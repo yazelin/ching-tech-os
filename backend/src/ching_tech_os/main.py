@@ -6,11 +6,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+import socketio
 
 from .config import settings
 from .database import init_db_pool, close_db_pool
 from .services.session import session_manager
-from .api import auth, nas
+from .api import auth, nas, user
+
+# 建立 Socket.IO 伺服器
+sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
 
 
 @asynccontextmanager
@@ -31,6 +35,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# 包裝成 ASGI 應用（Socket.IO + FastAPI）
+socket_app = socketio.ASGIApp(sio, app)
+
 # CORS 設定
 app.add_middleware(
     CORSMiddleware,
@@ -43,6 +50,7 @@ app.add_middleware(
 # 註冊路由
 app.include_router(auth.router)
 app.include_router(nas.router)
+app.include_router(user.router)
 
 
 @app.get("/api/health")
@@ -77,3 +85,22 @@ async def desktop_page():
 app.mount("/css", StaticFiles(directory=FRONTEND / "css"), name="css")
 app.mount("/js", StaticFiles(directory=FRONTEND / "js"), name="js")
 app.mount("/assets", StaticFiles(directory=FRONTEND / "assets"), name="assets")
+
+
+# === Socket.IO 事件 ===
+
+@sio.event
+async def connect(sid, environ):
+    """客戶端連線"""
+    print(f"Client connected: {sid}")
+
+
+@sio.event
+async def disconnect(sid):
+    """客戶端斷線"""
+    print(f"Client disconnected: {sid}")
+
+
+# 註冊 AI 事件（在 api/ai.py 中定義）
+from .api import ai
+ai.register_events(sio)

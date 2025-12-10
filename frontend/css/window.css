@@ -14,8 +14,8 @@
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   overflow: hidden;
-  min-width: 400px;
-  min-height: 300px;
+  min-width: 300px;
+  min-height: 200px;
 }
 
 .window.focused {

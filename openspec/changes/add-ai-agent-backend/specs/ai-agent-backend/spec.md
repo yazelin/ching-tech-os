@@ -1,56 +1,58 @@
-## ADDED Requirements
+# AI Agent Backend Specification
 
-### Requirement: Claude API Integration
-系統後端 SHALL 整合 Claude API 以提供 AI 對話功能。
+## MODIFIED Requirements
 
-#### Scenario: 發送訊息取得回應
-- **WHEN** 前端發送使用者訊息至後端
-- **THEN** 後端將訊息轉發至 Claude API
-- **AND** 後端將 Claude 回應返回給前端
+### Requirement: Claude CLI Integration
+系統 SHALL 透過非同步 subprocess 呼叫 Claude CLI 提供 AI 對話功能，使用 `--session-id` 維持對話上下文，完整回應後透過 Socket.IO 傳給前端。
 
-#### Scenario: 串流回應
-- **WHEN** Claude API 以串流方式回傳回應
-- **THEN** 後端即時將回應片段推送給前端
-- **AND** 前端逐步顯示回應內容
+#### Scenario: 發送訊息並接收回應
+- **GIVEN** 後端服務運行中且 Socket.IO 連線建立
+- **WHEN** 前端發送 `ai_chat` 事件包含 chatId、sessionId、message、model
+- **THEN** 後端發送 `ai_typing` 事件通知前端
+- **AND** 後端非同步呼叫 Claude CLI（含 `--session-id`）等待完整回應
+- **AND** 後端發送 `ai_response` 事件回傳結果
 
----
+#### Scenario: 維持對話上下文
+- **GIVEN** 使用者在同一個對話框發送多則訊息
+- **WHEN** 後端呼叫 Claude CLI
+- **THEN** 使用相同的 sessionId
+- **AND** Claude CLI 維持對話上下文
 
-### Requirement: Multi-Model Support
-系統 SHALL 支援使用者選擇不同的 Claude 模型進行對話。
-
-#### Scenario: 取得可用模型列表
-- **WHEN** 前端請求可用模型列表
-- **THEN** 後端返回支援的 Claude 模型清單
-
-#### Scenario: 切換對話模型
-- **WHEN** 使用者在對話中切換模型
-- **THEN** 後續訊息使用新選擇的模型處理
-- **AND** 對話上下文保持連續
+#### Scenario: 錯誤處理
+- **GIVEN** Claude CLI 不可用或發生錯誤
+- **WHEN** 使用者發送訊息
+- **THEN** 後端發送 `ai_error` 事件包含錯誤訊息
+- **AND** 前端顯示錯誤提示
 
 ---
 
-### Requirement: Session Management
-系統 SHALL 管理對話 session 以維持對話上下文。
+### Requirement: 全域 Socket.IO 連線
+系統 SHALL 在頁面載入時建立全域 Socket.IO 連線，不隨 AI 助手視窗關閉斷線。
 
-#### Scenario: 建立新對話 session
-- **WHEN** 使用者建立新對話
-- **THEN** 後端建立新的 Claude session
-- **AND** Session ID 儲存於資料庫
+#### Scenario: 頁面載入時連線
+- **GIVEN** 使用者進入桌面頁面
+- **WHEN** 頁面載入完成
+- **THEN** 自動建立 Socket.IO 連線
 
-#### Scenario: 恢復對話 session
-- **WHEN** 使用者切換至既有對話
-- **THEN** 後端載入對應的 session
-- **AND** 對話上下文正確恢復
+#### Scenario: AI 助手關閉時仍可接收回應
+- **GIVEN** 使用者發送訊息後關閉 AI 助手視窗
+- **WHEN** 後端回傳 AI 回應
+- **THEN** 前端接收回應並更新 localStorage
+- **AND** 下次開啟 AI 助手視窗時顯示該回應
 
 ---
 
-### Requirement: Conversation Persistence
-系統 SHALL 將對話資料持久化儲存。
+### Requirement: 通知系統
+系統 SHALL 在 AI 助手視窗關閉時，收到 AI 回應後顯示通知。
 
-#### Scenario: 儲存對話訊息
-- **WHEN** 對話產生新訊息
-- **THEN** 訊息儲存至 PostgreSQL 資料庫
+#### Scenario: AI 助手開啟時不通知
+- **GIVEN** AI 助手視窗開啟中
+- **WHEN** 收到 AI 回應
+- **THEN** 直接更新訊息列表
+- **AND** 不顯示通知
 
-#### Scenario: 載入歷史對話
-- **WHEN** 使用者登入系統
-- **THEN** 系統載入該使用者的所有對話列表
+#### Scenario: AI 助手關閉時顯示通知
+- **GIVEN** AI 助手視窗關閉
+- **WHEN** 收到 AI 回應
+- **THEN** 顯示 Toast 通知「AI 助手已回覆」
+- **AND** 點擊通知開啟 AI 助手視窗

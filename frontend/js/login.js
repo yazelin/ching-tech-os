@@ -211,5 +211,12 @@ const LoginModule = (function() {
   };
 })();
 
-// Initialize when DOM is ready
-document.addEventListener('DOMContentLoaded', LoginModule.init);
+// Initialize only on login page
+document.addEventListener('DOMContentLoaded', function() {
+  // Only run init on login.html page
+  if (window.location.pathname.endsWith('login.html') ||
+      window.location.pathname === '/' ||
+      window.location.pathname.endsWith('/')) {
+    LoginModule.init();
+  }
+});

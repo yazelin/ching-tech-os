@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="css/taskbar.css">
   <link rel="stylesheet" href="css/window.css">
   <link rel="stylesheet" href="css/ai-assistant.css">
+  <link rel="stylesheet" href="css/user-profile.css">
 </head>
 <body>
   <div class="desktop-container">
@@ -64,10 +65,14 @@
   </div>
 
   <!-- Scripts -->
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script src="js/icons.js"></script>
   <script src="js/login.js"></script>
   <script src="js/header.js"></script>
   <script src="js/window.js"></script>
+  <script src="js/notification.js"></script>
+  <script src="js/socket-client.js"></script>
+  <script src="js/user-profile.js"></script>
   <script src="js/ai-assistant.js"></script>
   <script src="js/desktop.js"></script>
   <script src="js/taskbar.js"></script>
@@ -91,6 +96,7 @@
       HeaderModule.init();
       DesktopModule.init();
       TaskbarModule.init();
+      SocketClient.connect();
     });
   </script>
 </body>

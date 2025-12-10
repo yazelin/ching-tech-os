@@ -30,6 +30,18 @@ const AIAssistantApp = (function() {
   }
 
   /**
+   * Generate UUID v4 for Claude CLI session
+   * @returns {string}
+   */
+  function generateUUID() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  }
+
+  /**
    * Load chats from localStorage
    */
   function loadChats() {
@@ -62,6 +74,7 @@ const AIAssistantApp = (function() {
   function createChat() {
     const chat = {
       id: generateId(),
+      sessionId: generateUUID(),  // UUID for Claude CLI session
       title: '新對話',
       model: availableModels[0].id,
       messages: [],
@@ -294,6 +307,11 @@ const AIAssistantApp = (function() {
       currentChatId = chat.id;
     }
 
+    // Ensure chat has sessionId (for older chats)
+    if (!chat.sessionId) {
+      chat.sessionId = generateUUID();
+    }
+
     // Add user message
     const userMessage = {
       role: 'user',
@@ -312,18 +330,67 @@ const AIAssistantApp = (function() {
     renderChatList();
     renderMessages();
 
-    // Simulate AI response
-    simulateResponse(chat);
+    // Send to backend via Socket.IO
+    if (typeof SocketClient !== 'undefined' && SocketClient.isConnected()) {
+      SocketClient.sendAIChat({
+        chatId: chat.id,
+        sessionId: chat.sessionId,
+        message: content.trim(),
+        model: chat.model
+      });
+    } else {
+      // Fallback: show error if not connected
+      handleError(chat.id, '無法連接到伺服器，請稍後再試');
+    }
   }
 
   /**
-   * Simulate AI response (placeholder)
-   * @param {Object} chat
+   * Receive AI response message
+   * @param {string} chatId
+   * @param {string} message
    */
-  function simulateResponse(chat) {
-    // Show typing indicator
+  function receiveMessage(chatId, message) {
+    const chat = getChatById(chatId);
+    if (!chat) return;
+
+    // Remove typing indicator
+    setTypingState(chatId, false);
+
+    // Add assistant message
+    const assistantMessage = {
+      role: 'assistant',
+      content: message,
+      timestamp: Date.now()
+    };
+    chat.messages.push(assistantMessage);
+    chat.updatedAt = Date.now();
+    saveChats();
+
+    // Render if this chat is currently active
+    if (chatId === currentChatId && windowId) {
+      renderMessages();
+    }
+  }
+
+  /**
+   * Set typing indicator state
+   * @param {string} chatId
+   * @param {boolean} typing
+   */
+  function setTypingState(chatId, typing) {
+    if (chatId !== currentChatId || !windowId) return;
+
     const container = document.querySelector(`#${windowId} .ai-messages-container`);
-    if (container) {
+    if (!container) return;
+
+    // Remove existing typing indicator
+    const existingTyping = container.querySelector('.ai-typing');
+    if (existingTyping) {
+      existingTyping.remove();
+    }
+
+    if (typing) {
+      // Show typing indicator
       const typingDiv = document.createElement('div');
       typingDiv.className = 'ai-message ai-message-assistant ai-typing';
       typingDiv.innerHTML = `
@@ -345,19 +412,53 @@ const AIAssistantApp = (function() {
         messagesArea.scrollTop = messagesArea.scrollHeight;
       }
     }
+  }
 
-    // Simulate response after delay
-    setTimeout(() => {
-      const assistantMessage = {
-        role: 'assistant',
-        content: `這是一個模擬回應。目前 AI 助手功能尚在開發中，尚未連接後端 API。\n\n您使用的模型：${chat.model}\n\n您的訊息已收到，當後端整合完成後，您將能與真正的 AI 進行對話。`,
-        timestamp: Date.now()
-      };
-      chat.messages.push(assistantMessage);
-      chat.updatedAt = Date.now();
-      saveChats();
+  /**
+   * Handle error from backend
+   * @param {string} chatId
+   * @param {string} error
+   */
+  function handleError(chatId, error) {
+    // Remove typing indicator
+    setTypingState(chatId, false);
+
+    const chat = getChatById(chatId);
+    if (!chat) return;
+
+    // Add error message as system message
+    const errorMessage = {
+      role: 'assistant',
+      content: `[錯誤] ${error}`,
+      timestamp: Date.now()
+    };
+    chat.messages.push(errorMessage);
+    chat.updatedAt = Date.now();
+    saveChats();
+
+    // Render if this chat is currently active
+    if (chatId === currentChatId && windowId) {
       renderMessages();
-    }, 1000);
+    }
+  }
+
+  /**
+   * Check if AI assistant window is open
+   * @returns {boolean}
+   */
+  function isWindowOpen() {
+    return windowId !== null;
+  }
+
+  /**
+   * Switch to a specific chat (used by notification click)
+   * @param {string} chatId
+   */
+  function switchToChat(chatId) {
+    const chat = getChatById(chatId);
+    if (chat) {
+      switchChat(chatId);
+    }
   }
 
   /**
@@ -520,6 +621,11 @@ const AIAssistantApp = (function() {
   // Public API
   return {
     open,
-    close
+    close,
+    isWindowOpen,
+    receiveMessage,
+    setTypingState,
+    handleError,
+    switchToChat
   };
 })();

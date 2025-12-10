@@ -62,14 +62,43 @@ const HeaderModule = (function() {
 
   /**
    * Display the current user's name
+   * Fetches display_name from API first, falls back to session username
    */
-  function displayUsername() {
+  async function displayUsername() {
     const userNameElement = document.getElementById('headerUserName');
-    if (userNameElement && typeof LoginModule !== 'undefined') {
-      const session = LoginModule.getSession();
-      if (session && session.username) {
-        userNameElement.textContent = session.username;
+    if (!userNameElement || typeof LoginModule === 'undefined') return;
+
+    const session = LoginModule.getSession();
+    if (!session || !session.username) return;
+
+    // Try to fetch display_name from API first (avoid flicker)
+    try {
+      const token = LoginModule.getToken();
+      if (token) {
+        const response = await fetch('/api/user/me', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (response.ok) {
+          const user = await response.json();
+          userNameElement.textContent = user.display_name || session.username;
+          return;
+        }
       }
+    } catch (error) {
+      // Fall through to fallback
+    }
+
+    // Fallback: show username from session
+    userNameElement.textContent = session.username;
+  }
+
+  /**
+   * Handle user name click - open profile window
+   */
+  function handleUserNameClick() {
+    if (typeof UserProfileModule !== 'undefined') {
+      UserProfileModule.open();
     }
   }
 
@@ -98,6 +127,13 @@ const HeaderModule = (function() {
     const logoutBtn = document.getElementById('logoutBtn');
     if (logoutBtn) {
       logoutBtn.addEventListener('click', handleLogout);
+    }
+
+    // Attach user name click handler
+    const userNameElement = document.getElementById('headerUserName');
+    if (userNameElement) {
+      userNameElement.style.cursor = 'pointer';
+      userNameElement.addEventListener('click', handleUserNameClick);
     }
   }
 

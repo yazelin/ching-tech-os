@@ -322,8 +322,8 @@ const WindowModule = (function() {
     const deltaY = e.clientY - resizeState.startY;
     const dir = resizeState.direction;
 
-    const minWidth = 400;
-    const minHeight = 300;
+    const minWidth = 300;
+    const minHeight = 200;
 
     // East (right edge)
     if (dir.includes('e')) {
