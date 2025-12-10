@@ -84,17 +84,33 @@ const DesktopModule = (function() {
   }
 
   /**
+   * Open an application
+   * @param {string} appId
+   */
+  function openApp(appId) {
+    switch (appId) {
+      case 'ai-assistant':
+        if (typeof AIAssistantApp !== 'undefined') {
+          AIAssistantApp.open();
+        }
+        break;
+      default:
+        const app = applications.find(a => a.id === appId);
+        if (app) {
+          showToast(`「${app.name}」功能開發中`, 'wrench');
+        }
+        break;
+    }
+  }
+
+  /**
    * Handle icon double-click (open app)
    * @param {Event} event
    */
   function handleIconDoubleClick(event) {
     const iconElement = event.currentTarget;
     const appId = iconElement.dataset.appId;
-    const app = applications.find(a => a.id === appId);
-
-    if (app) {
-      showToast(`「${app.name}」功能開發中`, 'wrench');
-    }
+    openApp(appId);
   }
 
   /**
@@ -147,6 +163,7 @@ const DesktopModule = (function() {
   return {
     init,
     getApplications,
-    showToast
+    showToast,
+    openApp
   };
 })();

@@ -31,16 +31,76 @@ const TaskbarModule = (function() {
   }
 
   /**
-   * Handle taskbar icon click
+   * Handle taskbar icon click - Dock behavior logic
    * @param {Event} event
    */
   function handleIconClick(event) {
     const iconElement = event.currentTarget;
     const appId = iconElement.dataset.appId;
-    const app = quickLaunchApps.find(a => a.id === appId);
 
-    if (app && typeof DesktopModule !== 'undefined') {
-      DesktopModule.showToast(`「${app.name}」功能開發中`, 'wrench');
+    // Check if WindowModule is available
+    if (typeof WindowModule === 'undefined') {
+      return;
+    }
+
+    // Check if app window is already open
+    const existingWindow = WindowModule.getWindowByAppId(appId);
+
+    if (existingWindow) {
+      // App is open
+      if (existingWindow.minimized) {
+        // Restore minimized window
+        WindowModule.restoreWindow(existingWindow.windowId);
+      } else {
+        // Focus the window (bring to front)
+        WindowModule.focusWindow(existingWindow.windowId);
+      }
+    } else {
+      // App is not open - open it
+      if (typeof DesktopModule !== 'undefined' && typeof DesktopModule.openApp === 'function') {
+        DesktopModule.openApp(appId);
+      }
+    }
+  }
+
+  /**
+   * Update running indicator for a specific app
+   * @param {string} appId
+   * @param {boolean} isRunning
+   */
+  function updateRunningIndicator(appId, isRunning) {
+    const iconElement = document.querySelector(`.taskbar-icon[data-app-id="${appId}"]`);
+    if (iconElement) {
+      iconElement.classList.toggle('active', isRunning);
+    }
+  }
+
+  /**
+   * Update all running indicators based on current windows
+   */
+  function updateAllRunningIndicators() {
+    if (typeof WindowModule === 'undefined') return;
+
+    const windows = WindowModule.getWindows();
+    const runningAppIds = new Set(
+      Object.values(windows).map(w => w.appId)
+    );
+
+    quickLaunchApps.forEach(app => {
+      updateRunningIndicator(app.id, runningAppIds.has(app.id));
+    });
+  }
+
+  /**
+   * Handle window state change callback
+   * @param {string} eventType - 'open' or 'close'
+   * @param {string} appId
+   */
+  function onWindowStateChange(eventType, appId) {
+    if (eventType === 'open') {
+      updateRunningIndicator(appId, true);
+    } else if (eventType === 'close') {
+      updateRunningIndicator(appId, false);
     }
   }
 
@@ -70,10 +130,20 @@ const TaskbarModule = (function() {
    */
   function init() {
     renderIcons();
+
+    // Register window state change callback
+    if (typeof WindowModule !== 'undefined' && typeof WindowModule.onStateChange === 'function') {
+      WindowModule.onStateChange(onWindowStateChange);
+    }
+
+    // Update indicators for any already open windows
+    updateAllRunningIndicators();
   }
 
   // Public API
   return {
-    init
+    init,
+    updateRunningIndicator,
+    updateAllRunningIndicators
   };
 })();

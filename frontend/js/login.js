@@ -1,6 +1,6 @@
 /**
  * ChingTech OS - Login Module
- * Handles user authentication (simulated) and session management
+ * Handles user authentication via NAS SMB and session management
  */
 
 const LoginModule = (function() {
@@ -8,14 +8,19 @@ const LoginModule = (function() {
 
   // Session key for localStorage
   const SESSION_KEY = 'chingtech_session';
+  const TOKEN_KEY = 'chingtech_token';
+
+  // API base URL (空字串表示同源)
+  const API_BASE = '';
 
   /**
    * Check if user is already logged in
    * @returns {boolean}
    */
   function isLoggedIn() {
+    const token = localStorage.getItem(TOKEN_KEY);
     const session = localStorage.getItem(SESSION_KEY);
-    if (!session) return false;
+    if (!token || !session) return false;
 
     try {
       const data = JSON.parse(session);
@@ -41,15 +46,25 @@ const LoginModule = (function() {
   }
 
   /**
+   * Get authentication token
+   * @returns {string|null}
+   */
+  function getToken() {
+    return localStorage.getItem(TOKEN_KEY);
+  }
+
+  /**
    * Create a new session
    * @param {string} username
+   * @param {string} token
    */
-  function createSession(username) {
+  function createSession(username, token) {
     const session = {
       username: username,
       timestamp: Date.now()
     };
     localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    localStorage.setItem(TOKEN_KEY, token);
   }
 
   /**
@@ -57,45 +72,61 @@ const LoginModule = (function() {
    */
   function clearSession() {
     localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(TOKEN_KEY);
   }
 
   /**
-   * Simulate login validation
-   * In a real application, this would make an API call
+   * Call login API
    * @param {string} username
    * @param {string} password
-   * @returns {Promise<{success: boolean, message?: string}>}
+   * @returns {Promise<{success: boolean, token?: string, username?: string, error?: string}>}
    */
-  async function validateLogin(username, password) {
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 500));
+  async function callLoginAPI(username, password) {
+    try {
+      const response = await fetch(`${API_BASE}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username, password }),
+      });
 
-    // Basic validation (simulated - accepts any non-empty credentials)
-    if (!username || !password) {
+      if (response.status === 503) {
+        return {
+          success: false,
+          error: '無法連線至檔案伺服器'
+        };
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Login API error:', error);
       return {
         success: false,
-        message: '請輸入使用者名稱和密碼'
+        error: '無法連線至伺服器'
       };
     }
+  }
 
-    if (username.length < 2) {
-      return {
-        success: false,
-        message: '使用者名稱至少需要 2 個字元'
-      };
+  /**
+   * Call logout API
+   * @returns {Promise<void>}
+   */
+  async function callLogoutAPI() {
+    const token = getToken();
+    if (!token) return;
+
+    try {
+      await fetch(`${API_BASE}/api/auth/logout`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+    } catch (error) {
+      console.error('Logout API error:', error);
     }
-
-    if (password.length < 4) {
-      return {
-        success: false,
-        message: '密碼至少需要 4 個字元'
-      };
-    }
-
-    // Simulated success
-    return {
-      success: true
-    };
   }
 
   /**
@@ -111,20 +142,27 @@ const LoginModule = (function() {
     const submitBtn = form.querySelector('.login-btn');
     const errorDiv = form.querySelector('.login-error');
 
+    // Basic validation
+    if (!username || !password) {
+      errorDiv.textContent = '請輸入使用者名稱和密碼';
+      errorDiv.classList.add('show');
+      return;
+    }
+
     // Disable button during submission
     submitBtn.disabled = true;
     submitBtn.innerHTML = '<span class="mdi mdi-loading mdi-spin"></span> 登入中...';
     errorDiv.classList.remove('show');
 
     try {
-      const result = await validateLogin(username, password);
+      const result = await callLoginAPI(username, password);
 
-      if (result.success) {
-        createSession(username);
+      if (result.success && result.token) {
+        createSession(result.username, result.token);
         // Redirect to desktop
         window.location.href = 'index.html';
       } else {
-        errorDiv.textContent = result.message;
+        errorDiv.textContent = result.error || '登入失敗';
         errorDiv.classList.add('show');
       }
     } catch (error) {
@@ -134,6 +172,15 @@ const LoginModule = (function() {
       submitBtn.disabled = false;
       submitBtn.innerHTML = '<span class="mdi mdi-login"></span> 登入';
     }
+  }
+
+  /**
+   * Logout and redirect to login page
+   */
+  async function logout() {
+    await callLogoutAPI();
+    clearSession();
+    window.location.href = 'login.html';
   }
 
   /**
@@ -158,7 +205,9 @@ const LoginModule = (function() {
     init,
     isLoggedIn,
     getSession,
-    clearSession
+    getToken,
+    clearSession,
+    logout
   };
 })();
 

@@ -76,11 +76,12 @@ const HeaderModule = (function() {
   /**
    * Handle logout button click
    */
-  function handleLogout() {
+  async function handleLogout() {
     if (typeof LoginModule !== 'undefined') {
-      LoginModule.clearSession();
+      await LoginModule.logout();
+    } else {
+      window.location.href = 'login.html';
     }
-    window.location.href = 'login.html';
   }
 
   /**

@@ -13,6 +13,8 @@
   <link rel="stylesheet" href="css/header.css">
   <link rel="stylesheet" href="css/desktop.css">
   <link rel="stylesheet" href="css/taskbar.css">
+  <link rel="stylesheet" href="css/window.css">
+  <link rel="stylesheet" href="css/ai-assistant.css">
 </head>
 <body>
   <div class="desktop-container">
@@ -65,6 +67,8 @@
   <script src="js/icons.js"></script>
   <script src="js/login.js"></script>
   <script src="js/header.js"></script>
+  <script src="js/window.js"></script>
+  <script src="js/ai-assistant.js"></script>
   <script src="js/desktop.js"></script>
   <script src="js/taskbar.js"></script>
   <script>
@@ -83,6 +87,7 @@
       }
 
       // Initialize all modules
+      WindowModule.init();
       HeaderModule.init();
       DesktopModule.init();
       TaskbarModule.init();

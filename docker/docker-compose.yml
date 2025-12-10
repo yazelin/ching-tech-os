@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ching-tech-os-db
+    environment:
+      POSTGRES_USER: ${DB_USER:-ching_tech}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-REMOVED_PASSWORD}
+      POSTGRES_DB: ${DB_NAME:-ching_tech_os}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-ching_tech} -d ${DB_NAME:-ching_tech_os}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
