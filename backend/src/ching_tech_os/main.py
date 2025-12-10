@@ -11,7 +11,7 @@ import socketio
 from .config import settings
 from .database import init_db_pool, close_db_pool
 from .services.session import session_manager
-from .api import auth, nas, user
+from .api import auth, nas, user, ai_router
 
 # 建立 Socket.IO 伺服器
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
@@ -51,6 +51,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(nas.router)
 app.include_router(user.router)
+app.include_router(ai_router.router)
 
 
 @app.get("/api/health")

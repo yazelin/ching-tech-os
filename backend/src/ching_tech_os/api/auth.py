@@ -51,6 +51,44 @@ async def get_current_session(token: str = Depends(get_token)) -> SessionData:
     return session
 
 
+def get_session_from_token_or_query(
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    token: str | None = None,  # Query parameter
+) -> SessionData:
+    """從 header 或 query parameter 取得 session
+
+    優先使用 Authorization header，若無則使用 query parameter token。
+    這允許 <img src> 等無法設定 header 的請求使用 token。
+
+    Returns:
+        SessionData
+
+    Raises:
+        HTTPException: 若 token 無效或過期
+    """
+    # 優先使用 header
+    actual_token = None
+    if credentials is not None:
+        actual_token = credentials.credentials
+    elif token is not None:
+        actual_token = token
+
+    if actual_token is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="未授權，請重新登入",
+        )
+
+    session = session_manager.get_session(actual_token)
+    if session is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="未授權，請重新登入",
+        )
+
+    return session
+
+
 @router.post(
     "/login",
     response_model=LoginResponse,

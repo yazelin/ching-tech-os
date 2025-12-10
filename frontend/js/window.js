@@ -100,6 +100,9 @@ const WindowModule = (function() {
           <button class="window-btn window-btn-minimize" title="最小化">
             <span class="icon">${getIcon('minus')}</span>
           </button>
+          <button class="window-btn window-btn-maximize" title="最大化">
+            <span class="icon">${getIcon('window-maximize')}</span>
+          </button>
           <button class="window-btn window-btn-close" title="關閉">
             <span class="icon">${getIcon('close')}</span>
           </button>
@@ -127,7 +130,10 @@ const WindowModule = (function() {
       appId: appId,
       title: title,
       onClose: onClose,
-      minimized: false
+      minimized: false,
+      maximized: false,
+      // Store original position/size for restore
+      restoreState: null
     };
 
     // Update z-index order
@@ -160,6 +166,7 @@ const WindowModule = (function() {
     const titlebar = windowEl.querySelector('.window-titlebar');
     const closeBtn = windowEl.querySelector('.window-btn-close');
     const minimizeBtn = windowEl.querySelector('.window-btn-minimize');
+    const maximizeBtn = windowEl.querySelector('.window-btn-maximize');
 
     // Focus on click
     windowEl.addEventListener('mousedown', () => {
@@ -172,6 +179,12 @@ const WindowModule = (function() {
       startDrag(windowId, e);
     });
 
+    // Double-click titlebar to toggle maximize
+    titlebar.addEventListener('dblclick', (e) => {
+      if (e.target.closest('.window-btn')) return;
+      toggleMaximize(windowId);
+    });
+
     // Close button
     closeBtn.addEventListener('click', () => {
       closeWindow(windowId);
@@ -180,6 +193,11 @@ const WindowModule = (function() {
     // Minimize button
     minimizeBtn.addEventListener('click', () => {
       minimizeWindow(windowId);
+    });
+
+    // Maximize button
+    maximizeBtn.addEventListener('click', () => {
+      toggleMaximize(windowId);
     });
 
     // Resize handles
@@ -199,6 +217,24 @@ const WindowModule = (function() {
   function startDrag(windowId, e) {
     const windowInfo = windows[windowId];
     if (!windowInfo) return;
+
+    // If maximized, unmaximize first and adjust position
+    if (windowInfo.maximized) {
+      const windowEl = windowInfo.element;
+      const oldWidth = windowInfo.restoreState ? parseInt(windowInfo.restoreState.width) : 800;
+
+      // Unmaximize
+      unmaximizeWindow(windowId);
+
+      // Position window so mouse is centered on titlebar
+      const desktopArea = document.querySelector('.desktop-area');
+      const desktopRect = desktopArea.getBoundingClientRect();
+      const newX = Math.max(0, Math.min(e.clientX - oldWidth / 2, desktopRect.width - oldWidth));
+      const newY = e.clientY - desktopRect.top - 20; // 20px from top of titlebar
+
+      windowEl.style.left = `${newX}px`;
+      windowEl.style.top = `${Math.max(0, newY)}px`;
+    }
 
     const windowEl = windowInfo.element;
     const rect = windowEl.getBoundingClientRect();
@@ -450,6 +486,96 @@ const WindowModule = (function() {
   }
 
   /**
+   * Maximize a window
+   * @param {string} windowId
+   */
+  function maximizeWindow(windowId) {
+    const windowInfo = windows[windowId];
+    if (!windowInfo || windowInfo.maximized) return;
+
+    const windowEl = windowInfo.element;
+
+    // Save current position and size for restore
+    windowInfo.restoreState = {
+      left: windowEl.style.left,
+      top: windowEl.style.top,
+      width: windowEl.style.width,
+      height: windowEl.style.height
+    };
+
+    // Maximize to fill desktop area
+    windowEl.style.left = '0';
+    windowEl.style.top = '0';
+    windowEl.style.width = '100%';
+    windowEl.style.height = '100%';
+
+    windowInfo.maximized = true;
+    windowEl.classList.add('maximized');
+
+    // Update maximize button icon
+    updateMaximizeButtonIcon(windowId);
+  }
+
+  /**
+   * Restore a maximized window to its previous size
+   * @param {string} windowId
+   */
+  function unmaximizeWindow(windowId) {
+    const windowInfo = windows[windowId];
+    if (!windowInfo || !windowInfo.maximized) return;
+
+    const windowEl = windowInfo.element;
+
+    // Restore previous position and size
+    if (windowInfo.restoreState) {
+      windowEl.style.left = windowInfo.restoreState.left;
+      windowEl.style.top = windowInfo.restoreState.top;
+      windowEl.style.width = windowInfo.restoreState.width;
+      windowEl.style.height = windowInfo.restoreState.height;
+    }
+
+    windowInfo.maximized = false;
+    windowInfo.restoreState = null;
+    windowEl.classList.remove('maximized');
+
+    // Update maximize button icon
+    updateMaximizeButtonIcon(windowId);
+  }
+
+  /**
+   * Toggle maximize state
+   * @param {string} windowId
+   */
+  function toggleMaximize(windowId) {
+    const windowInfo = windows[windowId];
+    if (!windowInfo) return;
+
+    if (windowInfo.maximized) {
+      unmaximizeWindow(windowId);
+    } else {
+      maximizeWindow(windowId);
+    }
+  }
+
+  /**
+   * Update maximize button icon based on state
+   * @param {string} windowId
+   */
+  function updateMaximizeButtonIcon(windowId) {
+    const windowInfo = windows[windowId];
+    if (!windowInfo) return;
+
+    const maximizeBtn = windowInfo.element.querySelector('.window-btn-maximize');
+    if (!maximizeBtn) return;
+
+    const iconSpan = maximizeBtn.querySelector('.icon');
+    if (iconSpan) {
+      iconSpan.innerHTML = getIcon(windowInfo.maximized ? 'window-restore' : 'window-maximize');
+      maximizeBtn.title = windowInfo.maximized ? '還原' : '最大化';
+    }
+  }
+
+  /**
    * Get window by app ID
    * @param {string} appId
    * @returns {Object|null}
@@ -513,6 +639,9 @@ const WindowModule = (function() {
     focusWindow,
     minimizeWindow,
     restoreWindow,
+    maximizeWindow,
+    unmaximizeWindow,
+    toggleMaximize,
     getWindowByAppId,
     getWindows,
     onStateChange

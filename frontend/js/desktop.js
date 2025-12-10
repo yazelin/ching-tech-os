@@ -94,6 +94,11 @@ const DesktopModule = (function() {
           AIAssistantApp.open();
         }
         break;
+      case 'file-manager':
+        if (typeof FileManagerModule !== 'undefined') {
+          FileManagerModule.open();
+        }
+        break;
       default:
         const app = applications.find(a => a.id === appId);
         if (app) {

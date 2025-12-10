@@ -1,0 +1,1349 @@
+/**
+ * ChingTech OS - File Manager Module
+ * Provides file browsing, preview, and operations for NAS storage
+ */
+
+const FileManagerModule = (function() {
+  'use strict';
+
+  // State
+  let windowId = null;
+  let currentPath = '/';
+  let history = [];
+  let historyIndex = -1;
+  let files = [];
+  let selectedFiles = new Set();
+  let lastSelectedIndex = -1;
+  let contextMenu = null;
+  let clickTimer = null;
+  let isEditingPath = false;
+  let previewWidth = 300;
+  let isSearching = false;
+  let searchQuery = '';
+  let searchResults = [];
+  let searchTimer = null;
+
+  // Text MIME types for preview
+  const TEXT_EXTENSIONS = ['txt', 'md', 'json', 'js', 'css', 'html', 'log', 'csv', 'xml', 'yaml', 'yml'];
+  const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'];
+
+  // File extension to icon mapping
+  const FILE_ICONS = {
+    folder: 'folder',
+    txt: 'file-document',
+    md: 'file-document',
+    json: 'code-braces',
+    js: 'code-braces',
+    css: 'code-braces',
+    html: 'code-braces',
+    jpg: 'file-image',
+    jpeg: 'file-image',
+    png: 'file-image',
+    gif: 'file-image',
+    svg: 'file-image',
+    webp: 'file-image',
+    pdf: 'file-document',
+    default: 'file'
+  };
+
+  /**
+   * Get auth token
+   */
+  function getToken() {
+    return localStorage.getItem('chingtech_token');
+  }
+
+  /**
+   * Get file icon based on type and extension
+   */
+  function getFileIcon(type, name) {
+    if (type === 'directory') return FILE_ICONS.folder;
+    const ext = name.split('.').pop().toLowerCase();
+    return FILE_ICONS[ext] || FILE_ICONS.default;
+  }
+
+  /**
+   * Get file type class for styling
+   */
+  function getFileTypeClass(type, name) {
+    if (type === 'directory') return 'folder';
+    const ext = name.split('.').pop().toLowerCase();
+    if (IMAGE_EXTENSIONS.includes(ext)) return 'image';
+    if (TEXT_EXTENSIONS.includes(ext)) return 'text';
+    return '';
+  }
+
+  /**
+   * Format file size
+   */
+  function formatSize(bytes) {
+    if (bytes === null || bytes === undefined) return '-';
+    if (bytes === 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return (bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0) + ' ' + units[i];
+  }
+
+  /**
+   * Format date
+   */
+  function formatDate(isoString) {
+    if (!isoString) return '-';
+    const date = new Date(isoString);
+    return date.toLocaleDateString('zh-TW') + ' ' + date.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  /**
+   * Open file manager window
+   */
+  function open(initialPath = '/') {
+    const existing = WindowModule.getWindowByAppId('file-manager');
+    if (existing) {
+      WindowModule.focusWindow(existing.windowId);
+      if (!existing.minimized) return;
+      WindowModule.restoreWindow(existing.windowId);
+      return;
+    }
+
+    currentPath = initialPath;
+    history = [initialPath];
+    historyIndex = 0;
+    selectedFiles.clear();
+
+    windowId = WindowModule.createWindow({
+      title: '檔案管理',
+      appId: 'file-manager',
+      icon: 'folder',
+      width: 900,
+      height: 600,
+      content: renderContent(),
+      onClose: handleClose,
+      onInit: handleInit
+    });
+  }
+
+  /**
+   * Close file manager
+   */
+  function close() {
+    if (windowId) {
+      WindowModule.closeWindow(windowId);
+    }
+  }
+
+  /**
+   * Handle window close
+   */
+  function handleClose() {
+    windowId = null;
+    currentPath = '/';
+    history = [];
+    historyIndex = -1;
+    files = [];
+    selectedFiles.clear();
+    hideContextMenu();
+  }
+
+  /**
+   * Handle window init
+   */
+  function handleInit(windowEl, wId) {
+    windowId = wId;
+    bindEvents(windowEl);
+    loadDirectory(currentPath);
+  }
+
+  /**
+   * Render main content
+   */
+  function renderContent() {
+    return `
+      <div class="file-manager">
+        <div class="fm-toolbar">
+          <div class="fm-toolbar-nav">
+            <button class="fm-toolbar-btn" id="fmBtnBack" title="上一頁" disabled>
+              <span class="icon">${getIcon('chevron-left')}</span>
+            </button>
+            <button class="fm-toolbar-btn" id="fmBtnForward" title="下一頁" disabled>
+              <span class="icon">${getIcon('chevron-right')}</span>
+            </button>
+            <button class="fm-toolbar-btn" id="fmBtnUp" title="上一層">
+              <span class="icon">${getIcon('chevron-up')}</span>
+            </button>
+            <button class="fm-toolbar-btn" id="fmBtnRefresh" title="重新整理">
+              <span class="icon">${getIcon('refresh')}</span>
+            </button>
+          </div>
+          <div class="fm-path-container" id="fmPathContainer">
+            <div class="fm-path-input-wrapper" id="fmPathInputWrapper">
+              <span class="fm-path-input-icon">
+                <span class="icon">${getIcon('folder')}</span>
+              </span>
+              <input type="text" class="fm-path-input" id="fmPathInput" value="/">
+            </div>
+            <div class="fm-path-display" id="fmPathDisplay">
+              <span class="icon">${getIcon('folder')}</span>
+              <span class="fm-path-text" id="fmPathText">/</span>
+            </div>
+          </div>
+          <div class="fm-search-container">
+            <span class="fm-search-icon">
+              <span class="icon">${getIcon('search')}</span>
+            </span>
+            <input type="text" class="fm-search-input" id="fmSearchInput" placeholder="搜尋...">
+            <button class="fm-search-clear" id="fmSearchClear" title="清除搜尋" style="display: none;">
+              <span class="icon">${getIcon('close')}</span>
+            </button>
+          </div>
+          <div class="fm-toolbar-actions">
+            <button class="fm-action-btn" id="fmBtnUpload" title="上傳檔案">
+              <span class="icon">${getIcon('upload')}</span>
+              <span>上傳</span>
+            </button>
+            <button class="fm-action-btn" id="fmBtnNewFolder" title="新增資料夾">
+              <span class="icon">${getIcon('folder-plus')}</span>
+              <span>新增</span>
+            </button>
+          </div>
+        </div>
+        <div class="fm-main">
+          <div class="fm-file-list" id="fmFileList">
+            <div class="fm-list-header">
+              <span class="fm-list-header-name">名稱</span>
+              <span class="fm-list-header-size">大小</span>
+              <span class="fm-list-header-date">修改日期</span>
+            </div>
+            <div class="fm-loading">
+              <span class="icon">${getIcon('folder')}</span>
+              <span>載入中...</span>
+            </div>
+          </div>
+          <div class="fm-resizer" id="fmResizer"></div>
+          <div class="fm-preview" id="fmPreview" style="width: ${previewWidth}px;">
+            <div class="fm-preview-header">預覽</div>
+            <div class="fm-preview-content">
+              <div class="fm-preview-empty">
+                <span class="icon">${getIcon('file')}</span>
+                <span>選取檔案以預覽</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="fm-statusbar">
+          <div class="fm-statusbar-info">
+            <span id="fmStatusTotal">0 個項目</span>
+            <span id="fmStatusSelected"></span>
+          </div>
+        </div>
+        <input type="file" class="fm-upload-input" id="fmUploadInput" multiple>
+      </div>
+    `;
+  }
+
+  /**
+   * Bind events
+   */
+  function bindEvents(windowEl) {
+    // Navigation buttons
+    windowEl.querySelector('#fmBtnBack').addEventListener('click', navigateBack);
+    windowEl.querySelector('#fmBtnForward').addEventListener('click', navigateForward);
+    windowEl.querySelector('#fmBtnUp').addEventListener('click', navigateUp);
+    windowEl.querySelector('#fmBtnRefresh').addEventListener('click', refresh);
+
+    // Action buttons
+    windowEl.querySelector('#fmBtnUpload').addEventListener('click', () => {
+      windowEl.querySelector('#fmUploadInput').click();
+    });
+    windowEl.querySelector('#fmBtnNewFolder').addEventListener('click', showNewFolderDialog);
+
+    // Upload input
+    windowEl.querySelector('#fmUploadInput').addEventListener('change', handleUpload);
+
+    // Path display click - enter edit mode
+    windowEl.querySelector('#fmPathDisplay').addEventListener('click', enterPathEditMode);
+
+    // Path input events
+    const pathInput = windowEl.querySelector('#fmPathInput');
+    pathInput.addEventListener('keydown', handlePathInputKeydown);
+    pathInput.addEventListener('blur', exitPathEditMode);
+
+    // Search input events
+    const searchInput = windowEl.querySelector('#fmSearchInput');
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (searchTimer) clearTimeout(searchTimer);
+        searchFiles(searchInput.value);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        clearSearch();
+      }
+    });
+    searchInput.addEventListener('input', (e) => {
+      // Debounce search for auto-search (optional)
+      if (searchTimer) clearTimeout(searchTimer);
+      const value = e.target.value;
+      if (!value.trim()) {
+        clearSearch();
+      }
+    });
+
+    // Search clear button
+    windowEl.querySelector('#fmSearchClear').addEventListener('click', clearSearch);
+
+    // File list events
+    const fileList = windowEl.querySelector('#fmFileList');
+    fileList.addEventListener('click', (e) => {
+      const item = e.target.closest('.fm-file-item');
+      if (!item) return;
+
+      if (clickTimer) {
+        clearTimeout(clickTimer);
+        clickTimer = null;
+      }
+
+      clickTimer = setTimeout(() => {
+        handleFileListClick(e);
+        clickTimer = null;
+      }, 200);
+    });
+
+    fileList.addEventListener('dblclick', (e) => {
+      if (clickTimer) {
+        clearTimeout(clickTimer);
+        clickTimer = null;
+      }
+      handleFileListDblClick(e);
+    });
+    fileList.addEventListener('contextmenu', handleContextMenu);
+
+    // Resizer drag
+    const resizer = windowEl.querySelector('#fmResizer');
+    resizer.addEventListener('mousedown', startResize);
+
+    // Global click to close context menu
+    document.addEventListener('click', hideContextMenu);
+  }
+
+  /**
+   * Enter path edit mode
+   */
+  function enterPathEditMode() {
+    if (isEditingPath) return;
+    isEditingPath = true;
+
+    const windowEl = document.getElementById(windowId);
+    if (!windowEl) return;
+
+    const inputWrapper = windowEl.querySelector('#fmPathInputWrapper');
+    const pathDisplay = windowEl.querySelector('#fmPathDisplay');
+    const pathInput = windowEl.querySelector('#fmPathInput');
+
+    inputWrapper.classList.add('active');
+    pathDisplay.style.display = 'none';
+    pathInput.value = currentPath;
+    pathInput.focus();
+    pathInput.select();
+  }
+
+  /**
+   * Exit path edit mode
+   */
+  function exitPathEditMode() {
+    if (!isEditingPath) return;
+    isEditingPath = false;
+
+    const windowEl = document.getElementById(windowId);
+    if (!windowEl) return;
+
+    const inputWrapper = windowEl.querySelector('#fmPathInputWrapper');
+    const pathDisplay = windowEl.querySelector('#fmPathDisplay');
+
+    inputWrapper.classList.remove('active');
+    pathDisplay.style.display = 'flex';
+  }
+
+  /**
+   * Handle path input keydown
+   */
+  function handlePathInputKeydown(e) {
+    if (e.key === 'Enter') {
+      const newPath = e.target.value.trim();
+      if (newPath && newPath !== currentPath) {
+        navigateTo(newPath);
+      }
+      exitPathEditMode();
+    } else if (e.key === 'Escape') {
+      exitPathEditMode();
+    }
+  }
+
+  /**
+   * Start resizer drag
+   */
+  function startResize(e) {
+    e.preventDefault();
+    const windowEl = document.getElementById(windowId);
+    if (!windowEl) return;
+
+    const resizer = windowEl.querySelector('#fmResizer');
+    const preview = windowEl.querySelector('#fmPreview');
+    const main = windowEl.querySelector('.fm-main');
+
+    resizer.classList.add('dragging');
+
+    const startX = e.clientX;
+    const startWidth = preview.offsetWidth;
+    const mainRect = main.getBoundingClientRect();
+
+    function onMouseMove(e) {
+      const dx = startX - e.clientX;
+      let newWidth = startWidth + dx;
+
+      // Constrain width
+      const minWidth = 200;
+      const maxWidth = mainRect.width * 0.5;
+      newWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
+
+      preview.style.width = `${newWidth}px`;
+      previewWidth = newWidth;
+    }
+
+    function onMouseUp() {
+      resizer.classList.remove('dragging');
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    }
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  }
+
+  /**
+   * Load directory contents
+   */
+  async function loadDirectory(path) {
+    const windowEl = document.getElementById(windowId);
+    if (!windowEl) return;
+
+    const fileList = windowEl.querySelector('#fmFileList');
+    const pathText = windowEl.querySelector('#fmPathText');
+
+    // Show loading
+    fileList.innerHTML = `
+      <div class="fm-list-header">
+        <span class="fm-list-header-name">名稱</span>
+        <span class="fm-list-header-size">大小</span>
+        <span class="fm-list-header-date">修改日期</span>
+      </div>
+      <div class="fm-loading">
+        <span class="icon">${getIcon('folder')}</span>
+        <span>載入中...</span>
+      </div>
+    `;
+
+    try {
+      if (path === '/') {
+        const response = await fetch('/api/nas/shares', {
+          headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+
+        if (!response.ok) throw new Error('無法取得共享資料夾');
+        const data = await response.json();
+
+        files = data.shares.map(share => ({
+          name: share.name,
+          type: 'directory',
+          size: null,
+          modified: null
+        }));
+      } else {
+        const response = await fetch(`/api/nas/browse?path=${encodeURIComponent(path)}`, {
+          headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.detail || '載入失敗');
+        }
+        const data = await response.json();
+        files = data.items;
+      }
+
+      currentPath = path;
+      pathText.textContent = path;
+      selectedFiles.clear();
+      lastSelectedIndex = -1;
+
+      renderFileList();
+      updateNavButtons();
+      updateStatusBar();
+      renderPreview();
+
+    } catch (error) {
+      fileList.innerHTML = `
+        <div class="fm-list-header">
+          <span class="fm-list-header-name">名稱</span>
+          <span class="fm-list-header-size">大小</span>
+          <span class="fm-list-header-date">修改日期</span>
+        </div>
+        <div class="fm-empty">
+          <span class="icon">${getIcon('information')}</span>
+          <span>${error.message}</span>
+        </div>
+      `;
+    }
+  }
+
+  /**
+   * Search files
+   */
+  async function searchFiles(query) {
+    if (!query || !query.trim()) {
+      clearSearch();
+      return;
+    }
+
+    const windowEl = document.getElementById(windowId);
+    if (!windowEl) return;
+
+    const fileList = windowEl.querySelector('#fmFileList');
+    const clearBtn = windowEl.querySelector('#fmSearchClear');
+
+    isSearching = true;
+    searchQuery = query.trim();
+
+    // Show clear button
+    if (clearBtn) clearBtn.style.display = 'flex';
+
+    // Show loading
+    fileList.innerHTML = `
+      <div class="fm-list-header">
+        <span class="fm-list-header-name">名稱</span>
+        <span class="fm-list-header-size">路徑</span>
+        <span class="fm-list-header-date">類型</span>
+      </div>
+      <div class="fm-loading">
+        <span class="icon">${getIcon('search')}</span>
+        <span>搜尋中...</span>
+      </div>
+    `;
+
+    try {
+      const response = await fetch(
+        `/api/nas/search?path=${encodeURIComponent(currentPath)}&query=${encodeURIComponent(searchQuery)}&max_depth=5&max_results=100`,
+        { headers: { 'Authorization': `Bearer ${getToken()}` } }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || '搜尋失敗');
+      }
+
+      const data = await response.json();
+      searchResults = data.results;
+
+      renderSearchResults();
+      updateStatusBar();
+
+    } catch (error) {
+      fileList.innerHTML = `
+        <div class="fm-list-header">
+          <span class="fm-list-header-name">名稱</span>
+          <span class="fm-list-header-size">路徑</span>
+          <span class="fm-list-header-date">類型</span>
+        </div>
+        <div class="fm-empty">
+          <span class="icon">${getIcon('information')}</span>
+          <span>${error.message}</span>
+        </div>
+      `;
+    }
+  }
+
+  /**
+   * Render search results
+   */
+  function renderSearchResults() {
+    const windowEl = document.getElementById(windowId);
+    if (!windowEl) return;
+
+    const fileList = windowEl.querySelector('#fmFileList');
+
+    if (searchResults.length === 0) {
+      fileList.innerHTML = `
+        <div class="fm-list-header">
+          <span class="fm-list-header-name">名稱</span>
+          <span class="fm-list-header-size">路徑</span>
+          <span class="fm-list-header-date">類型</span>
+        </div>
+        <div class="fm-empty">
+          <span class="icon">${getIcon('search')}</span>
+          <span>找不到符合「${searchQuery}」的項目</span>
+        </div>
+      `;
+      return;
+    }
+
+    let html = `
+      <div class="fm-list-header">
+        <span class="fm-list-header-name">名稱</span>
+        <span class="fm-list-header-size">路徑</span>
+        <span class="fm-list-header-date">類型</span>
+      </div>
+    `;
+
+    searchResults.forEach((item, index) => {
+      const iconName = getFileIcon(item.type, item.name);
+      const typeClass = getFileTypeClass(item.type, item.name);
+      const typeLabel = item.type === 'directory' ? '資料夾' : '檔案';
+
+      html += `
+        <div class="fm-file-item fm-search-result ${typeClass}"
+             data-index="${index}"
+             data-path="${item.path}"
+             data-type="${item.type}">
+          <span class="fm-file-icon">
+            <span class="icon">${getIcon(iconName)}</span>
+          </span>
+          <span class="fm-file-name">${item.name}</span>
+          <span class="fm-file-size">${item.path}</span>
+          <span class="fm-file-modified">${typeLabel}</span>
+        </div>
+      `;
+    });
+
+    fileList.innerHTML = html;
+
+    // Add click handlers for search results
+    fileList.querySelectorAll('.fm-search-result').forEach(el => {
+      el.addEventListener('dblclick', handleSearchResultDoubleClick);
+    });
+  }
+
+  /**
+   * Handle search result double click
+   */
+  function handleSearchResultDoubleClick(e) {
+    const item = e.currentTarget;
+    const path = item.dataset.path;
+    const type = item.dataset.type;
+
+    clearSearch();
+
+    if (type === 'directory') {
+      navigateTo(path);
+    } else {
+      // Navigate to parent folder
+      const parentPath = path.substring(0, path.lastIndexOf('/')) || '/';
+      navigateTo(parentPath);
+    }
+  }
+
+  /**
+   * Clear search and return to normal browsing
+   */
+  function clearSearch() {
+    const windowEl = document.getElementById(windowId);
+    if (!windowEl) return;
+
+    const searchInput = windowEl.querySelector('#fmSearchInput');
+    const clearBtn = windowEl.querySelector('#fmSearchClear');
+
+    isSearching = false;
+    searchQuery = '';
+    searchResults = [];
+
+    if (searchInput) searchInput.value = '';
+    if (clearBtn) clearBtn.style.display = 'none';
+
+    loadDirectory(currentPath);
+  }
+
+  /**
+   * Render file list
+   */
+  function renderFileList() {
+    const windowEl = document.getElementById(windowId);
+    if (!windowEl) return;
+
+    const fileList = windowEl.querySelector('#fmFileList');
+
+    if (files.length === 0) {
+      fileList.innerHTML = `
+        <div class="fm-list-header">
+          <span class="fm-list-header-name">名稱</span>
+          <span class="fm-list-header-size">大小</span>
+          <span class="fm-list-header-date">修改日期</span>
+        </div>
+        <div class="fm-empty">
+          <span class="icon">${getIcon('folder')}</span>
+          <span>資料夾是空的</span>
+        </div>
+      `;
+      return;
+    }
+
+    // Sort: folders first, then files, alphabetically
+    const sorted = [...files].sort((a, b) => {
+      if (a.type === 'directory' && b.type !== 'directory') return -1;
+      if (a.type !== 'directory' && b.type === 'directory') return 1;
+      return a.name.localeCompare(b.name, 'zh-TW');
+    });
+
+    const header = `
+      <div class="fm-list-header">
+        <span class="fm-list-header-name">名稱</span>
+        <span class="fm-list-header-size">大小</span>
+        <span class="fm-list-header-date">修改日期</span>
+      </div>
+    `;
+
+    const items = sorted.map((file, index) => {
+      const iconName = getFileIcon(file.type, file.name);
+      const typeClass = getFileTypeClass(file.type, file.name);
+      const isSelected = selectedFiles.has(file.name);
+
+      return `
+        <div class="fm-file-item ${isSelected ? 'selected' : ''}" data-index="${index}" data-name="${file.name}" data-type="${file.type}">
+          <div class="fm-file-icon ${typeClass}">
+            <span class="icon">${getIcon(iconName)}</span>
+          </div>
+          <span class="fm-file-name">${file.name}</span>
+          <span class="fm-file-size">${formatSize(file.size)}</span>
+          <span class="fm-file-modified">${formatDate(file.modified)}</span>
+        </div>
+      `;
+    }).join('');
+
+    fileList.innerHTML = header + items;
+    files = sorted;
+  }
+
+  /**
+   * Handle file list click (selection)
+   */
+  function handleFileListClick(e) {
+    const item = e.target.closest('.fm-file-item');
+    if (!item) return;
+
+    const index = parseInt(item.dataset.index);
+    const name = item.dataset.name;
+    const ctrlKey = e.ctrlKey || e.metaKey;
+    const shiftKey = e.shiftKey;
+
+    if (shiftKey && lastSelectedIndex !== -1) {
+      const start = Math.min(lastSelectedIndex, index);
+      const end = Math.max(lastSelectedIndex, index);
+      if (!ctrlKey) selectedFiles.clear();
+      for (let i = start; i <= end; i++) {
+        selectedFiles.add(files[i].name);
+      }
+    } else if (ctrlKey) {
+      if (selectedFiles.has(name)) {
+        selectedFiles.delete(name);
+      } else {
+        selectedFiles.add(name);
+      }
+      lastSelectedIndex = index;
+    } else {
+      selectedFiles.clear();
+      selectedFiles.add(name);
+      lastSelectedIndex = index;
+    }
+
+    renderFileList();
+    updateStatusBar();
+    renderPreview();
+  }
+
+  /**
+   * Handle file list double click (open)
+   */
+  function handleFileListDblClick(e) {
+    const item = e.target.closest('.fm-file-item');
+    if (!item) return;
+
+    const name = item.dataset.name;
+    const type = item.dataset.type;
+
+    if (type === 'directory') {
+      const newPath = currentPath === '/' ? `/${name}` : `${currentPath}/${name}`;
+      navigateTo(newPath);
+    } else {
+      openFile(name);
+    }
+  }
+
+  /**
+   * Open file in appropriate viewer
+   */
+  function openFile(name) {
+    const filePath = currentPath === '/' ? `/${name}` : `${currentPath}/${name}`;
+    const ext = name.split('.').pop().toLowerCase();
+
+    if (IMAGE_EXTENSIONS.includes(ext)) {
+      if (typeof ImageViewerModule !== 'undefined') {
+        ImageViewerModule.open(filePath, name);
+      }
+    } else if (TEXT_EXTENSIONS.includes(ext)) {
+      if (typeof TextViewerModule !== 'undefined') {
+        TextViewerModule.open(filePath, name);
+      }
+    }
+  }
+
+  /**
+   * Handle context menu
+   */
+  function handleContextMenu(e) {
+    e.preventDefault();
+
+    const item = e.target.closest('.fm-file-item');
+    if (item) {
+      const name = item.dataset.name;
+      if (!selectedFiles.has(name)) {
+        selectedFiles.clear();
+        selectedFiles.add(name);
+        renderFileList();
+        updateStatusBar();
+      }
+    }
+
+    showContextMenu(e.clientX, e.clientY, !!item);
+  }
+
+  /**
+   * Show context menu
+   */
+  function showContextMenu(x, y, hasSelection) {
+    hideContextMenu();
+
+    const selectedFile = selectedFiles.size === 1 ? files.find(f => selectedFiles.has(f.name)) : null;
+    const isFile = selectedFile && selectedFile.type !== 'directory';
+
+    let menuItems = '';
+
+    if (hasSelection && selectedFiles.size > 0) {
+      if (selectedFiles.size === 1 && selectedFile) {
+        if (selectedFile.type === 'directory') {
+          menuItems += `<div class="fm-context-menu-item" data-action="open"><span class="icon">${getIcon('folder')}</span>開啟</div>`;
+        } else {
+          menuItems += `<div class="fm-context-menu-item" data-action="open"><span class="icon">${getIcon('file')}</span>開啟</div>`;
+        }
+      }
+      if (isFile) {
+        menuItems += `<div class="fm-context-menu-item" data-action="download"><span class="icon">${getIcon('download')}</span>下載</div>`;
+      }
+      menuItems += `<div class="fm-context-menu-divider"></div>`;
+      if (selectedFiles.size === 1) {
+        menuItems += `<div class="fm-context-menu-item" data-action="rename"><span class="icon">${getIcon('edit')}</span>重命名</div>`;
+      }
+      menuItems += `<div class="fm-context-menu-item danger" data-action="delete"><span class="icon">${getIcon('delete')}</span>刪除</div>`;
+    } else {
+      menuItems += `<div class="fm-context-menu-item" data-action="refresh"><span class="icon">${getIcon('refresh')}</span>重新整理</div>`;
+      menuItems += `<div class="fm-context-menu-divider"></div>`;
+      menuItems += `<div class="fm-context-menu-item" data-action="upload"><span class="icon">${getIcon('upload')}</span>上傳檔案</div>`;
+      menuItems += `<div class="fm-context-menu-item" data-action="newfolder"><span class="icon">${getIcon('folder-plus')}</span>新增資料夾</div>`;
+    }
+
+    contextMenu = document.createElement('div');
+    contextMenu.className = 'fm-context-menu';
+    contextMenu.innerHTML = menuItems;
+    contextMenu.style.left = `${x}px`;
+    contextMenu.style.top = `${y}px`;
+
+    document.body.appendChild(contextMenu);
+
+    const rect = contextMenu.getBoundingClientRect();
+    if (rect.right > window.innerWidth) {
+      contextMenu.style.left = `${x - rect.width}px`;
+    }
+    if (rect.bottom > window.innerHeight) {
+      contextMenu.style.top = `${y - rect.height}px`;
+    }
+
+    contextMenu.addEventListener('click', handleContextMenuClick);
+  }
+
+  /**
+   * Hide context menu
+   */
+  function hideContextMenu() {
+    if (contextMenu) {
+      contextMenu.remove();
+      contextMenu = null;
+    }
+  }
+
+  /**
+   * Handle context menu click
+   */
+  function handleContextMenuClick(e) {
+    const item = e.target.closest('.fm-context-menu-item');
+    if (!item) return;
+
+    const action = item.dataset.action;
+    hideContextMenu();
+
+    switch (action) {
+      case 'open':
+        const selectedName = [...selectedFiles][0];
+        const selectedFile = files.find(f => f.name === selectedName);
+        if (selectedFile.type === 'directory') {
+          const newPath = currentPath === '/' ? `/${selectedName}` : `${currentPath}/${selectedName}`;
+          navigateTo(newPath);
+        } else {
+          openFile(selectedName);
+        }
+        break;
+      case 'download':
+        downloadSelected();
+        break;
+      case 'rename':
+        showRenameDialog();
+        break;
+      case 'delete':
+        showDeleteDialog();
+        break;
+      case 'refresh':
+        refresh();
+        break;
+      case 'upload':
+        document.getElementById(windowId).querySelector('#fmUploadInput').click();
+        break;
+      case 'newfolder':
+        showNewFolderDialog();
+        break;
+    }
+  }
+
+  /**
+   * Navigate to path
+   */
+  function navigateTo(path) {
+    history = history.slice(0, historyIndex + 1);
+    history.push(path);
+    historyIndex = history.length - 1;
+    loadDirectory(path);
+  }
+
+  /**
+   * Navigate back
+   */
+  function navigateBack() {
+    if (historyIndex > 0) {
+      historyIndex--;
+      loadDirectory(history[historyIndex]);
+    }
+  }
+
+  /**
+   * Navigate forward
+   */
+  function navigateForward() {
+    if (historyIndex < history.length - 1) {
+      historyIndex++;
+      loadDirectory(history[historyIndex]);
+    }
+  }
+
+  /**
+   * Navigate up
+   */
+  function navigateUp() {
+    if (currentPath === '/') return;
+    const parts = currentPath.split('/').filter(Boolean);
+    parts.pop();
+    const parentPath = parts.length === 0 ? '/' : '/' + parts.join('/');
+    navigateTo(parentPath);
+  }
+
+  /**
+   * Refresh current directory
+   */
+  function refresh() {
+    loadDirectory(currentPath);
+  }
+
+  /**
+   * Update navigation buttons state
+   */
+  function updateNavButtons() {
+    const windowEl = document.getElementById(windowId);
+    if (!windowEl) return;
+
+    windowEl.querySelector('#fmBtnBack').disabled = historyIndex <= 0;
+    windowEl.querySelector('#fmBtnForward').disabled = historyIndex >= history.length - 1;
+    windowEl.querySelector('#fmBtnUp').disabled = currentPath === '/';
+  }
+
+  /**
+   * Update status bar
+   */
+  function updateStatusBar() {
+    const windowEl = document.getElementById(windowId);
+    if (!windowEl) return;
+
+    if (isSearching) {
+      windowEl.querySelector('#fmStatusTotal').textContent = `搜尋「${searchQuery}」找到 ${searchResults.length} 個結果`;
+      windowEl.querySelector('#fmStatusSelected').textContent = '';
+    } else {
+      windowEl.querySelector('#fmStatusTotal').textContent = `${files.length} 個項目`;
+      const selectedCount = selectedFiles.size;
+      windowEl.querySelector('#fmStatusSelected').textContent = selectedCount > 0 ? `選取 ${selectedCount} 個` : '';
+    }
+  }
+
+  /**
+   * Render preview panel - New layout: preview on top, info below
+   */
+  async function renderPreview() {
+    const windowEl = document.getElementById(windowId);
+    if (!windowEl) return;
+
+    const previewContent = windowEl.querySelector('#fmPreview .fm-preview-content');
+
+    if (selectedFiles.size !== 1) {
+      previewContent.innerHTML = `
+        <div class="fm-preview-empty">
+          <span class="icon">${getIcon('file')}</span>
+          <span>${selectedFiles.size > 1 ? `已選取 ${selectedFiles.size} 個項目` : '選取檔案以預覽'}</span>
+        </div>
+      `;
+      return;
+    }
+
+    const selectedName = [...selectedFiles][0];
+    const file = files.find(f => f.name === selectedName);
+    if (!file) return;
+
+    const iconName = getFileIcon(file.type, file.name);
+    const ext = file.name.split('.').pop().toLowerCase();
+    const filePath = currentPath === '/' ? `/${file.name}` : `${currentPath}/${file.name}`;
+
+    // Build preview HTML - preview area first, then info
+    let previewMainHTML = '';
+
+    if (file.type === 'directory') {
+      previewMainHTML = `
+        <div class="fm-preview-icon-large">
+          <span class="icon">${getIcon('folder')}</span>
+        </div>
+      `;
+    } else if (IMAGE_EXTENSIONS.includes(ext)) {
+      previewMainHTML = `
+        <div class="fm-preview-image">
+          <img src="/api/nas/file?path=${encodeURIComponent(filePath)}&token=${encodeURIComponent(getToken())}" alt="${file.name}">
+        </div>
+      `;
+    } else if (TEXT_EXTENSIONS.includes(ext)) {
+      previewMainHTML = `<div class="fm-preview-text" id="fmPreviewText">載入中...</div>`;
+    } else {
+      previewMainHTML = `
+        <div class="fm-preview-icon-large">
+          <span class="icon">${getIcon(iconName)}</span>
+        </div>
+      `;
+    }
+
+    const previewHTML = `
+      <div class="fm-preview-main">
+        ${previewMainHTML}
+      </div>
+      <div class="fm-preview-info">
+        <div class="fm-preview-filename">${file.name}</div>
+        <div class="fm-preview-meta">
+          <div class="fm-preview-meta-item">
+            <span class="fm-preview-meta-label">類型:</span>
+            <span class="fm-preview-meta-value">${file.type === 'directory' ? '資料夾' : ext.toUpperCase()}</span>
+          </div>
+          ${file.size !== null ? `
+          <div class="fm-preview-meta-item">
+            <span class="fm-preview-meta-label">大小:</span>
+            <span class="fm-preview-meta-value">${formatSize(file.size)}</span>
+          </div>
+          ` : ''}
+          ${file.modified ? `
+          <div class="fm-preview-meta-item">
+            <span class="fm-preview-meta-label">修改:</span>
+            <span class="fm-preview-meta-value">${formatDate(file.modified)}</span>
+          </div>
+          ` : ''}
+        </div>
+      </div>
+    `;
+
+    previewContent.innerHTML = previewHTML;
+
+    // Load text content async
+    if (TEXT_EXTENSIONS.includes(ext)) {
+      try {
+        const response = await fetch(`/api/nas/file?path=${encodeURIComponent(filePath)}`, {
+          headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+        if (response.ok) {
+          const text = await response.text();
+          const previewText = windowEl.querySelector('#fmPreviewText');
+          if (previewText) {
+            const lines = text.split('\n').slice(0, 50);
+            previewText.textContent = lines.join('\n') + (text.split('\n').length > 50 ? '\n...' : '');
+          }
+        }
+      } catch (e) {
+        const previewText = windowEl.querySelector('#fmPreviewText');
+        if (previewText) previewText.textContent = '無法載入預覽';
+      }
+    }
+  }
+
+  /**
+   * Download selected file
+   */
+  function downloadSelected() {
+    if (selectedFiles.size !== 1) return;
+    const name = [...selectedFiles][0];
+    const filePath = currentPath === '/' ? `/${name}` : `${currentPath}/${name}`;
+
+    const link = document.createElement('a');
+    link.href = `/api/nas/download?path=${encodeURIComponent(filePath)}`;
+    link.download = name;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  /**
+   * Handle file upload
+   */
+  async function handleUpload(e) {
+    const uploadFiles = e.target.files;
+    if (!uploadFiles || uploadFiles.length === 0) return;
+
+    for (const file of uploadFiles) {
+      const formData = new FormData();
+      formData.append('path', currentPath);
+      formData.append('file', file);
+
+      try {
+        const response = await fetch('/api/nas/upload', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${getToken()}` },
+          body: formData
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.detail || '上傳失敗');
+        }
+      } catch (error) {
+        DesktopModule.showToast(error.message, 'error');
+      }
+    }
+
+    e.target.value = '';
+    refresh();
+    DesktopModule.showToast('上傳成功', 'success');
+  }
+
+  /**
+   * Show new folder dialog
+   */
+  function showNewFolderDialog() {
+    showDialog({
+      title: '新增資料夾',
+      input: true,
+      inputPlaceholder: '資料夾名稱',
+      confirmText: '建立',
+      onConfirm: async (name) => {
+        if (!name.trim()) return;
+
+        const path = currentPath === '/' ? `/${name}` : `${currentPath}/${name}`;
+        try {
+          const response = await fetch('/api/nas/mkdir', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${getToken()}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ path })
+          });
+
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || '建立失敗');
+          }
+
+          refresh();
+          DesktopModule.showToast('資料夾建立成功', 'success');
+        } catch (error) {
+          DesktopModule.showToast(error.message, 'error');
+        }
+      }
+    });
+  }
+
+  /**
+   * Show rename dialog
+   */
+  function showRenameDialog() {
+    if (selectedFiles.size !== 1) return;
+    const oldName = [...selectedFiles][0];
+
+    showDialog({
+      title: '重命名',
+      input: true,
+      inputValue: oldName,
+      inputPlaceholder: '新名稱',
+      confirmText: '確定',
+      onConfirm: async (newName) => {
+        if (!newName.trim() || newName === oldName) return;
+
+        const path = currentPath === '/' ? `/${oldName}` : `${currentPath}/${oldName}`;
+        try {
+          const response = await fetch('/api/nas/rename', {
+            method: 'PATCH',
+            headers: {
+              'Authorization': `Bearer ${getToken()}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ path, new_name: newName })
+          });
+
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || '重命名失敗');
+          }
+
+          refresh();
+          DesktopModule.showToast('重命名成功', 'success');
+        } catch (error) {
+          DesktopModule.showToast(error.message, 'error');
+        }
+      }
+    });
+  }
+
+  /**
+   * Show delete dialog
+   */
+  function showDeleteDialog() {
+    if (selectedFiles.size === 0) return;
+
+    const names = [...selectedFiles];
+    const hasFolder = names.some(name => {
+      const file = files.find(f => f.name === name);
+      return file && file.type === 'directory';
+    });
+
+    showDialog({
+      title: '確認刪除',
+      message: names.length === 1
+        ? `確定要刪除「${names[0]}」嗎？`
+        : `確定要刪除 ${names.length} 個項目嗎？`,
+      warning: hasFolder ? '警告：將會連同資料夾內所有內容一併刪除！' : null,
+      confirmText: '刪除',
+      confirmDanger: true,
+      onConfirm: async () => {
+        for (const name of names) {
+          const path = currentPath === '/' ? `/${name}` : `${currentPath}/${name}`;
+          try {
+            const response = await fetch('/api/nas/file', {
+              method: 'DELETE',
+              headers: {
+                'Authorization': `Bearer ${getToken()}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ path, recursive: true })
+            });
+
+            if (!response.ok) {
+              const error = await response.json();
+              throw new Error(error.detail || '刪除失敗');
+            }
+          } catch (error) {
+            DesktopModule.showToast(`刪除「${name}」失敗：${error.message}`, 'error');
+          }
+        }
+
+        refresh();
+        DesktopModule.showToast('刪除成功', 'success');
+      }
+    });
+  }
+
+  /**
+   * Show dialog
+   */
+  function showDialog(options) {
+    const {
+      title,
+      message,
+      warning,
+      input,
+      inputValue = '',
+      inputPlaceholder = '',
+      confirmText = '確定',
+      confirmDanger = false,
+      onConfirm
+    } = options;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'fm-dialog-overlay';
+    overlay.innerHTML = `
+      <div class="fm-dialog">
+        <div class="fm-dialog-header">
+          <span class="fm-dialog-title">${title}</span>
+          <button class="fm-dialog-close">
+            <span class="icon">${getIcon('close')}</span>
+          </button>
+        </div>
+        <div class="fm-dialog-body">
+          ${message ? `<div class="fm-dialog-message">${message}</div>` : ''}
+          ${warning ? `<div class="fm-dialog-message warning">${warning}</div>` : ''}
+          ${input ? `<input type="text" class="fm-dialog-input" value="${inputValue}" placeholder="${inputPlaceholder}">` : ''}
+        </div>
+        <div class="fm-dialog-footer">
+          <button class="fm-dialog-btn fm-dialog-btn-cancel">取消</button>
+          <button class="fm-dialog-btn ${confirmDanger ? 'fm-dialog-btn-danger' : 'fm-dialog-btn-primary'}">${confirmText}</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const closeDialog = () => overlay.remove();
+    const inputEl = overlay.querySelector('.fm-dialog-input');
+
+    overlay.querySelector('.fm-dialog-close').addEventListener('click', closeDialog);
+    overlay.querySelector('.fm-dialog-btn-cancel').addEventListener('click', closeDialog);
+    overlay.querySelector('.fm-dialog-footer .fm-dialog-btn:last-child').addEventListener('click', () => {
+      const value = input ? inputEl.value : null;
+      closeDialog();
+      if (onConfirm) onConfirm(value);
+    });
+
+    if (inputEl) {
+      inputEl.focus();
+      inputEl.select();
+      inputEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          closeDialog();
+          if (onConfirm) onConfirm(inputEl.value);
+        } else if (e.key === 'Escape') {
+          closeDialog();
+        }
+      });
+    }
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeDialog();
+    });
+  }
+
+  // Public API
+  return {
+    open,
+    close
+  };
+})();

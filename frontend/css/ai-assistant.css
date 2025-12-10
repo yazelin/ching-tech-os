@@ -165,7 +165,56 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+}
+
+.ai-prompt-selector {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.ai-prompt-selector label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.ai-prompt-select {
+  width: auto;
+  min-width: 120px;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-size: var(--font-size-sm);
+  background-color: rgba(255, 255, 255, 0.05);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-gray-dark);
+  border-radius: var(--radius-md);
+}
+
+.ai-prompt-select:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.ai-prompt-select option {
+  background-color: var(--color-background);
+  color: var(--color-text-primary);
+}
+
+.ai-token-info {
+  display: flex;
+  align-items: center;
+  gap: 2px;
   margin-left: auto;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.ai-token-count {
+  font-family: monospace;
+}
+
+.ai-token-count.warning {
+  color: var(--color-warning);
+  font-weight: 600;
 }
 
 .ai-model-selector label {
@@ -192,6 +241,59 @@
 .ai-model-select option {
   background-color: var(--color-background);
   color: var(--color-text-primary);
+}
+
+/* ==========================================================================
+   Token Warning Bar
+   ========================================================================== */
+.ai-token-warning {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: rgba(255, 193, 7, 0.1);
+  border-bottom: 1px solid rgba(255, 193, 7, 0.3);
+  flex-shrink: 0;
+}
+
+.ai-warning-text {
+  font-size: var(--font-size-sm);
+  color: var(--color-warning);
+}
+
+.ai-compress-btn {
+  flex-shrink: 0;
+  font-size: var(--font-size-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+}
+
+.ai-compress-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ==========================================================================
+   Summary Message
+   ========================================================================== */
+.ai-message-summary {
+  background-color: rgba(128, 128, 128, 0.1);
+  border: 1px solid rgba(128, 128, 128, 0.2);
+  border-left: 3px solid var(--color-text-muted);
+}
+
+.ai-message-summary .ai-message-content {
+  padding-left: var(--spacing-sm);
+}
+
+.ai-message-summary .ai-message-role {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.ai-message-summary .ai-message-text {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
 }
 
 /* ==========================================================================
@@ -290,6 +392,8 @@
   color: var(--color-text-primary);
   line-height: 1.6;
   word-wrap: break-word;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 /* Typing Indicator */

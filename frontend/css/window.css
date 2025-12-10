@@ -32,6 +32,19 @@
   display: none;
 }
 
+.window.maximized {
+  left: 0 !important;
+  top: 0 !important;
+  width: 100% !important;
+  height: calc(100% - var(--taskbar-height) - var(--spacing-lg)) !important;
+  border-radius: 0;
+  border: none;
+}
+
+.window.maximized .window-resize {
+  display: none;
+}
+
 /* ==========================================================================
    Window Titlebar
    ========================================================================== */

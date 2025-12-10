@@ -1,0 +1,118 @@
+/**
+ * ChingTech OS - API Client
+ * REST API wrapper for backend communication
+ */
+
+const APIClient = (function() {
+  'use strict';
+
+  const BASE_URL = 'http://localhost:8088/api';
+
+  /**
+   * Make an API request
+   * @param {string} endpoint
+   * @param {Object} options
+   * @returns {Promise}
+   */
+  async function request(endpoint, options = {}) {
+    const url = `${BASE_URL}${endpoint}`;
+    const defaultOptions = {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include', // Include cookies for session
+    };
+
+    const response = await fetch(url, { ...defaultOptions, ...options });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
+      throw new Error(error.detail || `HTTP ${response.status}`);
+    }
+
+    // Handle 204 No Content
+    if (response.status === 204) {
+      return null;
+    }
+
+    return response.json();
+  }
+
+  // ========== AI Chat API ==========
+
+  /**
+   * Get user's chat list
+   * @returns {Promise<Array>}
+   */
+  async function getChats() {
+    return request('/ai/chats');
+  }
+
+  /**
+   * Create a new chat
+   * @param {Object} data - { title, model, prompt_name }
+   * @returns {Promise<Object>}
+   */
+  async function createChat(data = {}) {
+    return request('/ai/chats', {
+      method: 'POST',
+      body: JSON.stringify({
+        title: data.title || '新對話',
+        model: data.model || 'claude-sonnet',
+        prompt_name: data.prompt_name || 'default',
+      }),
+    });
+  }
+
+  /**
+   * Get chat details
+   * @param {string} chatId
+   * @returns {Promise<Object>}
+   */
+  async function getChat(chatId) {
+    return request(`/ai/chats/${chatId}`);
+  }
+
+  /**
+   * Delete a chat
+   * @param {string} chatId
+   * @returns {Promise}
+   */
+  async function deleteChat(chatId) {
+    return request(`/ai/chats/${chatId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Update a chat
+   * @param {string} chatId
+   * @param {Object} data - { title, model, prompt_name }
+   * @returns {Promise<Object>}
+   */
+  async function updateChat(chatId, data) {
+    return request(`/ai/chats/${chatId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  /**
+   * Get available prompts
+   * @returns {Promise<Array>}
+   */
+  async function getPrompts() {
+    return request('/ai/prompts');
+  }
+
+  // Public API
+  return {
+    // AI Chats
+    getChats,
+    createChat,
+    getChat,
+    deleteChat,
+    updateChat,
+    getPrompts,
+  };
+})();

@@ -26,12 +26,20 @@ class Settings(BaseSettings):
     session_ttl_hours: int = 8
     session_cleanup_interval_minutes: int = 10
 
-    # CORS 設定（開發環境允許所有來源）
-    cors_origins: list[str] = ["*"]
+    # CORS 設定（credentials=True 時不能用 "*"）
+    cors_origins: list[str] = [
+        "http://localhost:8080",
+        "http://localhost:8088",
+        "http://0.0.0.0:8080",
+        "http://0.0.0.0:8088",
+        "http://127.0.0.1:8080",
+        "http://127.0.0.1:8088",
+    ]
 
     @property
     def database_url(self) -> str:
-        return f"postgresql://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
+        """同步 database URL (for Alembic/SQLAlchemy)"""
+        return f"postgresql+psycopg://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
 
     @property
     def async_database_url(self) -> str:

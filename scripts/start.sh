@@ -52,11 +52,15 @@ start_dev() {
         uv sync
     fi
 
+    # 執行資料庫 migration
+    log_info "執行資料庫 migration..."
+    uv run alembic upgrade head
+
     echo ""
     log_info "應用程式: http://localhost:8088"
     log_info "API 文件: http://localhost:8088/docs"
     echo ""
-    uv run uvicorn ching_tech_os.main:app --host 0.0.0.0 --port 8088 --reload
+    uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8088 --reload
 }
 
 # 停止所有服務

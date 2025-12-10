@@ -9,7 +9,7 @@ const SocketClient = (function () {
   let isConnected = false;
 
   // 後端 URL（開發環境）
-  const BACKEND_URL = 'http://localhost:8000';
+  const BACKEND_URL = 'http://localhost:8088';
 
   /**
    * 建立 Socket.IO 連線
@@ -48,6 +48,50 @@ const SocketClient = (function () {
     socket.on('ai_typing', handleAITyping);
     socket.on('ai_response', handleAIResponse);
     socket.on('ai_error', handleAIError);
+
+    // 對話壓縮事件
+    socket.on('compress_started', handleCompressStarted);
+    socket.on('compress_complete', handleCompressComplete);
+    socket.on('compress_error', handleCompressError);
+  }
+
+  /**
+   * 處理壓縮開始
+   * @param {Object} data - { chatId }
+   */
+  function handleCompressStarted(data) {
+    const { chatId } = data;
+    console.log('[SocketClient] Compress started for chat:', chatId);
+
+    if (typeof AIAssistantApp !== 'undefined' && AIAssistantApp.isWindowOpen()) {
+      AIAssistantApp.setCompressingState(chatId, true);
+    }
+  }
+
+  /**
+   * 處理壓縮完成
+   * @param {Object} data - { chatId, messages, compressed_count }
+   */
+  function handleCompressComplete(data) {
+    const { chatId, messages, compressed_count } = data;
+    console.log('[SocketClient] Compress complete for chat:', chatId, 'compressed:', compressed_count);
+
+    if (typeof AIAssistantApp !== 'undefined') {
+      AIAssistantApp.handleCompressComplete(chatId, messages);
+    }
+  }
+
+  /**
+   * 處理壓縮錯誤
+   * @param {Object} data - { chatId, error }
+   */
+  function handleCompressError(data) {
+    const { chatId, error } = data;
+    console.error('[SocketClient] Compress error:', chatId, error);
+
+    if (typeof AIAssistantApp !== 'undefined') {
+      AIAssistantApp.handleCompressError(chatId, error);
+    }
   }
 
   /**
@@ -101,7 +145,7 @@ const SocketClient = (function () {
 
   /**
    * 發送 AI 對話訊息
-   * @param {Object} data - { chatId, sessionId, message, model }
+   * @param {Object} data - { chatId, message, model }
    */
   function sendAIChat(data) {
     if (!socket || !isConnected) {
@@ -109,7 +153,21 @@ const SocketClient = (function () {
       return false;
     }
 
-    socket.emit('ai_chat', data);
+    socket.emit('ai_chat_event', data);
+    return true;
+  }
+
+  /**
+   * 發送對話壓縮請求
+   * @param {string} chatId
+   */
+  function compressChat(chatId) {
+    if (!socket || !isConnected) {
+      console.error('[SocketClient] Not connected, cannot compress');
+      return false;
+    }
+
+    socket.emit('compress_chat', { chatId });
     return true;
   }
 
@@ -136,6 +194,7 @@ const SocketClient = (function () {
     connect,
     disconnect,
     sendAIChat,
+    compressChat,
     isConnected: getIsConnected,
   };
 })();

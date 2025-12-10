@@ -1,6 +1,6 @@
 /**
  * ChingTech OS - AI Assistant Application
- * ChatGPT-style AI chat interface
+ * ChatGPT-style AI chat interface with DB persistence
  */
 
 const AIAssistantApp = (function() {
@@ -8,11 +8,16 @@ const AIAssistantApp = (function() {
 
   // Application state
   const APP_ID = 'ai-assistant';
-  const STORAGE_KEY = 'chingtech_ai_chats';
   let windowId = null;
   let chats = [];
   let currentChatId = null;
   let sidebarCollapsed = false;
+  let availablePrompts = [];
+  let isCompressing = false;
+
+  // Token estimation constants
+  const TOKEN_LIMIT = 200000;
+  const WARNING_THRESHOLD = 0.75; // 75%
 
   // Available models
   const availableModels = [
@@ -22,68 +27,78 @@ const AIAssistantApp = (function() {
   ];
 
   /**
-   * Generate unique ID
-   * @returns {string}
+   * Estimate tokens from text (simplified: ~2 chars per token)
+   * @param {string} text
+   * @returns {number}
    */
-  function generateId() {
-    return 'chat-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+  function estimateTokens(text) {
+    if (!text) return 0;
+    return Math.ceil(text.length / 2);
   }
 
   /**
-   * Generate UUID v4 for Claude CLI session
-   * @returns {string}
+   * Calculate total tokens for a chat
+   * @param {Array} messages
+   * @returns {number}
    */
-  function generateUUID() {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-      const r = Math.random() * 16 | 0;
-      const v = c === 'x' ? r : (r & 0x3 | 0x8);
-      return v.toString(16);
-    });
+  function getChatTokens(messages) {
+    if (!messages || !Array.isArray(messages)) return 0;
+    return messages.reduce((sum, msg) => sum + estimateTokens(msg.content || ''), 0);
   }
 
   /**
-   * Load chats from localStorage
+   * Load chats from API
    */
-  function loadChats() {
+  async function loadChats() {
     try {
-      const data = localStorage.getItem(STORAGE_KEY);
-      if (data) {
-        chats = JSON.parse(data);
+      if (typeof APIClient !== 'undefined') {
+        chats = await APIClient.getChats();
+      } else {
+        console.warn('[AIAssistant] APIClient not available, using empty chats');
+        chats = [];
       }
     } catch (e) {
-      console.error('Failed to load chats:', e);
+      console.error('[AIAssistant] Failed to load chats:', e);
       chats = [];
     }
   }
 
   /**
-   * Save chats to localStorage
+   * Load available prompts from API
    */
-  function saveChats() {
+  async function loadPrompts() {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(chats));
+      if (typeof APIClient !== 'undefined') {
+        availablePrompts = await APIClient.getPrompts();
+      } else {
+        availablePrompts = [{ name: 'default', display_name: '預設助手', description: '' }];
+      }
     } catch (e) {
-      console.error('Failed to save chats:', e);
+      console.error('[AIAssistant] Failed to load prompts:', e);
+      availablePrompts = [{ name: 'default', display_name: '預設助手', description: '' }];
     }
   }
 
   /**
-   * Create a new chat
+   * Create a new chat via API
+   * @param {string} promptName
    * @returns {Object} New chat object
    */
-  function createChat() {
-    const chat = {
-      id: generateId(),
-      sessionId: generateUUID(),  // UUID for Claude CLI session
-      title: '新對話',
-      model: availableModels[0].id,
-      messages: [],
-      createdAt: Date.now(),
-      updatedAt: Date.now()
-    };
-    chats.unshift(chat);
-    saveChats();
-    return chat;
+  async function createChat(promptName = 'default') {
+    try {
+      if (typeof APIClient !== 'undefined') {
+        const chat = await APIClient.createChat({
+          title: '新對話',
+          model: availableModels[1].id, // Default to Sonnet
+          prompt_name: promptName,
+        });
+        chats.unshift(chat);
+        return chat;
+      }
+    } catch (e) {
+      console.error('[AIAssistant] Failed to create chat:', e);
+    }
+    return null;
   }
 
   /**
@@ -96,38 +111,35 @@ const AIAssistantApp = (function() {
   }
 
   /**
-   * Delete a chat
+   * Delete a chat via API
    * @param {string} chatId
    */
-  function deleteChat(chatId) {
-    const index = chats.findIndex(c => c.id === chatId);
-    if (index > -1) {
-      chats.splice(index, 1);
-      saveChats();
-      if (currentChatId === chatId) {
-        currentChatId = chats.length > 0 ? chats[0].id : null;
-        if (!currentChatId) {
-          const newChat = createChat();
-          currentChatId = newChat.id;
-        }
+  async function deleteChat(chatId) {
+    try {
+      if (typeof APIClient !== 'undefined') {
+        await APIClient.deleteChat(chatId);
       }
-      renderChatList();
-      renderMessages();
-    }
-  }
 
-  /**
-   * Generate chat title from first message
-   * @param {string} content
-   * @returns {string}
-   */
-  function generateTitle(content) {
-    const maxLength = 20;
-    const cleaned = content.replace(/\n/g, ' ').trim();
-    if (cleaned.length <= maxLength) {
-      return cleaned;
+      const index = chats.findIndex(c => c.id === chatId);
+      if (index > -1) {
+        chats.splice(index, 1);
+
+        if (currentChatId === chatId) {
+          if (chats.length > 0) {
+            currentChatId = chats[0].id;
+          } else {
+            const newChat = await createChat();
+            if (newChat) {
+              currentChatId = newChat.id;
+            }
+          }
+        }
+        renderChatList();
+        renderMessages();
+      }
+    } catch (e) {
+      console.error('[AIAssistant] Failed to delete chat:', e);
     }
-    return cleaned.substring(0, maxLength) + '...';
   }
 
   /**
@@ -162,7 +174,22 @@ const AIAssistantApp = (function() {
                 ${availableModels.map(m => `<option value="${m.id}">${m.name}</option>`).join('')}
               </select>
             </div>
+            <div class="ai-prompt-selector">
+              <label>助手：</label>
+              <select class="ai-prompt-select input">
+                ${availablePrompts.map(p => `<option value="${p.name}">${p.display_name}</option>`).join('')}
+              </select>
+            </div>
+            <div class="ai-token-info">
+              <span class="ai-token-count">0</span>
+              <span class="ai-token-separator">/</span>
+              <span class="ai-token-limit">${TOKEN_LIMIT.toLocaleString()}</span>
+            </div>
           </header>
+          <div class="ai-token-warning" style="display: none;">
+            <span class="ai-warning-text"></span>
+            <button class="ai-compress-btn btn btn-warning">壓縮對話</button>
+          </div>
           <div class="ai-messages">
             <div class="ai-messages-container">
               <!-- Messages will be rendered here -->
@@ -233,7 +260,9 @@ const AIAssistantApp = (function() {
     if (!container) return;
 
     const chat = getChatById(currentChatId);
-    if (!chat || chat.messages.length === 0) {
+    const messages = chat?.messages || [];
+
+    if (messages.length === 0) {
       container.innerHTML = `
         <div class="ai-welcome">
           <span class="ai-welcome-icon icon">${getIcon('robot')}</span>
@@ -241,25 +270,69 @@ const AIAssistantApp = (function() {
           <p>有什麼我可以幫助你的嗎？</p>
         </div>
       `;
-      return;
+    } else {
+      container.innerHTML = messages.map(msg => {
+        // Skip system summary messages in display (or show differently)
+        if (msg.is_summary) {
+          return `
+            <div class="ai-message ai-message-summary">
+              <div class="ai-message-content">
+                <div class="ai-message-role">對話摘要</div>
+                <div class="ai-message-text">${escapeHtml(msg.content)}</div>
+              </div>
+            </div>
+          `;
+        }
+        return `
+          <div class="ai-message ai-message-${msg.role}">
+            <div class="ai-message-avatar">
+              <span class="icon">${getIcon(msg.role === 'user' ? 'account' : 'robot')}</span>
+            </div>
+            <div class="ai-message-content">
+              <div class="ai-message-role">${msg.role === 'user' ? '你' : 'AI 助手'}</div>
+              <div class="ai-message-text">${escapeHtml(msg.content)}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
     }
-
-    container.innerHTML = chat.messages.map(msg => `
-      <div class="ai-message ai-message-${msg.role}">
-        <div class="ai-message-avatar">
-          <span class="icon">${getIcon(msg.role === 'user' ? 'account' : 'robot')}</span>
-        </div>
-        <div class="ai-message-content">
-          <div class="ai-message-role">${msg.role === 'user' ? '你' : 'AI 助手'}</div>
-          <div class="ai-message-text">${escapeHtml(msg.content)}</div>
-        </div>
-      </div>
-    `).join('');
 
     // Scroll to bottom
     const messagesArea = document.querySelector(`#${windowId} .ai-messages`);
     if (messagesArea) {
       messagesArea.scrollTop = messagesArea.scrollHeight;
+    }
+
+    // Update token count and warning
+    updateTokenDisplay(messages);
+  }
+
+  /**
+   * Update token display and warning
+   * @param {Array} messages
+   */
+  function updateTokenDisplay(messages) {
+    const tokens = getChatTokens(messages);
+    const percentage = tokens / TOKEN_LIMIT;
+
+    // Update token count
+    const tokenCount = document.querySelector(`#${windowId} .ai-token-count`);
+    if (tokenCount) {
+      tokenCount.textContent = tokens.toLocaleString();
+      tokenCount.className = 'ai-token-count' + (percentage > WARNING_THRESHOLD ? ' warning' : '');
+    }
+
+    // Update warning bar
+    const warningBar = document.querySelector(`#${windowId} .ai-token-warning`);
+    const warningText = document.querySelector(`#${windowId} .ai-warning-text`);
+    if (warningBar && warningText) {
+      if (percentage > WARNING_THRESHOLD) {
+        const pct = Math.round(percentage * 100);
+        warningText.textContent = `對話過長 (${pct}%)，建議壓縮以維持 AI 回應品質`;
+        warningBar.style.display = 'flex';
+      } else {
+        warningBar.style.display = 'none';
+      }
     }
   }
 
@@ -278,15 +351,34 @@ const AIAssistantApp = (function() {
    * Switch to a different chat
    * @param {string} chatId
    */
-  function switchChat(chatId) {
+  async function switchChat(chatId) {
     currentChatId = chatId;
 
-    // Update model selector
+    // Load full chat details from API if messages not loaded
     const chat = getChatById(chatId);
-    if (chat) {
+    if (chat && (!chat.messages || chat.messages.length === undefined)) {
+      try {
+        const fullChat = await APIClient.getChat(chatId);
+        const index = chats.findIndex(c => c.id === chatId);
+        if (index > -1) {
+          chats[index] = fullChat;
+        }
+      } catch (e) {
+        console.error('[AIAssistant] Failed to load chat details:', e);
+      }
+    }
+
+    // Update model selector
+    const updatedChat = getChatById(chatId);
+    if (updatedChat) {
       const modelSelect = document.querySelector(`#${windowId} .ai-model-select`);
       if (modelSelect) {
-        modelSelect.value = chat.model;
+        modelSelect.value = updatedChat.model || 'claude-sonnet';
+      }
+
+      const promptSelect = document.querySelector(`#${windowId} .ai-prompt-select`);
+      if (promptSelect) {
+        promptSelect.value = updatedChat.prompt_name || 'default';
       }
     }
 
@@ -298,35 +390,28 @@ const AIAssistantApp = (function() {
    * Send a message
    * @param {string} content
    */
-  function sendMessage(content) {
+  async function sendMessage(content) {
     if (!content.trim()) return;
 
     let chat = getChatById(currentChatId);
     if (!chat) {
-      chat = createChat();
+      chat = await createChat();
+      if (!chat) {
+        console.error('[AIAssistant] Failed to create chat');
+        return;
+      }
       currentChatId = chat.id;
     }
 
-    // Ensure chat has sessionId (for older chats)
-    if (!chat.sessionId) {
-      chat.sessionId = generateUUID();
-    }
-
-    // Add user message
+    // Add user message to local state (optimistic update)
+    if (!chat.messages) chat.messages = [];
     const userMessage = {
       role: 'user',
       content: content.trim(),
-      timestamp: Date.now()
+      timestamp: Math.floor(Date.now() / 1000)
     };
     chat.messages.push(userMessage);
 
-    // Update title if this is the first message
-    if (chat.messages.length === 1) {
-      chat.title = generateTitle(content);
-    }
-
-    chat.updatedAt = Date.now();
-    saveChats();
     renderChatList();
     renderMessages();
 
@@ -334,12 +419,10 @@ const AIAssistantApp = (function() {
     if (typeof SocketClient !== 'undefined' && SocketClient.isConnected()) {
       SocketClient.sendAIChat({
         chatId: chat.id,
-        sessionId: chat.sessionId,
         message: content.trim(),
-        model: chat.model
+        model: chat.model || 'claude-sonnet'
       });
     } else {
-      // Fallback: show error if not connected
       handleError(chat.id, '無法連接到伺服器，請稍後再試');
     }
   }
@@ -357,14 +440,13 @@ const AIAssistantApp = (function() {
     setTypingState(chatId, false);
 
     // Add assistant message
+    if (!chat.messages) chat.messages = [];
     const assistantMessage = {
       role: 'assistant',
       content: message,
-      timestamp: Date.now()
+      timestamp: Math.floor(Date.now() / 1000)
     };
     chat.messages.push(assistantMessage);
-    chat.updatedAt = Date.now();
-    saveChats();
 
     // Render if this chat is currently active
     if (chatId === currentChatId && windowId) {
@@ -415,6 +497,58 @@ const AIAssistantApp = (function() {
   }
 
   /**
+   * Set compressing state
+   * @param {string} chatId
+   * @param {boolean} compressing
+   */
+  function setCompressingState(chatId, compressing) {
+    isCompressing = compressing;
+
+    const compressBtn = document.querySelector(`#${windowId} .ai-compress-btn`);
+    if (compressBtn) {
+      compressBtn.textContent = compressing ? '壓縮中...' : '壓縮對話';
+      compressBtn.disabled = compressing;
+    }
+  }
+
+  /**
+   * Handle compress complete
+   * @param {string} chatId
+   * @param {Array} messages
+   */
+  function handleCompressComplete(chatId, messages) {
+    setCompressingState(chatId, false);
+
+    const chat = getChatById(chatId);
+    if (chat) {
+      chat.messages = messages;
+    }
+
+    if (chatId === currentChatId && windowId) {
+      renderMessages();
+    }
+  }
+
+  /**
+   * Handle compress error
+   * @param {string} chatId
+   * @param {string} error
+   */
+  function handleCompressError(chatId, error) {
+    setCompressingState(chatId, false);
+    console.error('[AIAssistant] Compress error:', error);
+
+    // Show error notification or message
+    if (typeof NotificationModule !== 'undefined') {
+      NotificationModule.show({
+        title: '壓縮失敗',
+        message: error,
+        duration: 5000,
+      });
+    }
+  }
+
+  /**
    * Handle error from backend
    * @param {string} chatId
    * @param {string} error
@@ -427,14 +561,13 @@ const AIAssistantApp = (function() {
     if (!chat) return;
 
     // Add error message as system message
+    if (!chat.messages) chat.messages = [];
     const errorMessage = {
       role: 'assistant',
       content: `[錯誤] ${error}`,
-      timestamp: Date.now()
+      timestamp: Math.floor(Date.now() / 1000)
     };
     chat.messages.push(errorMessage);
-    chat.updatedAt = Date.now();
-    saveChats();
 
     // Render if this chat is currently active
     if (chatId === currentChatId && windowId) {
@@ -482,18 +615,31 @@ const AIAssistantApp = (function() {
    * @param {HTMLElement} windowEl
    * @param {string} wId
    */
-  function initApp(windowEl, wId) {
+  async function initApp(windowEl, wId) {
     windowId = wId;
 
-    // Load data
-    loadChats();
+    // Load data from API
+    await loadPrompts();
+    await loadChats();
+
+    // Update prompt selector after loading
+    const promptSelect = document.querySelector(`#${windowId} .ai-prompt-select`);
+    if (promptSelect && availablePrompts.length > 0) {
+      promptSelect.innerHTML = availablePrompts.map(p =>
+        `<option value="${p.name}">${p.display_name}</option>`
+      ).join('');
+    }
 
     // Create initial chat if none exists
     if (chats.length === 0) {
-      const chat = createChat();
-      currentChatId = chat.id;
+      const chat = await createChat();
+      if (chat) {
+        currentChatId = chat.id;
+      }
     } else {
       currentChatId = chats[0].id;
+      // Load full details for current chat
+      await switchChat(currentChatId);
     }
 
     // Render initial state
@@ -511,11 +657,15 @@ const AIAssistantApp = (function() {
     // New chat button
     const newChatBtn = document.querySelector(`#${windowId} .ai-new-chat-btn`);
     if (newChatBtn) {
-      newChatBtn.addEventListener('click', () => {
-        const chat = createChat();
-        currentChatId = chat.id;
-        renderChatList();
-        renderMessages();
+      newChatBtn.addEventListener('click', async () => {
+        const promptSelect = document.querySelector(`#${windowId} .ai-prompt-select`);
+        const promptName = promptSelect ? promptSelect.value : 'default';
+        const chat = await createChat(promptName);
+        if (chat) {
+          currentChatId = chat.id;
+          renderChatList();
+          renderMessages();
+        }
       });
     }
 
@@ -534,11 +684,44 @@ const AIAssistantApp = (function() {
     // Model selector
     const modelSelect = document.querySelector(`#${windowId} .ai-model-select`);
     if (modelSelect) {
-      modelSelect.addEventListener('change', (e) => {
+      modelSelect.addEventListener('change', async (e) => {
         const chat = getChatById(currentChatId);
         if (chat) {
           chat.model = e.target.value;
-          saveChats();
+          // Update on server
+          try {
+            await APIClient.updateChat(chat.id, { model: e.target.value });
+          } catch (err) {
+            console.error('[AIAssistant] Failed to update model:', err);
+          }
+        }
+      });
+    }
+
+    // Prompt selector
+    const promptSelect = document.querySelector(`#${windowId} .ai-prompt-select`);
+    if (promptSelect) {
+      promptSelect.addEventListener('change', async (e) => {
+        const chat = getChatById(currentChatId);
+        if (chat) {
+          chat.prompt_name = e.target.value;
+          // Update on server
+          try {
+            await APIClient.updateChat(chat.id, { prompt_name: e.target.value });
+          } catch (err) {
+            console.error('[AIAssistant] Failed to update prompt:', err);
+          }
+        }
+      });
+    }
+
+    // Compress button
+    const compressBtn = document.querySelector(`#${windowId} .ai-compress-btn`);
+    if (compressBtn) {
+      compressBtn.addEventListener('click', () => {
+        if (isCompressing) return;
+        if (currentChatId && typeof SocketClient !== 'undefined') {
+          SocketClient.compressChat(currentChatId);
         }
       });
     }
@@ -625,6 +808,9 @@ const AIAssistantApp = (function() {
     isWindowOpen,
     receiveMessage,
     setTypingState,
+    setCompressingState,
+    handleCompressComplete,
+    handleCompressError,
     handleError,
     switchToChat
   };
