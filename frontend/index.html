@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ChingTech OS - 桌面</title>
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="assets/images/logo.svg">
+
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/header.css">
+  <link rel="stylesheet" href="css/desktop.css">
+  <link rel="stylesheet" href="css/taskbar.css">
+</head>
+<body>
+  <div class="desktop-container">
+    <!-- Header Bar -->
+    <header class="header-bar">
+      <div class="header-left">
+        <img src="assets/images/logo-breathing.svg" alt="Logo" class="header-logo">
+        <span class="header-title">ChingTech <span class="header-title-os">OS</span></span>
+      </div>
+
+      <div class="header-center">
+        <!-- Reserved for future navigation or search -->
+      </div>
+
+      <div class="header-right">
+        <!-- System Time -->
+        <div class="header-time">
+          <span class="icon" id="iconClock"></span>
+          <span id="headerTime">--:--:--</span>
+        </div>
+
+        <div class="header-divider"></div>
+
+        <!-- User Info -->
+        <div class="header-user">
+          <span class="icon" id="iconUser"></span>
+          <span id="headerUserName" class="header-user-name">使用者</span>
+        </div>
+
+        <!-- Logout Button -->
+        <button id="logoutBtn" class="header-logout" title="登出">
+          <span class="icon" id="iconLogout"></span>
+          <span>登出</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Desktop Area -->
+    <main class="desktop-area">
+      <!-- Desktop icons will be rendered by JavaScript -->
+    </main>
+
+    <!-- Taskbar / Dock -->
+    <nav class="taskbar">
+      <!-- Taskbar icons will be rendered by JavaScript -->
+    </nav>
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/icons.js"></script>
+  <script src="js/login.js"></script>
+  <script src="js/header.js"></script>
+  <script src="js/desktop.js"></script>
+  <script src="js/taskbar.js"></script>
+  <script>
+    // 初始化 Header icons
+    document.getElementById('iconClock').innerHTML = getIcon('clock-outline');
+    document.getElementById('iconUser').innerHTML = getIcon('account-circle');
+    document.getElementById('iconLogout').innerHTML = getIcon('logout');
+  </script>
+  <script>
+    // Initialize desktop when DOM is ready
+    document.addEventListener('DOMContentLoaded', function() {
+      // Check if logged in
+      if (!LoginModule.isLoggedIn()) {
+        window.location.href = 'login.html';
+        return;
+      }
+
+      // Initialize all modules
+      HeaderModule.init();
+      DesktopModule.init();
+      TaskbarModule.init();
+    });
+  </script>
+</body>
+</html>

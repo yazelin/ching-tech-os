@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-60 -60 840 840" width="720" height="720">
+  <defs>
+    <!-- 強光暈效果 -->
+    <filter id="glowStrong" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <!-- 弱光暈效果 -->
+    <filter id="glowWeak" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <!-- 中心圓光暈 -->
+    <filter id="glowCenter" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!--
+    統一使用白色 #FFFFFF，透明度區分深淺
+  -->
+
+  <!-- 編號7: 正六角形 r=360px 透明度8% -->
+  <polygon
+    points="360,0 671.77,180 671.77,540 360,720 48.23,540 48.23,180"
+    fill="none"
+    stroke="rgba(255, 255, 255, 0.08)"
+    stroke-width="10"
+    stroke-linejoin="round"
+    stroke-linecap="round"
+    filter="url(#glowWeak)"
+  />
+
+  <!-- 編號6: 正六角形 r=300px 透明度5% -->
+  <polygon
+    points="360,60 619.81,210 619.81,510 360,660 100.19,510 100.19,210"
+    fill="none"
+    stroke="rgba(255, 255, 255, 0.05)"
+    stroke-width="5"
+    stroke-linejoin="round"
+    stroke-linecap="round"
+    filter="url(#glowWeak)"
+  />
+
+  <!-- 編號5: 正六角形 r=240px 邊框100% 填充5% -->
+  <polygon
+    points="360,120 567.85,240 567.85,480 360,600 152.15,480 152.15,240"
+    fill="rgba(255, 255, 255, 0.05)"
+    stroke="#FFFFFF"
+    stroke-width="15"
+    stroke-linejoin="round"
+    stroke-linecap="round"
+    filter="url(#glowStrong)"
+  />
+
+  <!-- 編號4: 正六角形 r=180px 邊框5% -->
+  <polygon
+    points="360,180 515.88,270 515.88,450 360,540 204.12,450 204.12,270"
+    fill="none"
+    stroke="rgba(255, 255, 255, 0.05)"
+    stroke-width="5"
+    stroke-linejoin="round"
+    stroke-linecap="round"
+    filter="url(#glowWeak)"
+  />
+
+  <!-- 編號2: 圓形 r=2單位=60px 透明度10% -->
+  <circle cx="360" cy="360" r="60" fill="rgba(255, 255, 255, 0.1)" filter="url(#glowWeak)"/>
+
+  <!-- 編號3: 正六角形 r=120px 邊框100% 填充10% -->
+  <polygon
+    points="360,240 463.92,300 463.92,420 360,480 256.08,420 256.08,300"
+    fill="rgba(255, 255, 255, 0.1)"
+    stroke="#FFFFFF"
+    stroke-width="15"
+    stroke-linejoin="round"
+    stroke-linecap="round"
+    filter="url(#glowStrong)"
+  />
+
+  <!-- 編號1: 圓形 r=45px 透明度100% -->
+  <circle cx="360" cy="360" r="45" fill="#FFFFFF" filter="url(#glowCenter)"/>
+
+  <!-- 編號3延伸線: 透明度100% -->
+  <g filter="url(#glowStrong)">
+    <line x1="360" y1="240" x2="360" y2="195" stroke="#FFFFFF" stroke-width="15" stroke-linecap="round"/>
+    <line x1="463.92" y1="420" x2="502.89" y2="442.5" stroke="#FFFFFF" stroke-width="15" stroke-linecap="round"/>
+    <line x1="256.08" y1="420" x2="217.11" y2="442.5" stroke="#FFFFFF" stroke-width="15" stroke-linecap="round"/>
+  </g>
+</svg>

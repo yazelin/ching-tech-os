@@ -1,0 +1,107 @@
+/* ==========================================================================
+   ChingTech OS - Taskbar/Dock Styles
+   ========================================================================== */
+
+.taskbar {
+  position: fixed;
+  bottom: var(--spacing-md);
+  left: 50%;
+  transform: translateX(-50%);
+  height: var(--taskbar-height);
+  background-color: rgba(15, 28, 46, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-xl);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--spacing-md);
+  gap: var(--spacing-sm);
+  z-index: 100;
+  backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-lg);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Taskbar Icons */
+.taskbar-icon {
+  width: var(--taskbar-icon-size);
+  height: var(--taskbar-icon-size);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  position: relative;
+  user-select: none;
+  -webkit-user-select: none;
+  outline: none;
+}
+
+.taskbar-icon:hover {
+  background-color: rgba(255, 255, 255, 0.12);
+  transform: translateY(-4px);
+}
+
+.taskbar-icon:active {
+  transform: translateY(-2px);
+}
+
+.taskbar-icon .icon {
+  color: var(--color-text-secondary);
+  transition: color var(--transition-fast);
+}
+
+.taskbar-icon .icon svg {
+  width: 28px;
+  height: 28px;
+}
+
+.taskbar-icon:hover .icon {
+  color: var(--color-accent);
+}
+
+/* Taskbar Tooltip */
+.taskbar-icon::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background-color: rgba(0, 0, 0, 0.9);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transition: all var(--transition-fast);
+  pointer-events: none;
+}
+
+.taskbar-icon:hover::after {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Taskbar Divider */
+.taskbar-divider {
+  width: 1px;
+  height: 32px;
+  background-color: rgba(255, 255, 255, 0.1);
+  margin: 0 var(--spacing-xs);
+}
+
+/* Active indicator (for future use when apps are open) */
+.taskbar-icon.active::before {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  background-color: var(--color-accent);
+  border-radius: 50%;
+}

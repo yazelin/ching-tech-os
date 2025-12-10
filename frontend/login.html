@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>登入 - ChingTech OS</title>
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="assets/images/logo.svg">
+
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/login.css">
+</head>
+<body>
+  <div class="login-container">
+    <!-- Logo Section -->
+    <div class="login-logo">
+      <img src="assets/images/logo-breathing.svg" alt="ChingTech OS Logo" class="login-logo-icon">
+      <h1 class="login-logo-text">ChingTech<br><span>OS</span></h1>
+    </div>
+
+    <!-- Login Card -->
+    <div class="login-card">
+      <h2>歡迎回來</h2>
+
+      <form id="loginForm" class="login-form">
+        <!-- Error Message -->
+        <div class="login-error" id="loginError"></div>
+
+        <!-- Username Field -->
+        <div class="form-group">
+          <label for="username">使用者名稱</label>
+          <div class="input-icon">
+            <input
+              type="text"
+              id="username"
+              name="username"
+              class="input"
+              placeholder="請輸入使用者名稱"
+              autocomplete="username"
+              required
+            >
+            <span class="icon" id="iconAccount"></span>
+          </div>
+        </div>
+
+        <!-- Password Field -->
+        <div class="form-group">
+          <label for="password">密碼</label>
+          <div class="input-icon">
+            <input
+              type="password"
+              id="password"
+              name="password"
+              class="input"
+              placeholder="請輸入密碼"
+              autocomplete="current-password"
+              required
+            >
+            <span class="icon" id="iconLock"></span>
+          </div>
+        </div>
+
+        <!-- Submit Button -->
+        <button type="submit" class="btn btn-accent login-btn">
+          <span class="icon" id="iconLogin"></span>
+          登入
+        </button>
+      </form>
+    </div>
+
+    <!-- Footer -->
+    <div class="login-footer">
+      <p>&copy; 2024 擎添工業 Ching Tech Industrial Co., Ltd.</p>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/icons.js"></script>
+  <script src="js/login.js"></script>
+  <script>
+    document.getElementById('iconAccount').innerHTML = getIcon('account');
+    document.getElementById('iconLock').innerHTML = getIcon('lock');
+    document.getElementById('iconLogin').innerHTML = getIcon('login');
+  </script>
+</body>
+</html>

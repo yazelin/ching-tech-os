@@ -1,0 +1,137 @@
+/* ==========================================================================
+   ChingTech OS - Header Bar Styles
+   ========================================================================== */
+
+.header-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--header-height);
+  background-color: rgba(15, 28, 46, 0.95);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--spacing-md);
+  z-index: 100;
+  backdrop-filter: blur(8px);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Header Left Section - Logo and Title */
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.header-logo {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+}
+
+.header-title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-accent);
+  text-shadow: 0 0 10px rgba(33, 212, 253, 0.5), 0 0 20px rgba(33, 212, 253, 0.3);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.header-title-os {
+  color: #FFFFFF;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.5), 0 0 20px rgba(255, 255, 255, 0.3);
+}
+
+/* Header Center Section (reserved for future use) */
+.header-center {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+/* Header Right Section - User info and controls */
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+/* System Time */
+.header-time {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}
+
+.header-time .icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* User Info */
+.header-user {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-md);
+  cursor: default;
+}
+
+.header-user .icon {
+  color: var(--color-accent);
+}
+
+.header-user .icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.header-user-name {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Logout Button */
+.header-logout {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+}
+
+.header-logout:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: var(--color-error);
+}
+
+.header-logout .icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Divider */
+.header-divider {
+  width: 1px;
+  height: 20px;
+  background-color: rgba(255, 255, 255, 0.1);
+}

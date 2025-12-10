@@ -1,0 +1,241 @@
+/* ==========================================================================
+   ChingTech OS - Main CSS (Design System)
+   ========================================================================== */
+
+/* ==========================================================================
+   Font - 使用系統字型，不載入外部字型
+   ========================================================================== */
+
+/* ==========================================================================
+   CSS Variables (Design Tokens)
+   ========================================================================== */
+:root {
+  /* Primary Colors */
+  --color-primary: #1C4FA8;           /* ChingTech Blue */
+  --color-background: #0F1C2E;        /* Deep Industrial Navy */
+  --color-accent: #21D4FD;            /* AI Neon Cyan */
+
+  /* Neutral Colors */
+  --color-gray-light: #F5F7FA;
+  --color-gray-mid: #A4ACB5;
+  --color-gray-dark: #3A3F45;
+
+  /* Status Colors */
+  --color-success: #4CC577;           /* Action Green */
+  --color-warning: #FFC557;           /* Warning Amber */
+  --color-error: #E65050;             /* Error Red */
+
+  /* Text Colors */
+  --color-text-primary: #F5F7FA;
+  --color-text-secondary: #A4ACB5;
+  --color-text-muted: #3A3F45;
+
+  /* Font Families */
+  --font-primary: -apple-system, BlinkMacSystemFont, 'Ubuntu', 'Segoe UI', 'Microsoft JhengHei', 'Noto Sans CJK TC', sans-serif;
+  --font-technical: -apple-system, BlinkMacSystemFont, 'Ubuntu', 'Segoe UI', 'Microsoft JhengHei', 'Noto Sans CJK TC', sans-serif;
+  --font-mono: 'Ubuntu Mono', 'Consolas', 'Monaco', monospace;
+
+  /* Font Sizes */
+  --font-size-xs: 0.75rem;    /* 12px */
+  --font-size-sm: 0.875rem;   /* 14px */
+  --font-size-base: 1rem;     /* 16px */
+  --font-size-lg: 1.125rem;   /* 18px */
+  --font-size-xl: 1.25rem;    /* 20px */
+  --font-size-2xl: 1.5rem;    /* 24px */
+
+  /* Layout */
+  --header-height: 40px;
+  --taskbar-height: 64px;
+  --taskbar-icon-size: 48px;
+  --desktop-icon-size: 64px;
+  --desktop-icon-gap: 24px;
+
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+
+  /* Border Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.4);
+
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-normal: 250ms ease;
+  --transition-slow: 350ms ease;
+}
+
+/* ==========================================================================
+   Reset & Base Styles
+   ========================================================================== */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-primary);
+  font-size: var(--font-size-base);
+  color: var(--color-text-primary);
+  background-color: var(--color-background);
+  line-height: 1.5;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+a {
+  color: var(--color-accent);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+a:hover {
+  color: var(--color-primary);
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+/* SVG Icons */
+.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon svg {
+  width: 1em;
+  height: 1em;
+}
+
+input {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+/* ==========================================================================
+   Utility Classes
+   ========================================================================== */
+.text-primary { color: var(--color-text-primary); }
+.text-secondary { color: var(--color-text-secondary); }
+.text-muted { color: var(--color-text-muted); }
+.text-accent { color: var(--color-accent); }
+
+.bg-primary { background-color: var(--color-primary); }
+.bg-background { background-color: var(--color-background); }
+
+.flex { display: flex; }
+.flex-center { display: flex; justify-content: center; align-items: center; }
+.flex-between { display: flex; justify-content: space-between; align-items: center; }
+
+/* ==========================================================================
+   Button Styles
+   ========================================================================== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  transition: all var(--transition-fast);
+}
+
+.btn-primary {
+  background-color: var(--color-primary);
+  color: var(--color-text-primary);
+}
+
+.btn-primary:hover {
+  background-color: #2560c2;
+}
+
+.btn-accent {
+  background-color: var(--color-accent);
+  color: var(--color-background);
+}
+
+.btn-accent:hover {
+  background-color: #4fe0ff;
+}
+
+.btn-ghost {
+  background-color: transparent;
+  color: var(--color-text-secondary);
+}
+
+.btn-ghost:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: var(--color-text-primary);
+}
+
+/* ==========================================================================
+   Input Styles
+   ========================================================================== */
+.input {
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--color-gray-dark);
+  border-radius: var(--radius-md);
+  color: var(--color-text-primary);
+  transition: all var(--transition-fast);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.input::placeholder {
+  color: var(--color-text-muted);
+}
+
+/* ==========================================================================
+   Card Styles
+   ========================================================================== */
+.card {
+  background-color: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+}
+
+/* ==========================================================================
+   Icon Styles
+   ========================================================================== */
+.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-sm { font-size: 16px; }
+.icon-md { font-size: 24px; }
+.icon-lg { font-size: 32px; }
+.icon-xl { font-size: 48px; }

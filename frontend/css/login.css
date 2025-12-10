@@ -1,0 +1,174 @@
+/* ==========================================================================
+   ChingTech OS - Login Page Styles
+   ========================================================================== */
+
+.login-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: var(--spacing-lg);
+  background: linear-gradient(135deg, var(--color-background) 0%, #0a1421 100%);
+}
+
+/* Logo Section */
+.login-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: var(--spacing-xl);
+  text-align: center;
+}
+
+.login-logo-icon {
+  width: 120px;
+  height: 120px;
+  margin-bottom: var(--spacing-md);
+}
+
+.login-logo-text {
+  font-family: var(--font-technical);
+  font-size: 2rem;
+  font-weight: 600;
+  color: var(--color-accent);
+  letter-spacing: 0.15em;
+  line-height: 1.2;
+  margin: 0;
+  text-shadow: 0 0 20px rgba(33, 212, 253, 0.4);
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}
+
+.login-logo-text span {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: 0.4em;
+  color: #FFFFFF;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.4), 0 0 20px rgba(255, 255, 255, 0.2);
+}
+
+/* Login Card */
+.login-card {
+  width: 100%;
+  max-width: 400px;
+  background-color: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-xl);
+  padding: var(--spacing-xl);
+  box-shadow: var(--shadow-lg);
+}
+
+.login-card h2 {
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: var(--spacing-lg);
+  text-align: center;
+}
+
+/* Form Styles */
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.form-group label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  font-weight: 500;
+}
+
+.form-group .input {
+  height: 44px;
+}
+
+.form-group .input-icon {
+  position: relative;
+}
+
+.form-group .input-icon .input {
+  padding-left: 44px;
+}
+
+.form-group .input-icon .icon {
+  position: absolute;
+  left: var(--spacing-md);
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-text-muted);
+}
+
+.form-group .input-icon .icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.form-group .input-icon .input:focus + .icon,
+.form-group .input-icon .input:not(:placeholder-shown) + .icon {
+  color: var(--color-accent);
+}
+
+/* Login Button */
+.login-btn {
+  width: 100%;
+  height: 48px;
+  margin-top: var(--spacing-sm);
+  font-size: var(--font-size-base);
+  font-weight: 600;
+}
+
+/* Error Message */
+.login-error {
+  display: none;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: rgba(230, 80, 80, 0.1);
+  border: 1px solid rgba(230, 80, 80, 0.3);
+  border-radius: var(--radius-md);
+  color: var(--color-error);
+  font-size: var(--font-size-sm);
+  text-align: center;
+}
+
+.login-error.show {
+  display: block;
+}
+
+/* Footer */
+.login-footer {
+  margin-top: var(--spacing-xl);
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+/* Decorative Elements */
+.login-container::before {
+  content: '';
+  position: fixed;
+  top: -50%;
+  right: -50%;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle, rgba(33, 212, 253, 0.05) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.login-container::after {
+  content: '';
+  position: fixed;
+  bottom: -50%;
+  left: -50%;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle, rgba(28, 79, 168, 0.08) 0%, transparent 70%);
+  pointer-events: none;
+}

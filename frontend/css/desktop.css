@@ -1,0 +1,171 @@
+/* ==========================================================================
+   ChingTech OS - Desktop Layout Styles
+   ========================================================================== */
+
+/* Desktop Container - Full viewport layout */
+.desktop-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  width: 100%;
+  overflow: hidden;
+  background-color: var(--color-background);
+  position: relative;
+}
+
+.desktop-container::before {
+  content: '';
+  display: block;
+  position: absolute;
+  right: -1100px;
+  bottom: -1100px;
+  width: 3200px;
+  height: 3200px;
+  background-image: url('../assets/images/logo-white-clean.svg');
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  opacity: 0.08;
+  pointer-events: none;
+  z-index: 0;
+  transform: rotate(-30deg);
+  transform-origin: center center;
+}
+
+/* ==========================================================================
+   Desktop Area (Main content area)
+   ========================================================================== */
+.desktop-area {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  grid-auto-rows: 120px;
+  gap: var(--desktop-icon-gap);
+  padding: var(--spacing-lg);
+  padding-top: calc(var(--header-height) + var(--spacing-lg));
+  padding-bottom: calc(var(--taskbar-height) + var(--spacing-lg));
+  align-content: start;
+  overflow-y: auto;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ==========================================================================
+   Desktop Icons
+   ========================================================================== */
+.desktop-icon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: var(--spacing-sm);
+  gap: var(--spacing-xs);
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+  user-select: none;
+  -webkit-user-select: none;
+  outline: none;
+}
+
+.desktop-icon:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.desktop-icon:active {
+  background-color: rgba(255, 255, 255, 0.12);
+  transform: scale(0.98);
+}
+
+.desktop-icon.selected {
+  background-color: rgba(33, 212, 253, 0.15);
+  outline: 1px solid rgba(33, 212, 253, 0.3);
+}
+
+.desktop-icon-image {
+  width: var(--desktop-icon-size);
+  height: var(--desktop-icon-size);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-accent);
+  background: linear-gradient(135deg, rgba(28, 79, 168, 0.3) 0%, rgba(33, 212, 253, 0.1) 100%);
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(33, 212, 253, 0.2);
+}
+
+.desktop-icon-image .icon svg {
+  width: 40px;
+  height: 40px;
+}
+
+.desktop-icon-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-primary);
+  text-align: center;
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+/* ==========================================================================
+   Toast Notification (for "功能開發中" message)
+   ========================================================================== */
+.toast-container {
+  position: fixed;
+  bottom: calc(var(--taskbar-height) + var(--spacing-lg));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  pointer-events: none;
+}
+
+.toast {
+  background-color: rgba(0, 0, 0, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  animation: toastIn 0.3s ease, toastOut 0.3s ease 2.7s forwards;
+  pointer-events: auto;
+}
+
+.toast .icon {
+  color: var(--color-warning);
+}
+
+.toast .icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes toastOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+}
