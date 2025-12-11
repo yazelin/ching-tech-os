@@ -108,12 +108,27 @@ const TextViewerModule = (function() {
     const contentEl = windowEl.querySelector('#txtViewerContent');
 
     try {
-      const response = await fetch(`/api/nas/file?path=${encodeURIComponent(currentPath)}`, {
-        headers: { 'Authorization': `Bearer ${getToken()}` }
-      });
+      // Determine the URL to fetch
+      let fetchUrl;
+      let fetchOptions = {};
+
+      if (currentPath.startsWith('/api/') || currentPath.startsWith('http://') || currentPath.startsWith('https://')) {
+        // Direct URL - use as is
+        fetchUrl = currentPath;
+        fetchOptions = { headers: { 'Authorization': `Bearer ${getToken()}` } };
+      } else if (currentPath.startsWith('/data/')) {
+        // Static file path - no auth needed
+        fetchUrl = currentPath;
+      } else {
+        // NAS file path - use NAS API
+        fetchUrl = `/api/nas/file?path=${encodeURIComponent(currentPath)}`;
+        fetchOptions = { headers: { 'Authorization': `Bearer ${getToken()}` } };
+      }
+
+      const response = await fetch(fetchUrl, fetchOptions);
 
       if (!response.ok) {
-        const error = await response.json();
+        const error = await response.json().catch(() => ({ detail: '載入失敗' }));
         throw new Error(error.detail || '載入失敗');
       }
 

@@ -78,8 +78,8 @@
 }
 
 .desktop-icon.selected {
-  background-color: rgba(33, 212, 253, 0.15);
-  outline: 1px solid rgba(33, 212, 253, 0.3);
+  background-color: var(--accent-bg-light);
+  outline: 1px solid var(--accent-border);
 }
 
 .desktop-icon-image {
@@ -89,9 +89,9 @@
   align-items: center;
   justify-content: center;
   color: var(--color-accent);
-  background: linear-gradient(135deg, rgba(28, 79, 168, 0.3) 0%, rgba(33, 212, 253, 0.1) 100%);
+  background: linear-gradient(135deg, rgba(28, 79, 168, 0.3) 0%, var(--accent-bg-subtle) 100%);
   border-radius: var(--radius-lg);
-  border: 1px solid rgba(33, 212, 253, 0.2);
+  border: 1px solid var(--accent-bg-medium);
 }
 
 .desktop-icon-image .icon svg {
@@ -126,8 +126,8 @@
 }
 
 .toast {
-  background-color: rgba(0, 0, 0, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background-color: var(--bg-overlay-dark);
+  border: 1px solid var(--border-light);
   border-radius: var(--radius-md);
   padding: var(--spacing-sm) var(--spacing-md);
   color: var(--color-text-primary);

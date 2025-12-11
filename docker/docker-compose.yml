@@ -18,5 +18,22 @@ services:
       timeout: 5s
       retries: 5
 
+  code-server:
+    image: codercom/code-server:latest
+    container_name: ching-tech-os-code
+    environment:
+      - PASSWORD=${CODE_PASSWORD:-changeme}
+    volumes:
+      - ../:/home/coder/project                    # 專案目錄
+      - code_server_data:/home/coder/.local        # 擴充功能和設定
+      - ${HOME}/.ssh:/home/coder/.ssh:ro           # SSH key (唯讀)
+      - ${HOME}/.gitconfig:/home/coder/.gitconfig:ro  # Git 設定 (唯讀)
+    ports:
+      - "${CODE_PORT:-8443}:8080"
+    restart: unless-stopped
+    user: "${UID:-1000}:${GID:-1000}"
+    working_dir: /home/coder/project
+
 volumes:
   postgres_data:
+  code_server_data:

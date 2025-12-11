@@ -6,7 +6,7 @@
 const APIClient = (function() {
   'use strict';
 
-  const BASE_URL = 'http://localhost:8088/api';
+  const BASE_URL = '/api';
 
   /**
    * Make an API request

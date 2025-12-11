@@ -13,13 +13,13 @@
 
 .terminal-app ::-webkit-scrollbar-track,
 .xterm-viewport::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.3);
+  background: var(--bg-surface-darker);
   border-radius: 4px;
 }
 
 .terminal-app ::-webkit-scrollbar-thumb,
 .xterm-viewport::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.2);
+  background-color: var(--border-strong);
   border-radius: 4px;
 }
 
@@ -69,8 +69,8 @@
   align-items: center;
   justify-content: space-between;
   padding: var(--spacing-xs) var(--spacing-sm);
-  background-color: rgba(0, 0, 0, 0.3);
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  background-color: var(--bg-surface-darker);
+  border-top: 1px solid var(--border-light);
   font-size: 11px;
   color: rgba(255, 255, 255, 0.5);
 }
@@ -153,13 +153,13 @@
 }
 
 .terminal-reconnect-actions .btn-secondary {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: var(--border-light);
   color: var(--color-text-primary);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--border-strong);
 }
 
 .terminal-reconnect-actions .btn-secondary:hover {
-  background-color: rgba(255, 255, 255, 0.2);
+  background-color: var(--border-strong);
 }
 
 /* ==========================================================================
@@ -178,7 +178,7 @@
   align-items: center;
   justify-content: space-between;
   padding: var(--spacing-sm);
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: var(--border-subtle);
   border-radius: var(--radius-sm);
   margin-bottom: var(--spacing-xs);
   cursor: pointer;
@@ -186,7 +186,7 @@
 }
 
 .terminal-session-item:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: var(--border-light);
 }
 
 .terminal-session-info {
@@ -199,7 +199,7 @@
 }
 
 .terminal-session-cwd code {
-  background-color: rgba(0, 0, 0, 0.3);
+  background-color: var(--bg-surface-darker);
   padding: 2px 6px;
   border-radius: 3px;
   font-family: "JetBrainsMono NF", monospace;
@@ -226,7 +226,7 @@
 .terminal-loading .spinner {
   width: 32px;
   height: 32px;
-  border: 3px solid rgba(255, 255, 255, 0.1);
+  border: 3px solid var(--border-light);
   border-top-color: var(--color-primary);
   border-radius: 50%;
   animation: spin 1s linear infinite;

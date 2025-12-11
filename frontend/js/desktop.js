@@ -104,6 +104,11 @@ const DesktopModule = (function() {
           TerminalApp.open();
         }
         break;
+      case 'code-editor':
+        if (typeof CodeEditorModule !== 'undefined') {
+          CodeEditorModule.open();
+        }
+        break;
       case 'knowledge-base':
         if (typeof KnowledgeBaseModule !== 'undefined') {
           KnowledgeBaseModule.open();

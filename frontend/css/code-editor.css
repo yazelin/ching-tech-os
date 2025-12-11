@@ -1,0 +1,57 @@
+/* ==========================================================================
+   ChingTech OS - Code Editor Styles
+   ========================================================================== */
+
+.code-editor-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  background-color: #1e1e1e;
+}
+
+.code-editor-loading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-md);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-md);
+  z-index: 1;
+}
+
+.code-editor-loading .icon {
+  font-size: 32px;
+  color: var(--color-accent);
+}
+
+.code-editor-loading .icon svg {
+  animation: spin 1s linear infinite;
+}
+
+.code-editor-loading small {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.code-editor-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}

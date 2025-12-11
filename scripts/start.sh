@@ -26,17 +26,46 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# 啟動 PostgreSQL
-start_db() {
-    log_info "啟動 PostgreSQL..."
+# 啟動 Docker 服務 (PostgreSQL + code-server)
+start_services() {
+    log_info "啟動 Docker 服務..."
     cd "$PROJECT_ROOT/docker"
-    if docker compose ps | grep -q "ching-tech-os-db.*running"; then
-        log_info "PostgreSQL 已在運行中"
-    else
-        docker compose up -d
-        log_info "等待 PostgreSQL 就緒..."
-        sleep 3
+
+    # 設定 UID/GID 供 code-server 使用
+    export UID=$(id -u)
+    export GID=$(id -g)
+
+    # 檢查服務狀態
+    local need_start=false
+    if ! docker compose ps | grep -q "ching-tech-os-db.*running"; then
+        need_start=true
     fi
+    if ! docker compose ps | grep -q "ching-tech-os-code.*running"; then
+        need_start=true
+    fi
+
+    if [ "$need_start" = true ]; then
+        docker compose up -d
+        log_info "等待服務就緒..."
+        sleep 3
+
+        # 等待 code-server 就緒
+        log_info "等待 code-server 就緒..."
+        for i in {1..30}; do
+            if curl -s http://localhost:8443 > /dev/null 2>&1; then
+                log_info "code-server 已就緒"
+                break
+            fi
+            sleep 1
+        done
+    else
+        log_info "Docker 服務已在運行中"
+    fi
+}
+
+# 相容舊的 start_db 函數
+start_db() {
+    start_services
 }
 
 # 啟動開發模式
@@ -59,6 +88,7 @@ start_dev() {
     echo ""
     log_info "應用程式: http://localhost:8088"
     log_info "API 文件: http://localhost:8088/docs"
+    log_info "程式編輯器: http://localhost:8443 (密碼: \${CODE_PASSWORD:-changeme})"
     echo ""
 
     # 設定終端機起始目錄為專案根目錄
@@ -82,8 +112,9 @@ show_usage() {
     echo "用法: $0 <command>"
     echo ""
     echo "Commands:"
-    echo "  dev      啟動開發環境 (PostgreSQL + 後端 with hot-reload)"
-    echo "  db       只啟動 PostgreSQL"
+    echo "  dev      啟動開發環境 (PostgreSQL + code-server + 後端 with hot-reload)"
+    echo "  services 只啟動 Docker 服務 (PostgreSQL + code-server)"
+    echo "  db       只啟動 Docker 服務 (同 services)"
     echo "  stop     停止所有服務"
     echo "  help     顯示此說明"
 }
@@ -93,8 +124,8 @@ case "${1:-}" in
     dev)
         start_dev
         ;;
-    db)
-        start_db
+    services|db)
+        start_services
         ;;
     stop)
         stop_all

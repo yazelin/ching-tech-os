@@ -9,7 +9,7 @@
   transform: translateX(-50%);
   height: var(--taskbar-height);
   background-color: rgba(15, 28, 46, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-light);
   border-radius: var(--radius-xl);
   display: flex;
   align-items: center;
@@ -89,7 +89,7 @@
 .taskbar-divider {
   width: 1px;
   height: 32px;
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: var(--border-light);
   margin: 0 var(--spacing-xs);
 }
 
@@ -155,7 +155,7 @@
 }
 
 .taskbar-window-menu-item:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: var(--border-light);
 }
 
 .taskbar-window-menu-item.minimized {

@@ -37,7 +37,7 @@
   font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--color-accent);
-  text-shadow: 0 0 10px rgba(33, 212, 253, 0.5), 0 0 20px rgba(33, 212, 253, 0.3);
+  text-shadow: 0 0 10px rgba(33, 212, 253, 0.5), 0 0 20px var(--accent-border);
   user-select: none;
   -webkit-user-select: none;
 }
@@ -120,7 +120,7 @@
 }
 
 .header-logout:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: var(--border-light);
   color: var(--color-error);
 }
 
@@ -133,5 +133,5 @@
 .header-divider {
   width: 1px;
   height: 20px;
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: var(--border-light);
 }

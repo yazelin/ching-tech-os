@@ -18,8 +18,8 @@
   justify-content: center;
   gap: var(--spacing-sm);
   padding: var(--spacing-sm);
-  background-color: rgba(0, 0, 0, 0.2);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background-color: var(--bg-surface-dark);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .viewer-toolbar-btn {
@@ -35,7 +35,7 @@
 }
 
 .viewer-toolbar-btn:hover:not(:disabled) {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: var(--border-light);
   color: var(--color-text-primary);
 }
 
@@ -52,7 +52,7 @@
 .viewer-toolbar-divider {
   width: 1px;
   height: 24px;
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: var(--border-light);
   margin: 0 var(--spacing-xs);
 }
 
@@ -76,8 +76,8 @@
   align-items: center;
   justify-content: space-between;
   padding: var(--spacing-xs) var(--spacing-md);
-  background-color: rgba(0, 0, 0, 0.2);
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  background-color: var(--bg-surface-dark);
+  border-top: 1px solid var(--border-subtle);
   font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
 }
@@ -86,7 +86,7 @@
    Image Viewer
    ========================================================================== */
 .image-viewer-content {
-  background-color: rgba(0, 0, 0, 0.3);
+  background-color: var(--bg-surface-darker);
   background-image:
     linear-gradient(45deg, rgba(255, 255, 255, 0.03) 25%, transparent 25%),
     linear-gradient(-45deg, rgba(255, 255, 255, 0.03) 25%, transparent 25%),
@@ -151,7 +151,7 @@
 .text-viewer-content pre {
   margin: 0;
   padding: var(--spacing-md);
-  background-color: rgba(0, 0, 0, 0.3);
+  background-color: var(--bg-surface-darker);
   border-radius: var(--radius-md);
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
@@ -210,7 +210,7 @@
   width: 3em;
   margin-right: 1em;
   padding-right: 0.5em;
-  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  border-right: 1px solid var(--border-light);
   color: var(--color-text-secondary);
   text-align: right;
   user-select: none;
@@ -230,7 +230,7 @@
 
 .text-viewer-content::-webkit-scrollbar-thumb,
 .image-viewer-content::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.2);
+  background-color: var(--border-strong);
   border-radius: 5px;
 }
 

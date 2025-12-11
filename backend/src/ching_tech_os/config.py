@@ -26,6 +26,13 @@ class Settings(BaseSettings):
     session_ttl_hours: int = 8
     session_cleanup_interval_minutes: int = 10
 
+    # 知識庫 NAS 設定
+    knowledge_nas_host: str = "192.168.11.50"
+    knowledge_nas_share: str = "擎添開發"
+    knowledge_nas_path: str = "ching-tech-os/knowledge"
+    knowledge_nas_user: str = "yazelin"
+    knowledge_nas_password: str = "REMOVED_PASSWORD"
+
     # CORS 設定（credentials=True 時不能用 "*"）
     cors_origins: list[str] = [
         "http://localhost:8080",

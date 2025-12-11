@@ -30,6 +30,24 @@
   --color-text-secondary: #A4ACB5;
   --color-text-muted: #3A3F45;
 
+  /* Surface & Border Colors */
+  --bg-surface: rgba(0, 0, 0, 0.1);
+  --bg-surface-dark: rgba(0, 0, 0, 0.2);
+  --bg-surface-darker: rgba(0, 0, 0, 0.3);
+  --bg-overlay: rgba(0, 0, 0, 0.6);
+  --bg-overlay-dark: rgba(0, 0, 0, 0.85);
+  --border-subtle: rgba(255, 255, 255, 0.05);
+  --border-light: rgba(255, 255, 255, 0.1);
+  --border-medium: rgba(255, 255, 255, 0.15);
+  --border-strong: rgba(255, 255, 255, 0.2);
+  --hover-bg: rgba(255, 255, 255, 0.1);
+
+  /* Accent Variants (for hover/active states) */
+  --accent-bg-subtle: rgba(33, 212, 253, 0.1);
+  --accent-bg-light: rgba(33, 212, 253, 0.15);
+  --accent-bg-medium: rgba(33, 212, 253, 0.2);
+  --accent-border: rgba(33, 212, 253, 0.3);
+
   /* Font Families */
   --font-primary: -apple-system, BlinkMacSystemFont, 'Ubuntu', 'Segoe UI', 'Microsoft JhengHei', 'Noto Sans CJK TC', sans-serif;
   --font-technical: -apple-system, BlinkMacSystemFont, 'Ubuntu', 'Segoe UI', 'Microsoft JhengHei', 'Noto Sans CJK TC', sans-serif;
