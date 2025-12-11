@@ -93,15 +93,77 @@
   margin: 0 var(--spacing-xs);
 }
 
-/* Active indicator (for future use when apps are open) */
-.taskbar-icon.active::before {
-  content: '';
+/* Running indicator container */
+.taskbar-icon .running-indicator {
   position: absolute;
   bottom: 2px;
   left: 50%;
   transform: translateX(-50%);
+  display: flex;
+  gap: 3px;
+  align-items: center;
+}
+
+/* Individual indicator dot */
+.taskbar-icon .indicator-dot {
   width: 4px;
   height: 4px;
   background-color: var(--color-accent);
   border-radius: 50%;
+}
+
+/* ==========================================================================
+   Window Selection Menu
+   ========================================================================== */
+
+.taskbar-window-menu {
+  position: fixed;
+  transform: translateX(-50%);
+  min-width: 180px;
+  max-width: 280px;
+  background-color: rgba(15, 28, 46, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-xs);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-lg);
+  z-index: 200;
+  animation: menuFadeIn 0.15s ease-out;
+}
+
+@keyframes menuFadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.taskbar-window-menu-item {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background-color var(--transition-fast);
+}
+
+.taskbar-window-menu-item:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.taskbar-window-menu-item.minimized {
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
+.taskbar-window-menu-item.minimized::before {
+  content: '(最小化) ';
+  font-size: var(--font-size-xs);
 }

@@ -38,6 +38,16 @@ const WindowModule = (function() {
     startTop: 0
   };
 
+  // Snap state
+  let snapState = {
+    zone: null,           // Current snap zone: 'left', 'right', 'top', 'top-left', 'top-right', 'bottom-left', 'bottom-right'
+    previewElement: null  // Snap preview DOM element
+  };
+
+  // Snap zone detection thresholds (pixels from edge)
+  const SNAP_EDGE_THRESHOLD = 20;
+  const SNAP_CORNER_SIZE = 50;
+
   /**
    * Generate unique window ID
    * @returns {string}
@@ -218,8 +228,12 @@ const WindowModule = (function() {
     const windowInfo = windows[windowId];
     if (!windowInfo) return;
 
-    // If maximized, unmaximize first and adjust position
-    if (windowInfo.maximized) {
+    // If snapped, unsnap first and adjust position
+    if (windowInfo.snapped) {
+      unsnapWindow(windowId, e);
+    }
+    // If maximized (but not snapped), unmaximize first and adjust position
+    else if (windowInfo.maximized) {
       const windowEl = windowInfo.element;
       const oldWidth = windowInfo.restoreState ? parseInt(windowInfo.restoreState.width) : 800;
 
@@ -285,6 +299,14 @@ const WindowModule = (function() {
 
     windowEl.style.left = `${newX}px`;
     windowEl.style.top = `${newY}px`;
+
+    // Detect snap zone and show preview
+    const snapZone = detectSnapZone(e.clientX, e.clientY);
+    if (snapZone) {
+      showSnapPreview(snapZone);
+    } else {
+      hideSnapPreview();
+    }
   }
 
   /**
@@ -293,7 +315,17 @@ const WindowModule = (function() {
   function handleMouseUp() {
     // End dragging
     if (dragState.isDragging) {
-      const windowInfo = windows[dragState.windowId];
+      const windowId = dragState.windowId;
+      const windowInfo = windows[windowId];
+
+      // Apply snap if in snap zone
+      if (snapState.zone && windowInfo) {
+        applySnap(windowId, snapState.zone);
+      }
+
+      // Hide snap preview
+      hideSnapPreview();
+
       if (windowInfo) {
         windowInfo.element.classList.remove('dragging');
       }
@@ -394,6 +426,193 @@ const WindowModule = (function() {
         windowEl.style.height = `${minHeight}px`;
       }
     }
+  }
+
+  /**
+   * Detect snap zone based on mouse position
+   * @param {number} x - Mouse X position (viewport)
+   * @param {number} y - Mouse Y position (viewport)
+   * @returns {string|null} Snap zone name or null
+   */
+  function detectSnapZone(x, y) {
+    const desktopArea = document.querySelector('.desktop-area');
+    if (!desktopArea) return null;
+
+    const rect = desktopArea.getBoundingClientRect();
+    const relativeX = x - rect.left;
+    const relativeY = y - rect.top;
+
+    const nearLeft = relativeX <= SNAP_EDGE_THRESHOLD;
+    const nearRight = relativeX >= rect.width - SNAP_EDGE_THRESHOLD;
+    const nearTop = relativeY <= SNAP_EDGE_THRESHOLD;
+    const nearBottom = relativeY >= rect.height - SNAP_EDGE_THRESHOLD;
+
+    const inCornerX = relativeX <= SNAP_CORNER_SIZE || relativeX >= rect.width - SNAP_CORNER_SIZE;
+    const inCornerY = relativeY <= SNAP_CORNER_SIZE || relativeY >= rect.height - SNAP_CORNER_SIZE;
+
+    // Corner detection (corners have priority)
+    if (nearLeft && nearTop) return 'top-left';
+    if (nearRight && nearTop) return 'top-right';
+    if (nearLeft && nearBottom) return 'bottom-left';
+    if (nearRight && nearBottom) return 'bottom-right';
+
+    // Edge detection
+    if (nearTop && !inCornerX) return 'top';  // Top edge (not corner) = maximize
+    if (nearLeft) return 'left';
+    if (nearRight) return 'right';
+
+    return null;
+  }
+
+  /**
+   * Get snap zone dimensions
+   * @param {string} zone - Snap zone name
+   * @returns {Object} { left, top, width, height } as percentages/pixels
+   */
+  function getSnapDimensions(zone) {
+    const desktopArea = document.querySelector('.desktop-area');
+    if (!desktopArea) return null;
+
+    const rect = desktopArea.getBoundingClientRect();
+    const halfWidth = rect.width / 2;
+    const halfHeight = rect.height / 2;
+
+    switch (zone) {
+      case 'left':
+        return { left: 0, top: 0, width: halfWidth, height: rect.height };
+      case 'right':
+        return { left: halfWidth, top: 0, width: halfWidth, height: rect.height };
+      case 'top':
+        return { left: 0, top: 0, width: rect.width, height: rect.height };
+      case 'top-left':
+        return { left: 0, top: 0, width: halfWidth, height: halfHeight };
+      case 'top-right':
+        return { left: halfWidth, top: 0, width: halfWidth, height: halfHeight };
+      case 'bottom-left':
+        return { left: 0, top: halfHeight, width: halfWidth, height: halfHeight };
+      case 'bottom-right':
+        return { left: halfWidth, top: halfHeight, width: halfWidth, height: halfHeight };
+      default:
+        return null;
+    }
+  }
+
+  /**
+   * Show snap preview
+   * @param {string} zone - Snap zone name
+   */
+  function showSnapPreview(zone) {
+    if (snapState.zone === zone && snapState.previewElement) return;
+
+    hideSnapPreview();
+
+    const dimensions = getSnapDimensions(zone);
+    if (!dimensions) return;
+
+    const desktopArea = document.querySelector('.desktop-area');
+    if (!desktopArea) return;
+
+    const preview = document.createElement('div');
+    preview.className = 'window-snap-preview';
+    preview.style.left = `${dimensions.left}px`;
+    preview.style.top = `${dimensions.top}px`;
+    preview.style.width = `${dimensions.width}px`;
+    preview.style.height = `${dimensions.height}px`;
+
+    desktopArea.appendChild(preview);
+    snapState.previewElement = preview;
+    snapState.zone = zone;
+
+    // Trigger animation
+    requestAnimationFrame(() => {
+      preview.classList.add('visible');
+    });
+  }
+
+  /**
+   * Hide snap preview
+   */
+  function hideSnapPreview() {
+    if (snapState.previewElement) {
+      snapState.previewElement.remove();
+      snapState.previewElement = null;
+    }
+    snapState.zone = null;
+  }
+
+  /**
+   * Apply snap to window
+   * @param {string} windowId
+   * @param {string} zone - Snap zone name
+   */
+  function applySnap(windowId, zone) {
+    const windowInfo = windows[windowId];
+    if (!windowInfo) return;
+
+    const windowEl = windowInfo.element;
+    const dimensions = getSnapDimensions(zone);
+    if (!dimensions) return;
+
+    // Save original state for unsnap (if not already snapped)
+    if (!windowInfo.snapped) {
+      windowInfo.snapRestoreState = {
+        left: windowEl.style.left,
+        top: windowEl.style.top,
+        width: windowEl.style.width,
+        height: windowEl.style.height
+      };
+    }
+
+    // Apply snap dimensions
+    windowEl.style.left = `${dimensions.left}px`;
+    windowEl.style.top = `${dimensions.top}px`;
+    windowEl.style.width = `${dimensions.width}px`;
+    windowEl.style.height = `${dimensions.height}px`;
+
+    windowInfo.snapped = zone;
+    windowEl.classList.add('snapped');
+
+    // If snapping to top, also set maximized state
+    if (zone === 'top') {
+      windowInfo.maximized = true;
+      windowEl.classList.add('maximized');
+      updateMaximizeButtonIcon(windowId);
+    }
+  }
+
+  /**
+   * Unsnap a window (restore to original size)
+   * @param {string} windowId
+   * @param {MouseEvent} e - Mouse event for positioning
+   */
+  function unsnapWindow(windowId, e) {
+    const windowInfo = windows[windowId];
+    if (!windowInfo || !windowInfo.snapped) return;
+
+    const windowEl = windowInfo.element;
+    const restoreState = windowInfo.snapRestoreState;
+
+    if (restoreState) {
+      const oldWidth = parseInt(restoreState.width) || 800;
+      const oldHeight = parseInt(restoreState.height) || 600;
+
+      // Position window so mouse is centered horizontally on titlebar
+      const desktopArea = document.querySelector('.desktop-area');
+      const desktopRect = desktopArea.getBoundingClientRect();
+      const newX = Math.max(0, Math.min(e.clientX - oldWidth / 2, desktopRect.width - oldWidth));
+      const newY = e.clientY - desktopRect.top - 20;
+
+      windowEl.style.left = `${newX}px`;
+      windowEl.style.top = `${Math.max(0, newY)}px`;
+      windowEl.style.width = restoreState.width;
+      windowEl.style.height = restoreState.height;
+    }
+
+    windowInfo.snapped = null;
+    windowInfo.snapRestoreState = null;
+    windowInfo.maximized = false;
+    windowEl.classList.remove('snapped', 'maximized');
+    updateMaximizeButtonIcon(windowId);
   }
 
   /**
@@ -576,7 +795,7 @@ const WindowModule = (function() {
   }
 
   /**
-   * Get window by app ID
+   * Get window by app ID (returns first match)
    * @param {string} appId
    * @returns {Object|null}
    */
@@ -587,6 +806,21 @@ const WindowModule = (function() {
       }
     }
     return null;
+  }
+
+  /**
+   * Get all windows for a specific app ID
+   * @param {string} appId
+   * @returns {Array} Array of window objects with windowId
+   */
+  function getWindowsByAppId(appId) {
+    const result = [];
+    for (const windowId of Object.keys(windows)) {
+      if (windows[windowId].appId === appId) {
+        result.push({ windowId, ...windows[windowId] });
+      }
+    }
+    return result;
   }
 
   /**
@@ -643,6 +877,7 @@ const WindowModule = (function() {
     unmaximizeWindow,
     toggleMaximize,
     getWindowByAppId,
+    getWindowsByAppId,
     getWindows,
     onStateChange
   };

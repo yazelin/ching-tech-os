@@ -6,6 +6,9 @@
 const TaskbarModule = (function() {
   'use strict';
 
+  // Active window menu reference
+  let activeWindowMenu = null;
+
   // Quick launch applications for taskbar
   const quickLaunchApps = [
     { id: 'file-manager', name: '檔案管理', icon: 'mdi-folder' },
@@ -38,40 +41,136 @@ const TaskbarModule = (function() {
     const iconElement = event.currentTarget;
     const appId = iconElement.dataset.appId;
 
+    // Close any existing window menu
+    closeWindowMenu();
+
     // Check if WindowModule is available
     if (typeof WindowModule === 'undefined') {
       return;
     }
 
-    // Check if app window is already open
-    const existingWindow = WindowModule.getWindowByAppId(appId);
+    // Get all windows for this app
+    const appWindows = WindowModule.getWindowsByAppId(appId);
 
-    if (existingWindow) {
-      // App is open
-      if (existingWindow.minimized) {
-        // Restore minimized window
-        WindowModule.restoreWindow(existingWindow.windowId);
-      } else {
-        // Focus the window (bring to front)
-        WindowModule.focusWindow(existingWindow.windowId);
-      }
-    } else {
+    if (appWindows.length === 0) {
       // App is not open - open it
       if (typeof DesktopModule !== 'undefined' && typeof DesktopModule.openApp === 'function') {
         DesktopModule.openApp(appId);
       }
+    } else if (appWindows.length === 1) {
+      // Single window - focus or restore
+      const win = appWindows[0];
+      if (win.minimized) {
+        WindowModule.restoreWindow(win.windowId);
+      } else {
+        WindowModule.focusWindow(win.windowId);
+      }
+    } else {
+      // Multiple windows - show window menu
+      showWindowMenu(iconElement, appWindows);
+    }
+  }
+
+  /**
+   * Show window selection menu for multi-window apps
+   * @param {HTMLElement} iconElement - The taskbar icon element
+   * @param {Array} windows - Array of window objects
+   */
+  function showWindowMenu(iconElement, windows) {
+    const menu = document.createElement('div');
+    menu.className = 'taskbar-window-menu';
+
+    windows.forEach(win => {
+      const item = document.createElement('div');
+      item.className = 'taskbar-window-menu-item';
+      if (win.minimized) {
+        item.classList.add('minimized');
+      }
+      item.textContent = win.title || '無標題';
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (win.minimized) {
+          WindowModule.restoreWindow(win.windowId);
+        } else {
+          WindowModule.focusWindow(win.windowId);
+        }
+        closeWindowMenu();
+      });
+      menu.appendChild(item);
+    });
+
+    // Position menu above the icon
+    const iconRect = iconElement.getBoundingClientRect();
+    menu.style.left = `${iconRect.left + iconRect.width / 2}px`;
+    menu.style.bottom = `${window.innerHeight - iconRect.top + 8}px`;
+
+    document.body.appendChild(menu);
+    activeWindowMenu = menu;
+
+    // Close menu when clicking outside
+    setTimeout(() => {
+      document.addEventListener('click', handleOutsideClick);
+    }, 0);
+  }
+
+  /**
+   * Close the window menu
+   */
+  function closeWindowMenu() {
+    if (activeWindowMenu) {
+      activeWindowMenu.remove();
+      activeWindowMenu = null;
+      document.removeEventListener('click', handleOutsideClick);
+    }
+  }
+
+  /**
+   * Handle click outside window menu
+   */
+  function handleOutsideClick(event) {
+    if (activeWindowMenu && !activeWindowMenu.contains(event.target)) {
+      closeWindowMenu();
     }
   }
 
   /**
    * Update running indicator for a specific app
    * @param {string} appId
-   * @param {boolean} isRunning
+   * @param {number} windowCount - Number of windows for this app
    */
-  function updateRunningIndicator(appId, isRunning) {
+  function updateRunningIndicator(appId, windowCount) {
     const iconElement = document.querySelector(`.taskbar-icon[data-app-id="${appId}"]`);
-    if (iconElement) {
-      iconElement.classList.toggle('active', isRunning);
+    if (!iconElement) return;
+
+    // Remove existing indicators
+    const existingIndicator = iconElement.querySelector('.running-indicator');
+    if (existingIndicator) {
+      existingIndicator.remove();
+    }
+
+    // Remove active class
+    iconElement.classList.remove('active', 'multi-window');
+
+    if (windowCount > 0) {
+      iconElement.classList.add('active');
+
+      // Create indicator container
+      const indicator = document.createElement('div');
+      indicator.className = 'running-indicator';
+
+      // Add dots (max 3)
+      const dotCount = Math.min(windowCount, 3);
+      for (let i = 0; i < dotCount; i++) {
+        const dot = document.createElement('span');
+        dot.className = 'indicator-dot';
+        indicator.appendChild(dot);
+      }
+
+      if (windowCount > 1) {
+        iconElement.classList.add('multi-window');
+      }
+
+      iconElement.appendChild(indicator);
     }
   }
 
@@ -81,13 +180,22 @@ const TaskbarModule = (function() {
   function updateAllRunningIndicators() {
     if (typeof WindowModule === 'undefined') return;
 
-    const windows = WindowModule.getWindows();
-    const runningAppIds = new Set(
-      Object.values(windows).map(w => w.appId)
-    );
-
+    // Count windows per app
+    const windowCounts = {};
     quickLaunchApps.forEach(app => {
-      updateRunningIndicator(app.id, runningAppIds.has(app.id));
+      windowCounts[app.id] = 0;
+    });
+
+    const windows = WindowModule.getWindows();
+    Object.values(windows).forEach(w => {
+      if (windowCounts.hasOwnProperty(w.appId)) {
+        windowCounts[w.appId]++;
+      }
+    });
+
+    // Update indicators
+    quickLaunchApps.forEach(app => {
+      updateRunningIndicator(app.id, windowCounts[app.id]);
     });
   }
 
@@ -97,11 +205,8 @@ const TaskbarModule = (function() {
    * @param {string} appId
    */
   function onWindowStateChange(eventType, appId) {
-    if (eventType === 'open') {
-      updateRunningIndicator(appId, true);
-    } else if (eventType === 'close') {
-      updateRunningIndicator(appId, false);
-    }
+    // Always update all indicators to ensure correct count
+    updateAllRunningIndicators();
   }
 
   /**

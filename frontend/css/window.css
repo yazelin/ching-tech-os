@@ -206,3 +206,32 @@
   height: 12px;
   cursor: nwse-resize;
 }
+
+/* ==========================================================================
+   Window Snap Preview
+   ========================================================================== */
+.window-snap-preview {
+  position: absolute;
+  background-color: rgba(0, 150, 255, 0.15);
+  border: 2px solid rgba(0, 150, 255, 0.5);
+  border-radius: var(--radius-lg);
+  pointer-events: none;
+  z-index: 50;
+  opacity: 0;
+  transform: scale(0.98);
+  transition: opacity 0.15s ease-out, transform 0.15s ease-out;
+}
+
+.window-snap-preview.visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Snapped window state */
+.window.snapped {
+  border-radius: 0;
+}
+
+.window.snapped .window-resize {
+  display: none;
+}
