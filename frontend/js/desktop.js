@@ -11,9 +11,8 @@ const DesktopModule = (function() {
     { id: 'file-manager', name: '檔案管理', icon: 'mdi-folder' },
     { id: 'terminal', name: '終端機', icon: 'mdi-console' },
     { id: 'code-editor', name: '程式編輯器', icon: 'mdi-code-braces' },
-    { id: 'project-manager', name: '專案管理', icon: 'mdi-clipboard-check-outline' },
+    { id: 'project-management', name: '專案管理', icon: 'mdi-briefcase' },
     { id: 'ai-assistant', name: 'AI 助手', icon: 'mdi-robot' },
-    { id: 'message-center', name: '訊息中心', icon: 'mdi-message-text' },
     { id: 'knowledge-base', name: '知識庫', icon: 'mdi-book-open-page-variant' },
     { id: 'settings', name: '系統設定', icon: 'mdi-cog' }
   ];
@@ -112,6 +111,11 @@ const DesktopModule = (function() {
       case 'knowledge-base':
         if (typeof KnowledgeBaseModule !== 'undefined') {
           KnowledgeBaseModule.open();
+        }
+        break;
+      case 'project-management':
+        if (typeof ProjectManagementModule !== 'undefined') {
+          ProjectManagementModule.open();
         }
         break;
       default:

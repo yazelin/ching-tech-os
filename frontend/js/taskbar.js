@@ -15,7 +15,6 @@ const TaskbarModule = (function() {
     { id: 'terminal', name: '終端機', icon: 'mdi-console' },
     { id: 'code-editor', name: '程式編輯器', icon: 'mdi-code-braces' },
     { id: 'ai-assistant', name: 'AI 助手', icon: 'mdi-robot' },
-    { id: 'message-center', name: '訊息中心', icon: 'mdi-message-text' },
     { id: 'settings', name: '系統設定', icon: 'mdi-cog' }
   ];
 

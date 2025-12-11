@@ -312,23 +312,23 @@
 }
 
 .kb-tag.project {
-  background-color: rgba(99, 102, 241, 0.2);
-  color: #818cf8;
+  background-color: var(--tag-bg-purple);
+  color: var(--tag-color-purple);
 }
 
 .kb-tag.type {
-  background-color: rgba(16, 185, 129, 0.2);
-  color: #34d399;
+  background-color: var(--tag-bg-green);
+  color: var(--tag-color-green);
 }
 
 .kb-tag.level {
-  background-color: rgba(245, 158, 11, 0.2);
-  color: #fbbf24;
+  background-color: var(--tag-bg-orange);
+  color: var(--tag-color-yellow);
 }
 
 .kb-tag.role {
-  background-color: rgba(236, 72, 153, 0.2);
-  color: #f472b6;
+  background-color: var(--tag-bg-pink);
+  color: var(--tag-color-pink);
 }
 
 /* Loading & Empty States */
@@ -523,7 +523,7 @@
   background-color: var(--bg-surface-darker);
   padding: 0.2em 0.4em;
   border-radius: var(--radius-sm);
-  color: #e879f9;
+  color: var(--tag-color-pink);
 }
 
 .kb-markdown pre {
@@ -622,28 +622,28 @@
 }
 
 .kb-tag-large.project {
-  background-color: rgba(99, 102, 241, 0.2);
-  color: #818cf8;
+  background-color: var(--tag-bg-purple);
+  color: var(--tag-color-purple);
 }
 
 .kb-tag-large.type {
-  background-color: rgba(16, 185, 129, 0.2);
-  color: #34d399;
+  background-color: var(--tag-bg-green);
+  color: var(--tag-color-green);
 }
 
 .kb-tag-large.level {
-  background-color: rgba(245, 158, 11, 0.2);
-  color: #fbbf24;
+  background-color: var(--tag-bg-orange);
+  color: var(--tag-color-yellow);
 }
 
 .kb-tag-large.role {
-  background-color: rgba(236, 72, 153, 0.2);
-  color: #f472b6;
+  background-color: var(--tag-bg-pink);
+  color: var(--tag-color-pink);
 }
 
 .kb-tag-large.topic {
-  background-color: rgba(139, 92, 246, 0.2);
-  color: #a78bfa;
+  background-color: var(--tag-bg-purple);
+  color: var(--tag-color-purple);
 }
 
 /* ==========================================================================
@@ -771,7 +771,7 @@
   right: 0;
   width: 300px;
   height: 100%;
-  background-color: rgba(15, 28, 46, 0.98);
+  background-color: var(--modal-bg);
   border-left: 1px solid var(--border-light);
   display: flex;
   flex-direction: column;
@@ -865,7 +865,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: var(--bg-overlay);
+  background-color: var(--bg-overlay-dark);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -873,7 +873,7 @@
 }
 
 .kb-dialog {
-  background-color: rgba(15, 28, 46, 0.98);
+  background-color: var(--modal-bg);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
@@ -1118,7 +1118,7 @@
 }
 
 .kb-attachment-location.local {
-  background-color: rgba(76, 197, 119, 0.2);
+  background-color: var(--tag-bg-green);
   color: var(--color-success);
 }
 
@@ -1260,7 +1260,7 @@
 .kb-attachment-edit-modal {
   position: absolute;
   inset: 0;
-  background-color: var(--bg-overlay);
+  background-color: var(--bg-overlay-dark);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1350,9 +1350,9 @@
 }
 
 .kb-upload-modal-content {
-  background-color: #1e1e2e;
+  background-color: var(--modal-bg);
   border-radius: var(--radius-lg);
-  box-shadow: 0 8px 32px var(--bg-overlay);
+  box-shadow: var(--shadow-lg);
   width: 90%;
   max-width: 450px;
   overflow: hidden;
@@ -1411,7 +1411,7 @@
 .kb-upload-modal-body .kb-upload-dropzone:hover,
 .kb-upload-modal-body .kb-upload-dropzone.dragover {
   border-color: var(--color-accent);
-  background-color: rgba(99, 102, 241, 0.1);
+  background-color: var(--accent-bg-subtle);
 }
 
 .kb-upload-modal-body .kb-upload-dropzone .icon svg {

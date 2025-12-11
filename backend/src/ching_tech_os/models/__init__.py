@@ -18,7 +18,36 @@ from ching_tech_os.models.knowledge import (
     VersionResponse,
 )
 
+from ching_tech_os.models.message import (
+    MessageSeverity,
+    MessageSource,
+    MessageCreate,
+    MessageResponse,
+    MessageListItem,
+    MessageListResponse,
+    MessageFilter,
+    UnreadCountResponse,
+    MarkReadRequest,
+    MarkReadResponse,
+    MessageNewEvent,
+    UnreadCountEvent,
+)
+
+from ching_tech_os.models.login_record import (
+    DeviceType,
+    GeoLocation,
+    DeviceInfo,
+    LoginRecordCreate,
+    LoginRecordResponse,
+    LoginRecordListItem,
+    LoginRecordListResponse,
+    LoginRecordFilter,
+    RecentLoginsResponse,
+    LoginDeviceInfo,
+)
+
 __all__ = [
+    # Knowledge
     "KnowledgeAttachment",
     "KnowledgeCreate",
     "KnowledgeIndex",
@@ -34,4 +63,28 @@ __all__ = [
     "IndexEntry",
     "TagsResponse",
     "VersionResponse",
+    # Message
+    "MessageSeverity",
+    "MessageSource",
+    "MessageCreate",
+    "MessageResponse",
+    "MessageListItem",
+    "MessageListResponse",
+    "MessageFilter",
+    "UnreadCountResponse",
+    "MarkReadRequest",
+    "MarkReadResponse",
+    "MessageNewEvent",
+    "UnreadCountEvent",
+    # Login Record
+    "DeviceType",
+    "GeoLocation",
+    "DeviceInfo",
+    "LoginRecordCreate",
+    "LoginRecordResponse",
+    "LoginRecordListItem",
+    "LoginRecordListResponse",
+    "LoginRecordFilter",
+    "RecentLoginsResponse",
+    "LoginDeviceInfo",
 ]

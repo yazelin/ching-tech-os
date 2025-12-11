@@ -74,3 +74,51 @@ async def update_user_display_name(username: str, display_name: str) -> dict | N
         if row:
             return dict(row)
         return None
+
+
+async def get_user_preferences(user_id: int) -> dict:
+    """取得使用者偏好設定
+
+    Args:
+        user_id: 使用者 ID
+
+    Returns:
+        使用者偏好設定（JSONB），若無則回傳預設值
+    """
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            "SELECT preferences FROM users WHERE id = $1",
+            user_id,
+        )
+        if row and row["preferences"]:
+            return dict(row["preferences"])
+        return {"theme": "dark"}
+
+
+async def update_user_preferences(user_id: int, preferences: dict) -> dict:
+    """更新使用者偏好設定
+
+    Args:
+        user_id: 使用者 ID
+        preferences: 要更新的偏好設定（會與現有設定合併）
+
+    Returns:
+        更新後的完整偏好設定
+    """
+    import json
+
+    async with get_connection() as conn:
+        # 使用 jsonb_concat (||) 合併現有與新的偏好設定
+        row = await conn.fetchrow(
+            """
+            UPDATE users
+            SET preferences = COALESCE(preferences, '{}'::jsonb) || $2::jsonb
+            WHERE id = $1
+            RETURNING preferences
+            """,
+            user_id,
+            json.dumps(preferences),
+        )
+        if row and row["preferences"]:
+            return dict(row["preferences"])
+        return {"theme": "dark"}

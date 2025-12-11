@@ -21,6 +21,8 @@
   <link rel="stylesheet" href="css/terminal.css">
   <link rel="stylesheet" href="css/code-editor.css">
   <link rel="stylesheet" href="css/knowledge-base.css">
+  <link rel="stylesheet" href="css/project-management.css">
+  <link rel="stylesheet" href="css/message-center.css">
 
   <!-- xterm.js -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css">
@@ -47,6 +49,14 @@
           <span class="icon" id="iconClock"></span>
           <span id="headerTime">--:--:--</span>
         </div>
+
+        <div class="header-divider"></div>
+
+        <!-- Message Center Button -->
+        <button id="messagesBtn" class="header-messages-btn" title="訊息中心">
+          <span class="icon" id="iconMessages"></span>
+          <span class="header-badge hidden" id="messagesBadge">0</span>
+        </button>
 
         <div class="header-divider"></div>
 
@@ -96,11 +106,14 @@
   <script src="js/terminal.js"></script>
   <script src="js/code-editor.js"></script>
   <script src="js/knowledge-base.js"></script>
+  <script src="js/project-management.js"></script>
+  <script src="js/message-center.js"></script>
   <script src="js/desktop.js"></script>
   <script src="js/taskbar.js"></script>
   <script>
     // 初始化 Header icons
     document.getElementById('iconClock').innerHTML = getIcon('clock-outline');
+    document.getElementById('iconMessages').innerHTML = getIcon('bell-outline');
     document.getElementById('iconUser').innerHTML = getIcon('account-circle');
     document.getElementById('iconLogout').innerHTML = getIcon('logout');
   </script>

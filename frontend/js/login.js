@@ -79,16 +79,22 @@ const LoginModule = (function() {
    * Call login API
    * @param {string} username
    * @param {string} password
+   * @param {Object} device - 裝置資訊
    * @returns {Promise<{success: boolean, token?: string, username?: string, error?: string}>}
    */
-  async function callLoginAPI(username, password) {
+  async function callLoginAPI(username, password, device = null) {
     try {
+      const body = { username, password };
+      if (device) {
+        body.device = device;
+      }
+
       const response = await fetch(`${API_BASE}/api/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify(body),
       });
 
       if (response.status === 503) {
@@ -155,7 +161,17 @@ const LoginModule = (function() {
     errorDiv.classList.remove('show');
 
     try {
-      const result = await callLoginAPI(username, password);
+      // 產生裝置指紋
+      let deviceInfo = null;
+      if (window.DeviceFingerprint) {
+        try {
+          deviceInfo = await DeviceFingerprint.generate();
+        } catch (e) {
+          console.warn('無法產生裝置指紋:', e);
+        }
+      }
+
+      const result = await callLoginAPI(username, password, deviceInfo);
 
       if (result.success && result.token) {
         createSession(result.username, result.token);

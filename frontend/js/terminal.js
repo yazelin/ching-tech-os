@@ -13,6 +13,45 @@ const TerminalApp = (function() {
   let instanceCounter = 0;
 
   /**
+   * 從 CSS 變數讀取顏色值
+   * @param {string} varName - CSS 變數名稱 (包含 --)
+   * @returns {string} 顏色值
+   */
+  function getCSSVar(varName) {
+    return getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+  }
+
+  /**
+   * 從 CSS 變數建立 xterm 主題
+   * @returns {Object} xterm 主題配置
+   */
+  function getTerminalTheme() {
+    return {
+      background: getCSSVar('--terminal-bg'),
+      foreground: getCSSVar('--terminal-fg'),
+      cursor: getCSSVar('--terminal-cursor'),
+      cursorAccent: getCSSVar('--terminal-cursor-accent'),
+      selectionBackground: getCSSVar('--terminal-selection'),
+      black: getCSSVar('--terminal-black'),
+      red: getCSSVar('--terminal-red'),
+      green: getCSSVar('--terminal-green'),
+      yellow: getCSSVar('--terminal-yellow'),
+      blue: getCSSVar('--terminal-blue'),
+      magenta: getCSSVar('--terminal-magenta'),
+      cyan: getCSSVar('--terminal-cyan'),
+      white: getCSSVar('--terminal-white'),
+      brightBlack: getCSSVar('--terminal-bright-black'),
+      brightRed: getCSSVar('--terminal-bright-red'),
+      brightGreen: getCSSVar('--terminal-bright-green'),
+      brightYellow: getCSSVar('--terminal-bright-yellow'),
+      brightBlue: getCSSVar('--terminal-bright-blue'),
+      brightMagenta: getCSSVar('--terminal-bright-magenta'),
+      brightCyan: getCSSVar('--terminal-bright-cyan'),
+      brightWhite: getCSSVar('--terminal-bright-white')
+    };
+  }
+
+  /**
    * Terminal instance class
    */
   class TerminalInstance {
@@ -31,36 +70,14 @@ const TerminalApp = (function() {
      * @param {HTMLElement} container
      */
     init(container) {
-      // Create terminal instance
+      // Create terminal instance with theme from CSS variables
       this.terminal = new Terminal({
         cursorBlink: true,
         cursorStyle: 'block',
         fontFamily: '"JetBrainsMono NF", "JetBrainsMono Nerd Font", "FiraCode Nerd Font", "JetBrains Mono", "Fira Code", "Cascadia Code", Menlo, Monaco, "Courier New", monospace',
         fontSize: 14,
         lineHeight: 1.2,
-        theme: {
-          background: '#1a1a1a',
-          foreground: '#e0e0e0',
-          cursor: '#ffffff',
-          cursorAccent: '#1a1a1a',
-          selectionBackground: 'rgba(255, 255, 255, 0.3)',
-          black: '#000000',
-          red: '#ff5555',
-          green: '#50fa7b',
-          yellow: '#f1fa8c',
-          blue: '#6272a4',
-          magenta: '#ff79c6',
-          cyan: '#8be9fd',
-          white: '#f8f8f2',
-          brightBlack: '#6272a4',
-          brightRed: '#ff6e6e',
-          brightGreen: '#69ff94',
-          brightYellow: '#ffffa5',
-          brightBlue: '#d6acff',
-          brightMagenta: '#ff92df',
-          brightCyan: '#a4ffff',
-          brightWhite: '#ffffff'
-        }
+        theme: getTerminalTheme()
       });
 
       // Load addons

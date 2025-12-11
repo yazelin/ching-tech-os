@@ -114,6 +114,15 @@ const HeaderModule = (function() {
   }
 
   /**
+   * Handle messages button click - open message center
+   */
+  function handleMessagesClick() {
+    if (typeof MessageCenterApp !== 'undefined') {
+      MessageCenterApp.open();
+    }
+  }
+
+  /**
    * Initialize header module
    */
   function init() {
@@ -134,6 +143,19 @@ const HeaderModule = (function() {
     if (userNameElement) {
       userNameElement.style.cursor = 'pointer';
       userNameElement.addEventListener('click', handleUserNameClick);
+    }
+
+    // Attach messages button handler
+    const messagesBtn = document.getElementById('messagesBtn');
+    if (messagesBtn) {
+      messagesBtn.addEventListener('click', handleMessagesClick);
+    }
+
+    // Load initial unread count
+    if (typeof SocketClient !== 'undefined') {
+      setTimeout(() => {
+        SocketClient.updateMessageBadge();
+      }, 1000);
     }
   }
 

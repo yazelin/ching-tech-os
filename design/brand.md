@@ -127,3 +127,92 @@ JetBrains Mono（程式碼介面、Log Viewer、CI/CD Console）
 方向 C：AI 資料匯流線
 
 方向 D：簡約科技字標（Type Logo）
+
+---
+
+## 🔧 CSS 變數對照表（Design Tokens）
+
+所有 UI 顏色都透過 CSS 變數定義於 `frontend/css/main.css`，支援未來主題切換。
+
+### 基礎顏色變數
+
+| CSS 變數 | 色碼 | 用途 |
+|---------|------|------|
+| `--color-primary` | #1C4FA8 | ChingTech Blue 主視覺色 |
+| `--color-background` | #0F1C2E | Deep Industrial Navy 背景色 |
+| `--color-accent` | #21D4FD | AI Neon Cyan 強調色 |
+| `--color-success` | #4CC577 | Action Green 成功狀態 |
+| `--color-warning` | #FFC557 | Warning Amber 警告狀態 |
+| `--color-error` | #E65050 | Error Red 錯誤狀態 |
+
+### 文字顏色變數
+
+| CSS 變數 | 色碼 | 用途 |
+|---------|------|------|
+| `--color-text-primary` | #F5F7FA | 主要文字 |
+| `--color-text-secondary` | #A4ACB5 | 次要文字 |
+| `--color-text-muted` | #3A3F45 | 靜音/提示文字 |
+
+### 標籤顏色變數
+
+| CSS 變數 | 色碼 | 用途 |
+|---------|------|------|
+| `--tag-color-purple` | #818cf8 | 分類/專案標籤 |
+| `--tag-color-green` | #34d399 | 類型/成功標籤 |
+| `--tag-color-yellow` | #fbbf24 | 警告/等級標籤 |
+| `--tag-color-pink` | #f472b6 | 角色/特殊標籤 |
+| `--tag-color-blue` | #3b82f6 | 資訊/進行中標籤 |
+| `--tag-color-gray` | #6c757d | 已取消/待處理標籤 |
+
+### 狀態標籤變數
+
+| CSS 變數 | 用途 |
+|---------|------|
+| `--status-completed-color/bg` | 已完成狀態 |
+| `--status-in-progress-color/bg` | 進行中狀態 |
+| `--status-pending-color/bg` | 待處理狀態 |
+| `--status-cancelled-color/bg` | 已取消狀態 |
+
+### 優先級變數
+
+| CSS 變數 | 用途 |
+|---------|------|
+| `--priority-critical-color/bg` | 最高優先級 |
+| `--priority-urgent-color/bg` | 緊急 |
+| `--priority-high-color/bg` | 高優先級 |
+| `--priority-normal-color/bg` | 一般 |
+| `--priority-low-color/bg` | 低優先級 |
+
+### 終端機主題變數
+
+| CSS 變數 | 色碼 | 用途 |
+|---------|------|------|
+| `--terminal-bg` | #1a1a1a | 終端機背景 |
+| `--terminal-fg` | #e0e0e0 | 終端機前景文字 |
+| `--terminal-cursor` | #ffffff | 游標顏色 |
+| `--terminal-*` | - | ANSI 16 色 (black, red, green, yellow, blue, magenta, cyan, white + bright 版本) |
+
+### 模態框變數
+
+| CSS 變數 | 色碼 | 用途 |
+|---------|------|------|
+| `--modal-bg` | #1e1e2e | 模態框背景（不透明） |
+| `--modal-border` | var(--border-light) | 模態框邊框 |
+
+### 主題切換支援
+
+系統架構支援透過 `data-theme` 屬性切換主題：
+
+```css
+/* 暗色主題（預設） */
+:root {
+  --color-background: #0F1C2E;
+  /* ... */
+}
+
+/* 亮色主題（未來擴充） */
+:root[data-theme="light"] {
+  --color-background: #F5F7FA;
+  /* ... */
+}
+```

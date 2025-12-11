@@ -12,7 +12,8 @@ from .config import settings
 from .database import init_db_pool, close_db_pool
 from .services.session import session_manager
 from .services.terminal import terminal_service
-from .api import auth, knowledge, nas, user, ai_router
+from .services.scheduler import start_scheduler, stop_scheduler
+from .api import auth, knowledge, login_records, messages, nas, user, ai_router, project
 
 # 建立 Socket.IO 伺服器
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
@@ -25,8 +26,10 @@ async def lifespan(app: FastAPI):
     await init_db_pool()
     await session_manager.start_cleanup_task()
     await terminal_service.start_cleanup_task()
+    start_scheduler()
     yield
     # 關閉時
+    stop_scheduler()
     await terminal_service.stop_cleanup_task()
     terminal_service.close_all()
     await session_manager.stop_cleanup_task()
@@ -54,9 +57,12 @@ app.add_middleware(
 # 註冊路由
 app.include_router(auth.router)
 app.include_router(knowledge.router)
+app.include_router(messages.router)
+app.include_router(login_records.router)
 app.include_router(nas.router)
 app.include_router(user.router)
 app.include_router(ai_router.router)
+app.include_router(project.router)
 
 
 @app.get("/api/health")
@@ -97,6 +103,11 @@ KNOWLEDGE_ASSETS = Path("/home/ct/SDD/ching-tech-os/data/knowledge/assets")
 if KNOWLEDGE_ASSETS.exists():
     app.mount("/data/knowledge/assets", StaticFiles(directory=KNOWLEDGE_ASSETS), name="knowledge-assets")
 
+# 專案附件本機目錄
+PROJECT_ATTACHMENTS = Path(settings.project_attachments_path)
+PROJECT_ATTACHMENTS.mkdir(parents=True, exist_ok=True)
+app.mount("/data/projects/attachments", StaticFiles(directory=PROJECT_ATTACHMENTS), name="project-attachments")
+
 
 # === Socket.IO 事件 ===
 
@@ -119,3 +130,7 @@ ai.register_events(sio)
 # 註冊終端機事件
 from .api import terminal
 terminal.register_events(sio)
+
+# 註冊訊息中心事件
+from .api import message_events
+message_events.register_events(sio)

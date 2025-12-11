@@ -6,6 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response
 
+from ching_tech_os.services.message import log_message
 from ching_tech_os.models.knowledge import (
     AttachmentUpdate,
     HistoryResponse,
@@ -169,7 +170,22 @@ async def create_new_knowledge(data: KnowledgeCreate) -> KnowledgeResponse:
     系統會自動分配 ID，並根據標題產生 slug（若未提供）。
     """
     try:
-        return create_knowledge(data)
+        result = create_knowledge(data)
+
+        # 記錄到訊息中心
+        try:
+            await log_message(
+                severity="info",
+                source="knowledge-base",
+                title="知識庫新增",
+                content=f"新增知識: {result.title}",
+                category="app",
+                metadata={"kb_id": result.id, "title": result.title}
+            )
+        except Exception as e:
+            print(f"[knowledge] log_message error: {e}")
+
+        return result
     except KnowledgeError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -190,7 +206,22 @@ async def update_existing_knowledge(
     只需提供要更新的欄位。
     """
     try:
-        return update_knowledge(kb_id, data)
+        result = update_knowledge(kb_id, data)
+
+        # 記錄到訊息中心
+        try:
+            await log_message(
+                severity="info",
+                source="knowledge-base",
+                title="知識庫更新",
+                content=f"更新知識: {result.title}",
+                category="app",
+                metadata={"kb_id": kb_id, "title": result.title}
+            )
+        except Exception as e:
+            print(f"[knowledge] log_message error: {e}")
+
+        return result
     except KnowledgeNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -215,6 +246,20 @@ async def delete_existing_knowledge(kb_id: str) -> None:
     """
     try:
         delete_knowledge(kb_id)
+
+        # 記錄到訊息中心
+        try:
+            await log_message(
+                severity="info",
+                source="knowledge-base",
+                title="知識庫刪除",
+                content=f"刪除知識: {kb_id}",
+                category="app",
+                metadata={"kb_id": kb_id}
+            )
+        except Exception as e:
+            print(f"[knowledge] log_message error: {e}")
+
     except KnowledgeNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

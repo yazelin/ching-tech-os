@@ -53,6 +53,89 @@ const SocketClient = (function () {
     socket.on('compress_started', handleCompressStarted);
     socket.on('compress_complete', handleCompressComplete);
     socket.on('compress_error', handleCompressError);
+
+    // 訊息中心事件
+    socket.on('message:new', handleNewMessage);
+    socket.on('message:unread_count', handleUnreadCount);
+  }
+
+  /**
+   * 處理新訊息
+   * @param {Object} data - { message }
+   */
+  function handleNewMessage(data) {
+    const { message } = data;
+    console.log('[SocketClient] New message:', message.id, message.severity);
+
+    // 通知訊息中心
+    if (typeof MessageCenterApp !== 'undefined') {
+      MessageCenterApp.handleNewMessage(message);
+    }
+
+    // 更新 Header badge
+    updateMessageBadge();
+
+    // 根據嚴重程度顯示 Toast 通知（warning 以上）
+    if (['warning', 'error', 'critical'].includes(message.severity)) {
+      if (typeof DesktopModule !== 'undefined') {
+        const iconMap = {
+          'warning': 'alert',
+          'error': 'alert-circle',
+          'critical': 'alert-octagon'
+        };
+        DesktopModule.showToast(
+          `[${message.severity.toUpperCase()}] ${message.title}`,
+          iconMap[message.severity] || 'information'
+        );
+      }
+    }
+  }
+
+  /**
+   * 處理未讀數量更新
+   * @param {Object} data - { count }
+   */
+  function handleUnreadCount(data) {
+    const { count } = data;
+    console.log('[SocketClient] Unread count:', count);
+    updateMessageBadgeCount(count);
+  }
+
+  /**
+   * 更新訊息 badge（從 API 取得）
+   */
+  async function updateMessageBadge() {
+    try {
+      const token = LoginModule.getToken();
+      if (!token) return;
+
+      const response = await fetch('/api/messages/unread-count', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        updateMessageBadgeCount(data.count);
+      }
+    } catch (error) {
+      console.error('[SocketClient] Failed to fetch unread count:', error);
+    }
+  }
+
+  /**
+   * 更新訊息 badge 數量
+   * @param {number} count
+   */
+  function updateMessageBadgeCount(count) {
+    const badge = document.getElementById('messagesBadge');
+    if (!badge) return;
+
+    if (count > 0) {
+      badge.textContent = count > 99 ? '99+' : count;
+      badge.classList.remove('hidden');
+    } else {
+      badge.classList.add('hidden');
+    }
   }
 
   /**
@@ -255,5 +338,6 @@ const SocketClient = (function () {
     emitWithAck,
     on,
     off,
+    updateMessageBadge,
   };
 })();

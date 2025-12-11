@@ -4,11 +4,24 @@ from datetime import datetime
 from pydantic import BaseModel
 
 
+class DeviceInfo(BaseModel):
+    """裝置資訊（前端提供）"""
+
+    fingerprint: str | None = None
+    device_type: str | None = None
+    browser: str | None = None
+    os: str | None = None
+    screen_resolution: str | None = None
+    timezone: str | None = None
+    language: str | None = None
+
+
 class LoginRequest(BaseModel):
     """登入請求"""
 
     username: str
     password: str
+    device: DeviceInfo | None = None
 
 
 class LoginResponse(BaseModel):
@@ -32,6 +45,7 @@ class SessionData(BaseModel):
     username: str
     password: str  # SMB 操作需要
     nas_host: str
+    user_id: int | None = None  # 資料庫中的使用者 ID
     created_at: datetime
     expires_at: datetime
 

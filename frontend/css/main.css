@@ -35,7 +35,7 @@
   --bg-surface-dark: rgba(0, 0, 0, 0.2);
   --bg-surface-darker: rgba(0, 0, 0, 0.3);
   --bg-overlay: rgba(0, 0, 0, 0.6);
-  --bg-overlay-dark: rgba(0, 0, 0, 0.85);
+  --bg-overlay-dark: rgba(0, 0, 0, 0.8);
   --border-subtle: rgba(255, 255, 255, 0.05);
   --border-light: rgba(255, 255, 255, 0.1);
   --border-medium: rgba(255, 255, 255, 0.15);
@@ -47,6 +47,100 @@
   --accent-bg-light: rgba(33, 212, 253, 0.15);
   --accent-bg-medium: rgba(33, 212, 253, 0.2);
   --accent-border: rgba(33, 212, 253, 0.3);
+
+  /* RGB Format (for rgba() calculations) */
+  --color-primary-rgb: 28, 79, 168;
+  --color-background-rgb: 15, 28, 46;
+  --color-accent-rgb: 33, 212, 253;
+  --color-success-rgb: 76, 197, 119;
+  --color-warning-rgb: 255, 197, 87;
+  --color-error-rgb: 230, 80, 80;
+
+  /* Button Hover Colors */
+  --color-primary-hover: #2560c2;
+  --color-accent-hover: #4fe0ff;
+
+  /* Tag Colors (語義化標籤顏色) */
+  --tag-color-purple: #818cf8;
+  --tag-color-green: #34d399;
+  --tag-color-yellow: #fbbf24;
+  --tag-color-pink: #f472b6;
+  --tag-color-blue: #3b82f6;
+  --tag-color-gray: #6c757d;
+  --tag-color-red: #ef4444;
+  --tag-color-orange: #f59e0b;
+  --tag-color-cyan: #22d3ee;
+
+  /* Tag Background Colors (帶透明度) */
+  --tag-bg-purple: rgba(129, 140, 248, 0.2);
+  --tag-bg-green: rgba(52, 211, 153, 0.2);
+  --tag-bg-yellow: rgba(251, 191, 36, 0.2);
+  --tag-bg-pink: rgba(244, 114, 182, 0.2);
+  --tag-bg-blue: rgba(59, 130, 246, 0.2);
+  --tag-bg-gray: rgba(108, 117, 125, 0.2);
+  --tag-bg-red: rgba(239, 68, 68, 0.2);
+  --tag-bg-orange: rgba(245, 158, 11, 0.2);
+
+  /* Status Tag Colors (狀態標籤) */
+  --status-completed-color: var(--color-success);
+  --status-completed-bg: rgba(76, 197, 119, 0.15);
+  --status-in-progress-color: var(--tag-color-blue);
+  --status-in-progress-bg: rgba(59, 130, 246, 0.15);
+  --status-pending-color: var(--tag-color-yellow);
+  --status-pending-bg: rgba(251, 191, 36, 0.15);
+  --status-cancelled-color: var(--tag-color-gray);
+  --status-cancelled-bg: rgba(108, 117, 125, 0.15);
+
+  /* Priority Tag Colors (優先級標籤) */
+  --priority-critical-color: #dc2626;
+  --priority-critical-bg: rgba(220, 38, 38, 0.3);
+  --priority-urgent-color: var(--color-error);
+  --priority-urgent-bg: rgba(239, 68, 68, 0.2);
+  --priority-high-color: var(--tag-color-orange);
+  --priority-high-bg: rgba(245, 158, 11, 0.2);
+  --priority-normal-color: var(--tag-color-blue);
+  --priority-normal-bg: rgba(59, 130, 246, 0.2);
+  --priority-low-color: var(--tag-color-gray);
+  --priority-low-bg: rgba(128, 128, 128, 0.2);
+
+  /* Modal Colors (模態框) */
+  --modal-bg: #1e1e2e;
+  --modal-bg-alt: #1a1a2e;
+  --modal-border: var(--border-light);
+
+  /* Terminal Theme Colors (終端機主題) */
+  --terminal-bg: #1a1a1a;
+  --terminal-fg: #e0e0e0;
+  --terminal-cursor: #ffffff;
+  --terminal-cursor-accent: #1a1a1a;
+  --terminal-selection: rgba(255, 255, 255, 0.3);
+  --terminal-black: #000000;
+  --terminal-red: #ff5555;
+  --terminal-green: #50fa7b;
+  --terminal-yellow: #f1fa8c;
+  --terminal-blue: #6272a4;
+  --terminal-magenta: #ff79c6;
+  --terminal-cyan: #8be9fd;
+  --terminal-white: #f8f8f2;
+  --terminal-bright-black: #6272a4;
+  --terminal-bright-red: #ff6e6e;
+  --terminal-bright-green: #69ff94;
+  --terminal-bright-yellow: #ffffa5;
+  --terminal-bright-blue: #d6acff;
+  --terminal-bright-magenta: #ff92df;
+  --terminal-bright-cyan: #a4ffff;
+  --terminal-bright-white: #ffffff;
+
+  /* Terminal Status Indicators */
+  --terminal-status-connected: #4caf50;
+  --terminal-status-disconnected: #f44336;
+  --terminal-status-idle: #666666;
+
+  /* Code Editor */
+  --code-editor-bg: #1e1e1e;
+
+  /* Notification Badge */
+  --badge-color: #ef4444;
 
   /* Font Families */
   --font-primary: -apple-system, BlinkMacSystemFont, 'Ubuntu', 'Segoe UI', 'Microsoft JhengHei', 'Noto Sans CJK TC', sans-serif;
@@ -189,7 +283,7 @@ input {
 }
 
 .btn-primary:hover {
-  background-color: #2560c2;
+  background-color: var(--color-primary-hover);
 }
 
 .btn-accent {
@@ -198,7 +292,7 @@ input {
 }
 
 .btn-accent:hover {
-  background-color: #4fe0ff;
+  background-color: var(--color-accent-hover);
 }
 
 .btn-ghost {

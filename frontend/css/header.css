@@ -43,7 +43,7 @@
 }
 
 .header-title-os {
-  color: #FFFFFF;
+  color: var(--color-text-primary);
   text-shadow: 0 0 10px rgba(255, 255, 255, 0.5), 0 0 20px rgba(255, 255, 255, 0.3);
 }
 
@@ -134,4 +134,52 @@
   width: 1px;
   height: 20px;
   background-color: var(--border-light);
+}
+
+/* Message Center Button */
+.header-messages-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.header-messages-btn:hover {
+  background-color: var(--border-light);
+  color: var(--color-accent);
+}
+
+.header-messages-btn .icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.header-messages-btn .header-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  background-color: var(--badge-color);
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.header-messages-btn .header-badge.hidden {
+  display: none;
 }

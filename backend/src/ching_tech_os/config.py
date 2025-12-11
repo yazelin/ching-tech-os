@@ -33,6 +33,16 @@ class Settings(BaseSettings):
     knowledge_nas_user: str = "yazelin"
     knowledge_nas_password: str = "REMOVED_PASSWORD"
 
+    # 專案管理 NAS 設定
+    project_nas_host: str = "192.168.11.50"
+    project_nas_share: str = "擎添開發"
+    project_nas_path: str = "ching-tech-os/projects"
+    project_nas_user: str = "yazelin"
+    project_nas_password: str = "REMOVED_PASSWORD"
+
+    # 專案附件本機儲存路徑
+    project_attachments_path: str = "/home/ct/SDD/ching-tech-os/data/projects/attachments"
+
     # CORS 設定（credentials=True 時不能用 "*"）
     cors_origins: list[str] = [
         "http://localhost:8080",

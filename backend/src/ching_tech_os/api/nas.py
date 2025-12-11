@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from fastapi.responses import Response, StreamingResponse
 
 from ..models.auth import ErrorResponse, SessionData
+from ..services.message import log_message
 from ..models.nas import (
     SharesResponse,
     BrowseResponse,
@@ -322,6 +323,21 @@ async def upload_file(
         content = await file.read()
         with smb:
             smb.write_file(share_name, file_path, content)
+
+            # 記錄上傳操作到訊息中心
+            try:
+                await log_message(
+                    severity="info",
+                    source="file-manager",
+                    title="檔案上傳",
+                    content=f"上傳檔案: {file_path}\n大小: {len(content)} bytes",
+                    category="app",
+                    user_id=session.user_id,
+                    metadata={"path": f"/{share_name}/{file_path}", "size": len(content)}
+                )
+            except Exception as e:
+                print(f"[nas] log_message error: {e}")
+
             return OperationResponse(success=True, message="上傳成功")
     except SMBConnectionError:
         raise HTTPException(
@@ -375,6 +391,21 @@ async def delete_file(
     try:
         with smb:
             smb.delete_item(share_name, sub_path, recursive=request.recursive)
+
+            # 記錄刪除操作到訊息中心
+            try:
+                await log_message(
+                    severity="info",
+                    source="file-manager",
+                    title="檔案刪除",
+                    content=f"刪除: {request.path}",
+                    category="app",
+                    user_id=session.user_id,
+                    metadata={"path": request.path, "recursive": request.recursive}
+                )
+            except Exception as e:
+                print(f"[nas] log_message error: {e}")
+
             return OperationResponse(success=True, message="刪除成功")
     except SMBConnectionError:
         raise HTTPException(

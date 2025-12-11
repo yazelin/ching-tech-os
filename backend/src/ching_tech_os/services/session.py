@@ -20,7 +20,7 @@ class SessionManager:
         self._cleanup_task: asyncio.Task | None = None
 
     def create_session(
-        self, username: str, password: str, nas_host: str | None = None
+        self, username: str, password: str, nas_host: str | None = None, user_id: int | None = None
     ) -> str:
         """建立新 session
 
@@ -28,6 +28,7 @@ class SessionManager:
             username: 使用者帳號
             password: 使用者密碼（供 SMB 操作使用）
             nas_host: NAS 主機位址
+            user_id: 資料庫中的使用者 ID
 
         Returns:
             session token (UUID)
@@ -40,6 +41,7 @@ class SessionManager:
             username=username,
             password=password,
             nas_host=nas_host or settings.nas_host,
+            user_id=user_id,
             created_at=now,
             expires_at=expires_at,
         )

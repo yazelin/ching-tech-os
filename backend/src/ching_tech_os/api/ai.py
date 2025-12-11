@@ -7,6 +7,7 @@ from socketio import AsyncServer
 
 from ..services import ai_chat
 from ..services.claude_agent import call_claude, call_claude_for_summary, get_prompt_content
+from ..services.message import log_message
 
 
 def register_events(sio: AsyncServer):
@@ -143,6 +144,22 @@ def register_events(sio: AsyncServer):
                 },
                 to=sid,
             )
+
+            # 記錄 AI 對話訊息到訊息中心
+            user_id = chat.get("user_id")
+            if user_id:
+                try:
+                    await log_message(
+                        severity="info",
+                        source="ai-assistant",
+                        title="AI 助手回應",
+                        content=f"對話: {chat.get('title', '新對話')}\n回應摘要: {response.message[:100]}...",
+                        category="user",
+                        user_id=user_id,
+                        metadata={"chat_id": chat_id_str, "model": model}
+                    )
+                except Exception as e:
+                    print(f"[ai] log_message error: {e}")
         else:
             # 發送錯誤
             await sio.emit(

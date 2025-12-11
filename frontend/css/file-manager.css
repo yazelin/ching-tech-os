@@ -339,11 +339,11 @@
 }
 
 .fm-file-icon.image {
-  color: #f472b6;
+  color: var(--tag-color-pink);
 }
 
 .fm-file-icon.text {
-  color: #34d399;
+  color: var(--tag-color-green);
 }
 
 .fm-file-name {
@@ -641,7 +641,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: var(--bg-overlay);
+  background-color: var(--bg-overlay-dark);
   display: flex;
   align-items: center;
   justify-content: center;

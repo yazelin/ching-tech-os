@@ -41,7 +41,7 @@
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-  background-color: #1a1a1a;
+  background-color: var(--terminal-bg);
 }
 
 /* ==========================================================================
@@ -97,15 +97,15 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background-color: #666;
+  background-color: var(--terminal-status-idle);
 }
 
 .terminal-status-indicator .status-dot.connected {
-  background-color: #4caf50;
+  background-color: var(--terminal-status-connected);
 }
 
 .terminal-status-indicator .status-dot.disconnected {
-  background-color: #f44336;
+  background-color: var(--terminal-status-disconnected);
 }
 
 /* ==========================================================================
@@ -117,7 +117,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.8);
+  background-color: var(--bg-overlay-dark);
   display: flex;
   align-items: center;
   justify-content: center;

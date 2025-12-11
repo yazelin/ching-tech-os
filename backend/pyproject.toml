@@ -17,6 +17,9 @@ dependencies = [
     "sqlalchemy>=2.0.0",
     "python-multipart>=0.0.20",
     "ptyprocess>=0.7.0",
+    "geoip2>=4.8.0",
+    "user-agents>=2.2.0",
+    "apscheduler>=3.11.1",
 ]
 
 [project.optional-dependencies]

@@ -24,16 +24,20 @@ Ching-Tech OS 是一個 Web-based 統一工作空間，以 AI Agent 系統架構
 - **JavaScript (ES6+)**: 原生 JavaScript，模組化設計
 - **無框架**: 不使用 React、Vue 等前端框架
 
-### Backend (預計)
-- **Python**: 主要後端語言
+### Backend
+- **Python 3.11+**: 主要後端語言
 - **uv**: Python 套件管理工具
 - **FastAPI**: Web API 框架
-- **Socket.IO**: 即時通訊
+- **asyncpg**: PostgreSQL 非同步驅動
+- **Socket.IO**: 即時通訊（終端機、AI 對話）
 - **httpx**: HTTP 客戶端
+- **Pydantic**: 資料驗證與序列化
 
 ### Database & Infrastructure
 - **PostgreSQL**: 主要資料庫
+- **Alembic**: 資料庫 migration 管理
 - **Docker**: 容器化部署（資料庫）
+- **SMB/CIFS**: NAS 檔案存取
 
 ## Project Conventions
 
@@ -54,30 +58,43 @@ Ching-Tech OS 是一個 Web-based 統一工作空間，以 AI Agent 系統架構
   - Window (視窗管理)
   - App (應用程式)
 
-### File Structure (預計)
+### File Structure
 ```
 /
 ├── frontend/
-│   ├── index.html
-│   ├── css/
-│   │   ├── main.css
-│   │   ├── desktop.css
-│   │   ├── taskbar.css
-│   │   └── components/
-│   ├── js/
-│   │   ├── main.js
-│   │   ├── desktop.js
-│   │   ├── taskbar.js
-│   │   └── modules/
-│   └── assets/
-│       ├── icons/
-│       └── images/
+│   ├── index.html          # 主頁面
+│   ├── login.html          # 登入頁面
+│   ├── css/                # 樣式檔案
+│   ├── js/                 # JavaScript 模組
+│   └── assets/             # 圖片、圖示
 ├── backend/
-│   └── (FastAPI 應用)
+│   ├── src/ching_tech_os/
+│   │   ├── main.py         # FastAPI 入口
+│   │   ├── config.py       # 設定檔
+│   │   ├── database.py     # 資料庫連線
+│   │   ├── api/            # API 路由
+│   │   ├── models/         # Pydantic 資料模型
+│   │   └── services/       # 業務邏輯
+│   ├── migrations/         # Alembic migrations
+│   │   └── versions/       # Migration 檔案
+│   ├── alembic.ini
+│   └── pyproject.toml
 ├── docker/
-│   └── docker-compose.yml
+│   ├── docker-compose.yml
+│   └── init.sql            # 初始化基本表（僅 users）
+├── data/                   # 本機資料儲存
+│   ├── knowledge/assets/   # 知識庫附件
+│   └── projects/attachments/ # 專案附件
 └── openspec/
 ```
+
+### Database Migration 規範
+- **必須使用 Alembic**：所有資料庫 schema 變更都要透過 migration
+- **Migration 檔案命名**：`00X_description.py`（遞增編號）
+- **不要修改 init.sql**：僅用於 Docker 初始化基本表
+- **建立 migration**：`cd backend && uv run alembic revision -m "description"`
+- **執行 migration**：`cd backend && uv run alembic upgrade head`
+- **回滾 migration**：`cd backend && uv run alembic downgrade -1`
 
 ### Testing Strategy
 - 前端：手動測試 + 瀏覽器開發者工具
@@ -100,11 +117,11 @@ Ching-Tech OS 是一個 Web-based 統一工作空間，以 AI Agent 系統架構
 - **Window**: 應用程式執行時的視窗容器（後期實作）
 
 ## Important Constraints
-- 第一階段僅實作前端 UI，不包含後端功能
-- 登入功能為模擬實作（不連接真實驗證服務）
-- 不使用前端框架，純 HTML/CSS/JavaScript
+- 前端不使用框架，純 HTML/CSS/JavaScript
+- 登入使用 NAS SMB 驗證
 - 優先支援現代瀏覽器 (Chrome, Firefox, Safari, Edge)
 - 響應式設計以支援不同螢幕尺寸
+- 大型檔案（≥1MB）儲存於 NAS，小型檔案儲存本機
 
 ## External Dependencies
 - **PostgreSQL** (Docker 容器)
