@@ -9,6 +9,14 @@ const APIClient = (function() {
   const BASE_URL = '/api';
 
   /**
+   * 取得認證 token
+   * @returns {string|null}
+   */
+  function getToken() {
+    return localStorage.getItem('chingtech_token');
+  }
+
+  /**
    * Make an API request
    * @param {string} endpoint
    * @param {Object} options
@@ -16,11 +24,13 @@ const APIClient = (function() {
    */
   async function request(endpoint, options = {}) {
     const url = `${BASE_URL}${endpoint}`;
+    const token = getToken();
     const defaultOptions = {
       headers: {
         'Content-Type': 'application/json',
+        ...(token && { 'Authorization': `Bearer ${token}` }),
       },
-      credentials: 'include', // Include cookies for session
+      credentials: 'include',
     };
 
     const response = await fetch(url, { ...defaultOptions, ...options });
@@ -105,8 +115,60 @@ const APIClient = (function() {
     return request('/ai/prompts');
   }
 
+  // ========== Generic HTTP Methods ==========
+
+  /**
+   * Generic GET request
+   * @param {string} endpoint
+   * @returns {Promise}
+   */
+  async function get(endpoint) {
+    return request(endpoint, { method: 'GET' });
+  }
+
+  /**
+   * Generic POST request
+   * @param {string} endpoint
+   * @param {Object} data
+   * @returns {Promise}
+   */
+  async function post(endpoint, data) {
+    return request(endpoint, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  /**
+   * Generic PUT request
+   * @param {string} endpoint
+   * @param {Object} data
+   * @returns {Promise}
+   */
+  async function put(endpoint, data) {
+    return request(endpoint, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  /**
+   * Generic DELETE request
+   * @param {string} endpoint
+   * @returns {Promise}
+   */
+  async function del(endpoint) {
+    return request(endpoint, { method: 'DELETE' });
+  }
+
   // Public API
   return {
+    // Generic HTTP methods
+    get,
+    post,
+    put,
+    delete: del,
+
     // AI Chats
     getChats,
     createChat,
@@ -116,3 +178,6 @@ const APIClient = (function() {
     getPrompts,
   };
 })();
+
+// Alias for compatibility
+const ApiClient = APIClient;

@@ -11,6 +11,7 @@ from collections.abc import Sequence
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import JSONB
 
 # revision identifiers, used by Alembic.
 revision: str = "001"
@@ -25,6 +26,7 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
         sa.Column("username", sa.String(100), unique=True, nullable=False),
         sa.Column("display_name", sa.String(100), nullable=True),
+        sa.Column("preferences", JSONB, server_default="{}", nullable=False),
         sa.Column(
             "created_at", sa.DateTime, server_default=sa.text("NOW()"), nullable=True
         ),
@@ -38,6 +40,9 @@ def upgrade() -> None:
     )
     op.execute("COMMENT ON COLUMN users.username IS 'NAS 帳號'")
     op.execute("COMMENT ON COLUMN users.display_name IS '顯示名稱（可選）'")
+    op.execute(
+        "COMMENT ON COLUMN users.preferences IS '使用者偏好設定（JSONB），包含 theme 等設定'"
+    )
     op.execute("COMMENT ON COLUMN users.created_at IS '首次登入時間'")
     op.execute("COMMENT ON COLUMN users.last_login_at IS '最後登入時間'")
 

@@ -8,8 +8,8 @@
   left: 0;
   right: 0;
   height: var(--header-height);
-  background-color: rgba(15, 28, 46, 0.95);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background-color: var(--bg-glass);
+  border-bottom: 1px solid var(--interactive-border);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -33,10 +33,34 @@
   border-radius: var(--radius-sm);
 }
 
+/* 根據主題切換 logo */
+.header-logo-light {
+  display: none;
+}
+
+:root[data-theme="light"] .header-logo-dark {
+  display: none;
+}
+
+:root[data-theme="light"] .header-logo-light {
+  display: block;
+  animation: logoGlowLight 4s ease-in-out infinite;
+}
+
+/* 亮色主題 logo 發光呼吸動畫 */
+@keyframes logoGlowLight {
+  0%, 100% {
+    filter: drop-shadow(0 0 2px rgba(8, 145, 178, 0.3));
+  }
+  50% {
+    filter: drop-shadow(0 0 8px rgba(8, 145, 178, 0.6)) drop-shadow(0 0 12px rgba(8, 145, 178, 0.4));
+  }
+}
+
 .header-title {
   font-size: var(--font-size-sm);
   font-weight: 600;
-  color: var(--color-accent);
+  color: var(--color-primary);
   text-shadow: 0 0 10px rgba(33, 212, 253, 0.5), 0 0 20px var(--accent-border);
   user-select: none;
   -webkit-user-select: none;
@@ -86,11 +110,21 @@
   gap: var(--spacing-sm);
   padding: var(--spacing-xs) var(--spacing-sm);
   border-radius: var(--radius-md);
-  cursor: default;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.header-user:hover {
+  background-color: var(--interactive-hover);
+}
+
+.header-user:hover .icon,
+.header-user:hover .header-user-name {
+  color: var(--color-text-primary);
 }
 
 .header-user .icon {
-  color: var(--color-accent);
+  color: var(--color-text-secondary);
 }
 
 .header-user .icon svg {
@@ -100,7 +134,7 @@
 
 .header-user-name {
   font-size: var(--font-size-sm);
-  color: var(--color-text-primary);
+  color: var(--color-text-secondary);
   max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -115,13 +149,20 @@
   padding: var(--spacing-xs) var(--spacing-sm);
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
+  background-color: transparent;
+  border: none;
   border-radius: var(--radius-md);
+  cursor: pointer;
   transition: all var(--transition-fast);
 }
 
 .header-logout:hover {
-  background-color: var(--border-light);
-  color: var(--color-error);
+  background-color: var(--interactive-hover);
+  color: var(--color-text-primary);
+}
+
+.header-logout:hover .icon {
+  color: var(--color-text-primary);
 }
 
 .header-logout .icon svg {
@@ -153,8 +194,8 @@
 }
 
 .header-messages-btn:hover {
-  background-color: var(--border-light);
-  color: var(--color-accent);
+  background-color: var(--interactive-hover);
+  color: var(--color-text-primary);
 }
 
 .header-messages-btn .icon svg {

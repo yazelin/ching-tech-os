@@ -8,7 +8,7 @@
   left: 50%;
   transform: translateX(-50%);
   height: var(--taskbar-height);
-  background-color: rgba(15, 28, 46, 0.85);
+  background-color: var(--bg-glass-light);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-xl);
   display: flex;
@@ -39,7 +39,7 @@
 }
 
 .taskbar-icon:hover {
-  background-color: rgba(255, 255, 255, 0.12);
+  background-color: var(--interactive-active);
   transform: translateY(-4px);
 }
 
@@ -58,7 +58,7 @@
 }
 
 .taskbar-icon:hover .icon {
-  color: var(--color-accent);
+  color: var(--color-primary);
 }
 
 /* Taskbar Tooltip */
@@ -69,10 +69,10 @@
   left: 50%;
   transform: translateX(-50%);
   padding: var(--spacing-xs) var(--spacing-sm);
-  background-color: rgba(0, 0, 0, 0.9);
+  background-color: var(--bg-tooltip);
   border-radius: var(--radius-sm);
   font-size: var(--font-size-xs);
-  color: var(--color-text-primary);
+  color: var(--tooltip-text);
   white-space: nowrap;
   opacity: 0;
   visibility: hidden;
@@ -121,8 +121,8 @@
   transform: translateX(-50%);
   min-width: 180px;
   max-width: 280px;
-  background-color: rgba(15, 28, 46, 0.95);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background-color: var(--bg-glass);
+  border: 1px solid var(--interactive-active);
   border-radius: var(--radius-md);
   padding: var(--spacing-xs);
   backdrop-filter: blur(12px);

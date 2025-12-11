@@ -10,25 +10,25 @@
    CSS Variables (Design Tokens)
    ========================================================================== */
 :root {
-  /* Primary Colors */
-  --color-primary: #1C4FA8;           /* ChingTech Blue */
-  --color-background: #0F1C2E;        /* Deep Industrial Navy */
-  --color-accent: #21D4FD;            /* AI Neon Cyan */
+  /* Primary Colors - 統一使用較深色調，白字清晰 */
+  --color-primary: #0891b2;           /* ChingTech Cyan - 主要按鈕/品牌色 */
+  --color-background: #1a1a1a;        /* 純黑灰背景（無彩度） */
+  --color-accent: #ea580c;            /* Orange - 強調/特殊元素 */
 
-  /* Neutral Colors */
-  --color-gray-light: #F5F7FA;
-  --color-gray-mid: #A4ACB5;
-  --color-gray-dark: #3A3F45;
+  /* Neutral Colors（無彩度灰階） */
+  --color-gray-light: #f0f0f0;
+  --color-gray-mid: #909090;
+  --color-gray-dark: #404040;
 
-  /* Status Colors */
-  --color-success: #4CC577;           /* Action Green */
-  --color-warning: #FFC557;           /* Warning Amber */
-  --color-error: #E65050;             /* Error Red */
+  /* Status Colors - 統一使用較深色調 */
+  --color-success: #16a34a;           /* Action Green */
+  --color-warning: #d97706;           /* Warning Amber */
+  --color-error: #dc2626;             /* Error Red */
 
-  /* Text Colors */
-  --color-text-primary: #F5F7FA;
-  --color-text-secondary: #A4ACB5;
-  --color-text-muted: #3A3F45;
+  /* Text Colors（無彩度） */
+  --color-text-primary: #f0f0f0;
+  --color-text-secondary: #a0a0a0;
+  --color-text-muted: #606060;
 
   /* Surface & Border Colors */
   --bg-surface: rgba(0, 0, 0, 0.1);
@@ -43,22 +43,37 @@
   --hover-bg: rgba(255, 255, 255, 0.1);
 
   /* Accent Variants (for hover/active states) */
-  --accent-bg-subtle: rgba(33, 212, 253, 0.1);
-  --accent-bg-light: rgba(33, 212, 253, 0.15);
-  --accent-bg-medium: rgba(33, 212, 253, 0.2);
-  --accent-border: rgba(33, 212, 253, 0.3);
+  --accent-bg-subtle: rgba(8, 145, 178, 0.1);
+  --accent-bg-light: rgba(8, 145, 178, 0.15);
+  --accent-bg-medium: rgba(8, 145, 178, 0.2);
+  --accent-border: rgba(8, 145, 178, 0.3);
 
   /* RGB Format (for rgba() calculations) */
-  --color-primary-rgb: 28, 79, 168;
-  --color-background-rgb: 15, 28, 46;
-  --color-accent-rgb: 33, 212, 253;
-  --color-success-rgb: 76, 197, 119;
-  --color-warning-rgb: 255, 197, 87;
-  --color-error-rgb: 230, 80, 80;
+  --color-primary-rgb: 8, 145, 178;
+  --color-background-rgb: 26, 26, 26;
+  --color-accent-rgb: 234, 88, 12;
+  --color-success-rgb: 22, 163, 74;
+  --color-warning-rgb: 217, 119, 6;
+  --color-error-rgb: 220, 38, 38;
 
-  /* Button Hover Colors */
-  --color-primary-hover: #2560c2;
-  --color-accent-hover: #4fe0ff;
+  /* 半透明背景色（用於 header、taskbar、window 等）- 無彩度 */
+  --bg-glass: rgba(26, 26, 26, 0.95);
+  --bg-glass-light: rgba(26, 26, 26, 0.85);
+  --bg-glass-heavy: rgba(26, 26, 26, 0.98);
+  --bg-tooltip: rgba(0, 0, 0, 0.9);
+  --tooltip-text: #e8e8e8;
+
+  /* 互動效果（暗色主題用白色半透明） */
+  --interactive-hover: rgba(255, 255, 255, 0.08);
+  --interactive-active: rgba(255, 255, 255, 0.12);
+  --interactive-border: rgba(255, 255, 255, 0.08);
+  --scrollbar-hover: rgba(255, 255, 255, 0.35);
+  --text-muted-semi: rgba(255, 255, 255, 0.5);
+  --text-shadow-contrast: 0 1px 2px rgba(0, 0, 0, 0.8);
+
+  /* Button Hover Colors - 稍亮 */
+  --color-primary-hover: #0ea5c9;    /* Cyan hover - 稍亮 */
+  --color-accent-hover: #f97316;     /* Orange hover - 稍亮 */
 
   /* Tag Colors (語義化標籤顏色) */
   --tag-color-purple: #818cf8;
@@ -66,7 +81,7 @@
   --tag-color-yellow: #fbbf24;
   --tag-color-pink: #f472b6;
   --tag-color-blue: #3b82f6;
-  --tag-color-gray: #6c757d;
+  --tag-color-gray: #707070;
   --tag-color-red: #ef4444;
   --tag-color-orange: #f59e0b;
   --tag-color-cyan: #22d3ee;
@@ -77,7 +92,7 @@
   --tag-bg-yellow: rgba(251, 191, 36, 0.2);
   --tag-bg-pink: rgba(244, 114, 182, 0.2);
   --tag-bg-blue: rgba(59, 130, 246, 0.2);
-  --tag-bg-gray: rgba(108, 117, 125, 0.2);
+  --tag-bg-gray: rgba(112, 112, 112, 0.2);
   --tag-bg-red: rgba(239, 68, 68, 0.2);
   --tag-bg-orange: rgba(245, 158, 11, 0.2);
 
@@ -89,7 +104,7 @@
   --status-pending-color: var(--tag-color-yellow);
   --status-pending-bg: rgba(251, 191, 36, 0.15);
   --status-cancelled-color: var(--tag-color-gray);
-  --status-cancelled-bg: rgba(108, 117, 125, 0.15);
+  --status-cancelled-bg: rgba(112, 112, 112, 0.15);
 
   /* Priority Tag Colors (優先級標籤) */
   --priority-critical-color: #dc2626;
@@ -103,9 +118,9 @@
   --priority-low-color: var(--tag-color-gray);
   --priority-low-bg: rgba(128, 128, 128, 0.2);
 
-  /* Modal Colors (模態框) */
-  --modal-bg: #1e1e2e;
-  --modal-bg-alt: #1a1a2e;
+  /* Modal Colors (模態框) - 無彩度 */
+  --modal-bg: #1e1e1e;
+  --modal-bg-alt: #1a1a1a;
   --modal-border: var(--border-light);
 
   /* Terminal Theme Colors (終端機主題) */
@@ -121,7 +136,7 @@
   --terminal-blue: #6272a4;
   --terminal-magenta: #ff79c6;
   --terminal-cyan: #8be9fd;
-  --terminal-white: #f8f8f2;
+  --terminal-white: #f8f8f8;
   --terminal-bright-black: #6272a4;
   --terminal-bright-red: #ff6e6e;
   --terminal-bright-green: #69ff94;
@@ -184,6 +199,163 @@
   --transition-fast: 150ms ease;
   --transition-normal: 250ms ease;
   --transition-slow: 350ms ease;
+}
+
+/* ==========================================================================
+   Light Theme (亮色主題)
+   ========================================================================== */
+:root[data-theme="light"] {
+  /* Primary Colors */
+  --color-primary: #0891b2;           /* ChingTech Cyan - 主要按鈕/品牌色 */
+  --color-background: #f5f5f5;        /* 純灰背景（無彩度） */
+  --color-accent: #ea580c;            /* Orange - 強調/特殊元素 */
+
+  /* Neutral Colors（無彩度灰階） */
+  --color-gray-light: #1a1a1a;        /* 反轉：深灰文字 */
+  --color-gray-mid: #707070;          /* 中性灰 */
+  --color-gray-dark: #d0d0d0;         /* 淺灰邊框 */
+
+  /* Status Colors（保持高彩度） */
+  --color-success: #16a34a;
+  --color-warning: #d97706;
+  --color-error: #dc2626;
+
+  /* Text Colors（無彩度） */
+  --color-text-primary: #1a1a1a;      /* 深灰主要文字 */
+  --color-text-secondary: #505050;    /* 次要文字 */
+  --color-text-muted: #a0a0a0;        /* 靜音文字 */
+
+  /* Surface & Border Colors */
+  --bg-surface: rgba(0, 0, 0, 0.03);
+  --bg-surface-dark: rgba(0, 0, 0, 0.05);
+  --bg-surface-darker: rgba(0, 0, 0, 0.08);
+  --bg-overlay: rgba(0, 0, 0, 0.4);
+  --bg-overlay-dark: rgba(0, 0, 0, 0.6);
+  --border-subtle: rgba(0, 0, 0, 0.05);
+  --border-light: rgba(0, 0, 0, 0.1);
+  --border-medium: rgba(0, 0, 0, 0.15);
+  --border-strong: rgba(0, 0, 0, 0.2);
+  --hover-bg: rgba(0, 0, 0, 0.05);
+
+  /* Accent Variants */
+  --accent-bg-subtle: rgba(8, 145, 178, 0.1);
+  --accent-bg-light: rgba(8, 145, 178, 0.15);
+  --accent-bg-medium: rgba(8, 145, 178, 0.2);
+  --accent-border: rgba(8, 145, 178, 0.3);
+
+  /* RGB Format */
+  --color-primary-rgb: 8, 145, 178;
+  --color-background-rgb: 245, 245, 245;
+  --color-accent-rgb: 234, 88, 12;
+  --color-success-rgb: 22, 163, 74;
+  --color-warning-rgb: 217, 119, 6;
+  --color-error-rgb: 220, 38, 38;
+
+  /* 半透明背景色（亮色主題用白色基底）- 無彩度 */
+  --bg-glass: rgba(255, 255, 255, 0.95);
+  --bg-glass-light: rgba(255, 255, 255, 0.85);
+  --bg-glass-heavy: rgba(255, 255, 255, 0.98);
+  --bg-tooltip: rgba(32, 32, 32, 0.95);
+  --tooltip-text: #f8f8f8;
+
+  /* 互動效果（亮色主題用黑色半透明） */
+  --interactive-hover: rgba(0, 0, 0, 0.05);
+  --interactive-active: rgba(0, 0, 0, 0.08);
+  --interactive-border: rgba(0, 0, 0, 0.1);
+  --scrollbar-hover: rgba(0, 0, 0, 0.35);
+  --text-muted-semi: rgba(0, 0, 0, 0.5);
+  --text-shadow-contrast: 0 1px 2px rgba(255, 255, 255, 0.6);
+
+  /* Button Hover Colors */
+  --color-primary-hover: #0e7490;     /* Cyan hover - 更深 */
+  --color-accent-hover: #c2410c;      /* Orange hover - 更深 */
+
+  /* Tag Colors（稍微深化以在亮色背景上可見） */
+  --tag-color-purple: #7c3aed;
+  --tag-color-green: #059669;
+  --tag-color-yellow: #d97706;
+  --tag-color-pink: #db2777;
+  --tag-color-blue: #2563eb;
+  --tag-color-gray: #555555;
+  --tag-color-red: #dc2626;
+  --tag-color-orange: #ea580c;
+  --tag-color-cyan: #0891b2;
+
+  /* Tag Background Colors */
+  --tag-bg-purple: rgba(124, 58, 237, 0.15);
+  --tag-bg-green: rgba(5, 150, 105, 0.15);
+  --tag-bg-yellow: rgba(217, 119, 6, 0.15);
+  --tag-bg-pink: rgba(219, 39, 119, 0.15);
+  --tag-bg-blue: rgba(37, 99, 235, 0.15);
+  --tag-bg-gray: rgba(85, 85, 85, 0.15);
+  --tag-bg-red: rgba(220, 38, 38, 0.15);
+  --tag-bg-orange: rgba(234, 88, 12, 0.15);
+
+  /* Status Tag Colors */
+  --status-completed-color: var(--color-success);
+  --status-completed-bg: rgba(22, 163, 74, 0.15);
+  --status-in-progress-color: var(--tag-color-blue);
+  --status-in-progress-bg: rgba(37, 99, 235, 0.15);
+  --status-pending-color: var(--tag-color-yellow);
+  --status-pending-bg: rgba(217, 119, 6, 0.15);
+  --status-cancelled-color: var(--tag-color-gray);
+  --status-cancelled-bg: rgba(85, 85, 85, 0.15);
+
+  /* Priority Tag Colors */
+  --priority-critical-color: #b91c1c;
+  --priority-critical-bg: rgba(185, 28, 28, 0.2);
+  --priority-urgent-color: var(--color-error);
+  --priority-urgent-bg: rgba(220, 38, 38, 0.15);
+  --priority-high-color: var(--tag-color-orange);
+  --priority-high-bg: rgba(234, 88, 12, 0.15);
+  --priority-normal-color: var(--tag-color-blue);
+  --priority-normal-bg: rgba(37, 99, 235, 0.15);
+  --priority-low-color: var(--tag-color-gray);
+  --priority-low-bg: rgba(85, 85, 85, 0.15);
+
+  /* Modal Colors - 無彩度 */
+  --modal-bg: #ffffff;
+  --modal-bg-alt: #fafafa;
+  --modal-border: var(--border-light);
+
+  /* Terminal Theme Colors（亮色終端機主題 - 中性灰） */
+  --terminal-bg: #f5f5f5;
+  --terminal-fg: #1e1e1e;
+  --terminal-cursor: #1e1e1e;
+  --terminal-cursor-accent: #f5f5f5;
+  --terminal-selection: rgba(0, 0, 0, 0.15);
+  --terminal-black: #1e1e1e;
+  --terminal-red: #cd3131;
+  --terminal-green: #14ce14;
+  --terminal-yellow: #b5a000;
+  --terminal-blue: #0451a5;
+  --terminal-magenta: #bc05bc;
+  --terminal-cyan: #0598bc;
+  --terminal-white: #e5e5e5;
+  --terminal-bright-black: #666666;
+  --terminal-bright-red: #f14c4c;
+  --terminal-bright-green: #23d18b;
+  --terminal-bright-yellow: #f5f543;
+  --terminal-bright-blue: #3b8eea;
+  --terminal-bright-magenta: #d670d6;
+  --terminal-bright-cyan: #29b8db;
+  --terminal-bright-white: #ffffff;
+
+  /* Terminal Status Indicators */
+  --terminal-status-connected: #16a34a;
+  --terminal-status-disconnected: #dc2626;
+  --terminal-status-idle: #a0a0a0;
+
+  /* Code Editor */
+  --code-editor-bg: #ffffff;
+
+  /* Notification Badge */
+  --badge-color: #dc2626;
+
+  /* Shadows（亮色主題使用較淺的陰影） */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.12);
 }
 
 /* ==========================================================================
@@ -279,7 +451,7 @@ input {
 
 .btn-primary {
   background-color: var(--color-primary);
-  color: var(--color-text-primary);
+  color: white;
 }
 
 .btn-primary:hover {
@@ -288,7 +460,7 @@ input {
 
 .btn-accent {
   background-color: var(--color-accent);
-  color: var(--color-background);
+  color: white;
 }
 
 .btn-accent:hover {
@@ -301,7 +473,7 @@ input {
 }
 
 .btn-ghost:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: var(--interactive-hover);
   color: var(--color-text-primary);
 }
 
@@ -311,7 +483,7 @@ input {
 .input {
   width: 100%;
   padding: var(--spacing-sm) var(--spacing-md);
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: var(--bg-surface);
   border: 1px solid var(--color-gray-dark);
   border-radius: var(--radius-md);
   color: var(--color-text-primary);
@@ -321,7 +493,7 @@ input {
 .input:focus {
   outline: none;
   border-color: var(--color-accent);
-  background-color: rgba(255, 255, 255, 0.08);
+  background-color: var(--bg-surface-darker);
 }
 
 .input::placeholder {
@@ -332,8 +504,8 @@ input {
    Card Styles
    ========================================================================== */
 .card {
-  background-color: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--interactive-border);
   border-radius: var(--radius-lg);
   padding: var(--spacing-lg);
 }

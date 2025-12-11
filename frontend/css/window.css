@@ -9,7 +9,7 @@
   position: absolute;
   display: flex;
   flex-direction: column;
-  background-color: rgba(15, 28, 46, 0.95);
+  background-color: var(--bg-glass);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
@@ -74,7 +74,7 @@
 
 .window-icon {
   font-size: 18px;
-  color: var(--color-accent);
+  color: var(--color-primary);
   flex-shrink: 0;
 }
 
@@ -212,8 +212,8 @@
    ========================================================================== */
 .window-snap-preview {
   position: absolute;
-  background-color: rgba(0, 150, 255, 0.15);
-  border: 2px solid rgba(0, 150, 255, 0.5);
+  background-color: var(--accent-bg-light);
+  border: 2px solid var(--accent-border);
   border-radius: var(--radius-lg);
   pointer-events: none;
   z-index: 50;

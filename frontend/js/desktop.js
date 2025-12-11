@@ -118,6 +118,11 @@ const DesktopModule = (function() {
           ProjectManagementModule.open();
         }
         break;
+      case 'settings':
+        if (typeof SettingsApp !== 'undefined') {
+          SettingsApp.open();
+        }
+        break;
       default:
         const app = applications.find(a => a.id === appId);
         if (app) {

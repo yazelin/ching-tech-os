@@ -92,8 +92,8 @@
 
 .form-group input {
   padding: var(--spacing-xs) var(--spacing-sm);
-  background-color: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background-color: var(--bg-surface-dark);
+  border: 1px solid var(--border-light);
   border-radius: var(--radius-sm);
   color: var(--color-text-primary);
   font-size: var(--font-size-sm);
@@ -103,18 +103,18 @@
 .form-group input:focus {
   outline: none;
   border-color: var(--color-accent);
-  background-color: rgba(255, 255, 255, 0.08);
+  background-color: var(--bg-surface-darker);
 }
 
 .form-group input:read-only {
-  background-color: rgba(255, 255, 255, 0.02);
+  background-color: var(--bg-surface);
   color: var(--color-text-secondary);
   cursor: not-allowed;
 }
 
 .form-group .info-text {
   padding: var(--spacing-xs) var(--spacing-sm);
-  background-color: rgba(255, 255, 255, 0.03);
+  background-color: var(--bg-surface);
   border-radius: var(--radius-sm);
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
@@ -128,7 +128,7 @@
   justify-content: flex-end;
   gap: var(--spacing-sm);
   padding-top: var(--spacing-sm);
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid var(--border-subtle);
 }
 
 .user-profile-actions .btn {
@@ -141,13 +141,13 @@
 }
 
 .user-profile-actions .btn-primary {
-  background-color: var(--color-accent);
+  background-color: var(--color-primary);
   color: white;
   border: none;
 }
 
 .user-profile-actions .btn-primary:hover {
-  background-color: var(--color-accent-hover);
+  background-color: var(--color-primary-hover);
 }
 
 .user-profile-actions .btn-primary:disabled {

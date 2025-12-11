@@ -120,13 +120,13 @@
 }
 
 .pm-action-btn.primary {
-  background: var(--accent-color);
-  border-color: var(--accent-color);
+  background: var(--color-primary);
+  border-color: var(--color-primary);
   color: white;
 }
 
 .pm-action-btn.primary:hover {
-  background: var(--accent-color-dark);
+  background: var(--color-primary-hover);
 }
 
 .pm-action-btn.danger {
@@ -966,13 +966,13 @@
 }
 
 .pm-btn.primary {
-  background: var(--accent-color);
-  border-color: var(--accent-color);
+  background: var(--color-primary);
+  border-color: var(--color-primary);
   color: white;
 }
 
 .pm-btn.primary:hover {
-  background: var(--accent-color-dark);
+  background: var(--color-primary-hover);
 }
 
 /* Editor */

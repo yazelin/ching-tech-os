@@ -21,7 +21,7 @@
 }
 
 .message-center ::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(255, 255, 255, 0.3);
+  background-color: var(--scrollbar-hover);
 }
 
 .message-center ::-webkit-scrollbar-corner {
@@ -154,13 +154,13 @@
 }
 
 .mc-btn-primary {
-  background-color: var(--color-accent);
-  border-color: var(--color-accent);
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
   color: white;
 }
 
 .mc-btn-primary:hover {
-  background-color: var(--color-accent-hover);
+  background-color: var(--color-primary-hover);
 }
 
 /* ==========================================================================

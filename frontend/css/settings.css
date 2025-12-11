@@ -1,0 +1,312 @@
+/* ==========================================================================
+   ChingTech OS - Settings Application Styles
+   ========================================================================== */
+
+/* Settings Container */
+.settings-container {
+  display: flex;
+  height: 100%;
+  background-color: var(--color-background);
+}
+
+/* Sidebar */
+.settings-sidebar {
+  width: 200px;
+  background-color: var(--bg-surface-dark);
+  border-right: 1px solid var(--border-light);
+  padding: var(--spacing-md);
+}
+
+.settings-nav {
+  list-style: none;
+}
+
+.settings-nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.settings-nav-item:hover {
+  background-color: var(--hover-bg);
+  color: var(--color-text-primary);
+}
+
+.settings-nav-item.active {
+  background-color: var(--accent-bg-subtle);
+  color: var(--color-accent);
+}
+
+.settings-nav-item .icon {
+  font-size: 18px;
+}
+
+/* Content Area */
+.settings-content {
+  flex: 1;
+  padding: var(--spacing-lg);
+  overflow-y: auto;
+}
+
+.settings-section {
+  display: none;
+}
+
+.settings-section.active {
+  display: block;
+}
+
+.settings-section-title {
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: var(--spacing-lg);
+}
+
+.settings-group {
+  margin-bottom: var(--spacing-xl);
+}
+
+.settings-group-title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--spacing-md);
+}
+
+/* Theme Selection */
+.theme-cards {
+  display: flex;
+  gap: var(--spacing-lg);
+  margin-bottom: var(--spacing-xl);
+}
+
+.theme-card {
+  flex: 1;
+  max-width: 200px;
+  cursor: pointer;
+  border-radius: var(--radius-lg);
+  border: 2px solid var(--border-light);
+  overflow: hidden;
+  transition: all var(--transition-fast);
+}
+
+.theme-card:hover {
+  border-color: var(--border-medium);
+  transform: translateY(-2px);
+}
+
+.theme-card.selected {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--accent-bg-medium);
+}
+
+.theme-card-preview {
+  height: 100px;
+  padding: var(--spacing-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+/* Dark theme preview */
+.theme-card[data-theme="dark"] .theme-card-preview {
+  background-color: #1a1a1a;
+}
+
+.theme-card[data-theme="dark"] .preview-header {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.theme-card[data-theme="dark"] .preview-content {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.theme-card[data-theme="dark"] .preview-accent {
+  background-color: #21D4FD;
+}
+
+/* Light theme preview */
+.theme-card[data-theme="light"] .theme-card-preview {
+  background-color: #f5f5f5;
+}
+
+.theme-card[data-theme="light"] .preview-header {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.theme-card[data-theme="light"] .preview-content {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.theme-card[data-theme="light"] .preview-accent {
+  background-color: #0891b2;
+}
+
+/* Preview elements */
+.preview-header {
+  height: 12px;
+  border-radius: 4px;
+}
+
+.preview-content {
+  flex: 1;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-xs);
+}
+
+.preview-accent {
+  width: 40px;
+  height: 8px;
+  border-radius: 4px;
+}
+
+/* Theme card info */
+.theme-card-info {
+  padding: var(--spacing-md);
+  background-color: var(--bg-surface);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.theme-card-name {
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.theme-card-check {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--border-medium);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.theme-card.selected .theme-card-check {
+  background-color: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-background);
+}
+
+.theme-card-check .icon {
+  font-size: 12px;
+  opacity: 0;
+}
+
+.theme-card.selected .theme-card-check .icon {
+  opacity: 1;
+}
+
+/* Preview Panel */
+.preview-panel {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+}
+
+.preview-panel-title {
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: var(--spacing-md);
+}
+
+.preview-elements {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-md);
+  align-items: center;
+}
+
+.preview-element {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.preview-element-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+/* Preview badges */
+.preview-badges {
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
+.preview-badge {
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+}
+
+.preview-badge.success {
+  background-color: var(--status-completed-bg);
+  color: var(--status-completed-color);
+}
+
+.preview-badge.warning {
+  background-color: var(--status-pending-bg);
+  color: var(--status-pending-color);
+}
+
+.preview-badge.error {
+  background-color: var(--priority-urgent-bg);
+  color: var(--priority-urgent-color);
+}
+
+.preview-badge.info {
+  background-color: var(--status-in-progress-bg);
+  color: var(--status-in-progress-color);
+}
+
+/* Preview input */
+.preview-input {
+  width: 150px;
+}
+
+/* Actions */
+.settings-actions {
+  display: flex;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-xl);
+  padding-top: var(--spacing-lg);
+  border-top: 1px solid var(--border-light);
+}
+
+/* Toast notification */
+.settings-toast {
+  position: fixed;
+  bottom: calc(var(--taskbar-height) + var(--spacing-lg));
+  left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  background-color: var(--color-success);
+  color: white;
+  padding: var(--spacing-sm) var(--spacing-lg);
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  opacity: 0;
+  transition: all var(--transition-normal);
+  z-index: 10000;
+}
+
+.settings-toast.show {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+}

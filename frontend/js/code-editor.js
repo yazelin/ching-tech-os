@@ -6,8 +6,18 @@
 const CodeEditorModule = (function() {
   'use strict';
 
-  const CODE_SERVER_URL = 'http://localhost:8443';
+  const CODE_SERVER_BASE_URL = 'http://localhost:8443';
   let windowId = null;
+
+  /**
+   * Get code-server URL with theme-appropriate settings
+   * Note: code-server 本身不支援 URL 主題參數，主題需在 VS Code 設定中配置
+   * 建議在 ~/.local/share/code-server/User/settings.json 設定：
+   * { "workbench.colorTheme": "Default Dark Modern" }
+   */
+  function getCodeServerUrl() {
+    return CODE_SERVER_BASE_URL;
+  }
 
   /**
    * Open code editor window
@@ -34,7 +44,7 @@ const CodeEditorModule = (function() {
           </div>
           <iframe
             class="code-editor-iframe"
-            src="${CODE_SERVER_URL}"
+            src="${getCodeServerUrl()}"
             allow="clipboard-read; clipboard-write"
           ></iframe>
         </div>
@@ -89,7 +99,7 @@ const CodeEditorModule = (function() {
    */
   async function checkAvailability() {
     try {
-      const response = await fetch(CODE_SERVER_URL, {
+      const response = await fetch(CODE_SERVER_BASE_URL, {
         method: 'HEAD',
         mode: 'no-cors'
       });

@@ -21,7 +21,7 @@
 }
 
 .file-manager ::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(255, 255, 255, 0.3);
+  background-color: var(--scrollbar-hover);
 }
 
 .file-manager ::-webkit-scrollbar-corner {
@@ -307,7 +307,7 @@
   align-items: center;
   gap: var(--spacing-sm);
   padding: var(--spacing-xs) var(--spacing-sm);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid var(--border-subtle);
   cursor: pointer;
   transition: background-color var(--transition-fast);
 }
@@ -594,7 +594,7 @@
 .fm-context-menu {
   position: fixed;
   min-width: 160px;
-  background-color: rgba(15, 28, 46, 0.98);
+  background-color: var(--bg-glass-heavy);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
@@ -649,7 +649,7 @@
 }
 
 .fm-dialog {
-  background-color: rgba(15, 28, 46, 0.98);
+  background-color: var(--bg-glass-heavy);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
@@ -751,12 +751,12 @@
 }
 
 .fm-dialog-btn-primary {
-  background-color: var(--color-accent);
-  color: var(--color-background);
+  background-color: var(--color-primary);
+  color: white;
 }
 
 .fm-dialog-btn-primary:hover {
-  background-color: var(--color-primary);
+  background-color: var(--color-primary-hover);
 }
 
 .fm-dialog-btn-danger {

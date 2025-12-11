@@ -236,5 +236,5 @@
 
 .text-viewer-content::-webkit-scrollbar-thumb:hover,
 .image-viewer-content::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(255, 255, 255, 0.3);
+  background-color: var(--scrollbar-hover);
 }

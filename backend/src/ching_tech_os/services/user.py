@@ -76,6 +76,29 @@ async def update_user_display_name(username: str, display_name: str) -> dict | N
         return None
 
 
+def _parse_preferences(value) -> dict:
+    """解析偏好設定值
+
+    Args:
+        value: 可能是 dict、str 或 None
+
+    Returns:
+        偏好設定 dict
+    """
+    import json
+
+    if value is None:
+        return {"theme": "dark"}
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return {"theme": "dark"}
+    return {"theme": "dark"}
+
+
 async def get_user_preferences(user_id: int) -> dict:
     """取得使用者偏好設定
 
@@ -91,7 +114,7 @@ async def get_user_preferences(user_id: int) -> dict:
             user_id,
         )
         if row and row["preferences"]:
-            return dict(row["preferences"])
+            return _parse_preferences(row["preferences"])
         return {"theme": "dark"}
 
 
@@ -120,5 +143,5 @@ async def update_user_preferences(user_id: int, preferences: dict) -> dict:
             json.dumps(preferences),
         )
         if row and row["preferences"]:
-            return dict(row["preferences"])
+            return _parse_preferences(row["preferences"])
         return {"theme": "dark"}

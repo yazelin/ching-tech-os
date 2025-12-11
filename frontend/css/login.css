@@ -9,7 +9,12 @@
   justify-content: center;
   min-height: 100vh;
   padding: var(--spacing-lg);
-  background: linear-gradient(135deg, var(--color-background) 0%, #0a1421 100%);
+  background: linear-gradient(135deg, var(--color-background) 0%, #101010 100%);
+}
+
+/* 亮色主題：漸層從淺灰到白 */
+:root[data-theme="light"] .login-container {
+  background: linear-gradient(135deg, #e8e8e8 0%, #ffffff 100%);
 }
 
 /* Logo Section */
@@ -25,20 +30,50 @@
   width: 120px;
   height: 120px;
   margin-bottom: var(--spacing-md);
+  animation: logoGlowDark 4s ease-in-out infinite;
+}
+
+/* 暗色主題：青色發光呼吸動畫（大範圍、高強度） */
+@keyframes logoGlowDark {
+  0%, 100% {
+    filter: drop-shadow(0 0 8px rgba(33, 212, 253, 0.5)) drop-shadow(0 0 16px rgba(33, 212, 253, 0.3));
+  }
+  50% {
+    filter: drop-shadow(0 0 30px rgba(33, 212, 253, 1)) drop-shadow(0 0 60px rgba(33, 212, 253, 0.7)) drop-shadow(0 0 90px rgba(33, 212, 253, 0.4));
+  }
+}
+
+/* 亮色主題：青色發光呼吸動畫 */
+:root[data-theme="light"] .login-logo-icon {
+  animation: logoGlowLight 4s ease-in-out infinite;
+}
+
+@keyframes logoGlowLight {
+  0%, 100% {
+    filter: drop-shadow(0 0 4px rgba(8, 145, 178, 0.4)) drop-shadow(0 0 10px rgba(8, 145, 178, 0.2));
+  }
+  50% {
+    filter: drop-shadow(0 0 20px rgba(8, 145, 178, 0.8)) drop-shadow(0 0 40px rgba(8, 145, 178, 0.5)) drop-shadow(0 0 60px rgba(8, 145, 178, 0.3));
+  }
 }
 
 .login-logo-text {
   font-family: var(--font-technical);
   font-size: 2rem;
   font-weight: 600;
-  color: var(--color-accent);
+  color: var(--color-primary);
   letter-spacing: 0.15em;
   line-height: 1.2;
   margin: 0;
-  text-shadow: 0 0 20px rgba(33, 212, 253, 0.4);
+  text-shadow: 0 0 20px rgba(33, 212, 253, 0.5), 0 0 40px rgba(33, 212, 253, 0.3);
   user-select: none;
   -webkit-user-select: none;
   cursor: default;
+}
+
+/* 亮色主題：ChingTech 用投影代替發光 */
+:root[data-theme="light"] .login-logo-text {
+  text-shadow: 0 2px 8px rgba(8, 145, 178, 0.3);
 }
 
 .login-logo-text span {
@@ -46,18 +81,30 @@
   font-weight: 800;
   letter-spacing: 0.4em;
   color: var(--color-text-primary);
-  text-shadow: 0 0 10px rgba(255, 255, 255, 0.4), 0 0 20px rgba(255, 255, 255, 0.2);
+  text-shadow: 0 0 15px rgba(255, 255, 255, 0.5), 0 0 30px rgba(255, 255, 255, 0.3);
+}
+
+/* 亮色主題：OS 保持深色字，無發光效果 */
+:root[data-theme="light"] .login-logo-text span {
+  text-shadow: none;
 }
 
 /* Login Card */
 .login-card {
   width: 100%;
   max-width: 400px;
-  background-color: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background-color: rgba(26, 26, 26, 0.85);
+  border: 1px solid var(--interactive-border);
   border-radius: var(--radius-xl);
   padding: var(--spacing-xl);
   box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(12px);
+}
+
+/* 亮色主題：login-card 用不透明白底 */
+:root[data-theme="light"] .login-card {
+  background-color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
 }
 
 .login-card h2 {
@@ -91,6 +138,26 @@
   height: 44px;
 }
 
+/* 覆蓋瀏覽器自動填入樣式 */
+.form-group .input:-webkit-autofill,
+.form-group .input:-webkit-autofill:hover,
+.form-group .input:-webkit-autofill:focus,
+.form-group .input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #1a1a1a inset !important;
+  -webkit-text-fill-color: var(--color-text-primary) !important;
+  caret-color: var(--color-text-primary);
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+/* 亮色主題自動填入樣式 */
+:root[data-theme="light"] .form-group .input:-webkit-autofill,
+:root[data-theme="light"] .form-group .input:-webkit-autofill:hover,
+:root[data-theme="light"] .form-group .input:-webkit-autofill:focus,
+:root[data-theme="light"] .form-group .input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #f5f5f5 inset !important;
+  -webkit-text-fill-color: var(--color-text-primary) !important;
+}
+
 .form-group .input-icon {
   position: relative;
 }
@@ -114,7 +181,7 @@
 
 .form-group .input-icon .input:focus + .icon,
 .form-group .input-icon .input:not(:placeholder-shown) + .icon {
-  color: var(--color-accent);
+  color: var(--color-primary);
 }
 
 /* Login Button */
@@ -169,6 +236,6 @@
   left: -50%;
   width: 100%;
   height: 100%;
-  background: radial-gradient(circle, rgba(28, 79, 168, 0.08) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(128, 128, 128, 0.06) 0%, transparent 70%);
   pointer-events: none;
 }
