@@ -31,9 +31,9 @@ start_services() {
     log_info "啟動 Docker 服務..."
     cd "$PROJECT_ROOT/docker"
 
-    # 設定 UID/GID 供 code-server 使用
-    export UID=$(id -u)
-    export GID=$(id -g)
+    # 設定 UID/GID 供 code-server 使用 (使用不同變數名避免 bash 唯讀變數)
+    export DOCKER_UID=$(id -u)
+    export DOCKER_GID=$(id -g)
 
     # 檢查服務狀態
     local need_start=false

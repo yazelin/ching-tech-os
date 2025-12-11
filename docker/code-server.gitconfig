@@ -1,0 +1,12 @@
+[user]
+	name = chingtechrd
+	email = chingtechrd@gmail.com
+
+[credential]
+	helper = store
+
+[init]
+	defaultBranch = main
+
+[core]
+	editor = code --wait

@@ -21,18 +21,16 @@ services:
   code-server:
     image: codercom/code-server:latest
     container_name: ching-tech-os-code
-    environment:
-      - PASSWORD=${CODE_PASSWORD:-changeme}
+    command: ["--auth", "none", "--bind-addr", "0.0.0.0:8080"]
     volumes:
-      - ../:/home/coder/project                    # 專案目錄
+      - ${HOME}/SDD:/home/coder/SDD                # SDD 目錄 (可存取多個專案)
       - code_server_data:/home/coder/.local        # 擴充功能和設定
-      - ${HOME}/.ssh:/home/coder/.ssh:ro           # SSH key (唯讀)
-      - ${HOME}/.gitconfig:/home/coder/.gitconfig:ro  # Git 設定 (唯讀)
+      - ./code-server.gitconfig:/home/coder/.gitconfig:ro  # Git 設定 (專用)
+      - ./code-server.git-credentials:/home/coder/.git-credentials:rw  # Git 憑證 (獨立)
     ports:
       - "${CODE_PORT:-8443}:8080"
     restart: unless-stopped
-    user: "${UID:-1000}:${GID:-1000}"
-    working_dir: /home/coder/project
+    working_dir: /home/coder/SDD/ching-tech-os
 
 volumes:
   postgres_data:

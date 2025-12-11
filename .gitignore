@@ -29,5 +29,8 @@ Thumbs.db
 .env.local
 docker/.env
 
+# Credentials
+docker/code-server.git-credentials
+
 # Node (if added later)
 node_modules/
