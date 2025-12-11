@@ -11,7 +11,8 @@ import socketio
 from .config import settings
 from .database import init_db_pool, close_db_pool
 from .services.session import session_manager
-from .api import auth, nas, user, ai_router
+from .services.terminal import terminal_service
+from .api import auth, knowledge, nas, user, ai_router
 
 # 建立 Socket.IO 伺服器
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
@@ -23,8 +24,11 @@ async def lifespan(app: FastAPI):
     # 啟動時
     await init_db_pool()
     await session_manager.start_cleanup_task()
+    await terminal_service.start_cleanup_task()
     yield
     # 關閉時
+    await terminal_service.stop_cleanup_task()
+    terminal_service.close_all()
     await session_manager.stop_cleanup_task()
     await close_db_pool()
 
@@ -49,6 +53,7 @@ app.add_middleware(
 
 # 註冊路由
 app.include_router(auth.router)
+app.include_router(knowledge.router)
 app.include_router(nas.router)
 app.include_router(user.router)
 app.include_router(ai_router.router)
@@ -105,3 +110,7 @@ async def disconnect(sid):
 # 註冊 AI 事件（在 api/ai.py 中定義）
 from .api import ai
 ai.register_events(sio)
+
+# 註冊終端機事件
+from .api import terminal
+terminal.register_events(sio)

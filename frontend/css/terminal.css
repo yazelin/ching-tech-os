@@ -1,0 +1,238 @@
+/* ==========================================================================
+   ChingTech OS - Terminal Styles
+   ========================================================================== */
+
+/* ==========================================================================
+   Global Scrollbar Styles (Dark Theme)
+   ========================================================================== */
+.terminal-app ::-webkit-scrollbar,
+.xterm-viewport::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.terminal-app ::-webkit-scrollbar-track,
+.xterm-viewport::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+}
+
+.terminal-app ::-webkit-scrollbar-thumb,
+.xterm-viewport::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+.terminal-app ::-webkit-scrollbar-thumb:hover,
+.xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.35);
+}
+
+.terminal-app ::-webkit-scrollbar-corner,
+.xterm-viewport::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ==========================================================================
+   Main Container
+   ========================================================================== */
+.terminal-app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background-color: #1a1a1a;
+}
+
+/* ==========================================================================
+   Terminal Container
+   ========================================================================== */
+.terminal-container {
+  flex: 1;
+  padding: var(--spacing-xs);
+  overflow: hidden;
+}
+
+.terminal-container .xterm {
+  height: 100%;
+}
+
+.terminal-container .xterm-viewport {
+  overflow-y: auto !important;
+}
+
+/* ==========================================================================
+   Status Bar
+   ========================================================================== */
+.terminal-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background-color: rgba(0, 0, 0, 0.3);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.terminal-status-left {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.terminal-status-right {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.terminal-status-indicator {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.terminal-status-indicator .status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #666;
+}
+
+.terminal-status-indicator .status-dot.connected {
+  background-color: #4caf50;
+}
+
+.terminal-status-indicator .status-dot.disconnected {
+  background-color: #f44336;
+}
+
+/* ==========================================================================
+   Reconnect Dialog
+   ========================================================================== */
+.terminal-reconnect-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.terminal-reconnect-dialog {
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+  max-width: 400px;
+  text-align: center;
+}
+
+.terminal-reconnect-dialog h3 {
+  margin-bottom: var(--spacing-md);
+  color: var(--color-text-primary);
+}
+
+.terminal-reconnect-dialog p {
+  margin-bottom: var(--spacing-lg);
+  color: var(--color-text-secondary);
+}
+
+.terminal-reconnect-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  justify-content: center;
+}
+
+.terminal-reconnect-actions .btn {
+  min-width: 120px;
+}
+
+.terminal-reconnect-actions .btn-secondary {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: var(--color-text-primary);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.terminal-reconnect-actions .btn-secondary:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* ==========================================================================
+   Session List (for reconnect)
+   ========================================================================== */
+.terminal-session-list {
+  list-style: none;
+  padding: 0;
+  margin: var(--spacing-md) 0;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.terminal-session-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-sm);
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--spacing-xs);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.terminal-session-item:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.terminal-session-info {
+  text-align: left;
+}
+
+.terminal-session-cwd {
+  font-size: 13px;
+  color: var(--color-text-primary);
+}
+
+.terminal-session-cwd code {
+  background-color: rgba(0, 0, 0, 0.3);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: "JetBrainsMono NF", monospace;
+}
+
+.terminal-session-time {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  margin-top: 2px;
+}
+
+/* ==========================================================================
+   Loading State
+   ========================================================================== */
+.terminal-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.terminal-loading .spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: var(--spacing-md);
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

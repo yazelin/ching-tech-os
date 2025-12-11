@@ -8,8 +8,8 @@ const SocketClient = (function () {
   let socket = null;
   let isConnected = false;
 
-  // 後端 URL（開發環境）
-  const BACKEND_URL = 'http://localhost:8088';
+  // 後端 URL（使用目前頁面的 origin）
+  const BACKEND_URL = window.location.origin;
 
   /**
    * 建立 Socket.IO 連線
@@ -190,11 +190,70 @@ const SocketClient = (function () {
     }
   }
 
+  /**
+   * 發送事件
+   * @param {string} event - 事件名稱
+   * @param {Object} data - 資料
+   */
+  function emit(event, data) {
+    if (!socket || !isConnected) {
+      console.error('[SocketClient] Not connected, cannot emit:', event);
+      return false;
+    }
+    socket.emit(event, data);
+    return true;
+  }
+
+  /**
+   * 發送事件並等待回應 (使用 callback)
+   * @param {string} event - 事件名稱
+   * @param {Object} data - 資料
+   * @returns {Promise}
+   */
+  function emitWithAck(event, data) {
+    return new Promise((resolve, reject) => {
+      if (!socket || !isConnected) {
+        reject(new Error('Not connected'));
+        return;
+      }
+      socket.emit(event, data, (response) => {
+        resolve(response);
+      });
+    });
+  }
+
+  /**
+   * 監聽事件
+   * @param {string} event - 事件名稱
+   * @param {Function} handler - 處理函式
+   */
+  function on(event, handler) {
+    if (!socket) {
+      console.error('[SocketClient] Socket not initialized');
+      return;
+    }
+    socket.on(event, handler);
+  }
+
+  /**
+   * 移除事件監聽
+   * @param {string} event - 事件名稱
+   * @param {Function} handler - 處理函式
+   */
+  function off(event, handler) {
+    if (!socket) return;
+    socket.off(event, handler);
+  }
+
   return {
     connect,
     disconnect,
     sendAIChat,
     compressChat,
     isConnected: getIsConnected,
+    emit,
+    emitWithAck,
+    on,
+    off,
   };
 })();

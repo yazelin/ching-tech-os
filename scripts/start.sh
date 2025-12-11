@@ -60,6 +60,10 @@ start_dev() {
     log_info "應用程式: http://localhost:8088"
     log_info "API 文件: http://localhost:8088/docs"
     echo ""
+
+    # 設定終端機起始目錄為專案根目錄
+    export TERMINAL_CWD="$PROJECT_ROOT"
+
     uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8088 --reload
 }
 

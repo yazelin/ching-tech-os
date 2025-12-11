@@ -99,6 +99,16 @@ const DesktopModule = (function() {
           FileManagerModule.open();
         }
         break;
+      case 'terminal':
+        if (typeof TerminalApp !== 'undefined') {
+          TerminalApp.open();
+        }
+        break;
+      case 'knowledge-base':
+        if (typeof KnowledgeBaseModule !== 'undefined') {
+          KnowledgeBaseModule.open();
+        }
+        break;
       default:
         const app = applications.find(a => a.id === appId);
         if (app) {

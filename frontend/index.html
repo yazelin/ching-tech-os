@@ -18,6 +18,14 @@
   <link rel="stylesheet" href="css/user-profile.css">
   <link rel="stylesheet" href="css/file-manager.css">
   <link rel="stylesheet" href="css/viewer.css">
+  <link rel="stylesheet" href="css/terminal.css">
+  <link rel="stylesheet" href="css/knowledge-base.css">
+
+  <!-- xterm.js -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css">
+
+  <!-- marked.js for Markdown rendering -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
   <div class="desktop-container">
@@ -68,6 +76,10 @@
 
   <!-- Scripts -->
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <!-- xterm.js -->
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.min.js"></script>
   <script src="js/icons.js"></script>
   <script src="js/login.js"></script>
   <script src="js/header.js"></script>
@@ -80,6 +92,8 @@
   <script src="js/file-manager.js"></script>
   <script src="js/image-viewer.js"></script>
   <script src="js/text-viewer.js"></script>
+  <script src="js/terminal.js"></script>
+  <script src="js/knowledge-base.js"></script>
   <script src="js/desktop.js"></script>
   <script src="js/taskbar.js"></script>
   <script>
