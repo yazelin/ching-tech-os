@@ -174,11 +174,11 @@
 }
 
 .user-profile-message.success {
-  background-color: rgba(46, 204, 113, 0.2);
+  background-color: rgba(var(--color-success-rgb), 0.2);
   color: var(--color-success);
 }
 
 .user-profile-message.error {
-  background-color: rgba(231, 76, 60, 0.2);
+  background-color: rgba(var(--color-error-rgb), 0.2);
   color: var(--color-error);
 }

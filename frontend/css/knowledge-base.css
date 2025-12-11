@@ -225,7 +225,7 @@
   align-items: center;
   justify-content: space-between;
   padding: var(--spacing-xs) var(--spacing-md);
-  background-color: rgba(0, 0, 0, 0.15);
+  background-color: var(--bg-surface-dark);
   border-bottom: 1px solid var(--border-subtle);
   font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
@@ -608,7 +608,7 @@
   gap: var(--spacing-xs);
   padding: var(--spacing-md);
   border-bottom: 1px solid var(--border-subtle);
-  background-color: rgba(0, 0, 0, 0.05);
+  background-color: var(--bg-surface);
   flex-shrink: 0;
 }
 

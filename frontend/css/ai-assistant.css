@@ -252,8 +252,8 @@
   justify-content: space-between;
   gap: var(--spacing-md);
   padding: var(--spacing-sm) var(--spacing-md);
-  background-color: rgba(255, 193, 7, 0.1);
-  border-bottom: 1px solid rgba(255, 193, 7, 0.3);
+  background-color: rgba(var(--color-warning-rgb), 0.1);
+  border-bottom: 1px solid rgba(var(--color-warning-rgb), 0.3);
   flex-shrink: 0;
 }
 
@@ -277,8 +277,8 @@
    Summary Message
    ========================================================================== */
 .ai-message-summary {
-  background-color: rgba(128, 128, 128, 0.1);
-  border: 1px solid rgba(128, 128, 128, 0.2);
+  background-color: rgba(var(--color-text-muted-rgb), 0.1);
+  border: 1px solid rgba(var(--color-text-muted-rgb), 0.2);
   border-left: 3px solid var(--color-text-muted);
 }
 
@@ -350,7 +350,7 @@
 }
 
 .ai-message-assistant {
-  background-color: rgba(33, 212, 253, 0.05);
+  background-color: rgba(var(--color-primary-rgb), 0.05);
   border: 1px solid var(--accent-bg-subtle);
 }
 

@@ -277,7 +277,7 @@
   display: flex;
   align-items: center;
   padding: var(--spacing-xs) var(--spacing-sm);
-  background-color: rgba(0, 0, 0, 0.15);
+  background-color: var(--bg-surface-dark);
   border-bottom: 1px solid var(--border-subtle);
   font-size: var(--font-size-xs);
   color: var(--color-text-secondary);

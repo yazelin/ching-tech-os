@@ -55,6 +55,7 @@
   --color-success-rgb: 22, 163, 74;
   --color-warning-rgb: 217, 119, 6;
   --color-error-rgb: 220, 38, 38;
+  --color-text-muted-rgb: 96, 96, 96;
 
   /* 半透明背景色（用於 header、taskbar、window 等）- 無彩度 */
   --bg-glass: rgba(26, 26, 26, 0.95);
@@ -250,6 +251,7 @@
   --color-success-rgb: 22, 163, 74;
   --color-warning-rgb: 217, 119, 6;
   --color-error-rgb: 220, 38, 38;
+  --color-text-muted-rgb: 160, 160, 160;
 
   /* 半透明背景色（亮色主題用白色基底）- 無彩度 */
   --bg-glass: rgba(255, 255, 255, 0.95);

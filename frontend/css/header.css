@@ -50,10 +50,10 @@
 /* 亮色主題 logo 發光呼吸動畫 */
 @keyframes logoGlowLight {
   0%, 100% {
-    filter: drop-shadow(0 0 2px rgba(8, 145, 178, 0.3));
+    filter: drop-shadow(0 0 2px rgba(var(--color-primary-rgb), 0.3));
   }
   50% {
-    filter: drop-shadow(0 0 8px rgba(8, 145, 178, 0.6)) drop-shadow(0 0 12px rgba(8, 145, 178, 0.4));
+    filter: drop-shadow(0 0 8px rgba(var(--color-primary-rgb), 0.6)) drop-shadow(0 0 12px rgba(var(--color-primary-rgb), 0.4));
   }
 }
 
@@ -61,7 +61,7 @@
   font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--color-primary);
-  text-shadow: 0 0 10px rgba(33, 212, 253, 0.5), 0 0 20px var(--accent-border);
+  text-shadow: 0 0 10px rgba(var(--color-primary-rgb), 0.5), 0 0 20px var(--accent-border);
   user-select: none;
   -webkit-user-select: none;
 }
@@ -69,6 +69,10 @@
 .header-title-os {
   color: var(--color-text-primary);
   text-shadow: 0 0 10px rgba(255, 255, 255, 0.5), 0 0 20px rgba(255, 255, 255, 0.3);
+}
+
+:root[data-theme="light"] .header-title-os {
+  text-shadow: 0 0 10px rgba(0, 0, 0, 0.15), 0 0 20px rgba(0, 0, 0, 0.1);
 }
 
 /* Header Center Section (reserved for future use) */
