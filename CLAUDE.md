@@ -68,3 +68,30 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - 模態框背景遮罩使用 `var(--bg-overlay-dark)` 變數
 - 模態框內容區塊需使用不透明的背景色（如 `#1e1e2e`），不要使用半透明的 `var(--bg-surface)`
 - 所有 overlay 類別應使用 CSS 變數，避免硬編碼 rgba 值
+
+## 文件規範
+
+### 文件架構
+- `README.md` - 專案概覽、快速開始（保持簡潔）
+- `docs/` - 所有詳細技術文件
+- `openspec/` - 規格與變更管理
+
+### 文件放置原則
+- 詳細的技術設計文件放在 `docs/` 目錄
+- **不要**在子目錄（如 `backend/`、`frontend/`）建立 README
+- 功能規格使用 openspec 管理（`openspec/specs/`）
+
+### docs/ 目錄結構
+```
+docs/
+├── backend.md          # 後端開發指南、API 參考
+├── database-design.md  # 資料庫設計
+├── ai-agent-design.md  # AI Agent 架構設計
+├── smb-nas-architecture.md  # SMB/NAS 架構
+└── file-manager.md     # 檔案管理器設計
+```
+
+### 文件更新時機
+- 新增重大功能後更新 `README.md` 功能總覽
+- 技術設計變更後更新對應的 `docs/*.md`
+- API 變更後更新 `docs/backend.md`

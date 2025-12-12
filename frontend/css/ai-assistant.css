@@ -7,7 +7,9 @@
    ========================================================================== */
 .ai-assistant {
   display: flex;
+  flex: 1;
   height: 100%;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -139,6 +141,7 @@
   flex-direction: column;
   overflow: hidden;
   min-width: 0;
+  min-height: 0;
 }
 
 /* ==========================================================================
@@ -303,11 +306,18 @@
   flex: 1;
   overflow-y: auto;
   padding: var(--spacing-md);
+  min-height: 0;
 }
 
 .ai-messages-container {
-  max-width: 800px;
+  max-width: min(800px, 100%);
   margin: 0 auto;
+  width: 100%;
+}
+
+/* 視窗最大化時擴展訊息容器寬度 */
+.window.maximized .ai-messages-container {
+  max-width: min(1200px, 90%);
 }
 
 /* Welcome Message */
@@ -443,12 +453,18 @@
   display: flex;
   align-items: flex-end;
   gap: var(--spacing-sm);
-  max-width: 800px;
+  max-width: min(800px, 100%);
+  width: 100%;
   margin: 0 auto;
   background-color: var(--bg-surface);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
   padding: var(--spacing-sm);
+}
+
+/* 視窗最大化時擴展輸入框寬度 */
+.window.maximized .ai-input-wrapper {
+  max-width: min(1200px, 90%);
 }
 
 .ai-input-wrapper:focus-within {

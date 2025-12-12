@@ -602,13 +602,125 @@
   padding: 16px;
   background: var(--bg-surface-dark);
   border-radius: 8px;
-  line-height: 1.6;
+  line-height: 1.7;
+  font-size: var(--font-size-sm);
+  color: var(--md-text-color);
 }
 
+/* 會議內容 Markdown 樣式 */
 .pm-meeting-content h1,
 .pm-meeting-content h2,
-.pm-meeting-content h3 {
+.pm-meeting-content h3,
+.pm-meeting-content h4,
+.pm-meeting-content h5,
+.pm-meeting-content h6 {
+  color: var(--md-heading-color);
+  margin-top: 1.2em;
+  margin-bottom: 0.5em;
+  font-weight: 600;
+}
+
+.pm-meeting-content h1:first-child,
+.pm-meeting-content h2:first-child,
+.pm-meeting-content h3:first-child {
   margin-top: 0;
+}
+
+.pm-meeting-content h1 {
+  font-size: 1.4em;
+  border-bottom: 1px solid var(--md-hr-color);
+  padding-bottom: 0.3em;
+}
+
+.pm-meeting-content h2 {
+  font-size: 1.2em;
+  border-bottom: 1px solid var(--md-hr-color);
+  padding-bottom: 0.3em;
+}
+
+.pm-meeting-content h3 {
+  font-size: 1.1em;
+}
+
+.pm-meeting-content p {
+  margin: 0.8em 0;
+}
+
+.pm-meeting-content ul,
+.pm-meeting-content ol {
+  margin: 0.8em 0;
+  padding-left: 1.5em;
+}
+
+.pm-meeting-content li {
+  margin: 0.3em 0;
+}
+
+.pm-meeting-content a {
+  color: var(--md-link-color);
+  text-decoration: none;
+}
+
+.pm-meeting-content a:hover {
+  text-decoration: underline;
+}
+
+.pm-meeting-content code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background-color: var(--md-code-bg);
+  padding: 0.2em 0.4em;
+  border-radius: var(--radius-sm);
+  color: var(--md-code-color);
+}
+
+.pm-meeting-content pre {
+  background-color: var(--md-pre-bg);
+  border: 1px solid var(--md-pre-border);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  overflow-x: auto;
+  margin: 1em 0;
+}
+
+.pm-meeting-content pre code {
+  background: none;
+  padding: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  border: none;
+}
+
+.pm-meeting-content blockquote {
+  border-left: 3px solid var(--md-blockquote-border);
+  margin: 1em 0;
+  padding: 0.5em 1em;
+  background-color: var(--md-blockquote-bg);
+  color: var(--color-text-secondary);
+}
+
+.pm-meeting-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1em 0;
+}
+
+.pm-meeting-content th,
+.pm-meeting-content td {
+  border: 1px solid var(--md-table-border);
+  padding: 0.5em 0.8em;
+  text-align: left;
+}
+
+.pm-meeting-content th {
+  background-color: var(--md-table-header-bg);
+  font-weight: 600;
+}
+
+.pm-meeting-content hr {
+  border: none;
+  border-top: 1px solid var(--md-hr-color);
+  margin: 1.5em 0;
 }
 
 /* Attachments */

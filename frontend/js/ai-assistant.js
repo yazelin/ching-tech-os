@@ -283,6 +283,10 @@ const AIAssistantApp = (function() {
             </div>
           `;
         }
+        // 使用者訊息使用純文字，AI 回應使用 Markdown 渲染
+        const isAssistant = msg.role === 'assistant';
+        const messageContent = isAssistant ? renderMarkdown(msg.content) : escapeHtml(msg.content);
+        const textClass = isAssistant ? 'ai-message-text markdown-rendered' : 'ai-message-text';
         return `
           <div class="ai-message ai-message-${msg.role}">
             <div class="ai-message-avatar">
@@ -290,7 +294,7 @@ const AIAssistantApp = (function() {
             </div>
             <div class="ai-message-content">
               <div class="ai-message-role">${msg.role === 'user' ? '你' : 'AI 助手'}</div>
-              <div class="ai-message-text">${escapeHtml(msg.content)}</div>
+              <div class="${textClass}">${messageContent}</div>
             </div>
           </div>
         `;
@@ -337,7 +341,7 @@ const AIAssistantApp = (function() {
   }
 
   /**
-   * Escape HTML special characters
+   * Escape HTML special characters (用於使用者訊息)
    * @param {string} text
    * @returns {string}
    */
@@ -345,6 +349,23 @@ const AIAssistantApp = (function() {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML.replace(/\n/g, '<br>');
+  }
+
+  /**
+   * Render Markdown content (用於 AI 回應)
+   * @param {string} text
+   * @returns {string}
+   */
+  function renderMarkdown(text) {
+    if (typeof marked !== 'undefined') {
+      try {
+        return marked.parse(text);
+      } catch (e) {
+        console.error('[AIAssistant] Markdown parse error:', e);
+        return escapeHtml(text);
+      }
+    }
+    return escapeHtml(text);
   }
 
   /**

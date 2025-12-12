@@ -1,218 +1,151 @@
-📄 系統介紹文案（適用官網/簡報）
+# 擎添OS（ChingTech OS）品牌與設計指南
 
-以下以 「擎添 Ching Tech OS」版本示範（若你選其他名稱我可立即替換）：
+## 品牌定位
 
-擎添 Ching Tech OS – 擎添工業的智慧工作中樞
-
-擎添 Ching Tech OS 是擎添工業打造的整合式智慧工作空間，串接業務、專案、工程、AI 與自動化流程，讓所有部門在同一平台協作、執行與追蹤。
-
-系統以 AI Agent 架構為核心，支援
-
-專案流程與 PM 工時管理
-
-PLC、Python 程式編寫與版本控管
-
-CI/CD Pipeline 佈署與監控
-
-LINE Bot 訊息整合與客服支援
-
-企業內部資料搜尋與知識整理
-
-所有功能皆透過 Web 介面操作，提供一致、流暢且智慧化的工作體驗。
-
-IntelliHub 為擎添打造一個「可進化的內部大腦」，讓知識變成生產力，讓團隊更快完成更多事。
-
-
-
-
-🏷️ 擎添OS（ChingTech OS）正式品牌文案
-品牌定位
-
-擎添OS（ChingTech OS） 是擎添工業打造的次世代企業級「作業系統級工作平台」。
+擎添OS（ChingTech OS）是擎添工業打造的次世代企業級「作業系統級工作平台」。
 它不是單一工具，而是一套驅動全公司數位流程、知識、工程與 AI 的整合性生態系。
 
 擎添OS 承擔企業中樞角色，協助連結人員、專案、設備、資料與 AI Agent，讓所有任務能以一致的工作體驗被創建、追蹤、執行與優化。
 
-品牌主張（Brand Statement）
+## 品牌主張
 
-「以智慧為底層，打造企業的第二作業系統。」
+**「以智慧為底層，打造企業的第二作業系統。」**
+
 ChingTech OS 讓資料會流動、流程會自動化、知識會累積、AI 會協助。
 
-系統價值（Value Pillars）
-1. 統一工作空間（Unified Workspace）
+## 系統價值
 
+### 1. 統一工作空間（Unified Workspace）
 無論是業務、PM、工程師或管理職，都能在一個平台完成所有工作：
 專案、排程、程式撰寫、版本控管、CI/CD、LINEBot 訊息、內部知識庫等。
 
-2. AI 驅動（AI-Driven）
-
+### 2. AI 驅動（AI-Driven）
 內建多代理（Multi-Agent）架構，能協助：
+- 尋找資料、整理知識
+- 撰寫 PLC / Python 程式
+- 協助文件生成、流程建議
+- 自動處理訊息與分類內容
 
-尋找資料、整理知識
-
-撰寫 PLC / Python 程式
-
-協助文件生成、流程建議
-
-自動處理訊息與分類內容
-
-3. 工程與自動化導向（Engineering-First）
-
+### 3. 工程與自動化導向（Engineering-First）
 支援 DevOps、工控、程式、流程自動化與企業級部署。
 
-4. 可成長的內部大腦（Growing Enterprise Brain）
-
+### 4. 可成長的內部大腦（Growing Enterprise Brain）
 擎添OS 會學習企業的作業模式，使流程越來越高效。
 
-標語（Slogan）
+## 標語（Slogan）
 
-Empowering Ching-Tech with an Intelligent Operating System.
-為擎添打造一套真正懂流程、懂工程、懂你的作業系統。
+**英文**：Empowering Ching-Tech with an Intelligent Operating System.
 
-或中文版本：
-「讓擎添，以智慧驅動。」
-
-🎨 UI 設計風格指南（Design System）
-🌈 品牌色票（Color Palette）
-主色系（Primary Colors）
-用途	色碼	說明
-ChingTech Blue	#1C4FA8	穩重、科技感，是主視覺基礎色
-Deep Industrial Navy	#0F1C2E	深色背景、專業工程氛圍
-AI Neon Cyan	#21D4FD	AI、智能提示元素、按鈕高亮
-中性色（Neutral Colors）
-用途	色碼
-Light Gray	#F5F7FA
-Mid Gray	#A4ACB5
-Dark Gray	#3A3F45
-輔助色（Accent Colors）
-用途	色碼	說明
-Action Green	#4CC577	成功狀態、運行中
-Warning Amber	#FFC557	警告、提醒
-Error Red	#E65050	系統錯誤、CI/CD Fail
-✏️ 字體（Typography）
-英文
-
-Inter（主體 UI 字體）
-
-IBM Plex Sans（技術說明、工程情境）
-
-JetBrains Mono（程式碼介面、Log Viewer、CI/CD Console）
-
-中文
-
-思源黑體（Noto Sans TC）（標準官方 UI）
-
-思源宋體（Noto Serif TC）（正式文件 / 行政策略頁）
-
-🧩 UI 設計方向（Design Aesthetic）
-
-半扁平設計（Semi-flat）
-
-大量留白，深色主題為主（工程感與可長時間閱讀）
-
-模組化卡片（Cards）呈現專案 / Agent / 模組
-
-以「核心、網路、中枢」為視覺語彙
-
-動畫節奏慢、科技感線條光芒效果適度使用
-
-🔧 Logo 草稿（AI生成）
-
-下一則訊息我會生成 擎添OS（ChingTech OS）Logo 草稿，並提供數個視覺方向：
-
-方向 A：核心光球（OS 中樞）
-
-方向 B：六邊形工程核
-
-方向 C：AI 資料匯流線
-
-方向 D：簡約科技字標（Type Logo）
+**中文**：讓擎添，以智慧驅動。
 
 ---
 
-## 🔧 CSS 變數對照表（Design Tokens）
+## 品牌色票（Color Palette）
 
-所有 UI 顏色都透過 CSS 變數定義於 `frontend/css/main.css`，支援未來主題切換。
+### 主色系（Primary Colors）
 
-### 基礎顏色變數
+| 用途 | CSS 變數 | 色碼 | 說明 |
+|------|----------|------|------|
+| ChingTech Cyan | `--color-primary` | #0891b2 | 主要按鈕/品牌色，青色調 |
+| Background | `--color-background` | #1a1a1a | 純黑灰背景（無彩度） |
+| Accent Orange | `--color-accent` | #ea580c | 強調/特殊元素，橙色 |
 
-| CSS 變數 | 色碼 | 用途 |
-|---------|------|------|
-| `--color-primary` | #1C4FA8 | ChingTech Blue 主視覺色 |
-| `--color-background` | #0F1C2E | Deep Industrial Navy 背景色 |
-| `--color-accent` | #21D4FD | AI Neon Cyan 強調色 |
-| `--color-success` | #4CC577 | Action Green 成功狀態 |
-| `--color-warning` | #FFC557 | Warning Amber 警告狀態 |
-| `--color-error` | #E65050 | Error Red 錯誤狀態 |
+### 中性色（Neutral Colors）
 
-### 文字顏色變數
+| 用途 | CSS 變數 | 色碼 |
+|------|----------|------|
+| Light Gray | `--color-gray-light` | #f0f0f0 |
+| Mid Gray | `--color-gray-mid` | #909090 |
+| Dark Gray | `--color-gray-dark` | #404040 |
 
-| CSS 變數 | 色碼 | 用途 |
-|---------|------|------|
-| `--color-text-primary` | #F5F7FA | 主要文字 |
-| `--color-text-secondary` | #A4ACB5 | 次要文字 |
-| `--color-text-muted` | #3A3F45 | 靜音/提示文字 |
+### 狀態色（Status Colors）
 
-### 標籤顏色變數
+| 用途 | CSS 變數 | 色碼 | 說明 |
+|------|----------|------|------|
+| Success | `--color-success` | #16a34a | 成功狀態 |
+| Warning | `--color-warning` | #d97706 | 警告狀態 |
+| Error | `--color-error` | #dc2626 | 錯誤狀態 |
 
-| CSS 變數 | 色碼 | 用途 |
-|---------|------|------|
-| `--tag-color-purple` | #818cf8 | 分類/專案標籤 |
-| `--tag-color-green` | #34d399 | 類型/成功標籤 |
-| `--tag-color-yellow` | #fbbf24 | 警告/等級標籤 |
-| `--tag-color-pink` | #f472b6 | 角色/特殊標籤 |
-| `--tag-color-blue` | #3b82f6 | 資訊/進行中標籤 |
-| `--tag-color-gray` | #6c757d | 已取消/待處理標籤 |
+### 文字顏色
 
-### 狀態標籤變數
+| 用途 | CSS 變數 | 色碼 |
+|------|----------|------|
+| 主要文字 | `--color-text-primary` | #f0f0f0 |
+| 次要文字 | `--color-text-secondary` | #a0a0a0 |
+| 靜音文字 | `--color-text-muted` | #606060 |
+| 主要按鈕文字 | `--btn-text-on-primary` | #ffffff |
+| 強調按鈕文字 | `--btn-text-on-accent` | #ffffff |
+| Ghost 按鈕文字 | `--btn-text-on-ghost` | var(--color-text-primary) |
 
-| CSS 變數 | 用途 |
-|---------|------|
-| `--status-completed-color/bg` | 已完成狀態 |
-| `--status-in-progress-color/bg` | 進行中狀態 |
-| `--status-pending-color/bg` | 待處理狀態 |
-| `--status-cancelled-color/bg` | 已取消狀態 |
+---
 
-### 優先級變數
+## 字體（Typography）
 
-| CSS 變數 | 用途 |
-|---------|------|
-| `--priority-critical-color/bg` | 最高優先級 |
-| `--priority-urgent-color/bg` | 緊急 |
-| `--priority-high-color/bg` | 高優先級 |
-| `--priority-normal-color/bg` | 一般 |
-| `--priority-low-color/bg` | 低優先級 |
-
-### 終端機主題變數
-
-| CSS 變數 | 色碼 | 用途 |
-|---------|------|------|
-| `--terminal-bg` | #1a1a1a | 終端機背景 |
-| `--terminal-fg` | #e0e0e0 | 終端機前景文字 |
-| `--terminal-cursor` | #ffffff | 游標顏色 |
-| `--terminal-*` | - | ANSI 16 色 (black, red, green, yellow, blue, magenta, cyan, white + bright 版本) |
-
-### 模態框變數
-
-| CSS 變數 | 色碼 | 用途 |
-|---------|------|------|
-| `--modal-bg` | #1e1e2e | 模態框背景（不透明） |
-| `--modal-border` | var(--border-light) | 模態框邊框 |
-
-### 主題切換支援
-
-系統架構支援透過 `data-theme` 屬性切換主題：
+### 系統字型堆疊
 
 ```css
-/* 暗色主題（預設） */
-:root {
-  --color-background: #0F1C2E;
-  /* ... */
-}
-
-/* 亮色主題（未來擴充） */
-:root[data-theme="light"] {
-  --color-background: #F5F7FA;
-  /* ... */
-}
+--font-primary: -apple-system, BlinkMacSystemFont, 'Ubuntu', 'Segoe UI', 'Microsoft JhengHei', 'Noto Sans CJK TC', sans-serif;
+--font-mono: 'Ubuntu Mono', 'Consolas', 'Monaco', monospace;
 ```
+
+### 字體大小
+
+| CSS 變數 | 尺寸 | 用途 |
+|----------|------|------|
+| `--font-size-xs` | 12px | 小型標籤、提示 |
+| `--font-size-sm` | 14px | 次要文字、說明 |
+| `--font-size-md` | 15px | 一般內容 |
+| `--font-size-base` | 16px | 基準字體 |
+| `--font-size-lg` | 18px | 標題 |
+| `--font-size-xl` | 20px | 大標題 |
+| `--font-size-2xl` | 24px | 特大標題 |
+
+---
+
+## UI 設計方向
+
+### 設計風格
+- **半扁平設計（Semi-flat）**
+- 大量留白，深色主題為主（工程感與可長時間閱讀）
+- 模組化卡片（Cards）呈現專案 / Agent / 模組
+- 動畫節奏慢、科技感線條光芒效果適度使用
+
+### 主題支援
+- **暗色主題**（預設）：無彩度灰階背景
+- **亮色主題**：白色背景，保持相同色彩語言
+
+### 佈局變數
+
+| CSS 變數 | 數值 | 說明 |
+|----------|------|------|
+| `--header-height` | 40px | Header Bar 高度 |
+| `--taskbar-height` | 64px | Taskbar 高度 |
+| `--taskbar-icon-size` | 48px | Taskbar 圖示大小 |
+| `--desktop-icon-size` | 64px | 桌面圖示大小 |
+
+### 圓角（Border Radius）
+
+| CSS 變數 | 數值 | 用途 |
+|----------|------|------|
+| `--radius-sm` | 4px | 小型元素 |
+| `--radius-md` | 8px | 按鈕、輸入框 |
+| `--radius-lg` | 12px | 卡片、面板 |
+| `--radius-xl` | 16px | 大型容器 |
+
+### 間距（Spacing）
+
+| CSS 變數 | 數值 |
+|----------|------|
+| `--spacing-xs` | 4px |
+| `--spacing-sm` | 8px |
+| `--spacing-md` | 16px |
+| `--spacing-lg` | 24px |
+| `--spacing-xl` | 32px |
+
+---
+
+## 詳細 CSS 變數
+
+完整的 CSS 設計系統定義請參考：
+- **設計系統文件**：`docs/design-system.md`
+- **CSS 原始碼**：`frontend/css/main.css`

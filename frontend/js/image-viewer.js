@@ -140,7 +140,8 @@ const ImageViewerModule = (function() {
     // Content area for panning
     const content = windowEl.querySelector('#imgViewerContent');
     content.addEventListener('mousedown', handlePanStart);
-    content.addEventListener('wheel', handleWheel);
+    // 使用 passive: false 因為 handleWheel 需要呼叫 preventDefault()
+    content.addEventListener('wheel', handleWheel, { passive: false });
 
     // Global events for panning
     document.addEventListener('mousemove', handlePanMove);

@@ -238,3 +238,111 @@
 .image-viewer-content::-webkit-scrollbar-thumb:hover {
   background-color: var(--scrollbar-hover);
 }
+
+/* ==========================================================================
+   Text Viewer Toolbar (顯示模式切換)
+   ========================================================================== */
+.txt-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: var(--bg-surface-dark);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.txt-toolbar-label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.txt-mode-group {
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
+.txt-mode-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.txt-mode-btn:hover {
+  background: var(--hover-bg);
+  color: var(--color-text-primary);
+  border-color: var(--border-medium);
+}
+
+.txt-mode-btn.active {
+  background: var(--accent-bg-light);
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.txt-mode-btn .icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.txt-mode-label {
+  font-size: var(--font-size-xs);
+}
+
+/* Text Viewer Error Bar */
+.txt-error-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: var(--tag-bg-yellow);
+  color: var(--tag-color-yellow);
+  font-size: var(--font-size-sm);
+}
+
+.txt-error-bar .icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Markdown Preview Container */
+.txt-markdown-preview {
+  padding: var(--spacing-lg);
+  width: 100%;
+  min-height: 100%;
+}
+
+/* Formatted Data in Text Viewer */
+.text-viewer-content .formatted-data {
+  margin: 0;
+  padding: var(--spacing-md);
+  background-color: var(--bg-surface-darker);
+  border-radius: var(--radius-md);
+  width: 100%;
+  min-height: 100%;
+}
+
+/* Empty File State */
+.text-viewer-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: var(--spacing-md);
+  background-color: var(--bg-surface-darker);
+  border-radius: var(--radius-md);
+  width: 100%;
+  min-height: 100%;
+}
+
+.text-viewer-empty-hint {
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
