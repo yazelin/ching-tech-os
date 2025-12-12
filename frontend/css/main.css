@@ -166,6 +166,7 @@
   /* Font Sizes */
   --font-size-xs: 0.75rem;    /* 12px */
   --font-size-sm: 0.875rem;   /* 14px */
+  --font-size-md: 0.9375rem;  /* 15px */
   --font-size-base: 1rem;     /* 16px */
   --font-size-lg: 1.125rem;   /* 18px */
   --font-size-xl: 1.25rem;    /* 20px */
@@ -254,9 +255,9 @@
   --color-text-muted-rgb: 160, 160, 160;
 
   /* 半透明背景色（亮色主題用白色基底）- 無彩度 */
-  --bg-glass: rgba(255, 255, 255, 0.95);
-  --bg-glass-light: rgba(255, 255, 255, 0.85);
-  --bg-glass-heavy: rgba(255, 255, 255, 0.98);
+  --bg-glass: rgba(255, 255, 255, 0.88);
+  --bg-glass-light: rgba(255, 255, 255, 0.75);
+  --bg-glass-heavy: rgba(255, 255, 255, 0.95);
   --bg-tooltip: rgba(32, 32, 32, 0.95);
   --tooltip-text: #f8f8f8;
 

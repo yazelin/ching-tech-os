@@ -31,7 +31,7 @@
   left: 10px;
   top: 50%;
   transform: translateY(-50%);
-  color: var(--text-muted);
+  color: var(--color-text-muted);
 }
 
 .pm-search-input {
@@ -40,13 +40,13 @@
   border: 1px solid var(--border-light);
   border-radius: 6px;
   background: var(--bg-surface);
-  color: var(--text-primary);
+  color: var(--color-text-primary);
   font-size: 13px;
 }
 
 .pm-search-input:focus {
   outline: none;
-  border-color: var(--accent-color);
+  border-color: var(--color-accent);
 }
 
 .pm-search-clear {
@@ -61,7 +61,7 @@
   height: 20px;
   border: none;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--color-text-muted);
   cursor: pointer;
   border-radius: 50%;
 }
@@ -80,7 +80,7 @@
   border: 1px solid var(--border-light);
   border-radius: 6px;
   background: var(--bg-surface);
-  color: var(--text-primary);
+  color: var(--color-text-primary);
   font-size: 13px;
   cursor: pointer;
   appearance: none;
@@ -109,7 +109,7 @@
   border: 1px solid var(--border-light);
   border-radius: 6px;
   background: var(--bg-surface);
-  color: var(--text-primary);
+  color: var(--color-text-primary);
   font-size: 13px;
   cursor: pointer;
   transition: all 0.15s;
@@ -161,13 +161,13 @@
   padding: 12px 16px;
   font-size: 13px;
   font-weight: 500;
-  color: var(--text-secondary);
+  color: var(--color-text-secondary);
   border-bottom: 1px solid var(--border-subtle);
 }
 
 .pm-list-count {
   font-weight: normal;
-  color: var(--text-muted);
+  color: var(--color-text-muted);
 }
 
 .pm-list {
@@ -202,7 +202,7 @@
 
 .pm-list-item-name {
   font-weight: 500;
-  color: var(--text-primary);
+  color: var(--color-text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -212,13 +212,13 @@
   display: flex;
   gap: 8px;
   font-size: 11px;
-  color: var(--text-muted);
+  color: var(--color-text-muted);
   margin-bottom: 4px;
 }
 
 .pm-list-item-date {
   font-size: 11px;
-  color: var(--text-muted);
+  color: var(--color-text-muted);
 }
 
 /* Status badge */
@@ -265,7 +265,7 @@
 
 .pm-resizer:hover,
 .pm-resizer.dragging {
-  background: var(--accent-color);
+  background: var(--color-accent);
 }
 
 /* Content panel */
@@ -283,7 +283,7 @@
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: var(--text-muted);
+  color: var(--color-text-muted);
   gap: 12px;
 }
 
@@ -318,7 +318,7 @@
   margin: 0;
   font-size: 20px;
   font-weight: 600;
-  color: var(--text-primary);
+  color: var(--color-text-primary);
 }
 
 .pm-content-actions {
@@ -342,7 +342,7 @@
   padding: 12px 16px;
   border: none;
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--color-text-secondary);
   font-size: 13px;
   cursor: pointer;
   border-bottom: 2px solid transparent;
@@ -350,13 +350,13 @@
 }
 
 .pm-tab:hover {
-  color: var(--text-primary);
+  color: var(--color-text-primary);
   background: var(--bg-overlay-dark);
 }
 
 .pm-tab.active {
-  color: var(--accent-color);
-  border-bottom-color: var(--accent-color);
+  color: var(--color-accent);
+  border-bottom-color: var(--color-accent);
 }
 
 .pm-tab .icon {
@@ -381,13 +381,13 @@
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: var(--text-primary);
+  color: var(--color-text-primary);
 }
 
 .pm-empty-tab {
   text-align: center;
   padding: 40px;
-  color: var(--text-muted);
+  color: var(--color-text-muted);
 }
 
 /* Overview */
@@ -401,7 +401,7 @@
   margin: 0 0 12px 0;
   font-size: 14px;
   font-weight: 600;
-  color: var(--text-secondary);
+  color: var(--color-text-secondary);
 }
 
 .pm-info-grid {
@@ -418,19 +418,19 @@
 
 .pm-info-item label {
   font-size: 12px;
-  color: var(--text-muted);
+  color: var(--color-text-muted);
 }
 
 .pm-info-item span {
   font-size: 14px;
-  color: var(--text-primary);
+  color: var(--color-text-primary);
 }
 
 .pm-description {
   padding: 12px;
   background: var(--bg-surface-dark);
   border-radius: 8px;
-  color: var(--text-primary);
+  color: var(--color-text-primary);
   line-height: 1.6;
   white-space: pre-wrap;
 }
@@ -460,7 +460,7 @@
   justify-content: center;
   background: var(--accent-bg-subtle);
   border-radius: 50%;
-  color: var(--accent-color);
+  color: var(--color-accent);
 }
 
 .pm-member-info {
@@ -470,17 +470,17 @@
 
 .pm-member-name {
   font-weight: 500;
-  color: var(--text-primary);
+  color: var(--color-text-primary);
 }
 
 .pm-member-role {
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--color-text-secondary);
 }
 
 .pm-member-company {
   font-size: 12px;
-  color: var(--text-muted);
+  color: var(--color-text-muted);
 }
 
 .pm-member-contact {
@@ -488,7 +488,7 @@
   gap: 12px;
   margin-top: 4px;
   font-size: 12px;
-  color: var(--text-muted);
+  color: var(--color-text-muted);
 }
 
 .pm-member-contact .icon {
@@ -542,13 +542,13 @@
 .pm-meeting-day {
   font-size: 24px;
   font-weight: 600;
-  color: var(--accent-color);
+  color: var(--color-accent);
   line-height: 1;
 }
 
 .pm-meeting-month {
   font-size: 12px;
-  color: var(--text-muted);
+  color: var(--color-text-muted);
 }
 
 .pm-meeting-info {
@@ -558,7 +558,7 @@
 
 .pm-meeting-title {
   font-weight: 500;
-  color: var(--text-primary);
+  color: var(--color-text-primary);
   margin-bottom: 4px;
 }
 
@@ -566,7 +566,7 @@
   display: flex;
   gap: 16px;
   font-size: 12px;
-  color: var(--text-muted);
+  color: var(--color-text-muted);
 }
 
 .pm-meeting-meta .icon {
@@ -583,7 +583,7 @@
   gap: 24px;
   margin-bottom: 16px;
   font-size: 14px;
-  color: var(--text-secondary);
+  color: var(--color-text-secondary);
 }
 
 .pm-meeting-detail-meta .icon {
@@ -670,7 +670,7 @@
 
 .pm-attachment-name {
   font-weight: 500;
-  color: var(--text-primary);
+  color: var(--color-text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -680,13 +680,13 @@
   display: flex;
   gap: 8px;
   font-size: 12px;
-  color: var(--text-muted);
+  color: var(--color-text-muted);
   margin-top: 2px;
 }
 
 .pm-attachment-desc {
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--color-text-secondary);
   margin-top: 4px;
 }
 
@@ -762,12 +762,12 @@
 
 .pm-link-title {
   font-weight: 500;
-  color: var(--text-primary);
+  color: var(--color-text-primary);
 }
 
 .pm-link-url {
   font-size: 12px;
-  color: var(--text-muted);
+  color: var(--color-text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -775,7 +775,7 @@
 
 .pm-link-desc {
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--color-text-secondary);
   margin-top: 4px;
 }
 
@@ -793,7 +793,7 @@
   justify-content: center;
   border: none;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--color-text-muted);
   cursor: pointer;
   border-radius: 6px;
   transition: all 0.15s;
@@ -801,7 +801,7 @@
 
 .pm-icon-btn:hover {
   background: var(--bg-overlay-dark);
-  color: var(--text-primary);
+  color: var(--color-text-primary);
 }
 
 .pm-icon-btn.danger:hover {
@@ -860,7 +860,7 @@
   justify-content: center;
   border: none;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--color-text-muted);
   cursor: pointer;
   border-radius: 6px;
 }
@@ -893,7 +893,7 @@
   margin-bottom: 6px;
   font-size: 13px;
   font-weight: 500;
-  color: var(--text-secondary);
+  color: var(--color-text-secondary);
 }
 
 .pm-form-group input,
@@ -904,7 +904,7 @@
   border: 1px solid var(--border-light);
   border-radius: 6px;
   background: var(--bg-surface-dark);
-  color: var(--text-primary);
+  color: var(--color-text-primary);
   font-size: 14px;
 }
 
@@ -912,7 +912,7 @@
 .pm-form-group select:focus,
 .pm-form-group textarea:focus {
   outline: none;
-  border-color: var(--accent-color);
+  border-color: var(--color-accent);
 }
 
 /* 表單 select option 樣式 */
@@ -929,7 +929,7 @@
 .pm-form-hint {
   margin-top: 4px;
   font-size: 12px;
-  color: var(--text-muted);
+  color: var(--color-text-muted);
 }
 
 .pm-form-row {
@@ -955,7 +955,7 @@
   border: 1px solid var(--border-light);
   border-radius: 6px;
   background: var(--bg-surface);
-  color: var(--text-primary);
+  color: var(--color-text-primary);
   font-size: 14px;
   cursor: pointer;
   transition: all 0.15s;
@@ -1021,25 +1021,25 @@
 
 .pm-upload-dropzone:hover,
 .pm-upload-dropzone.dragover {
-  border-color: var(--accent-color);
+  border-color: var(--color-accent);
   background: var(--accent-bg-subtle);
 }
 
 .pm-upload-dropzone .icon {
   font-size: 48px;
-  color: var(--text-muted);
+  color: var(--color-text-muted);
   margin-bottom: 12px;
 }
 
 .pm-upload-hint {
   font-size: 12px;
-  color: var(--text-muted);
+  color: var(--color-text-muted);
   margin-top: 4px;
 }
 
 .pm-upload-note {
   font-size: 11px;
-  color: var(--text-muted);
+  color: var(--color-text-muted);
   margin-top: 12px;
 }
 
@@ -1063,7 +1063,7 @@
 
 .pm-progress-fill {
   height: 100%;
-  background: var(--accent-color);
+  background: var(--color-accent);
   transition: width 0.3s;
 }
 
@@ -1075,7 +1075,7 @@
   align-items: center;
   justify-content: center;
   padding: 40px;
-  color: var(--text-muted);
+  color: var(--color-text-muted);
   gap: 12px;
 }
 

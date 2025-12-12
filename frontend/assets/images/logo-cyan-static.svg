@@ -28,7 +28,7 @@
     points="360,120 567.85,240 567.85,480 360,600 152.15,480 152.15,240"
     fill="rgba(8, 145, 178, 0.1)"
     stroke="#0891b2"
-    stroke-width="15"
+    stroke-width="20"
     stroke-linejoin="round"
     stroke-linecap="round"
   />
@@ -52,7 +52,7 @@
     points="360,240 463.92,300 463.92,420 360,480 256.08,420 256.08,300"
     fill="rgba(8, 145, 178, 0.15)"
     stroke="#0891b2"
-    stroke-width="15"
+    stroke-width="20"
     stroke-linejoin="round"
     stroke-linecap="round"
   />
@@ -61,7 +61,7 @@
   <circle cx="360" cy="360" r="45" fill="#0891b2"/>
 
   <!-- 編號3延伸線 -->
-  <line x1="360" y1="240" x2="360" y2="195" stroke="#0891b2" stroke-width="15" stroke-linecap="round"/>
-  <line x1="463.92" y1="420" x2="502.89" y2="442.5" stroke="#0891b2" stroke-width="15" stroke-linecap="round"/>
-  <line x1="256.08" y1="420" x2="217.11" y2="442.5" stroke="#0891b2" stroke-width="15" stroke-linecap="round"/>
+  <line x1="360" y1="240" x2="360" y2="195" stroke="#0891b2" stroke-width="20" stroke-linecap="round"/>
+  <line x1="463.92" y1="420" x2="502.89" y2="442.5" stroke="#0891b2" stroke-width="20" stroke-linecap="round"/>
+  <line x1="256.08" y1="420" x2="217.11" y2="442.5" stroke="#0891b2" stroke-width="20" stroke-linecap="round"/>
 </svg>

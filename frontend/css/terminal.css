@@ -125,7 +125,8 @@
 }
 
 .terminal-reconnect-dialog {
-  background-color: var(--color-surface);
+  background-color: var(--color-background);
+  border: 1px solid var(--interactive-border);
   border-radius: var(--radius-lg);
   padding: var(--spacing-lg);
   max-width: 400px;

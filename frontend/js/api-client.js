@@ -36,6 +36,14 @@ const APIClient = (function() {
     const response = await fetch(url, { ...defaultOptions, ...options });
 
     if (!response.ok) {
+      // 401 未授權：清除 token 並導向登入頁面
+      if (response.status === 401) {
+        localStorage.removeItem('chingtech_token');
+        localStorage.removeItem('chingtech_user');
+        window.location.href = 'login.html';
+        return;
+      }
+
       const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
       throw new Error(error.detail || `HTTP ${response.status}`);
     }

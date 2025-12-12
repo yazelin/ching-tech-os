@@ -14,7 +14,7 @@
 
 /* 亮色主題：漸層從淺灰到白 */
 :root[data-theme="light"] .login-container {
-  background: linear-gradient(135deg, #e8e8e8 0%, #ffffff 100%);
+  background: linear-gradient(135deg, #e0e0e0 0%, #f5f5f5 100%);
 }
 
 /* Logo Section */
@@ -22,44 +22,44 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin-bottom: var(--spacing-xl);
+  margin-bottom: var(--spacing-lg);
   text-align: center;
 }
 
 .login-logo-icon {
-  width: 120px;
-  height: 120px;
-  margin-bottom: var(--spacing-md);
+  width: 80px;
+  height: 80px;
+  margin-bottom: var(--spacing-sm);
   animation: logoGlowDark 4s ease-in-out infinite;
 }
 
-/* 暗色主題：青色發光呼吸動畫（大範圍、高強度） */
+/* 暗色主題：青色發光呼吸動畫（固定大小，變化透明度） */
 @keyframes logoGlowDark {
   0%, 100% {
-    filter: drop-shadow(0 0 8px rgba(33, 212, 253, 0.5)) drop-shadow(0 0 16px rgba(33, 212, 253, 0.3));
+    filter: drop-shadow(0 0 8px rgba(33, 212, 253, 0.3)) drop-shadow(0 0 16px rgba(33, 212, 253, 0.15));
   }
   50% {
-    filter: drop-shadow(0 0 30px rgba(33, 212, 253, 1)) drop-shadow(0 0 60px rgba(33, 212, 253, 0.7)) drop-shadow(0 0 90px rgba(33, 212, 253, 0.4));
+    filter: drop-shadow(0 0 8px rgba(33, 212, 253, 0.8)) drop-shadow(0 0 16px rgba(33, 212, 253, 0.5));
   }
 }
 
-/* 亮色主題：青色發光呼吸動畫 */
+/* 亮色主題：青色發光呼吸動畫（固定大小，變化透明度） */
 :root[data-theme="light"] .login-logo-icon {
   animation: logoGlowLight 4s ease-in-out infinite;
 }
 
 @keyframes logoGlowLight {
   0%, 100% {
-    filter: drop-shadow(0 0 4px rgba(8, 145, 178, 0.4)) drop-shadow(0 0 10px rgba(8, 145, 178, 0.2));
+    filter: drop-shadow(0 0 6px rgba(8, 145, 178, 0.2)) drop-shadow(0 0 12px rgba(8, 145, 178, 0.1));
   }
   50% {
-    filter: drop-shadow(0 0 20px rgba(8, 145, 178, 0.8)) drop-shadow(0 0 40px rgba(8, 145, 178, 0.5)) drop-shadow(0 0 60px rgba(8, 145, 178, 0.3));
+    filter: drop-shadow(0 0 6px rgba(8, 145, 178, 0.6)) drop-shadow(0 0 12px rgba(8, 145, 178, 0.35));
   }
 }
 
 .login-logo-text {
   font-family: var(--font-technical);
-  font-size: 2rem;
+  font-size: 1.5rem;
   font-weight: 600;
   color: var(--color-primary);
   letter-spacing: 0.15em;
@@ -77,16 +77,16 @@
 }
 
 .login-logo-text span {
-  font-size: 2rem;
+  font-size: 1.5rem;
   font-weight: 800;
   letter-spacing: 0.4em;
   color: var(--color-text-primary);
   text-shadow: 0 0 15px rgba(255, 255, 255, 0.5), 0 0 30px rgba(255, 255, 255, 0.3);
 }
 
-/* 亮色主題：OS 保持深色字，無發光效果 */
+/* 亮色主題：OS 加陰影 */
 :root[data-theme="light"] .login-logo-text span {
-  text-shadow: none;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
 }
 
 /* Login Card */
@@ -98,21 +98,15 @@
   border-radius: var(--radius-xl);
   padding: var(--spacing-xl);
   box-shadow: var(--shadow-lg);
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(6px);
 }
 
-/* 亮色主題：login-card 用不透明白底 */
+/* 亮色主題：login-card 玻璃效果 */
 :root[data-theme="light"] .login-card {
-  background-color: rgba(255, 255, 255, 0.9);
+  background-color: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(0, 0, 0, 0.15);
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
-}
-
-.login-card h2 {
-  font-size: var(--font-size-xl);
-  font-weight: 600;
-  color: var(--color-text-primary);
-  margin-bottom: var(--spacing-lg);
-  text-align: center;
+  backdrop-filter: blur(6px);
 }
 
 /* Form Styles */
@@ -211,13 +205,15 @@
 
 /* Footer */
 .login-footer {
-  margin-top: var(--spacing-xl);
+  margin-top: var(--spacing-lg);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--interactive-border);
   text-align: center;
   color: var(--color-text-muted);
   font-size: var(--font-size-xs);
 }
 
-/* Decorative Elements */
+/* Decorative Elements - 暫時停用
 .login-container::before {
   content: '';
   position: fixed;
@@ -239,3 +235,8 @@
   background: radial-gradient(circle, rgba(128, 128, 128, 0.06) 0%, transparent 70%);
   pointer-events: none;
 }
+
+:root[data-theme="light"] .login-container::before {
+  background: radial-gradient(circle, rgba(255, 160, 80, 0.08) 0%, transparent 70%);
+}
+*/
