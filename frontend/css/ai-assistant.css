@@ -87,7 +87,7 @@
 }
 
 .ai-chat-item:hover {
-  background-color: var(--border-subtle);
+  background-color: var(--hover-bg);
 }
 
 .ai-chat-item.active {

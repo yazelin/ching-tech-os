@@ -155,7 +155,7 @@
 }
 
 .taskbar-window-menu-item:hover {
-  background-color: var(--border-light);
+  background-color: var(--hover-bg);
 }
 
 .taskbar-window-menu-item.minimized {

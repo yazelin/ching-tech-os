@@ -110,7 +110,7 @@
 }
 
 .kb-search-clear:hover {
-  background-color: var(--border-light);
+  background-color: var(--hover-bg);
   color: var(--color-text-primary);
 }
 
@@ -180,7 +180,7 @@
 }
 
 .kb-action-btn:hover {
-  background-color: var(--border-light);
+  background-color: var(--hover-bg);
   color: var(--color-text-primary);
 }
 
@@ -252,7 +252,7 @@
 }
 
 .kb-list-item:hover {
-  background-color: var(--border-subtle);
+  background-color: var(--hover-bg);
 }
 
 .kb-list-item.selected {
@@ -811,7 +811,7 @@
 }
 
 .kb-history-close:hover {
-  background-color: var(--border-light);
+  background-color: var(--hover-bg);
   color: var(--color-text-primary);
 }
 
@@ -828,7 +828,7 @@
 }
 
 .kb-history-item:hover {
-  background-color: var(--border-subtle);
+  background-color: var(--hover-bg);
 }
 
 .kb-history-item.selected {
@@ -911,7 +911,7 @@
 }
 
 .kb-dialog-close:hover {
-  background-color: var(--border-light);
+  background-color: var(--hover-bg);
   color: var(--color-text-primary);
 }
 
@@ -945,7 +945,7 @@
 }
 
 .kb-dialog-btn-cancel:hover {
-  background-color: var(--border-light);
+  background-color: var(--hover-bg);
   color: var(--color-text-primary);
 }
 
@@ -1021,7 +1021,7 @@
 }
 
 .kb-attachments-upload-btn:hover {
-  background-color: var(--border-light);
+  background-color: var(--hover-bg);
   border-color: var(--color-accent);
   color: var(--color-accent);
 }
@@ -1148,7 +1148,7 @@
 }
 
 .kb-attachment-action:hover {
-  background-color: var(--border-light);
+  background-color: var(--hover-bg);
   color: var(--color-text-primary);
 }
 
@@ -1306,7 +1306,7 @@
 }
 
 .kb-attachment-edit-close:hover {
-  background-color: var(--border-light);
+  background-color: var(--hover-bg);
   color: var(--color-text);
 }
 
@@ -1387,7 +1387,7 @@
 }
 
 .kb-upload-modal-close:hover {
-  background-color: var(--border-light);
+  background-color: var(--hover-bg);
   color: var(--color-text);
 }
 

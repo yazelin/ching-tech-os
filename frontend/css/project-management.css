@@ -67,7 +67,7 @@
 }
 
 .pm-search-clear:hover {
-  background: var(--bg-overlay-dark);
+  background: var(--hover-bg);
 }
 
 .pm-filters {
@@ -116,7 +116,7 @@
 }
 
 .pm-action-btn:hover {
-  background: var(--bg-overlay-dark);
+  background: var(--hover-bg);
 }
 
 .pm-action-btn.primary {
@@ -146,8 +146,8 @@
 
 /* List panel */
 .pm-list-panel {
-  width: 280px;
-  min-width: 220px;
+  width: 320px;
+  min-width: 260px;
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--border-subtle);
@@ -185,7 +185,7 @@
 }
 
 .pm-list-item:hover {
-  background: var(--bg-overlay-dark);
+  background: var(--hover-bg);
 }
 
 .pm-list-item.selected {
@@ -351,7 +351,7 @@
 
 .pm-tab:hover {
   color: var(--color-text-primary);
-  background: var(--bg-overlay-dark);
+  background: var(--hover-bg);
 }
 
 .pm-tab.active {
@@ -406,7 +406,7 @@
 
 .pm-info-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 16px;
 }
 
@@ -800,7 +800,7 @@
 }
 
 .pm-icon-btn:hover {
-  background: var(--bg-overlay-dark);
+  background: var(--hover-bg);
   color: var(--color-text-primary);
 }
 
@@ -816,7 +816,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: var(--bg-overlay-dark);
+  background: var(--hover-bg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -866,7 +866,7 @@
 }
 
 .pm-modal-close:hover {
-  background: var(--bg-overlay-dark);
+  background: var(--hover-bg);
 }
 
 .pm-modal-body {
@@ -962,7 +962,7 @@
 }
 
 .pm-btn:hover {
-  background: var(--bg-overlay-dark);
+  background: var(--hover-bg);
 }
 
 .pm-btn.primary {

@@ -35,7 +35,7 @@
 }
 
 .viewer-toolbar-btn:hover:not(:disabled) {
-  background-color: var(--border-light);
+  background-color: var(--hover-bg);
   color: var(--color-text-primary);
 }
 

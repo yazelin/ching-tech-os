@@ -9,7 +9,7 @@
   position: absolute;
   display: flex;
   flex-direction: column;
-  background-color: var(--bg-glass);
+  background-color: var(--window-bg);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
@@ -24,7 +24,7 @@
 }
 
 .window.dragging {
-  opacity: 0.9;
+  background-color: var(--bg-glass);
   cursor: grabbing;
 }
 
@@ -54,7 +54,7 @@
   justify-content: space-between;
   height: 40px;
   padding: 0 var(--spacing-sm);
-  background-color: var(--bg-surface-darker);
+  background-color: var(--window-titlebar-bg);
   border-bottom: 1px solid var(--border-subtle);
   cursor: grab;
   user-select: none;
@@ -110,7 +110,7 @@
 }
 
 .window-btn:hover {
-  background-color: var(--border-light);
+  background-color: var(--hover-bg);
   color: var(--color-text-primary);
 }
 

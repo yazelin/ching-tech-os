@@ -160,7 +160,7 @@
 }
 
 .terminal-reconnect-actions .btn-secondary:hover {
-  background-color: var(--border-strong);
+  background-color: var(--hover-bg);
 }
 
 /* ==========================================================================
@@ -187,7 +187,7 @@
 }
 
 .terminal-session-item:hover {
-  background-color: var(--border-light);
+  background-color: var(--hover-bg);
 }
 
 .terminal-session-info {

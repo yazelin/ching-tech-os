@@ -69,7 +69,7 @@
 }
 
 .fm-toolbar-btn:hover:not(:disabled) {
-  background-color: var(--border-light);
+  background-color: var(--hover-bg);
   color: var(--color-text-primary);
 }
 
@@ -215,7 +215,7 @@
 }
 
 .fm-search-clear:hover {
-  background-color: var(--border-light);
+  background-color: var(--hover-bg);
   color: var(--color-text-primary);
 }
 
@@ -243,7 +243,7 @@
 }
 
 .fm-action-btn:hover {
-  background-color: var(--border-light);
+  background-color: var(--hover-bg);
   color: var(--color-text-primary);
 }
 
@@ -313,7 +313,7 @@
 }
 
 .fm-file-item:hover {
-  background-color: var(--border-subtle);
+  background-color: var(--hover-bg);
 }
 
 .fm-file-item.selected {
@@ -614,7 +614,7 @@
 }
 
 .fm-context-menu-item:hover {
-  background-color: var(--border-light);
+  background-color: var(--hover-bg);
 }
 
 .fm-context-menu-item.danger {
@@ -684,7 +684,7 @@
 }
 
 .fm-dialog-close:hover {
-  background-color: var(--border-light);
+  background-color: var(--hover-bg);
   color: var(--color-text-primary);
 }
 
@@ -746,7 +746,7 @@
 }
 
 .fm-dialog-btn-cancel:hover {
-  background-color: var(--border-light);
+  background-color: var(--hover-bg);
   color: var(--color-text-primary);
 }
 
