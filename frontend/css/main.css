@@ -26,9 +26,9 @@
   --color-error: #dc2626;             /* Error Red */
 
   /* Text Colors（無彩度） */
-  --color-text-primary: #f0f0f0;
-  --color-text-secondary: #a0a0a0;
-  --color-text-muted: #606060;
+  --text-primary: #f0f0f0;
+  --text-secondary: #a0a0a0;
+  --text-muted: #888888;
 
   /* Surface & Border Colors */
   --bg-surface: rgba(0, 0, 0, 0.1);
@@ -55,7 +55,7 @@
   --color-success-rgb: 22, 163, 74;
   --color-warning-rgb: 217, 119, 6;
   --color-error-rgb: 220, 38, 38;
-  --color-text-muted-rgb: 96, 96, 96;
+  --text-muted-rgb: 136, 136, 136;
 
   /* 半透明背景色（用於 header、taskbar 等）- 無彩度 */
   --bg-glass: rgba(26, 26, 26, 0.95);
@@ -82,7 +82,7 @@
   /* Button Text Colors - 按鈕文字顏色 */
   --btn-text-on-primary: #ffffff;    /* 主要按鈕文字 */
   --btn-text-on-accent: #ffffff;     /* 強調按鈕文字 */
-  --btn-text-on-ghost: var(--color-text-primary);  /* Ghost 按鈕文字 */
+  --btn-text-on-ghost: var(--text-primary);  /* Ghost 按鈕文字 */
 
   /* Tag Colors (語義化標籤顏色) */
   --tag-color-purple: #818cf8;
@@ -256,9 +256,9 @@
   --color-error: #dc2626;
 
   /* Text Colors（無彩度） */
-  --color-text-primary: #1a1a1a;      /* 深灰主要文字 */
-  --color-text-secondary: #505050;    /* 次要文字 */
-  --color-text-muted: #a0a0a0;        /* 靜音文字 */
+  --text-primary: #1a1a1a;      /* 深灰主要文字 */
+  --text-secondary: #505050;    /* 次要文字 */
+  --text-muted: #a0a0a0;        /* 靜音文字 */
 
   /* Surface & Border Colors */
   --bg-surface: rgba(0, 0, 0, 0.03);
@@ -285,7 +285,7 @@
   --color-success-rgb: 22, 163, 74;
   --color-warning-rgb: 217, 119, 6;
   --color-error-rgb: 220, 38, 38;
-  --color-text-muted-rgb: 160, 160, 160;
+  --text-muted-rgb: 160, 160, 160;
 
   /* 半透明背景色（亮色主題用白色基底）- 無彩度 */
   --bg-glass: rgba(255, 255, 255, 0.95);
@@ -312,7 +312,7 @@
   /* Button Text Colors - 按鈕文字顏色 */
   --btn-text-on-primary: #ffffff;    /* 主要按鈕文字 */
   --btn-text-on-accent: #ffffff;     /* 強調按鈕文字 */
-  --btn-text-on-ghost: var(--color-text-primary);  /* Ghost 按鈕文字 */
+  --btn-text-on-ghost: var(--text-primary);  /* Ghost 按鈕文字 */
 
   /* Tag Colors（稍微深化以在亮色背景上可見） */
   --tag-color-purple: #7c3aed;
@@ -447,7 +447,7 @@ html {
 body {
   font-family: var(--font-primary);
   font-size: var(--font-size-base);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   background-color: var(--color-background);
   line-height: 1.5;
   min-height: 100vh;
@@ -492,9 +492,9 @@ input {
 /* ==========================================================================
    Utility Classes
    ========================================================================== */
-.text-primary { color: var(--color-text-primary); }
-.text-secondary { color: var(--color-text-secondary); }
-.text-muted { color: var(--color-text-muted); }
+.text-primary { color: var(--text-primary); }
+.text-secondary { color: var(--text-secondary); }
+.text-muted { color: var(--text-muted); }
 .text-accent { color: var(--color-accent); }
 
 .bg-primary { background-color: var(--color-primary); }
@@ -538,7 +538,7 @@ input {
 
 .btn-ghost {
   background-color: transparent;
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
 }
 
 .btn-ghost:hover {
@@ -548,7 +548,7 @@ input {
 
 .btn-secondary {
   background-color: var(--bg-surface);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   border: 1px solid var(--border-light);
 }
 
@@ -568,7 +568,7 @@ input {
 
 .btn-danger:disabled {
   background-color: var(--bg-surface);
-  color: var(--color-text-muted);
+  color: var(--text-muted);
   cursor: not-allowed;
   border: 1px solid var(--border-light);
 }
@@ -582,7 +582,7 @@ input {
   background-color: var(--bg-surface);
   border: 1px solid var(--color-gray-dark);
   border-radius: var(--radius-md);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   transition: all var(--transition-fast);
 }
 
@@ -593,7 +593,7 @@ input {
 }
 
 .input::placeholder {
-  color: var(--color-text-muted);
+  color: var(--text-muted);
 }
 
 /* ==========================================================================
@@ -708,7 +708,7 @@ input {
   background: none;
   padding: 0;
   font-size: var(--font-size-sm);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   border: none;
 }
 
@@ -717,7 +717,7 @@ input {
   margin: 1em 0;
   padding: 0.5em 1em;
   background-color: var(--md-blockquote-bg);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
 }
 
 .markdown-rendered table {
@@ -759,7 +759,7 @@ input {
   line-height: 1.6;
   white-space: pre-wrap;
   word-wrap: break-word;
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 
 .formatted-data .fd-string {

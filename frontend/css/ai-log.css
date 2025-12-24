@@ -51,7 +51,7 @@
 
 .ai-log-filter-label {
   font-size: 12px;
-  color: var(--text-tertiary);
+  color: var(--text-muted);
 }
 
 .ai-log-filter-select {
@@ -66,7 +66,7 @@
 
 .ai-log-filter-select option {
   background-color: var(--color-background);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 
 .ai-log-filter-select:focus {
@@ -129,7 +129,7 @@
 
 .ai-log-stat-label {
   font-size: 11px;
-  color: var(--text-tertiary);
+  color: var(--text-muted);
 }
 
 .ai-log-stat-card.success .ai-log-stat-value {
@@ -215,7 +215,7 @@
 .ai-log-tokens {
   font-family: 'JetBrains Mono', monospace;
   font-size: 11px;
-  color: var(--text-tertiary);
+  color: var(--text-muted);
 }
 
 .ai-log-empty {
@@ -224,7 +224,7 @@
   align-items: center;
   justify-content: center;
   height: 200px;
-  color: var(--text-tertiary);
+  color: var(--text-muted);
 }
 
 .ai-log-empty .icon {
@@ -258,7 +258,7 @@
 .ai-log-detail-close {
   background: none;
   border: none;
-  color: var(--text-tertiary);
+  color: var(--text-muted);
   cursor: pointer;
   padding: 4px;
 }
@@ -285,7 +285,7 @@
 .ai-log-detail-section-title {
   font-size: 11px;
   font-weight: 500;
-  color: var(--text-tertiary);
+  color: var(--text-muted);
   text-transform: uppercase;
   margin-bottom: 8px;
 }
@@ -318,7 +318,7 @@
   gap: 16px;
   padding-top: 8px;
   font-size: 11px;
-  color: var(--text-tertiary);
+  color: var(--text-muted);
 }
 
 /* 分頁 */

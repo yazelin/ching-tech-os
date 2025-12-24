@@ -9,7 +9,7 @@ import asyncio
 import logging
 from uuid import UUID
 
-from fastapi import APIRouter, Request, HTTPException, Header, BackgroundTasks
+from fastapi import APIRouter, Request, HTTPException, Header, BackgroundTasks, Depends
 from fastapi.responses import Response
 from linebot.v3.webhooks import (
     MessageEvent,
@@ -35,7 +35,11 @@ from ..models.linebot import (
     LineFileResponse,
     LineFileListResponse,
     ProjectBindingRequest,
+    BindingCodeResponse,
+    BindingStatusResponse,
 )
+from ..api.auth import get_current_session
+from ..models.auth import SessionData
 from ..services.linebot import (
     verify_signature,
     get_webhook_parser,
@@ -47,6 +51,7 @@ from ..services.linebot import (
     list_groups,
     list_messages,
     list_users,
+    list_users_with_binding,
     list_files,
     get_group_by_id,
     get_user_by_id,
@@ -59,6 +64,15 @@ from ..services.linebot import (
     get_or_create_user,
     get_group_profile,
     get_user_profile,
+    # 綁定與存取控制
+    generate_binding_code,
+    verify_binding_code,
+    unbind_line_user,
+    get_binding_status,
+    is_binding_code_format,
+    check_line_access,
+    update_group_settings,
+    reply_text,
 )
 from ..services.linebot_ai import handle_text_message
 
@@ -171,11 +185,27 @@ async def process_message_event(event: MessageEvent) -> None:
         message_type = "unknown"
         content = None
 
+    # 取得或建立用戶
+    user_profile = await get_user_profile(line_user_id)
+    user_uuid = await get_or_create_user(line_user_id, user_profile)
+
     # 取得群組 UUID（如果是群組訊息）
     group_uuid = None
     if line_group_id:
         group_profile = await get_group_profile(line_group_id)
         group_uuid = await get_or_create_group(line_group_id, group_profile)
+
+    # 檢查是否為綁定驗證碼（僅個人對話、文字訊息、6 位數字）
+    is_group = line_group_id is not None
+    if not is_group and message_type == "text" and content and await is_binding_code_format(content):
+        # 嘗試驗證綁定碼
+        success, reply_msg = await verify_binding_code(user_uuid, content)
+        if event.reply_token:
+            try:
+                await reply_text(event.reply_token, reply_msg)
+            except Exception as e:
+                logger.warning(f"回覆綁定訊息失敗: {e}")
+        return  # 不再繼續處理
 
     # 儲存訊息
     message_uuid = await save_message(
@@ -202,8 +232,34 @@ async def process_message_event(event: MessageEvent) -> None:
             duration=duration,
         )
 
-    # 如果是文字訊息，觸發 AI 處理
+    # 如果是文字訊息，進行存取控制檢查並觸發 AI 處理
     if message_type == "text" and content:
+        # 存取控制檢查
+        has_access, deny_reason = await check_line_access(user_uuid, group_uuid)
+
+        if not has_access:
+            if deny_reason == "user_not_bound":
+                # 個人對話：回覆提示訊息
+                if not is_group and event.reply_token:
+                    try:
+                        await reply_text(
+                            event.reply_token,
+                            "請先在 CTOS 系統綁定您的 Line 帳號才能使用此服務。\n\n"
+                            "步驟：\n"
+                            "1. 登入 CTOS 系統\n"
+                            "2. 進入 Line Bot 管理頁面\n"
+                            "3. 點擊「綁定 Line 帳號」產生驗證碼\n"
+                            "4. 將驗證碼發送給我完成綁定",
+                        )
+                    except Exception as e:
+                        logger.warning(f"回覆未綁定訊息失敗: {e}")
+                # 群組對話：靜默不回應
+            elif deny_reason == "group_not_allowed":
+                # 群組未開啟 AI 回應，靜默不回應
+                pass
+            return
+
+        # 通過存取控制，觸發 AI 處理
         await handle_text_message(
             message_id=message.id,
             message_uuid=message_uuid,
@@ -288,7 +344,6 @@ async def process_join_event(event: JoinEvent) -> None:
 
     if line_group_id:
         await handle_join_event(line_group_id)
-        logger.info(f"Bot 加入群組: {line_group_id}")
 
 
 async def process_leave_event(event: LeaveEvent) -> None:
@@ -298,7 +353,6 @@ async def process_leave_event(event: LeaveEvent) -> None:
 
     if line_group_id:
         await handle_leave_event(line_group_id)
-        logger.info(f"Bot 離開群組: {line_group_id}")
 
 
 async def process_follow_event(event: FollowEvent) -> None:
@@ -558,3 +612,87 @@ async def api_delete_file(file_id: UUID):
     if not success:
         raise HTTPException(status_code=404, detail="File not found")
     return {"status": "ok", "message": "檔案已刪除"}
+
+
+# ============================================================
+# Line 綁定 API
+# ============================================================
+
+
+@router.post("/binding/generate-code", response_model=BindingCodeResponse)
+async def api_generate_binding_code(session: SessionData = Depends(get_current_session)):
+    """產生 Line 綁定驗證碼
+
+    產生 6 位數字驗證碼，有效期 5 分鐘。
+    用戶需在 Line 私訊 Bot 發送此驗證碼來完成綁定。
+    """
+    code, expires_at = await generate_binding_code(session.user_id)
+    return BindingCodeResponse(code=code, expires_at=expires_at)
+
+
+@router.get("/binding/status", response_model=BindingStatusResponse)
+async def api_get_binding_status(session: SessionData = Depends(get_current_session)):
+    """查詢當前用戶的 Line 綁定狀態"""
+    status = await get_binding_status(session.user_id)
+    return BindingStatusResponse(**status)
+
+
+@router.delete("/binding")
+async def api_unbind_line(session: SessionData = Depends(get_current_session)):
+    """解除當前用戶的 Line 綁定"""
+    success = await unbind_line_user(session.user_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="未找到綁定記錄")
+    return {"status": "ok", "message": "已解除 Line 綁定"}
+
+
+# ============================================================
+# 群組設定 API（更新 allow_ai_response）
+# ============================================================
+
+
+@router.patch("/groups/{group_id}")
+async def api_update_group(
+    group_id: UUID,
+    update: LineGroupUpdate,
+    session: SessionData = Depends(get_current_session),
+):
+    """更新群組設定
+
+    可更新：
+    - allow_ai_response: 是否允許 AI 回應
+    - project_id: 綁定專案（使用 bind-project API）
+    """
+    # 檢查群組是否存在
+    group = await get_group_by_id(group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+
+    # 更新 allow_ai_response
+    if update.allow_ai_response is not None:
+        success = await update_group_settings(group_id, update.allow_ai_response)
+        if not success:
+            raise HTTPException(status_code=500, detail="更新失敗")
+
+    # 重新取得群組資訊
+    updated_group = await get_group_by_id(group_id)
+    return LineGroupResponse(**updated_group)
+
+
+# ============================================================
+# 用戶列表（含綁定狀態）
+# ============================================================
+
+
+@router.get("/users-with-binding", response_model=LineUserListResponse)
+async def api_list_users_with_binding(
+    limit: int = 50,
+    offset: int = 0,
+    session: SessionData = Depends(get_current_session),
+):
+    """列出 Line 用戶（包含 CTOS 帳號綁定狀態）"""
+    items, total = await list_users_with_binding(limit=limit, offset=offset)
+    return LineUserListResponse(
+        items=[LineUserResponse(**item) for item in items],
+        total=total,
+    )

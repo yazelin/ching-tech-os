@@ -79,14 +79,68 @@ const socketPath = basePath ? `${basePath}/socket.io/` : '/socket.io/';
 socket = io(BACKEND_URL, { path: socketPath, ... });
 ```
 
+**`window.open()`**：需要手動加 `API_BASE` ⚠️
+```javascript
+// ❌ 錯誤：直接使用 /api/... 路徑
+window.open(`${API_BASE}/${id}/download`, '_blank');
+
+// ✅ 正確：加上 window.API_BASE
+const basePath = window.API_BASE || '';
+window.open(`${basePath}${API_BASE}/${id}/download`, '_blank');
+```
+
+**`ImageViewerModule` / `TextViewerModule`**：自動處理，不需修改 ✅
+```javascript
+// 這些 viewer 會自動加上 base path，傳入 /api/... 開頭的路徑即可
+ImageViewerModule.open(`/api/knowledge/attachments/${path}`);
+TextViewerModule.open(`/api/knowledge/assets/${path}`, filename);
+```
+
 ### 檢查清單
 新增前端功能時，確認以下項目：
 - [ ] 新的 JS 檔案已加入 `index.html` 和 `login.html`
 - [ ] `<a href="/api/...">` 已加上 `${window.API_BASE || ''}`
 - [ ] `<img src="/api/...">` 已加上 `${window.API_BASE || ''}`
+- [ ] `window.open('/api/...')` 已加上 `${window.API_BASE || ''}`
 - [ ] 其他 HTML 屬性中的 `/api/` 路徑已處理
 
 ## CSS 樣式注意事項
+
+### CSS 變數命名規則（重要）
+**撰寫 CSS 前，必須先查看 `frontend/css/main.css` 中的變數定義**，使用正確的變數名稱。
+
+#### 命名慣例
+- **文字顏色**：`--text-*`（如 `--text-primary`、`--text-secondary`）
+- **背景顏色**：`--bg-*`（如 `--bg-surface`、`--bg-overlay`）
+- **語義化顏色**：`--color-*`（如 `--color-primary`、`--color-success`）
+
+常用變數對照：
+| 用途 | 正確變數名稱 |
+|------|-------------|
+| 主要文字 | `--text-primary` |
+| 次要文字 | `--text-secondary` |
+| 靜音文字 | `--text-muted` |
+| 主要顏色 | `--color-primary` |
+| 主要顏色 hover | `--color-primary-hover` |
+| 強調顏色 | `--color-accent` |
+| 成功 | `--color-success` |
+| 警告 | `--color-warning` |
+| 錯誤 | `--color-error` |
+| 背景 | `--color-background` |
+| 表面背景 | `--bg-surface` |
+| 深色表面 | `--bg-surface-dark` |
+| 更深表面 | `--bg-surface-darker` |
+| 遮罩 | `--bg-overlay-dark` |
+| 邊框（輕） | `--border-light` |
+| 邊框（中） | `--border-medium` |
+| 邊框（強） | `--border-strong` |
+| Modal 背景 | `--modal-bg` |
+| Modal 邊框 | `--modal-border` |
+
+**禁止**：
+- 不要使用錯誤的變數名稱（如 `--color-text-primary`，應為 `--text-primary`）
+- 不要硬編碼顏色值（如 `#1e1e2e`、`#4a9eff`）
+- 不要使用 fallback 值（如 `var(--color-error, #e53935)`）
 
 ### 下拉選單（Select/Dropdown）樣式
 **重要**：所有下拉選單必須同時為 `<select>` 和 `<option>` 元素定義樣式。
@@ -97,19 +151,18 @@ socket = io(BACKEND_URL, { path: socketPath, ... });
 .xxx-filter-select {
   background: var(--bg-surface);
   color: var(--text-primary);
-  /* ... 其他樣式 */
 }
 
 /* 重要：必須為 option 元素定義背景和文字顏色 */
 .xxx-filter-select option {
   background-color: var(--color-background);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 ```
 
 ### 模態框（Modal）遮罩
 - 模態框背景遮罩使用 `var(--bg-overlay-dark)` 變數
-- 模態框內容區塊需使用不透明的背景色（如 `#1e1e2e`），不要使用半透明的 `var(--bg-surface)`
+- 模態框內容區塊使用 `var(--modal-bg)` 變數
 - 所有 overlay 類別應使用 CSS 變數，避免硬編碼 rgba 值
 
 ## 文件規範

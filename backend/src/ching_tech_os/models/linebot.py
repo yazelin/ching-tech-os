@@ -39,6 +39,7 @@ class LineGroupUpdate(BaseModel):
     picture_url: str | None = None
     project_id: UUID | None = None
     is_active: bool | None = None
+    allow_ai_response: bool | None = None
 
 
 class LineGroupResponse(LineGroupBase):
@@ -50,6 +51,7 @@ class LineGroupResponse(LineGroupBase):
     project_id: UUID | None
     project_name: str | None = None
     is_active: bool
+    allow_ai_response: bool = False
     joined_at: datetime
     left_at: datetime | None
     created_at: datetime
@@ -102,6 +104,9 @@ class LineUserResponse(LineUserBase):
     is_friend: bool
     created_at: datetime
     updated_at: datetime
+    # 綁定狀態（來自 JOIN users）
+    bound_username: str | None = None
+    bound_display_name: str | None = None
 
 
 class LineUserListResponse(BaseModel):
@@ -241,3 +246,24 @@ class ProjectBindingRequest(BaseModel):
     """群組專案綁定請求"""
 
     project_id: UUID
+
+
+# ============================================================
+# Line Binding Models（用戶與 CTOS 帳號綁定）
+# ============================================================
+
+
+class BindingCodeResponse(BaseModel):
+    """綁定驗證碼回應"""
+
+    code: str
+    expires_at: datetime
+
+
+class BindingStatusResponse(BaseModel):
+    """綁定狀態回應"""
+
+    is_bound: bool
+    line_display_name: str | None = None
+    line_picture_url: str | None = None
+    bound_at: datetime | None = None

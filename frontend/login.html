@@ -13,6 +13,11 @@
   <link rel="stylesheet" href="css/login.css">
 </head>
 <body>
+  <!-- 主題切換按鈕 -->
+  <button id="themeToggle" class="theme-toggle-btn" title="切換主題">
+    <span class="icon" id="iconTheme"></span>
+  </button>
+
   <div class="login-container">
     <!-- Login Card -->
     <div class="login-card">
@@ -86,6 +91,22 @@
     document.getElementById('iconLock').innerHTML = getIcon('lock');
     document.getElementById('iconLogin').innerHTML = getIcon('login');
     document.getElementById('copyrightYear').textContent = new Date().getFullYear();
+
+    // 主題切換按鈕
+    const themeToggleBtn = document.getElementById('themeToggle');
+    const iconTheme = document.getElementById('iconTheme');
+
+    function updateThemeIcon() {
+      const theme = ThemeManager.getTheme();
+      iconTheme.innerHTML = theme === 'dark' ? getIcon('sun') : getIcon('moon');
+    }
+
+    updateThemeIcon();
+
+    themeToggleBtn.addEventListener('click', () => {
+      ThemeManager.toggleTheme();
+      updateThemeIcon();
+    });
   </script>
 </body>
 </html>

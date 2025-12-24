@@ -538,14 +538,20 @@ const KnowledgeBaseModule = (function() {
   /**
    * Render single attachment item
    */
+  function escapeHtmlAttr(str) {
+    return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
   function renderAttachmentItem(att, idx) {
     const isNas = att.path.startsWith('nas://');
     const filename = att.path.split('/').pop();
     const iconType = getAttachmentIconType(att.type, filename);
-    const description = att.description ? `<div class="kb-attachment-desc">${att.description}</div>` : '';
+    const escapedPath = escapeHtmlAttr(att.path);
+    const escapedDesc = escapeHtmlAttr(att.description || '');
+    const description = att.description ? `<div class="kb-attachment-desc">${escapeHtmlAttr(att.description)}</div>` : '';
 
     return `
-      <div class="kb-attachment-item" data-idx="${idx}" data-path="${att.path}" data-type="${att.type}" data-description="${att.description || ''}">
+      <div class="kb-attachment-item" data-idx="${idx}" data-path="${escapedPath}" data-type="${att.type}" data-description="${escapedDesc}">
         <div class="kb-attachment-icon ${iconType}">
           <span class="icon">${getIcon(getAttachmentIcon(iconType))}</span>
         </div>
@@ -790,7 +796,8 @@ const KnowledgeBaseModule = (function() {
    */
   function downloadAttachment(kbId, path) {
     const url = getAttachmentUrl(path);
-    window.open(url, '_blank');
+    const basePath = window.API_BASE || '';
+    window.open(`${basePath}${url}`, '_blank');
   }
 
   /**
@@ -800,13 +807,14 @@ const KnowledgeBaseModule = (function() {
     const url = getAttachmentUrl(path);
     const filename = path.split('/').pop();
     const ext = filename.split('.').pop().toLowerCase();
+    const basePath = window.API_BASE || '';
 
     // Image files
     if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(ext)) {
       if (typeof ImageViewerModule !== 'undefined') {
         ImageViewerModule.open(url);
       } else {
-        window.open(url, '_blank');
+        window.open(`${basePath}${url}`, '_blank');
       }
       return;
     }
@@ -816,13 +824,13 @@ const KnowledgeBaseModule = (function() {
       if (typeof TextViewerModule !== 'undefined') {
         TextViewerModule.open(url, filename);
       } else {
-        window.open(url, '_blank');
+        window.open(`${basePath}${url}`, '_blank');
       }
       return;
     }
 
     // Other files - just download
-    window.open(url, '_blank');
+    window.open(`${basePath}${url}`, '_blank');
   }
 
   /**
@@ -943,6 +951,7 @@ const KnowledgeBaseModule = (function() {
    */
   function getAttachmentUrl(path) {
     const isNas = path.startsWith('nas://');
+    // 不加 base path，由 ImageViewerModule/TextViewerModule 統一處理
 
     if (isNas) {
       // NAS path: nas://knowledge/attachments/kb-001/file.bin
@@ -951,9 +960,10 @@ const KnowledgeBaseModule = (function() {
       const nasPath = path.replace('nas://knowledge/', '');
       return `${API_BASE}/${nasPath}`;
     } else {
-      // Local path: ../assets/images/kb-001-file.txt
+      // Local path: ../assets/images/kb-001-file.png
+      // API endpoint: /api/knowledge/assets/images/{filename}
       const filename = path.split('/').pop();
-      return `/data/knowledge/assets/images/${filename}`;
+      return `${API_BASE}/assets/images/${filename}`;
     }
   }
 

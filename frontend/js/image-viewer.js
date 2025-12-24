@@ -185,8 +185,12 @@ const ImageViewerModule = (function() {
 
     // Determine the URL to fetch
     let fetchUrl;
-    if (currentPath.startsWith('/api/') || currentPath.startsWith('http://') || currentPath.startsWith('https://')) {
-      // Direct URL - use as is
+    const basePath = window.API_BASE || '';
+    if (currentPath.startsWith('/api/')) {
+      // API URL - add base path for sub-path deployment
+      fetchUrl = `${basePath}${currentPath}`;
+    } else if (currentPath.startsWith('http://') || currentPath.startsWith('https://')) {
+      // Absolute URL - use as is
       fetchUrl = currentPath;
     } else if (currentPath.startsWith('/data/')) {
       // Static file path - use directly without auth
@@ -194,7 +198,7 @@ const ImageViewerModule = (function() {
       return;
     } else {
       // NAS file path - use NAS API
-      fetchUrl = `/api/nas/file?path=${encodeURIComponent(currentPath)}`;
+      fetchUrl = `${basePath}/api/nas/file?path=${encodeURIComponent(currentPath)}`;
     }
 
     // Add authorization header via fetch and create blob URL

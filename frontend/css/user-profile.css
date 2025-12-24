@@ -64,7 +64,7 @@
 .user-profile-left .username {
   font-size: var(--font-size-base);
   font-weight: 600;
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   text-align: center;
   word-break: break-all;
 }
@@ -87,7 +87,7 @@
 
 .form-group label {
   font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
 }
 
 .form-group input {
@@ -95,7 +95,7 @@
   background-color: var(--bg-surface-dark);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-sm);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   font-size: var(--font-size-sm);
   transition: all var(--transition-fast);
 }
@@ -108,7 +108,7 @@
 
 .form-group input:read-only {
   background-color: var(--bg-surface);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   cursor: not-allowed;
 }
 
@@ -116,7 +116,7 @@
   padding: var(--spacing-xs) var(--spacing-sm);
   background-color: var(--bg-surface);
   border-radius: var(--radius-sm);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   font-size: var(--font-size-sm);
 }
 
@@ -163,7 +163,7 @@
   align-items: center;
   justify-content: center;
   padding: var(--spacing-xl);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
 }
 
 .user-profile-message {

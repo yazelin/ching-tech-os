@@ -31,7 +31,7 @@
   left: 10px;
   top: 50%;
   transform: translateY(-50%);
-  color: var(--color-text-muted);
+  color: var(--text-muted);
 }
 
 .pm-search-input {
@@ -40,7 +40,7 @@
   border: 1px solid var(--border-light);
   border-radius: 6px;
   background: var(--bg-surface);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   font-size: 13px;
 }
 
@@ -61,7 +61,7 @@
   height: 20px;
   border: none;
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--text-muted);
   cursor: pointer;
   border-radius: 50%;
 }
@@ -80,7 +80,7 @@
   border: 1px solid var(--border-light);
   border-radius: 6px;
   background: var(--bg-surface);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   font-size: 13px;
   cursor: pointer;
   appearance: none;
@@ -92,7 +92,7 @@
 /* 下拉選單 option 樣式 - 避免白色背景 */
 .pm-filter-select option {
   background-color: var(--color-background);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 
 .pm-toolbar-actions {
@@ -109,7 +109,7 @@
   border: 1px solid var(--border-light);
   border-radius: 6px;
   background: var(--bg-surface);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   font-size: 13px;
   cursor: pointer;
   transition: all 0.15s;
@@ -161,13 +161,13 @@
   padding: 12px 16px;
   font-size: 13px;
   font-weight: 500;
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   border-bottom: 1px solid var(--border-subtle);
 }
 
 .pm-list-count {
   font-weight: normal;
-  color: var(--color-text-muted);
+  color: var(--text-muted);
 }
 
 .pm-list {
@@ -202,7 +202,7 @@
 
 .pm-list-item-name {
   font-weight: 500;
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -212,13 +212,13 @@
   display: flex;
   gap: 8px;
   font-size: 11px;
-  color: var(--color-text-muted);
+  color: var(--text-muted);
   margin-bottom: 4px;
 }
 
 .pm-list-item-date {
   font-size: 11px;
-  color: var(--color-text-muted);
+  color: var(--text-muted);
 }
 
 /* Status badge */
@@ -283,7 +283,7 @@
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: var(--color-text-muted);
+  color: var(--text-muted);
   gap: 12px;
 }
 
@@ -318,7 +318,7 @@
   margin: 0;
   font-size: 20px;
   font-weight: 600;
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 
 .pm-content-actions {
@@ -342,7 +342,7 @@
   padding: 12px 16px;
   border: none;
   background: transparent;
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   font-size: 13px;
   cursor: pointer;
   border-bottom: 2px solid transparent;
@@ -350,7 +350,7 @@
 }
 
 .pm-tab:hover {
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   background: var(--hover-bg);
 }
 
@@ -381,13 +381,13 @@
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 
 .pm-empty-tab {
   text-align: center;
   padding: 40px;
-  color: var(--color-text-muted);
+  color: var(--text-muted);
 }
 
 /* Overview */
@@ -401,7 +401,7 @@
   margin: 0 0 12px 0;
   font-size: 14px;
   font-weight: 600;
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
 }
 
 .pm-info-grid {
@@ -418,19 +418,19 @@
 
 .pm-info-item label {
   font-size: 12px;
-  color: var(--color-text-muted);
+  color: var(--text-muted);
 }
 
 .pm-info-item span {
   font-size: 14px;
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 
 .pm-description {
   padding: 12px;
   background: var(--bg-surface-dark);
   border-radius: 8px;
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   line-height: 1.6;
   white-space: pre-wrap;
 }
@@ -470,17 +470,17 @@
 
 .pm-member-name {
   font-weight: 500;
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 
 .pm-member-role {
   font-size: 12px;
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
 }
 
 .pm-member-company {
   font-size: 12px;
-  color: var(--color-text-muted);
+  color: var(--text-muted);
 }
 
 .pm-member-contact {
@@ -488,7 +488,7 @@
   gap: 12px;
   margin-top: 4px;
   font-size: 12px;
-  color: var(--color-text-muted);
+  color: var(--text-muted);
 }
 
 .pm-member-contact .icon {
@@ -548,7 +548,7 @@
 
 .pm-meeting-month {
   font-size: 12px;
-  color: var(--color-text-muted);
+  color: var(--text-muted);
 }
 
 .pm-meeting-info {
@@ -558,7 +558,7 @@
 
 .pm-meeting-title {
   font-weight: 500;
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   margin-bottom: 4px;
 }
 
@@ -566,7 +566,7 @@
   display: flex;
   gap: 16px;
   font-size: 12px;
-  color: var(--color-text-muted);
+  color: var(--text-muted);
 }
 
 .pm-meeting-meta .icon {
@@ -583,7 +583,7 @@
   gap: 24px;
   margin-bottom: 16px;
   font-size: 14px;
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
 }
 
 .pm-meeting-detail-meta .icon {
@@ -687,7 +687,7 @@
   background: none;
   padding: 0;
   font-size: var(--font-size-sm);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   border: none;
 }
 
@@ -696,7 +696,7 @@
   margin: 1em 0;
   padding: 0.5em 1em;
   background-color: var(--md-blockquote-bg);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
 }
 
 .pm-meeting-content table {
@@ -782,7 +782,7 @@
 
 .pm-attachment-name {
   font-weight: 500;
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -792,13 +792,13 @@
   display: flex;
   gap: 8px;
   font-size: 12px;
-  color: var(--color-text-muted);
+  color: var(--text-muted);
   margin-top: 2px;
 }
 
 .pm-attachment-desc {
   font-size: 12px;
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   margin-top: 4px;
 }
 
@@ -874,12 +874,12 @@
 
 .pm-link-title {
   font-weight: 500;
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 
 .pm-link-url {
   font-size: 12px;
-  color: var(--color-text-muted);
+  color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -887,7 +887,7 @@
 
 .pm-link-desc {
   font-size: 12px;
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   margin-top: 4px;
 }
 
@@ -905,7 +905,7 @@
   justify-content: center;
   border: none;
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--text-muted);
   cursor: pointer;
   border-radius: 6px;
   transition: all 0.15s;
@@ -913,7 +913,7 @@
 
 .pm-icon-btn:hover {
   background: var(--hover-bg);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 
 .pm-icon-btn.danger:hover {
@@ -972,7 +972,7 @@
   justify-content: center;
   border: none;
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--text-muted);
   cursor: pointer;
   border-radius: 6px;
 }
@@ -1005,7 +1005,7 @@
   margin-bottom: 6px;
   font-size: 13px;
   font-weight: 500;
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
 }
 
 .pm-form-group input,
@@ -1016,7 +1016,7 @@
   border: 1px solid var(--border-light);
   border-radius: 6px;
   background: var(--bg-surface-dark);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   font-size: 14px;
 }
 
@@ -1030,7 +1030,7 @@
 /* 表單 select option 樣式 */
 .pm-form-group select option {
   background-color: var(--color-background);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 
 .pm-form-group textarea {
@@ -1041,7 +1041,7 @@
 .pm-form-hint {
   margin-top: 4px;
   font-size: 12px;
-  color: var(--color-text-muted);
+  color: var(--text-muted);
 }
 
 .pm-form-row {
@@ -1067,7 +1067,7 @@
   border: 1px solid var(--border-light);
   border-radius: 6px;
   background: var(--bg-surface);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   font-size: 14px;
   cursor: pointer;
   transition: all 0.15s;
@@ -1139,19 +1139,19 @@
 
 .pm-upload-dropzone .icon {
   font-size: 48px;
-  color: var(--color-text-muted);
+  color: var(--text-muted);
   margin-bottom: 12px;
 }
 
 .pm-upload-hint {
   font-size: 12px;
-  color: var(--color-text-muted);
+  color: var(--text-muted);
   margin-top: 4px;
 }
 
 .pm-upload-note {
   font-size: 11px;
-  color: var(--color-text-muted);
+  color: var(--text-muted);
   margin-top: 12px;
 }
 
@@ -1187,7 +1187,7 @@
   align-items: center;
   justify-content: center;
   padding: 40px;
-  color: var(--color-text-muted);
+  color: var(--text-muted);
   gap: 12px;
 }
 
@@ -1223,7 +1223,7 @@
   margin: 0;
   font-size: 14px;
   font-weight: 600;
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
 }
 
 /* 時間軸容器 */
@@ -1303,7 +1303,7 @@
 
 .pm-milestone-name {
   font-weight: 500;
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   margin-bottom: 4px;
 }
 
@@ -1312,7 +1312,7 @@
   flex-wrap: wrap;
   gap: 12px;
   font-size: 12px;
-  color: var(--color-text-muted);
+  color: var(--text-muted);
 }
 
 .pm-milestone-meta .icon {
@@ -1374,7 +1374,7 @@
 }
 
 .pm-milestone-date.planned {
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
 }
 
 .pm-milestone-date.actual {
@@ -1428,13 +1428,13 @@
   padding-top: 8px;
   border-top: 1px solid var(--border-subtle);
   font-size: 12px;
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
 }
 
 /* 空狀態 */
 .pm-milestones-empty {
   text-align: center;
   padding: 24px;
-  color: var(--color-text-muted);
+  color: var(--text-muted);
   font-size: 13px;
 }

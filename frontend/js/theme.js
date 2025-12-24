@@ -1,6 +1,7 @@
 /**
  * ChingTech OS - Theme Manager
- * 主題管理模組：處理主題切換、偏好儲存與載入
+ * 主題管理模組：處理主題切換與本地儲存
+ * 主題設定僅存在 localStorage，不同步到後端
  */
 
 const ThemeManager = (function () {
@@ -13,10 +14,10 @@ const ThemeManager = (function () {
   let isInitialized = false;
 
   /**
-   * 從 localStorage 取得快取的主題
+   * 從 localStorage 取得主題
    * @returns {string} 主題名稱
    */
-  function getCachedTheme() {
+  function getStoredTheme() {
     try {
       return localStorage.getItem(STORAGE_KEY) || DEFAULT_THEME;
     } catch (e) {
@@ -28,7 +29,7 @@ const ThemeManager = (function () {
    * 將主題儲存到 localStorage
    * @param {string} theme - 主題名稱
    */
-  function setCachedTheme(theme) {
+  function storeTheme(theme) {
     try {
       localStorage.setItem(STORAGE_KEY, theme);
     } catch (e) {
@@ -71,76 +72,39 @@ const ThemeManager = (function () {
   }
 
   /**
-   * 設定主題（僅本地套用，不儲存到後端）
+   * 設定主題
    * @param {string} theme - 主題名稱 ('dark' | 'light')
    */
   function setTheme(theme) {
     applyTheme(theme);
-    setCachedTheme(theme);
+    storeTheme(theme);
   }
 
   /**
-   * 從 API 載入使用者偏好
-   * @returns {Promise<string>} 使用者偏好的主題
+   * 切換主題（在 dark 和 light 之間切換）
+   * @returns {string} 切換後的主題名稱
    */
-  async function loadUserPreference() {
-    try {
-      const response = await ApiClient.get('/user/preferences');
-      const theme = response.theme || DEFAULT_THEME;
-      setTheme(theme);
-      return theme;
-    } catch (e) {
-      console.warn('無法載入使用者偏好，使用預設主題:', e);
-      return DEFAULT_THEME;
-    }
-  }
-
-  /**
-   * 儲存使用者偏好到 API
-   * @param {string} theme - 主題名稱
-   * @returns {Promise<boolean>} 是否儲存成功
-   */
-  async function saveUserPreference(theme) {
-    try {
-      await ApiClient.put('/user/preferences', { theme });
-      setCachedTheme(theme);
-      return true;
-    } catch (e) {
-      console.error('無法儲存使用者偏好:', e);
-      return false;
-    }
+  function toggleTheme() {
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    setTheme(newTheme);
+    return newTheme;
   }
 
   /**
    * 初始化主題系統
-   * 優先使用 localStorage 快取，避免頁面閃爍
+   * 從 localStorage 讀取並套用主題
    */
   function init() {
     if (isInitialized) return;
 
-    // 立即套用快取的主題（避免閃爍）
-    const cachedTheme = getCachedTheme();
-    applyTheme(cachedTheme);
+    // 立即套用儲存的主題（避免閃爍）
+    const storedTheme = getStoredTheme();
+    applyTheme(storedTheme);
 
     isInitialized = true;
   }
 
-  /**
-   * 初始化並同步使用者偏好
-   * 用於登入後載入使用者實際偏好
-   */
-  async function initWithUserPreference() {
-    init();
-
-    // 背景同步使用者偏好
-    try {
-      await loadUserPreference();
-    } catch (e) {
-      // 忽略錯誤，繼續使用快取主題
-    }
-  }
-
-  // 立即初始化（使用快取主題）
+  // 立即初始化
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
@@ -150,11 +114,9 @@ const ThemeManager = (function () {
   // 公開 API
   return {
     init,
-    initWithUserPreference,
     getTheme,
     setTheme,
-    loadUserPreference,
-    saveUserPreference,
+    toggleTheme,
     DEFAULT_THEME,
   };
 })();

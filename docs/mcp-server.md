@@ -1,6 +1,6 @@
 # MCP Server 說明
 
-擎添科技 OS 的 MCP (Model Context Protocol) Server，使用 FastMCP 實作。
+擎添工業 OS 的 MCP (Model Context Protocol) Server，使用 FastMCP 實作。
 
 ## 概述
 

@@ -135,12 +135,12 @@
 
 .terminal-reconnect-dialog h3 {
   margin-bottom: var(--spacing-md);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 
 .terminal-reconnect-dialog p {
   margin-bottom: var(--spacing-lg);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
 }
 
 .terminal-reconnect-actions {
@@ -155,7 +155,7 @@
 
 .terminal-reconnect-actions .btn-secondary {
   background-color: var(--border-light);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   border: 1px solid var(--border-strong);
 }
 
@@ -196,7 +196,7 @@
 
 .terminal-session-cwd {
   font-size: 13px;
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 
 .terminal-session-cwd code {
@@ -208,7 +208,7 @@
 
 .terminal-session-time {
   font-size: 11px;
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   margin-top: 2px;
 }
 

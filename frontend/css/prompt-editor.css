@@ -62,24 +62,27 @@
 }
 
 .prompt-category-tab {
-  padding: 4px 12px;
-  border-radius: 12px;
+  padding: 6px 12px;
+  border-radius: 4px;
   font-size: 12px;
   cursor: pointer;
   white-space: nowrap;
-  background: var(--bg-tertiary);
+  background: transparent;
   color: var(--text-secondary);
   border: none;
+  border-bottom: 2px solid transparent;
   transition: all 0.15s ease;
 }
 
 .prompt-category-tab:hover {
+  color: var(--text-primary);
   background: var(--hover-bg);
 }
 
 .prompt-category-tab.active {
-  background: var(--color-accent);
-  color: var(--text-on-accent);
+  color: var(--color-accent);
+  background: rgba(var(--color-accent-rgb), 0.1);
+  border-bottom-color: var(--color-accent);
 }
 
 /* Prompt 列表 */
@@ -105,7 +108,7 @@
 
 .prompt-list-item.active {
   background: var(--accent-bg-subtle);
-  border-left: 3px solid var(--color-accent);
+  border: 1px solid var(--accent-border);
 }
 
 .prompt-list-item.active .prompt-list-item-icon {
@@ -113,7 +116,7 @@
 }
 
 .prompt-list-item-icon {
-  color: var(--text-tertiary);
+  color: var(--text-muted);
 }
 
 .prompt-list-item-info {
@@ -131,7 +134,7 @@
 
 .prompt-list-item-category {
   font-size: 11px;
-  color: var(--text-tertiary);
+  color: var(--text-muted);
 }
 
 .prompt-list-empty {
@@ -140,7 +143,7 @@
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: var(--text-tertiary);
+  color: var(--text-muted);
   padding: 24px;
   text-align: center;
 }
@@ -219,7 +222,7 @@
 
 .prompt-form-select option {
   background-color: var(--color-background);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 
 .prompt-form-select:focus {
@@ -267,7 +270,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--text-tertiary);
+  color: var(--text-muted);
   font-size: 12px;
 }
 
@@ -283,7 +286,7 @@
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: var(--text-tertiary);
+  color: var(--text-muted);
   text-align: center;
 }
 
@@ -323,6 +326,6 @@
   padding: 2px 8px;
   background: var(--bg-surface);
   border-radius: 4px;
-  color: var(--text-tertiary);
+  color: var(--text-muted);
   font-size: 11px;
 }

@@ -68,7 +68,7 @@
   align-items: center;
   justify-content: center;
   padding: var(--spacing-xl);
-  color: var(--color-text-muted);
+  color: var(--text-muted);
   text-align: center;
 }
 
@@ -99,7 +99,7 @@
 
 .ai-chat-item-icon {
   font-size: 16px;
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   flex-shrink: 0;
 }
 
@@ -110,7 +110,7 @@
 .ai-chat-item-title {
   flex: 1;
   font-size: var(--font-size-sm);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -169,11 +169,11 @@
   align-items: center;
   gap: var(--spacing-xs);
   font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
 }
 
 .ai-model-name {
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   font-weight: 500;
 }
 
@@ -187,7 +187,7 @@
 .ai-prompt-selector label,
 .ai-agent-selector label {
   font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
 }
 
 .ai-prompt-select,
@@ -197,7 +197,7 @@
   padding: var(--spacing-xs) var(--spacing-sm);
   font-size: var(--font-size-sm);
   background-color: var(--border-subtle);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   border: 1px solid var(--color-gray-dark);
   border-radius: var(--radius-md);
 }
@@ -211,7 +211,7 @@
 .ai-prompt-select option,
 .ai-agent-select option {
   background-color: var(--color-background);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 
 .ai-token-info {
@@ -220,7 +220,7 @@
   gap: 2px;
   margin-left: auto;
   font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
+  color: var(--text-muted);
 }
 
 .ai-token-count {
@@ -267,9 +267,9 @@
    Summary Message
    ========================================================================== */
 .ai-message-summary {
-  background-color: rgba(var(--color-text-muted-rgb), 0.1);
-  border: 1px solid rgba(var(--color-text-muted-rgb), 0.2);
-  border-left: 3px solid var(--color-text-muted);
+  background-color: rgba(var(--text-muted-rgb), 0.1);
+  border: 1px solid rgba(var(--text-muted-rgb), 0.2);
+  border-left: 3px solid var(--text-muted);
 }
 
 .ai-message-summary .ai-message-content {
@@ -277,13 +277,13 @@
 }
 
 .ai-message-summary .ai-message-role {
-  color: var(--color-text-muted);
+  color: var(--text-muted);
   font-style: italic;
 }
 
 .ai-message-summary .ai-message-text {
   font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
 }
 
 /* ==========================================================================
@@ -330,7 +330,7 @@
 }
 
 .ai-welcome p {
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
 }
 
 /* Message Item */
@@ -380,13 +380,13 @@
 .ai-message-role {
   font-size: var(--font-size-sm);
   font-weight: 600;
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   margin-bottom: var(--spacing-xs);
 }
 
 .ai-message-text {
   font-size: var(--font-size-base);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   line-height: 1.6;
   word-wrap: break-word;
   user-select: text;

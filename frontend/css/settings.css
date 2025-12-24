@@ -27,14 +27,14 @@
   gap: var(--spacing-sm);
   padding: var(--spacing-sm) var(--spacing-md);
   border-radius: var(--radius-md);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
 .settings-nav-item:hover {
   background-color: var(--hover-bg);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 
 .settings-nav-item.active {
@@ -64,7 +64,7 @@
 .settings-section-title {
   font-size: var(--font-size-xl);
   font-weight: 600;
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   margin-bottom: var(--spacing-lg);
 }
 
@@ -75,7 +75,7 @@
 .settings-group-title {
   font-size: var(--font-size-sm);
   font-weight: 600;
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin-bottom: var(--spacing-md);
@@ -181,7 +181,7 @@
 
 .theme-card-name {
   font-weight: 500;
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 
 .theme-card-check {
@@ -221,7 +221,7 @@
 .preview-panel-title {
   font-size: var(--font-size-base);
   font-weight: 600;
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   margin-bottom: var(--spacing-md);
 }
 
@@ -240,7 +240,7 @@
 
 .preview-element-label {
   font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
 }
 
 /* Preview badges */

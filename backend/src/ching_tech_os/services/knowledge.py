@@ -738,7 +738,7 @@ def get_version(kb_id: str, commit: str) -> VersionResponse:
         commit: Git commit hash
 
     Returns:
-        該版本的內容
+        該版本的內容（不含 frontmatter）
     """
     file_path = _find_knowledge_file(kb_id)
     if not file_path:
@@ -759,7 +759,9 @@ def get_version(kb_id: str, commit: str) -> VersionResponse:
         if result.returncode != 0:
             raise KnowledgeError(f"無法取得版本 {commit}")
 
-        return VersionResponse(id=kb_id, commit=commit, content=result.stdout)
+        # 解析 frontmatter，只回傳內容部分
+        _, content = _parse_front_matter(result.stdout)
+        return VersionResponse(id=kb_id, commit=commit, content=content)
 
     except subprocess.TimeoutExpired:
         raise KnowledgeError("取得版本內容逾時")

@@ -20,7 +20,7 @@
   align-items: center;
   justify-content: center;
   gap: var(--spacing-md);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   font-size: var(--font-size-md);
   z-index: 1;
 }
@@ -36,7 +36,7 @@
 
 .code-editor-loading small {
   font-size: var(--font-size-sm);
-  color: var(--color-text-muted);
+  color: var(--text-muted);
 }
 
 @keyframes spin {

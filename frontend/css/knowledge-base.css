@@ -74,7 +74,7 @@
   align-items: center;
   justify-content: center;
   padding-left: var(--spacing-sm);
-  color: var(--color-text-muted);
+  color: var(--text-muted);
 }
 
 .kb-search-icon .icon svg {
@@ -88,12 +88,12 @@
   border: none;
   padding: var(--spacing-sm);
   font-size: var(--font-size-sm);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   outline: none;
 }
 
 .kb-search-input::placeholder {
-  color: var(--color-text-muted);
+  color: var(--text-muted);
 }
 
 .kb-search-clear {
@@ -104,14 +104,14 @@
   height: 28px;
   margin-right: 4px;
   border-radius: var(--radius-sm);
-  color: var(--color-text-muted);
+  color: var(--text-muted);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
 .kb-search-clear:hover {
   background-color: var(--hover-bg);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 
 .kb-search-clear .icon svg {
@@ -137,7 +137,7 @@
   border: 1px solid var(--border-light);
   border-radius: var(--radius-sm);
   font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   cursor: pointer;
   appearance: none;
   outline: none;
@@ -154,7 +154,7 @@
 
 .kb-filter-select option {
   background-color: var(--color-background);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 
 /* Toolbar Actions */
@@ -172,7 +172,7 @@
   padding: var(--spacing-xs) var(--spacing-sm);
   border-radius: var(--radius-sm);
   font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   transition: all var(--transition-fast);
   cursor: pointer;
   border: none;
@@ -181,7 +181,7 @@
 
 .kb-action-btn:hover {
   background-color: var(--hover-bg);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 
 .kb-action-btn.primary {
@@ -228,11 +228,11 @@
   background-color: var(--bg-surface-dark);
   border-bottom: 1px solid var(--border-subtle);
   font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
 }
 
 .kb-list-count {
-  color: var(--color-text-muted);
+  color: var(--text-muted);
 }
 
 .kb-list {
@@ -266,7 +266,7 @@
 .kb-list-item-title {
   font-size: var(--font-size-sm);
   font-weight: 500;
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -284,7 +284,7 @@
   align-items: center;
   gap: var(--spacing-sm);
   font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
+  color: var(--text-muted);
 }
 
 .kb-list-item-tags {
@@ -295,7 +295,7 @@
 
 .kb-list-item-snippet {
   font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -339,7 +339,7 @@
   align-items: center;
   justify-content: center;
   height: 200px;
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   font-size: var(--font-size-sm);
   gap: var(--spacing-sm);
   padding: var(--spacing-md);
@@ -415,7 +415,7 @@
 .kb-content-title {
   font-size: var(--font-size-lg);
   font-weight: 600;
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   margin-bottom: var(--spacing-xs);
 }
 
@@ -424,7 +424,7 @@
   flex-wrap: wrap;
   gap: var(--spacing-sm);
   font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
+  color: var(--text-muted);
 }
 
 .kb-content-meta-item {
@@ -463,7 +463,7 @@
 .kb-markdown {
   font-size: var(--font-size-sm);
   line-height: 1.7;
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 
 .kb-markdown h1,
@@ -472,7 +472,7 @@
 .kb-markdown h4,
 .kb-markdown h5,
 .kb-markdown h6 {
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   margin-top: 1.5em;
   margin-bottom: 0.5em;
   font-weight: 600;
@@ -538,7 +538,7 @@
   background: none;
   padding: 0;
   font-size: var(--font-size-sm);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 
 .kb-markdown blockquote {
@@ -546,7 +546,7 @@
   margin: 1em 0;
   padding: 0.5em 1em;
   background-color: var(--bg-surface-dark);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
 }
 
 .kb-markdown table {
@@ -586,7 +586,7 @@
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   font-size: var(--font-size-sm);
   text-align: center;
   padding: var(--spacing-lg);
@@ -670,7 +670,7 @@
   border-radius: var(--radius-sm);
   font-size: var(--font-size-md);
   font-weight: 600;
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   outline: none;
   transition: border-color var(--transition-fast);
 }
@@ -694,7 +694,7 @@
 
 .kb-editor-label {
   font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
+  color: var(--text-muted);
 }
 
 .kb-editor-select {
@@ -708,7 +708,7 @@
   border: 1px solid var(--border-light);
   border-radius: var(--radius-sm);
   font-size: var(--font-size-sm);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   outline: none;
   appearance: none;
   -webkit-appearance: none;
@@ -725,7 +725,7 @@
 
 .kb-editor-select option {
   background-color: var(--color-background);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 
 .kb-editor-body {
@@ -744,13 +744,13 @@
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
   line-height: 1.6;
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   resize: none;
   outline: none;
 }
 
 .kb-editor-textarea::placeholder {
-  color: var(--color-text-muted);
+  color: var(--text-muted);
 }
 
 .kb-editor-footer {
@@ -795,7 +795,7 @@
 .kb-history-title {
   font-size: var(--font-size-sm);
   font-weight: 600;
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 
 .kb-history-close {
@@ -805,14 +805,14 @@
   width: 28px;
   height: 28px;
   border-radius: var(--radius-sm);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
 .kb-history-close:hover {
   background-color: var(--hover-bg);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 
 .kb-history-list {
@@ -844,7 +844,7 @@
 
 .kb-history-message {
   font-size: var(--font-size-sm);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   margin-bottom: 4px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -853,7 +853,7 @@
 
 .kb-history-meta {
   font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
+  color: var(--text-muted);
 }
 
 /* ==========================================================================
@@ -895,7 +895,7 @@
 .kb-dialog-title {
   font-size: var(--font-size-md);
   font-weight: 500;
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 
 .kb-dialog-close {
@@ -905,14 +905,14 @@
   width: 28px;
   height: 28px;
   border-radius: var(--radius-sm);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
 .kb-dialog-close:hover {
   background-color: var(--hover-bg);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 
 .kb-dialog-body {
@@ -940,13 +940,13 @@
 
 .kb-dialog-btn-cancel {
   background-color: transparent;
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   border: 1px solid var(--border-strong);
 }
 
 .kb-dialog-btn-cancel:hover {
   background-color: var(--hover-bg);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 
 .kb-dialog-btn-primary {
@@ -992,7 +992,7 @@
   gap: var(--spacing-xs);
   font-size: var(--font-size-sm);
   font-weight: 600;
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
 }
 
 .kb-attachments-title .icon {
@@ -1002,7 +1002,7 @@
 
 .kb-attachments-count {
   font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
+  color: var(--text-muted);
   font-weight: normal;
 }
 
@@ -1015,7 +1015,7 @@
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
@@ -1060,7 +1060,7 @@
   height: 32px;
   border-radius: var(--radius-sm);
   background-color: var(--border-light);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
 }
 
 .kb-attachment-icon .icon {
@@ -1087,7 +1087,7 @@
 
 .kb-attachment-name {
   font-size: var(--font-size-sm);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1098,7 +1098,7 @@
   align-items: center;
   gap: var(--spacing-sm);
   font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
+  color: var(--text-muted);
 }
 
 .kb-attachment-location {
@@ -1142,14 +1142,14 @@
   border-radius: var(--radius-xs);
   background-color: transparent;
   border: none;
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
 .kb-attachment-action:hover {
   background-color: var(--hover-bg);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 
 .kb-attachment-action .icon {
@@ -1169,7 +1169,7 @@
   border: 2px dashed var(--border-strong);
   border-radius: var(--radius-md);
   background-color: var(--bg-surface);
-  color: var(--color-text-muted);
+  color: var(--text-muted);
   transition: all var(--transition-fast);
 }
 
@@ -1195,7 +1195,7 @@
 
 .kb-upload-dropzone-hint {
   font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
+  color: var(--text-muted);
 }
 
 /* Upload Progress */
@@ -1230,7 +1230,7 @@
 
 .kb-upload-progress-text {
   font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
+  color: var(--text-muted);
   min-width: 40px;
   text-align: right;
 }
@@ -1239,14 +1239,14 @@
 .kb-attachments-empty {
   padding: var(--spacing-md);
   text-align: center;
-  color: var(--color-text-muted);
+  color: var(--text-muted);
   font-size: var(--font-size-sm);
 }
 
 /* Attachment description */
 .kb-attachment-desc {
   font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   margin-top: 2px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1296,7 +1296,7 @@
 .kb-attachment-edit-close {
   background: none;
   border: none;
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   cursor: pointer;
   padding: var(--spacing-xs);
   border-radius: var(--radius-sm);
@@ -1325,7 +1325,7 @@
 
 .kb-attachment-edit-field label {
   font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
 }
 
 .kb-attachment-edit-footer {
@@ -1377,7 +1377,7 @@
 .kb-upload-modal-close {
   background: none;
   border: none;
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   cursor: pointer;
   padding: var(--spacing-xs);
   border-radius: var(--radius-sm);
@@ -1417,25 +1417,25 @@
 .kb-upload-modal-body .kb-upload-dropzone .icon svg {
   width: 48px;
   height: 48px;
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   margin-bottom: var(--spacing-md);
 }
 
 .kb-upload-modal-body .kb-upload-dropzone-text {
   font-size: var(--font-size-md);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   font-weight: 500;
   margin-bottom: var(--spacing-xs);
 }
 
 .kb-upload-modal-body .kb-upload-dropzone-hint {
   font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
 }
 
 .kb-upload-modal-body .kb-upload-dropzone-note {
   font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   opacity: 0.7;
   margin-top: var(--spacing-sm);
 }

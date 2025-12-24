@@ -13,7 +13,7 @@
 .linebot-tabs {
     display: flex;
     gap: 8px;
-    border-bottom: 1px solid var(--border-default);
+    border-bottom: 1px solid var(--border-light);
     padding-bottom: 8px;
 }
 
@@ -29,13 +29,13 @@
 
 .linebot-tab:hover {
     color: var(--text-primary);
-    background: var(--bg-surface-hover);
+    background: var(--bg-surface-dark);
 }
 
 .linebot-tab.active {
-    color: var(--accent-primary);
+    color: var(--color-primary);
     background: var(--bg-surface);
-    border-bottom: 2px solid var(--accent-primary);
+    border-bottom: 2px solid var(--color-primary);
 }
 
 /* 內容區域 */
@@ -72,27 +72,27 @@
     gap: 12px;
     padding: 12px;
     background: var(--bg-surface);
-    border: 1px solid var(--border-default);
+    border: 1px solid var(--border-light);
     border-radius: 8px;
     cursor: pointer;
     transition: all 0.2s;
 }
 
 .linebot-group-card:hover {
-    background: var(--bg-surface-hover);
-    border-color: var(--accent-primary);
+    background: var(--bg-surface-dark);
+    border-color: var(--color-primary);
 }
 
 .linebot-group-card.selected {
-    border-color: var(--accent-primary);
-    box-shadow: 0 0 0 2px var(--accent-primary-transparent);
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px var(--accent-bg-subtle);
 }
 
 .linebot-group-avatar {
     width: 48px;
     height: 48px;
     border-radius: 50%;
-    background: var(--bg-elevated);
+    background: var(--bg-surface-dark);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -162,14 +162,14 @@
     align-items: center;
     gap: 16px;
     padding-bottom: 16px;
-    border-bottom: 1px solid var(--border-default);
+    border-bottom: 1px solid var(--border-light);
 }
 
 .linebot-detail-avatar {
     width: 64px;
     height: 64px;
     border-radius: 50%;
-    background: var(--bg-elevated);
+    background: var(--bg-surface-dark);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -199,7 +199,7 @@
 .linebot-project-binding {
     padding: 16px;
     background: var(--bg-surface);
-    border: 1px solid var(--border-default);
+    border: 1px solid var(--border-light);
     border-radius: 8px;
 }
 
@@ -212,8 +212,8 @@
 .linebot-project-select {
     width: 100%;
     padding: 8px 12px;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border-default);
+    background: var(--bg-surface-dark);
+    border: 1px solid var(--border-light);
     border-radius: 4px;
     color: var(--text-primary);
     font-size: 14px;
@@ -221,7 +221,7 @@
 
 .linebot-project-select option {
     background-color: var(--color-background);
-    color: var(--color-text-primary);
+    color: var(--text-primary);
 }
 
 /* 訊息列表 */
@@ -242,7 +242,7 @@
 .linebot-filter-select {
     padding: 6px 12px;
     background: var(--bg-surface);
-    border: 1px solid var(--border-default);
+    border: 1px solid var(--border-light);
     border-radius: 4px;
     color: var(--text-primary);
     font-size: 13px;
@@ -250,10 +250,11 @@
 
 .linebot-filter-select option {
     background-color: var(--color-background);
-    color: var(--color-text-primary);
+    color: var(--text-primary);
 }
 
-.linebot-messages-list {
+.linebot-messages-list,
+.linebot-group-messages-list {
     flex: 1;
     overflow-y: auto;
     display: flex;
@@ -270,14 +271,14 @@
 }
 
 .linebot-message.from-bot {
-    background: var(--accent-primary-transparent);
+    background: var(--accent-bg-subtle);
 }
 
 .linebot-message-avatar {
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    background: var(--bg-elevated);
+    background: var(--bg-surface-dark);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -313,7 +314,7 @@
 
 .linebot-message-time {
     font-size: 11px;
-    color: var(--text-tertiary);
+    color: var(--text-muted);
 }
 
 .linebot-message-text {
@@ -344,7 +345,7 @@
     gap: 12px;
     padding: 12px;
     background: var(--bg-surface);
-    border: 1px solid var(--border-default);
+    border: 1px solid var(--border-light);
     border-radius: 8px;
 }
 
@@ -352,7 +353,7 @@
     width: 40px;
     height: 40px;
     border-radius: 50%;
-    background: var(--bg-elevated);
+    background: var(--bg-surface-dark);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -395,7 +396,7 @@
 .linebot-pagination button {
     padding: 6px 12px;
     background: var(--bg-surface);
-    border: 1px solid var(--border-default);
+    border: 1px solid var(--border-light);
     border-radius: 4px;
     color: var(--text-primary);
     cursor: pointer;
@@ -403,8 +404,8 @@
 }
 
 .linebot-pagination button:hover:not(:disabled) {
-    background: var(--bg-surface-hover);
-    border-color: var(--accent-primary);
+    background: var(--bg-surface-dark);
+    border-color: var(--color-primary);
 }
 
 .linebot-pagination button:disabled {
@@ -496,21 +497,21 @@
 
 .linebot-file-card {
     background: var(--bg-surface);
-    border: 1px solid var(--border-default);
+    border: 1px solid var(--border-light);
     border-radius: 8px;
     overflow: hidden;
     transition: all 0.2s;
 }
 
 .linebot-file-card:hover {
-    border-color: var(--accent-primary);
+    border-color: var(--color-primary);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .linebot-file-preview {
     width: 100%;
     height: 120px;
-    background: var(--bg-elevated);
+    background: var(--bg-surface-dark);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -552,12 +553,12 @@
 
 .linebot-file-date {
     font-size: 11px;
-    color: var(--text-tertiary);
+    color: var(--text-muted);
 }
 
 .linebot-file-actions {
     padding: 8px 10px;
-    border-top: 1px solid var(--border-default);
+    border-top: 1px solid var(--border-light);
     display: flex;
     justify-content: flex-end;
     gap: 8px;
@@ -572,7 +573,7 @@
 }
 
 .linebot-file-download:hover {
-    background: var(--bg-surface-hover);
+    background: var(--bg-surface-dark);
 }
 
 .linebot-file-unavailable {
@@ -594,6 +595,307 @@
     background: var(--bg-danger-subtle, rgba(255, 100, 100, 0.2));
 }
 
+/* ============================================================
+   綁定狀態
+   ============================================================ */
+
+.linebot-binding-content {
+    padding: 24px;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.linebot-binding-status {
+    display: flex;
+    align-items: flex-start;
+    gap: 20px;
+    padding: 24px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-light);
+    border-radius: 12px;
+}
+
+.linebot-binding-status.bound {
+    border-color: var(--color-success);
+    background: rgba(0, 200, 100, 0.05);
+}
+
+.linebot-binding-icon {
+    font-size: 48px;
+    line-height: 1;
+}
+
+.linebot-binding-info {
+    flex: 1;
+}
+
+.linebot-binding-label {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.linebot-binding-detail {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.linebot-binding-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.linebot-binding-time {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.linebot-binding-instruction {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+}
+
+.linebot-binding-instruction ol {
+    margin: 12px 0 0 20px;
+    padding: 0;
+}
+
+.linebot-binding-instruction li {
+    margin-bottom: 6px;
+}
+
+/* 按鈕樣式 */
+.linebot-btn {
+    padding: 10px 20px;
+    border: 1px solid var(--border-light);
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--bg-surface);
+    color: var(--text-primary);
+}
+
+.linebot-btn:hover {
+    background: var(--bg-surface-dark);
+    border-color: var(--text-secondary);
+}
+
+.linebot-btn-primary {
+    background: var(--color-primary);
+    color: white;
+    border-color: var(--color-primary);
+}
+
+.linebot-btn-primary:hover {
+    background: var(--color-primary-hover);
+    border-color: var(--color-primary-hover);
+}
+
+.linebot-btn-danger {
+    background: var(--color-error);
+    color: white;
+    border-color: var(--color-error);
+}
+
+.linebot-btn-danger:hover {
+    background: var(--color-error);
+    border-color: var(--color-error);
+    opacity: 0.9;
+}
+
+/* 彈窗 */
+.linebot-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--bg-overlay-dark, rgba(0, 0, 0, 0.6));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.linebot-modal {
+    background: var(--modal-bg);
+    border: 1px solid var(--modal-border);
+    border-radius: 12px;
+    width: 100%;
+    max-width: 400px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.linebot-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-light);
+}
+
+.linebot-modal-header h3 {
+    margin: 0;
+    font-size: 16px;
+    color: var(--text-primary);
+}
+
+.linebot-modal-close {
+    background: none;
+    border: none;
+    font-size: 20px;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.linebot-modal-close:hover {
+    color: var(--text-primary);
+}
+
+.linebot-modal-body {
+    padding: 24px 20px;
+    text-align: center;
+}
+
+.linebot-binding-code-display {
+    font-size: 48px;
+    font-weight: 700;
+    letter-spacing: 8px;
+    color: var(--color-primary);
+    background: var(--bg-surface-dark);
+    padding: 20px 32px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    font-family: monospace;
+}
+
+.linebot-modal-body p {
+    margin: 8px 0;
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+.linebot-binding-expires {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.linebot-binding-status-hint {
+    font-size: 13px;
+    color: var(--color-warning);
+    margin-top: 12px;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.linebot-modal-footer {
+    display: flex;
+    gap: 12px;
+    padding: 16px 20px;
+    border-top: 1px solid var(--border-light);
+    justify-content: flex-end;
+}
+
+/* ============================================================
+   群組 AI 開關
+   ============================================================ */
+
+.linebot-group-ai-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.linebot-toggle {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+    cursor: pointer;
+}
+
+.linebot-toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.linebot-toggle-slider {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(255, 255, 255, 0.2);
+    border-radius: 24px;
+    transition: 0.3s;
+}
+
+.linebot-toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    background-color: white;
+    border-radius: 50%;
+    transition: 0.3s;
+}
+
+.linebot-toggle input:checked + .linebot-toggle-slider {
+    background-color: var(--color-success);
+}
+
+.linebot-toggle input:checked + .linebot-toggle-slider:before {
+    left: 24px;
+}
+
+.linebot-ai-toggle-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+/* ============================================================
+   用戶綁定狀態標籤
+   ============================================================ */
+
+.linebot-user-binding {
+    margin-top: 4px;
+}
+
+.linebot-binding-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.linebot-binding-badge.bound {
+    background: rgba(0, 200, 100, 0.15);
+    color: var(--color-success);
+}
+
+.linebot-binding-badge.unbound {
+    background: rgba(255, 100, 100, 0.15);
+    color: var(--text-muted);
+}
+
 /* 響應式 */
 @media (max-width: 768px) {
     .linebot-split-layout {
@@ -607,5 +909,14 @@
 
     .linebot-files-grid {
         grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    }
+
+    .linebot-binding-status {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .linebot-binding-detail {
+        justify-content: center;
     }
 }

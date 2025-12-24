@@ -81,7 +81,7 @@
 .window-title {
   font-size: var(--font-size-sm);
   font-weight: 500;
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -104,14 +104,14 @@
   width: 28px;
   height: 28px;
   border-radius: var(--radius-sm);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   transition: all var(--transition-fast);
   cursor: pointer;
 }
 
 .window-btn:hover {
   background-color: var(--hover-bg);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 
 .window-btn-close:hover {

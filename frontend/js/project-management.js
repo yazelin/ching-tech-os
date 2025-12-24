@@ -1079,7 +1079,8 @@ const ProjectManagementModule = (function() {
     const att = selectedProject.attachments.find(a => a.id === attachmentId);
     if (!att) return;
 
-    const url = `${API_BASE}/${selectedProject.id}/attachments/${attachmentId}/preview`;
+    const basePath = window.API_BASE || '';
+    const url = `${basePath}${API_BASE}/${selectedProject.id}/attachments/${attachmentId}/preview`;
 
     if (att.file_type === 'image') {
       if (typeof ImageViewerModule !== 'undefined') {
@@ -1096,7 +1097,8 @@ const ProjectManagementModule = (function() {
   }
 
   function downloadAttachment(attachmentId) {
-    window.open(`${API_BASE}/${selectedProject.id}/attachments/${attachmentId}/download`, '_blank');
+    const basePath = window.API_BASE || '';
+    window.open(`${basePath}${API_BASE}/${selectedProject.id}/attachments/${attachmentId}/download`, '_blank');
   }
 
   async function confirmDeleteAttachment(attachmentId) {

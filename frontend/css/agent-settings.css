@@ -75,7 +75,7 @@
 
 .agent-list-item.active {
   background: var(--accent-bg-subtle);
-  border-left: 3px solid var(--color-accent);
+  border: 1px solid var(--accent-border);
 }
 
 .agent-list-item-status {
@@ -90,7 +90,7 @@
 }
 
 .agent-list-item-status.inactive {
-  background: var(--text-tertiary);
+  background: var(--text-muted);
 }
 
 .agent-list-item-info {
@@ -108,7 +108,7 @@
 
 .agent-list-item-model {
   font-size: 11px;
-  color: var(--text-tertiary);
+  color: var(--text-muted);
 }
 
 .agent-list-empty {
@@ -117,7 +117,7 @@
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: var(--text-tertiary);
+  color: var(--text-muted);
   padding: 24px;
   text-align: center;
 }
@@ -151,7 +151,7 @@
 .agent-form-section-title {
   font-size: 12px;
   font-weight: 600;
-  color: var(--text-tertiary);
+  color: var(--text-muted);
   text-transform: uppercase;
   margin-bottom: 12px;
   padding-bottom: 8px;
@@ -206,7 +206,7 @@
 
 .agent-form-select option {
   background-color: var(--color-background);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 
 .agent-form-select:focus {
@@ -312,7 +312,7 @@
 
 .agent-tool-desc {
   font-size: 11px;
-  color: var(--text-tertiary);
+  color: var(--text-muted);
   margin-left: auto;
 }
 
@@ -375,7 +375,7 @@
 }
 
 .agent-test-result.loading {
-  color: var(--text-tertiary);
+  color: var(--text-muted);
   font-style: italic;
 }
 
@@ -393,7 +393,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--text-tertiary);
+  color: var(--text-muted);
   font-size: 12px;
 }
 
@@ -409,7 +409,7 @@
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: var(--text-tertiary);
+  color: var(--text-muted);
   text-align: center;
 }
 

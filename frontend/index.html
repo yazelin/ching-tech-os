@@ -132,8 +132,15 @@
   <script>
     // Initialize desktop when DOM is ready
     document.addEventListener('DOMContentLoaded', async function() {
-      // Check if logged in
+      // 先檢查本地 session
       if (!LoginModule.isLoggedIn()) {
+        window.location.href = 'login.html';
+        return;
+      }
+
+      // 與後端驗證 session 是否仍有效
+      const isValid = await LoginModule.validateSession();
+      if (!isValid) {
         window.location.href = 'login.html';
         return;
       }
@@ -144,11 +151,6 @@
       DesktopModule.init();
       TaskbarModule.init();
       SocketClient.connect();
-
-      // 載入使用者主題偏好（背景執行）
-      if (typeof ThemeManager !== 'undefined') {
-        ThemeManager.initWithUserPreference();
-      }
     });
   </script>
 </body>

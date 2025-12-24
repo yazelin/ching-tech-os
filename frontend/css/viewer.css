@@ -29,14 +29,14 @@
   width: 36px;
   height: 36px;
   border-radius: var(--radius-sm);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   transition: all var(--transition-fast);
   cursor: pointer;
 }
 
 .viewer-toolbar-btn:hover:not(:disabled) {
   background-color: var(--hover-bg);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 
 .viewer-toolbar-btn:disabled {
@@ -58,7 +58,7 @@
 
 .viewer-zoom-level {
   font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   min-width: 50px;
   text-align: center;
 }
@@ -79,7 +79,7 @@
   background-color: var(--bg-surface-dark);
   border-top: 1px solid var(--border-subtle);
   font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
 }
 
 /* ==========================================================================
@@ -114,7 +114,7 @@
   flex-direction: column;
   align-items: center;
   gap: var(--spacing-sm);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
 }
 
 .image-viewer-loading .icon svg {
@@ -156,7 +156,7 @@
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
   line-height: 1.6;
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   white-space: pre-wrap;
   word-break: break-word;
   width: 100%;
@@ -170,7 +170,7 @@
   justify-content: center;
   height: 100%;
   gap: var(--spacing-sm);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
 }
 
 .text-viewer-loading .icon svg {
@@ -211,7 +211,7 @@
   margin-right: 1em;
   padding-right: 0.5em;
   border-right: 1px solid var(--border-light);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   text-align: right;
   user-select: none;
 }
@@ -253,7 +253,7 @@
 
 .txt-toolbar-label {
   font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
 }
 
 .txt-mode-group {
@@ -269,7 +269,7 @@
   border: 1px solid var(--border-light);
   border-radius: var(--radius-sm);
   background: var(--bg-surface);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   font-size: var(--font-size-xs);
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -277,7 +277,7 @@
 
 .txt-mode-btn:hover {
   background: var(--hover-bg);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   border-color: var(--border-medium);
 }
 
@@ -343,6 +343,6 @@
 }
 
 .text-viewer-empty-hint {
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   font-style: italic;
 }

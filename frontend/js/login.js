@@ -116,6 +116,38 @@ const LoginModule = (function() {
   }
 
   /**
+   * Validate session with backend
+   * Call this on page load to ensure token is still valid
+   * @returns {Promise<boolean>} true if session is valid
+   */
+  async function validateSession() {
+    const token = getToken();
+    if (!token) return false;
+
+    try {
+      const response = await fetch(`${API_BASE}/api/user/me`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (response.status === 401) {
+        // Token is invalid, clear local session
+        clearSession();
+        return false;
+      }
+
+      return response.ok;
+    } catch (error) {
+      console.error('Session validation error:', error);
+      // Network error, assume session might still be valid
+      // Let the user try to use the app
+      return true;
+    }
+  }
+
+  /**
    * Call logout API
    * @returns {Promise<void>}
    */
@@ -220,6 +252,7 @@ const LoginModule = (function() {
   return {
     init,
     isLoggedIn,
+    validateSession,
     getSession,
     getToken,
     clearSession,

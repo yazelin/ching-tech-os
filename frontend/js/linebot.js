@@ -13,13 +13,14 @@ const LineBotApp = (function () {
 
     // 狀態
     let state = {
-        currentTab: 'groups',
+        currentTab: 'binding',  // 預設顯示綁定分頁
         groups: [],
         users: [],
         messages: [],
         files: [],
         selectedGroup: null,
         projects: [],
+        bindingStatus: null,
         pagination: {
             groups: { page: 1, total: 0 },
             users: { page: 1, total: 0 },
@@ -32,13 +33,20 @@ const LineBotApp = (function () {
         },
     };
 
+    // 取得 token
+    function getToken() {
+        return localStorage.getItem('chingtech_token');
+    }
+
     // API 呼叫
     async function api(endpoint, options = {}) {
         const url = `/api/linebot${endpoint}`;
+        const token = getToken();
         const response = await fetch(url, {
             ...options,
             headers: {
                 'Content-Type': 'application/json',
+                ...(token && { 'Authorization': `Bearer ${token}` }),
                 ...options.headers,
             },
             credentials: 'include',
@@ -49,6 +57,201 @@ const LineBotApp = (function () {
         }
 
         return response.json();
+    }
+
+    // 載入綁定狀態
+    async function loadBindingStatus() {
+        try {
+            const data = await api('/binding/status');
+            state.bindingStatus = data;
+            renderBindingStatus();
+        } catch (error) {
+            console.error('載入綁定狀態失敗:', error);
+            state.bindingStatus = { is_bound: false };
+            renderBindingStatus();
+        }
+    }
+
+    // 產生綁定驗證碼
+    async function generateBindingCode() {
+        try {
+            const data = await api('/binding/generate-code', { method: 'POST' });
+            showBindingCodeModal(data.code, data.expires_at);
+        } catch (error) {
+            console.error('產生驗證碼失敗:', error);
+            alert(`產生驗證碼失敗: ${error.message}`);
+        }
+    }
+
+    // 解除綁定
+    async function unbindLine() {
+        if (!confirm('確定要解除 Line 綁定嗎？\n解除後需要重新綁定才能使用 Line Bot。')) {
+            return;
+        }
+
+        try {
+            await api('/binding', { method: 'DELETE' });
+            await loadBindingStatus();
+            alert('已解除 Line 綁定');
+        } catch (error) {
+            console.error('解除綁定失敗:', error);
+            alert('解除綁定失敗');
+        }
+    }
+
+    // 顯示驗證碼彈窗
+    function showBindingCodeModal(code, expiresAt) {
+        const modal = document.createElement('div');
+        modal.className = 'linebot-modal-overlay';
+        modal.innerHTML = `
+            <div class="linebot-modal">
+                <div class="linebot-modal-header">
+                    <h3>Line 綁定驗證碼</h3>
+                    <button class="linebot-modal-close">&times;</button>
+                </div>
+                <div class="linebot-modal-body">
+                    <div class="linebot-binding-code-display">${code}</div>
+                    <p class="linebot-binding-instruction">
+                        請在 Line 私訊 Bot 發送此驗證碼完成綁定
+                    </p>
+                    <p class="linebot-binding-expires">
+                        有效期限：${new Date(expiresAt).toLocaleString()}
+                    </p>
+                    <p class="linebot-binding-status-hint">等待綁定中...</p>
+                </div>
+                <div class="linebot-modal-footer">
+                    <button class="linebot-btn linebot-btn-primary linebot-copy-code">複製驗證碼</button>
+                    <button class="linebot-btn linebot-modal-close-btn">關閉</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        // 自動檢測綁定狀態（每 3 秒）
+        let pollInterval = null;
+        const startPolling = () => {
+            pollInterval = setInterval(async () => {
+                try {
+                    const status = await api('/binding/status');
+                    if (status.is_bound) {
+                        // 綁定成功！
+                        clearInterval(pollInterval);
+                        state.bindingStatus = status;
+                        state.users = [];  // 清除用戶快取，讓下次切換時重新載入
+                        modal.remove();
+                        renderBindingStatus();
+                    }
+                } catch (e) {
+                    // 忽略錯誤，繼續 polling
+                }
+            }, 3000);
+        };
+        startPolling();
+
+        // 關閉時清除 polling
+        const closeModal = () => {
+            if (pollInterval) clearInterval(pollInterval);
+            modal.remove();
+            loadBindingStatus();
+        };
+
+        // 關閉事件
+        modal.querySelector('.linebot-modal-close').addEventListener('click', closeModal);
+        modal.querySelector('.linebot-modal-close-btn').addEventListener('click', closeModal);
+
+        // 複製驗證碼
+        modal.querySelector('.linebot-copy-code').addEventListener('click', () => {
+            navigator.clipboard.writeText(code).then(() => {
+                const btn = modal.querySelector('.linebot-copy-code');
+                btn.textContent = '已複製！';
+                setTimeout(() => { btn.textContent = '複製驗證碼'; }, 2000);
+            });
+        });
+
+        // 點擊背景關閉
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeModal();
+            }
+        });
+    }
+
+    // 渲染綁定狀態
+    function renderBindingStatus() {
+        const container = document.querySelector('.linebot-binding-content');
+        if (!container) return;
+
+        const status = state.bindingStatus;
+
+        if (!status) {
+            container.innerHTML = '<div class="linebot-loading">載入中...</div>';
+            return;
+        }
+
+        if (status.is_bound) {
+            container.innerHTML = `
+                <div class="linebot-binding-status bound">
+                    <div class="linebot-binding-icon">✅</div>
+                    <div class="linebot-binding-info">
+                        <div class="linebot-binding-label">已綁定 Line 帳號</div>
+                        <div class="linebot-binding-detail">
+                            ${status.line_picture_url
+                                ? `<img class="linebot-binding-avatar" src="${status.line_picture_url}" alt="">`
+                                : ''
+                            }
+                            <span>${status.line_display_name || 'Line 用戶'}</span>
+                        </div>
+                        <div class="linebot-binding-time">
+                            綁定時間：${status.bound_at ? new Date(status.bound_at).toLocaleString() : '未知'}
+                        </div>
+                    </div>
+                    <button class="linebot-btn linebot-btn-danger linebot-unbind-btn">解除綁定</button>
+                </div>
+            `;
+
+            container.querySelector('.linebot-unbind-btn').addEventListener('click', unbindLine);
+        } else {
+            container.innerHTML = `
+                <div class="linebot-binding-status unbound">
+                    <div class="linebot-binding-icon">🔗</div>
+                    <div class="linebot-binding-info">
+                        <div class="linebot-binding-label">尚未綁定 Line 帳號</div>
+                        <div class="linebot-binding-instruction">
+                            <p>綁定 Line 帳號後，即可使用 Line Bot 的 AI 功能。</p>
+                            <ol>
+                                <li>點擊「產生驗證碼」按鈕</li>
+                                <li>在 Line 私訊 Bot 發送驗證碼</li>
+                                <li>完成綁定！</li>
+                            </ol>
+                        </div>
+                    </div>
+                    <button class="linebot-btn linebot-btn-primary linebot-generate-code-btn">產生驗證碼</button>
+                </div>
+            `;
+
+            container.querySelector('.linebot-generate-code-btn').addEventListener('click', generateBindingCode);
+        }
+    }
+
+    // 更新群組 AI 回應設定
+    async function updateGroupAiResponse(groupId, allowAiResponse) {
+        try {
+            await api(`/groups/${groupId}`, {
+                method: 'PATCH',
+                body: JSON.stringify({ allow_ai_response: allowAiResponse }),
+            });
+            // 更新本地狀態
+            const group = state.groups.find(g => g.id === groupId);
+            if (group) {
+                group.allow_ai_response = allowAiResponse;
+            }
+        } catch (error) {
+            console.error('更新群組設定失敗:', error);
+            alert('更新失敗');
+            // 恢復開關狀態
+            renderGroups();
+        }
     }
 
     // 載入群組列表
@@ -69,13 +272,13 @@ const LineBotApp = (function () {
         }
     }
 
-    // 載入用戶列表
+    // 載入用戶列表（含綁定狀態）
     async function loadUsers(page = 1) {
         state.loading = true;
         renderLoading('users');
 
         try {
-            const data = await api(`/users?limit=20&offset=${(page - 1) * 20}`);
+            const data = await api(`/users-with-binding?limit=20&offset=${(page - 1) * 20}`);
             state.users = data.items;
             state.pagination.users = { page, total: data.total };
             renderUsers();
@@ -223,15 +426,35 @@ const LineBotApp = (function () {
                             ${group.is_active ? '使用中' : '已離開'}
                         </span>
                     </div>
+                    <div class="linebot-group-ai-toggle">
+                        <label class="linebot-toggle" title="${group.allow_ai_response ? '點擊關閉 AI 回應' : '點擊開啟 AI 回應'}">
+                            <input type="checkbox"
+                                   class="linebot-ai-toggle-input"
+                                   data-group-id="${group.id}"
+                                   ${group.allow_ai_response ? 'checked' : ''}>
+                            <span class="linebot-toggle-slider"></span>
+                        </label>
+                        <span class="linebot-ai-toggle-label">AI 回應</span>
+                    </div>
                 </div>
             </div>
         `).join('');
 
-        // 綁定點擊事件
+        // 綁定點擊事件（排除 toggle 區域）
         container.querySelectorAll('.linebot-group-card').forEach(card => {
-            card.addEventListener('click', () => {
+            card.addEventListener('click', (e) => {
+                // 忽略 toggle 的點擊
+                if (e.target.closest('.linebot-group-ai-toggle')) return;
                 const group = state.groups.find(g => g.id === card.dataset.id);
                 if (group) selectGroup(group);
+            });
+        });
+
+        // 綁定 AI 回應開關事件
+        container.querySelectorAll('.linebot-ai-toggle-input').forEach(toggle => {
+            toggle.addEventListener('change', (e) => {
+                console.log('Toggle changed:', toggle.dataset.groupId, toggle.checked);
+                updateGroupAiResponse(toggle.dataset.groupId, toggle.checked);
             });
         });
 
@@ -269,6 +492,10 @@ const LineBotApp = (function () {
                         <div>成員數：${group.member_count}</div>
                         <div>狀態：${group.is_active ? '使用中' : '已離開'}</div>
                         <div>加入時間：${new Date(group.joined_at).toLocaleDateString()}</div>
+                        ${!group.is_active && group.left_at
+                            ? `<div>離開時間：${new Date(group.left_at).toLocaleDateString()}</div>`
+                            : ''
+                        }
                     </div>
                 </div>
             </div>
@@ -381,6 +608,12 @@ const LineBotApp = (function () {
                     <div class="linebot-user-status">
                         ${user.is_friend ? '好友' : '非好友'}
                         ${user.status_message ? ` · ${user.status_message}` : ''}
+                    </div>
+                    <div class="linebot-user-binding ${user.bound_username ? 'bound' : 'unbound'}">
+                        ${user.bound_username
+                            ? `<span class="linebot-binding-badge bound">✓ 已綁定 ${user.bound_display_name || user.bound_username}</span>`
+                            : '<span class="linebot-binding-badge unbound">未綁定</span>'
+                        }
                     </div>
                 </div>
             </div>
@@ -583,7 +816,9 @@ const LineBotApp = (function () {
         });
 
         // 載入資料
-        if (tab === 'groups' && state.groups.length === 0) {
+        if (tab === 'binding' && state.bindingStatus === null) {
+            loadBindingStatus();
+        } else if (tab === 'groups' && state.groups.length === 0) {
             loadGroups();
         } else if (tab === 'users' && state.users.length === 0) {
             loadUsers();
@@ -603,18 +838,41 @@ const LineBotApp = (function () {
 
     // 初始化
     async function init(container) {
+        // 重置 state（視窗重新打開時需要）
+        state.currentTab = 'binding';
+        state.groups = [];
+        state.users = [];
+        state.messages = [];
+        state.files = [];
+        state.selectedGroup = null;
+        state.bindingStatus = null;
+        state.pagination = {
+            groups: { page: 1, total: 0 },
+            users: { page: 1, total: 0 },
+            messages: { page: 1, total: 0 },
+            files: { page: 1, total: 0 },
+        };
+
         container.innerHTML = `
             <div class="linebot-container">
                 <div class="linebot-tabs">
-                    <button class="linebot-tab active" data-tab="groups">群組</button>
+                    <button class="linebot-tab active" data-tab="binding">我的綁定</button>
+                    <button class="linebot-tab" data-tab="groups">群組</button>
                     <button class="linebot-tab" data-tab="users">用戶</button>
                     <button class="linebot-tab" data-tab="messages">訊息</button>
                     <button class="linebot-tab" data-tab="files">檔案</button>
                 </div>
 
                 <div class="linebot-content">
+                    <!-- 綁定面板 -->
+                    <div class="linebot-panel active" data-panel="binding">
+                        <div class="linebot-binding-content">
+                            <div class="linebot-loading">載入中...</div>
+                        </div>
+                    </div>
+
                     <!-- 群組面板 -->
-                    <div class="linebot-panel active" data-panel="groups">
+                    <div class="linebot-panel" data-panel="groups">
                         <div class="linebot-split-layout">
                             <div class="linebot-split-left">
                                 <div class="linebot-groups-list"></div>
@@ -676,17 +934,15 @@ const LineBotApp = (function () {
         // 載入專案列表
         await loadProjects();
 
-        // 載入群組
-        await loadGroups();
+        // 載入綁定狀態（預設分頁）
+        await loadBindingStatus();
 
-        // 渲染群組詳情初始狀態
-        renderGroupDetail();
-
-        // 填充群組篩選器
-        updateGroupFilter();
-
-        // 填充檔案篩選器
-        updateFilesFilter();
+        // 填充群組篩選器（需先載入群組）
+        loadGroups().then(() => {
+            updateGroupFilter();
+            updateFilesFilter();
+            renderGroupDetail();
+        });
 
         // 設置檔案刪除事件
         setupFileDeleteEvents();
@@ -738,11 +994,10 @@ const LineBotApp = (function () {
     // 刪除檔案
     async function deleteFile(fileId) {
         try {
-            const token = LoginModule.getToken();
             const response = await fetch(`/api/linebot/files/${fileId}`, {
                 method: 'DELETE',
                 headers: {
-                    'Authorization': `Bearer ${token}`,
+                    'Authorization': `Bearer ${getToken()}`,
                 },
             });
 

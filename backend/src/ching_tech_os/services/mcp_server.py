@@ -22,7 +22,7 @@ logger = logging.getLogger("mcp_server")
 # 建立 FastMCP Server 實例
 mcp = FastMCP(
     "ching-tech-os",
-    instructions="擎添科技 OS 的 AI 工具，可查詢專案、會議、成員等資訊。",
+    instructions="擎添工業 OS 的 AI 工具，可查詢專案、會議、成員等資訊。",
 )
 
 

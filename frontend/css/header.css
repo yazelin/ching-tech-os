@@ -68,7 +68,7 @@
 }
 
 .header-title-os {
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   text-shadow: 0 0 10px rgba(255, 255, 255, 0.5), 0 0 20px rgba(255, 255, 255, 0.3);
 }
 
@@ -96,7 +96,7 @@
   align-items: center;
   gap: var(--spacing-xs);
   font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   font-family: var(--font-mono);
   user-select: none;
   -webkit-user-select: none;
@@ -125,11 +125,11 @@
 
 .header-user:hover .icon,
 .header-user:hover .header-user-name {
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 
 .header-user .icon {
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
 }
 
 .header-user .icon svg {
@@ -139,7 +139,7 @@
 
 .header-user-name {
   font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -153,7 +153,7 @@
   gap: var(--spacing-xs);
   padding: var(--spacing-xs) var(--spacing-sm);
   font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   background-color: transparent;
   border: none;
   border-radius: var(--radius-md);
@@ -163,11 +163,11 @@
 
 .header-logout:hover {
   background-color: var(--interactive-hover);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 
 .header-logout:hover .icon {
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 
 .header-logout .icon svg {
@@ -193,14 +193,14 @@
   background: transparent;
   border: none;
   border-radius: var(--radius-md);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
 .header-messages-btn:hover {
   background-color: var(--interactive-hover);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 
 .header-messages-btn .icon svg {

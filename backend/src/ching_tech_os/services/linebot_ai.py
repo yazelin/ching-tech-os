@@ -246,7 +246,7 @@ async def build_system_prompt(line_group_id: UUID | None) -> str:
     Returns:
         系統提示文字
     """
-    base_prompt = """你是擎添科技的 AI 助理，透過 Line 與用戶互動。
+    base_prompt = """你是擎添工業的 AI 助理，透過 Line 與用戶互動。
 
 你可以使用以下工具：
 

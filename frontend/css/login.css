@@ -2,6 +2,50 @@
    ChingTech OS - Login Page Styles
    ========================================================================== */
 
+/* 主題切換按鈕 */
+.theme-toggle-btn {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.theme-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: var(--text-primary);
+  transform: scale(1.05);
+}
+
+.theme-toggle-btn .icon {
+  font-size: 20px;
+}
+
+.theme-toggle-btn .icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* 亮色主題：按鈕樣式 */
+:root[data-theme="light"] .theme-toggle-btn {
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+:root[data-theme="light"] .theme-toggle-btn:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
 .login-container {
   display: flex;
   flex-direction: column;
@@ -80,7 +124,7 @@
   font-size: 1.5rem;
   font-weight: 800;
   letter-spacing: 0.4em;
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   text-shadow: 0 0 15px rgba(255, 255, 255, 0.5), 0 0 30px rgba(255, 255, 255, 0.3);
 }
 
@@ -124,7 +168,7 @@
 
 .form-group label {
   font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   font-weight: 500;
 }
 
@@ -138,8 +182,8 @@
 .form-group .input:-webkit-autofill:focus,
 .form-group .input:-webkit-autofill:active {
   -webkit-box-shadow: 0 0 0 1000px #1a1a1a inset !important;
-  -webkit-text-fill-color: var(--color-text-primary) !important;
-  caret-color: var(--color-text-primary);
+  -webkit-text-fill-color: var(--text-primary) !important;
+  caret-color: var(--text-primary);
   transition: background-color 5000s ease-in-out 0s;
 }
 
@@ -149,7 +193,7 @@
 :root[data-theme="light"] .form-group .input:-webkit-autofill:focus,
 :root[data-theme="light"] .form-group .input:-webkit-autofill:active {
   -webkit-box-shadow: 0 0 0 1000px #f5f5f5 inset !important;
-  -webkit-text-fill-color: var(--color-text-primary) !important;
+  -webkit-text-fill-color: var(--text-primary) !important;
 }
 
 .form-group .input-icon {
@@ -165,7 +209,7 @@
   left: var(--spacing-md);
   top: 50%;
   transform: translateY(-50%);
-  color: var(--color-text-muted);
+  color: var(--text-muted);
 }
 
 .form-group .input-icon .icon svg {
@@ -209,7 +253,7 @@
   padding-top: var(--spacing-md);
   border-top: 1px solid var(--interactive-border);
   text-align: center;
-  color: var(--color-text-muted);
+  color: var(--text-muted);
   font-size: var(--font-size-xs);
 }
 

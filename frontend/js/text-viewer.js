@@ -226,14 +226,21 @@ const TextViewerModule = (function() {
       // 決定要 fetch 的 URL
       let fetchUrl;
       let fetchOptions = {};
+      const basePath = window.API_BASE || '';
 
-      if (currentPath.startsWith('/api/') || currentPath.startsWith('http://') || currentPath.startsWith('https://')) {
+      if (currentPath.startsWith('/api/')) {
+        // API URL - add base path for sub-path deployment
+        fetchUrl = `${basePath}${currentPath}`;
+        fetchOptions = { headers: { 'Authorization': `Bearer ${getToken()}` } };
+      } else if (currentPath.startsWith('http://') || currentPath.startsWith('https://')) {
+        // Absolute URL - use as is
         fetchUrl = currentPath;
         fetchOptions = { headers: { 'Authorization': `Bearer ${getToken()}` } };
       } else if (currentPath.startsWith('/data/')) {
         fetchUrl = currentPath;
       } else {
-        fetchUrl = `/api/nas/file?path=${encodeURIComponent(currentPath)}`;
+        // NAS file path - use NAS API
+        fetchUrl = `${basePath}/api/nas/file?path=${encodeURIComponent(currentPath)}`;
         fetchOptions = { headers: { 'Authorization': `Bearer ${getToken()}` } };
       }
 

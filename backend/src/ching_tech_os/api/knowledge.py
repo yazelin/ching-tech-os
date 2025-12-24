@@ -134,6 +134,49 @@ async def get_attachment(path: str) -> Response:
 
 
 @router.get(
+    "/assets/{path:path}",
+    summary="取得本機附件",
+)
+async def get_local_asset(path: str) -> Response:
+    """取得本機知識庫附件
+
+    Args:
+        path: 附件路徑（如 images/kb-001-file.png）
+    """
+    from pathlib import Path
+
+    # 安全檢查：防止路徑穿越攻擊
+    if ".." in path:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="無效的路徑",
+        )
+
+    assets_base = Path("/home/ct/SDD/ching-tech-os/data/knowledge/assets")
+    file_path = assets_base / path
+
+    if not file_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"檔案不存在：{path}",
+        )
+
+    try:
+        content = file_path.read_bytes()
+        filename = file_path.name
+        mime_type, _ = mimetypes.guess_type(filename)
+        return Response(
+            content=content,
+            media_type=mime_type or "application/octet-stream",
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+
+@router.get(
     "/{kb_id}",
     response_model=KnowledgeResponse,
     summary="取得單一知識",

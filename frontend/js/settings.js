@@ -8,8 +8,6 @@ const SettingsApp = (function () {
 
   const APP_ID = 'settings';
   let currentWindowId = null;
-  let originalTheme = null;
-  let hasUnsavedChanges = false;
 
   /**
    * 取得視窗內容 HTML
@@ -100,17 +98,6 @@ const SettingsApp = (function () {
                 </div>
               </div>
             </div>
-
-            <div class="settings-actions">
-              <button class="btn btn-primary" id="saveSettingsBtn">
-                <span class="icon">${getIcon('save')}</span>
-                儲存設定
-              </button>
-              <button class="btn btn-ghost" id="resetSettingsBtn">
-                <span class="icon">${getIcon('undo')}</span>
-                重設
-              </button>
-            </div>
           </section>
         </main>
       </div>
@@ -122,9 +109,6 @@ const SettingsApp = (function () {
    * @param {HTMLElement} windowEl - 視窗元素
    */
   function init(windowEl) {
-    originalTheme = ThemeManager.getTheme();
-    hasUnsavedChanges = false;
-
     // 綁定主題卡片點擊事件
     const themeCards = windowEl.querySelectorAll('.theme-card');
     themeCards.forEach(card => {
@@ -133,18 +117,6 @@ const SettingsApp = (function () {
         selectTheme(windowEl, theme);
       });
     });
-
-    // 綁定儲存按鈕
-    const saveBtn = windowEl.querySelector('#saveSettingsBtn');
-    if (saveBtn) {
-      saveBtn.addEventListener('click', () => saveSettings(windowEl));
-    }
-
-    // 綁定重設按鈕
-    const resetBtn = windowEl.querySelector('#resetSettingsBtn');
-    if (resetBtn) {
-      resetBtn.addEventListener('click', () => resetSettings(windowEl));
-    }
 
     // 綁定側邊欄導航
     const navItems = windowEl.querySelectorAll('.settings-nav-item');
@@ -157,7 +129,7 @@ const SettingsApp = (function () {
   }
 
   /**
-   * 選擇主題（即時預覽）
+   * 選擇主題（即時套用並儲存）
    * @param {HTMLElement} windowEl
    * @param {string} theme
    */
@@ -168,11 +140,8 @@ const SettingsApp = (function () {
       card.classList.toggle('selected', card.dataset.theme === theme);
     });
 
-    // 即時套用主題
+    // 即時套用並儲存主題
     ThemeManager.setTheme(theme);
-
-    // 標記有未儲存的變更
-    hasUnsavedChanges = theme !== originalTheme;
   }
 
   /**
@@ -192,103 +161,6 @@ const SettingsApp = (function () {
     sections.forEach(section => {
       section.classList.toggle('active', section.id === `section-${sectionId}`);
     });
-  }
-
-  /**
-   * 儲存設定
-   * @param {HTMLElement} windowEl
-   */
-  async function saveSettings(windowEl) {
-    const currentTheme = ThemeManager.getTheme();
-    const saveBtn = windowEl.querySelector('#saveSettingsBtn');
-
-    try {
-      // 禁用按鈕
-      if (saveBtn) {
-        saveBtn.disabled = true;
-        saveBtn.innerHTML = `<span class="icon">${getIcon('loader')}</span> 儲存中...`;
-      }
-
-      // 儲存到 API
-      const success = await ThemeManager.saveUserPreference(currentTheme);
-
-      if (success) {
-        originalTheme = currentTheme;
-        hasUnsavedChanges = false;
-        showToast('設定已儲存');
-      } else {
-        showToast('儲存失敗，請稍後再試', 'error');
-      }
-    } catch (e) {
-      console.error('儲存設定失敗:', e);
-      showToast('儲存失敗，請稍後再試', 'error');
-    } finally {
-      // 恢復按鈕
-      if (saveBtn) {
-        saveBtn.disabled = false;
-        saveBtn.innerHTML = `<span class="icon">${getIcon('save')}</span> 儲存設定`;
-      }
-    }
-  }
-
-  /**
-   * 重設設定
-   * @param {HTMLElement} windowEl
-   */
-  function resetSettings(windowEl) {
-    if (originalTheme) {
-      selectTheme(windowEl, originalTheme);
-      hasUnsavedChanges = false;
-    }
-  }
-
-  /**
-   * 顯示 Toast 訊息
-   * @param {string} message
-   * @param {string} type - 'success' | 'error'
-   */
-  function showToast(message, type = 'success') {
-    // 移除現有的 toast
-    const existing = document.querySelector('.settings-toast');
-    if (existing) {
-      existing.remove();
-    }
-
-    // 建立新的 toast
-    const toast = document.createElement('div');
-    toast.className = 'settings-toast';
-    toast.textContent = message;
-
-    if (type === 'error') {
-      toast.style.backgroundColor = 'var(--color-error)';
-    }
-
-    document.body.appendChild(toast);
-
-    // 顯示動畫
-    requestAnimationFrame(() => {
-      toast.classList.add('show');
-    });
-
-    // 3 秒後移除
-    setTimeout(() => {
-      toast.classList.remove('show');
-      setTimeout(() => toast.remove(), 300);
-    }, 3000);
-  }
-
-  /**
-   * 關閉前檢查
-   * @returns {boolean} 是否允許關閉
-   */
-  function onBeforeClose() {
-    if (hasUnsavedChanges) {
-      // 恢復原本的主題
-      if (originalTheme) {
-        ThemeManager.setTheme(originalTheme);
-      }
-    }
-    return true;
   }
 
   /**
@@ -316,7 +188,6 @@ const SettingsApp = (function () {
         init(windowEl);
       },
       onClose: (windowId) => {
-        onBeforeClose();
         currentWindowId = null;
       }
     });
