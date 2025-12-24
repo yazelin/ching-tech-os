@@ -12,19 +12,19 @@ const AIAssistantApp = (function() {
   let chats = [];
   let currentChatId = null;
   let sidebarCollapsed = false;
-  let availablePrompts = [];
+  let availableAgents = [];
   let isCompressing = false;
 
   // Token estimation constants
   const TOKEN_LIMIT = 200000;
   const WARNING_THRESHOLD = 0.75; // 75%
 
-  // Available models
-  const availableModels = [
-    { id: 'claude-opus', name: 'Claude Opus' },
-    { id: 'claude-sonnet', name: 'Claude Sonnet' },
-    { id: 'claude-haiku', name: 'Claude Haiku' }
-  ];
+  // Model display names mapping
+  const modelDisplayNames = {
+    'claude-opus': 'Claude Opus',
+    'claude-sonnet': 'Claude Sonnet',
+    'claude-haiku': 'Claude Haiku'
+  };
 
   /**
    * Estimate tokens from text (simplified: ~2 chars per token)
@@ -64,33 +64,44 @@ const AIAssistantApp = (function() {
   }
 
   /**
-   * Load available prompts from API
+   * Load available agents from API
    */
-  async function loadPrompts() {
+  async function loadAgents() {
     try {
-      if (typeof APIClient !== 'undefined') {
-        availablePrompts = await APIClient.getPrompts();
+      const response = await fetch('/api/ai/agents');
+      if (response.ok) {
+        const data = await response.json();
+        availableAgents = (data.items || []).filter(a => a.is_active);
       } else {
-        availablePrompts = [{ name: 'default', display_name: '預設助手', description: '' }];
+        availableAgents = [];
       }
     } catch (e) {
-      console.error('[AIAssistant] Failed to load prompts:', e);
-      availablePrompts = [{ name: 'default', display_name: '預設助手', description: '' }];
+      console.error('[AIAssistant] Failed to load agents:', e);
+      availableAgents = [];
+    }
+
+    // 確保有預設選項
+    if (availableAgents.length === 0) {
+      availableAgents = [{ name: 'web-chat-default', display_name: '預設對話', model: 'claude-sonnet' }];
     }
   }
 
   /**
    * Create a new chat via API
-   * @param {string} promptName
+   * @param {string} agentName - Agent 名稱
    * @returns {Object} New chat object
    */
-  async function createChat(promptName = 'default') {
+  async function createChat(agentName = 'web-chat-default') {
     try {
+      // 從 agent 取得對應的 model
+      const agent = availableAgents.find(a => a.name === agentName);
+      const model = agent?.model || 'claude-sonnet';
+
       if (typeof APIClient !== 'undefined') {
         const chat = await APIClient.createChat({
           title: '新對話',
-          model: availableModels[1].id, // Default to Sonnet
-          prompt_name: promptName,
+          model: model,
+          prompt_name: agentName, // 保持向後相容，用 prompt_name 儲存 agent name
         });
         chats.unshift(chat);
         return chat;
@@ -108,6 +119,17 @@ const AIAssistantApp = (function() {
    */
   function getChatById(chatId) {
     return chats.find(c => c.id === chatId) || null;
+  }
+
+  /**
+   * Update model display text
+   * @param {string} modelId
+   */
+  function updateModelDisplay(modelId) {
+    const modelNameEl = document.querySelector(`#${windowId} .ai-model-name`);
+    if (modelNameEl) {
+      modelNameEl.textContent = modelDisplayNames[modelId] || modelId;
+    }
   }
 
   /**
@@ -168,17 +190,15 @@ const AIAssistantApp = (function() {
             <button class="ai-sidebar-expand btn btn-ghost" title="展開側邊欄" style="display: none;">
               <span class="icon">${getIcon('menu')}</span>
             </button>
-            <div class="ai-model-selector">
-              <label>模型：</label>
-              <select class="ai-model-select input">
-                ${availableModels.map(m => `<option value="${m.id}">${m.name}</option>`).join('')}
+            <div class="ai-agent-selector">
+              <label>Agent：</label>
+              <select class="ai-agent-select input">
+                ${availableAgents.map(a => `<option value="${a.name}">${a.display_name || a.name}</option>`).join('')}
               </select>
             </div>
-            <div class="ai-prompt-selector">
-              <label>助手：</label>
-              <select class="ai-prompt-select input">
-                ${availablePrompts.map(p => `<option value="${p.name}">${p.display_name}</option>`).join('')}
-              </select>
+            <div class="ai-model-info">
+              <span class="ai-model-label">模型：</span>
+              <span class="ai-model-name">${availableAgents[0]?.model || 'claude-sonnet'}</span>
             </div>
             <div class="ai-token-info">
               <span class="ai-token-count">0</span>
@@ -389,18 +409,14 @@ const AIAssistantApp = (function() {
       }
     }
 
-    // Update model selector
+    // Update agent selector and model display
     const updatedChat = getChatById(chatId);
     if (updatedChat) {
-      const modelSelect = document.querySelector(`#${windowId} .ai-model-select`);
-      if (modelSelect) {
-        modelSelect.value = updatedChat.model || 'claude-sonnet';
+      const agentSelect = document.querySelector(`#${windowId} .ai-agent-select`);
+      if (agentSelect) {
+        agentSelect.value = updatedChat.prompt_name || 'web-chat-default';
       }
-
-      const promptSelect = document.querySelector(`#${windowId} .ai-prompt-select`);
-      if (promptSelect) {
-        promptSelect.value = updatedChat.prompt_name || 'default';
-      }
+      updateModelDisplay(updatedChat.model || 'claude-sonnet');
     }
 
     renderChatList();
@@ -640,14 +656,14 @@ const AIAssistantApp = (function() {
     windowId = wId;
 
     // Load data from API
-    await loadPrompts();
+    await loadAgents();
     await loadChats();
 
-    // Update prompt selector after loading
-    const promptSelect = document.querySelector(`#${windowId} .ai-prompt-select`);
-    if (promptSelect && availablePrompts.length > 0) {
-      promptSelect.innerHTML = availablePrompts.map(p =>
-        `<option value="${p.name}">${p.display_name}</option>`
+    // Update agent selector after loading
+    const agentSelect = document.querySelector(`#${windowId} .ai-agent-select`);
+    if (agentSelect && availableAgents.length > 0) {
+      agentSelect.innerHTML = availableAgents.map(a =>
+        `<option value="${a.name}">${a.display_name || a.name}</option>`
       ).join('');
     }
 
@@ -679,9 +695,9 @@ const AIAssistantApp = (function() {
     const newChatBtn = document.querySelector(`#${windowId} .ai-new-chat-btn`);
     if (newChatBtn) {
       newChatBtn.addEventListener('click', async () => {
-        const promptSelect = document.querySelector(`#${windowId} .ai-prompt-select`);
-        const promptName = promptSelect ? promptSelect.value : 'default';
-        const chat = await createChat(promptName);
+        const agentSelect = document.querySelector(`#${windowId} .ai-agent-select`);
+        const agentName = agentSelect ? agentSelect.value : 'web-chat-default';
+        const chat = await createChat(agentName);
         if (chat) {
           currentChatId = chat.id;
           renderChatList();
@@ -702,35 +718,30 @@ const AIAssistantApp = (function() {
       sidebarExpand.addEventListener('click', toggleSidebar);
     }
 
-    // Model selector
-    const modelSelect = document.querySelector(`#${windowId} .ai-model-select`);
-    if (modelSelect) {
-      modelSelect.addEventListener('change', async (e) => {
+    // Agent selector
+    const agentSelect = document.querySelector(`#${windowId} .ai-agent-select`);
+    if (agentSelect) {
+      agentSelect.addEventListener('change', async (e) => {
         const chat = getChatById(currentChatId);
         if (chat) {
-          chat.model = e.target.value;
-          // Update on server
-          try {
-            await APIClient.updateChat(chat.id, { model: e.target.value });
-          } catch (err) {
-            console.error('[AIAssistant] Failed to update model:', err);
-          }
-        }
-      });
-    }
+          const agentName = e.target.value;
+          const agent = availableAgents.find(a => a.name === agentName);
 
-    // Prompt selector
-    const promptSelect = document.querySelector(`#${windowId} .ai-prompt-select`);
-    if (promptSelect) {
-      promptSelect.addEventListener('change', async (e) => {
-        const chat = getChatById(currentChatId);
-        if (chat) {
-          chat.prompt_name = e.target.value;
+          chat.prompt_name = agentName;
+          if (agent) {
+            chat.model = agent.model;
+            // 更新 model 顯示
+            updateModelDisplay(agent.model);
+          }
+
           // Update on server
           try {
-            await APIClient.updateChat(chat.id, { prompt_name: e.target.value });
+            await APIClient.updateChat(chat.id, {
+              prompt_name: agentName,
+              model: chat.model
+            });
           } catch (err) {
-            console.error('[AIAssistant] Failed to update prompt:', err);
+            console.error('[AIAssistant] Failed to update agent:', err);
           }
         }
       });

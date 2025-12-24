@@ -546,6 +546,33 @@ input {
   color: var(--btn-text-on-ghost);
 }
 
+.btn-secondary {
+  background-color: var(--bg-surface);
+  color: var(--color-text-primary);
+  border: 1px solid var(--border-light);
+}
+
+.btn-secondary:hover {
+  background-color: var(--interactive-hover);
+  border-color: var(--border-strong);
+}
+
+.btn-danger {
+  background-color: var(--color-error);
+  color: white;
+}
+
+.btn-danger:hover {
+  background-color: #b91c1c;
+}
+
+.btn-danger:disabled {
+  background-color: var(--bg-surface);
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+  border: 1px solid var(--border-light);
+}
+
 /* ==========================================================================
    Input Styles
    ========================================================================== */

@@ -82,11 +82,82 @@ uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8089 --reload
 
 | 方法 | 端點 | 說明 |
 |------|------|------|
-| GET | `/api/ai/conversations` | 列表對話 |
-| POST | `/api/ai/conversations` | 新增對話 |
-| GET | `/api/ai/conversations/{id}` | 取得對話 |
-| DELETE | `/api/ai/conversations/{id}` | 刪除對話 |
-| POST | `/api/ai/conversations/{id}/messages` | 發送訊息 |
+| GET | `/api/ai/chats` | 列表對話 |
+| POST | `/api/ai/chats` | 新增對話 |
+| GET | `/api/ai/chats/{id}` | 取得對話 |
+| DELETE | `/api/ai/chats/{id}` | 刪除對話 |
+| PATCH | `/api/ai/chats/{id}` | 更新對話 |
+
+### AI 管理
+
+#### Prompts
+
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| GET | `/api/ai/prompts` | 列表 Prompts（支援 category 過濾）|
+| POST | `/api/ai/prompts` | 新增 Prompt |
+| GET | `/api/ai/prompts/{id}` | 取得 Prompt 詳情 |
+| PUT | `/api/ai/prompts/{id}` | 更新 Prompt |
+| DELETE | `/api/ai/prompts/{id}` | 刪除 Prompt |
+
+#### Agents
+
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| GET | `/api/ai/agents` | 列表 Agents |
+| POST | `/api/ai/agents` | 新增 Agent |
+| GET | `/api/ai/agents/{id}` | 取得 Agent 詳情（含 Prompt）|
+| GET | `/api/ai/agents/by-name/{name}` | 依名稱取得 Agent |
+| PUT | `/api/ai/agents/{id}` | 更新 Agent |
+| DELETE | `/api/ai/agents/{id}` | 刪除 Agent |
+| POST | `/api/ai/test` | 測試 Agent |
+
+#### AI Logs
+
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| GET | `/api/ai/logs` | 列表 Logs（分頁、過濾）|
+| GET | `/api/ai/logs/{id}` | 取得 Log 詳情 |
+| GET | `/api/ai/logs/stats` | 取得統計資料 |
+
+### Line Bot
+
+#### Webhook
+
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| POST | `/api/linebot/webhook` | Line Webhook 接收端點 |
+
+#### 群組管理
+
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| GET | `/api/linebot/groups` | 列表群組 |
+| GET | `/api/linebot/groups/{id}` | 取得群組詳情 |
+| POST | `/api/linebot/groups/{id}/bind-project` | 綁定專案 |
+| DELETE | `/api/linebot/groups/{id}/bind-project` | 解除專案綁定 |
+| GET | `/api/linebot/groups/{id}/files` | 列出群組檔案 |
+
+#### 用戶管理
+
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| GET | `/api/linebot/users` | 列表用戶 |
+| GET | `/api/linebot/users/{id}` | 取得用戶詳情 |
+
+#### 訊息管理
+
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| GET | `/api/linebot/messages` | 列表訊息（支援過濾）|
+
+#### 檔案管理
+
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| GET | `/api/linebot/files` | 列表檔案（支援過濾）|
+| GET | `/api/linebot/files/{id}` | 取得檔案詳情 |
+| GET | `/api/linebot/files/{id}/download` | 下載檔案 |
 
 ### 終端機 (WebSocket)
 
@@ -119,21 +190,30 @@ backend/
 │   ├── main.py           # FastAPI 入口（含 Socket.IO）
 │   ├── config.py         # 設定檔
 │   ├── database.py       # 資料庫連線
+│   ├── mcp_cli.py        # MCP CLI 入口
 │   ├── api/
-│   │   ├── auth.py       # 認證 API
-│   │   ├── nas.py        # NAS 操作 API
-│   │   ├── knowledge.py  # 知識庫 API
-│   │   └── ai.py         # AI 對話 API
+│   │   ├── auth.py         # 認證 API
+│   │   ├── nas.py          # NAS 操作 API
+│   │   ├── knowledge.py    # 知識庫 API
+│   │   ├── ai_router.py    # AI 對話 API
+│   │   ├── ai_management.py # AI 管理 API (Prompts/Agents/Logs)
+│   │   └── linebot_router.py # Line Bot API
 │   ├── services/
-│   │   ├── session.py    # Session 管理
-│   │   ├── smb.py        # SMB 連線服務
-│   │   ├── user.py       # 使用者服務
-│   │   ├── terminal.py   # 終端機服務
-│   │   └── ai_agent.py   # AI Agent 服務
+│   │   ├── session.py      # Session 管理
+│   │   ├── smb.py          # SMB 連線服務
+│   │   ├── user.py         # 使用者服務
+│   │   ├── terminal.py     # 終端機服務
+│   │   ├── claude_agent.py # Claude API 服務
+│   │   ├── ai_chat.py      # AI 對話服務
+│   │   ├── ai_manager.py   # AI 管理服務 (Prompts/Agents/Logs)
+│   │   ├── linebot.py      # Line Bot 服務
+│   │   ├── linebot_ai.py   # Line Bot AI 處理
+│   │   └── mcp_server.py   # MCP Server（FastMCP）
 │   └── models/
-│       ├── auth.py       # 認證模型
-│       ├── nas.py        # NAS 模型
-│       └── ai.py         # AI 對話模型
+│       ├── auth.py         # 認證模型
+│       ├── nas.py          # NAS 模型
+│       ├── ai.py           # AI 相關模型
+│       └── linebot.py      # Line Bot 模型
 └── tests/
 ```
 

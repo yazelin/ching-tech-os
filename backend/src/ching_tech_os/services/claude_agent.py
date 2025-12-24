@@ -5,15 +5,54 @@
 """
 
 import asyncio
+import os
+import shutil
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Optional
 
-from ..config import settings
+from . import ai_manager
 
 
 # Claude CLI 超時設定（秒）
 DEFAULT_TIMEOUT = 120
+
+# 工作目錄（使用獨立目錄，避免讀取專案的 CLAUDE.md）
+WORKING_DIR = "/tmp/ching-tech-os-cli"
+os.makedirs(WORKING_DIR, exist_ok=True)
+
+# 複製 MCP 配置到工作目錄
+PROJECT_ROOT = "/home/ct/SDD/ching-tech-os"
+_mcp_src = os.path.join(PROJECT_ROOT, ".mcp.json")
+_mcp_dst = os.path.join(WORKING_DIR, ".mcp.json")
+if os.path.exists(_mcp_src):
+    shutil.copy2(_mcp_src, _mcp_dst)
+
+
+def _find_claude_path() -> str:
+    """尋找 Claude CLI 路徑"""
+    # 先嘗試 PATH 中的 claude
+    claude_in_path = shutil.which("claude")
+    if claude_in_path:
+        return claude_in_path
+
+    # 嘗試常見的 NVM 安裝路徑
+    home = os.path.expanduser("~")
+    nvm_paths = [
+        f"{home}/.nvm/versions/node/v24.11.1/bin/claude",
+        f"{home}/.nvm/versions/node/v22.11.0/bin/claude",
+        f"{home}/.nvm/versions/node/v20.18.0/bin/claude",
+    ]
+
+    for path in nvm_paths:
+        if os.path.exists(path):
+            return path
+
+    # 找不到就用預設
+    return "claude"
+
+
+# Claude CLI 路徑
+CLAUDE_PATH = _find_claude_path()
 
 # 模型對應表（前端名稱 → CLI 模型名稱）
 MODEL_MAP = {
@@ -21,9 +60,6 @@ MODEL_MAP = {
     "claude-sonnet": "sonnet",
     "claude-haiku": "haiku",
 }
-
-# Prompts 目錄路徑
-PROMPTS_DIR = Path(settings.frontend_dir).parent / "data" / "prompts"
 
 
 @dataclass
@@ -35,12 +71,12 @@ class ClaudeResponse:
     error: Optional[str] = None
 
 
-def get_prompt_content(prompt_name: str) -> str | None:
-    """讀取 prompt 檔案內容"""
-    prompt_file = PROMPTS_DIR / f"{prompt_name}.md"
-    if not prompt_file.exists():
+async def get_prompt_content(prompt_name: str) -> str | None:
+    """從資料庫取得 prompt 內容"""
+    prompt = await ai_manager.get_prompt_by_name(prompt_name)
+    if prompt is None:
         return None
-    return prompt_file.read_text(encoding="utf-8")
+    return prompt.get("content")
 
 
 def compose_prompt_with_history(
@@ -86,6 +122,7 @@ async def call_claude(
     history: list[dict] | None = None,
     system_prompt: str | None = None,
     timeout: int = DEFAULT_TIMEOUT,
+    tools: list[str] | None = None,
 ) -> ClaudeResponse:
     """非同步呼叫 Claude CLI（自己管理對話歷史）
 
@@ -95,6 +132,7 @@ async def call_claude(
         history: 對話歷史（可選）
         system_prompt: System prompt 內容（可選）
         timeout: 超時秒數
+        tools: 允許使用的工具列表（可選，如 ["WebSearch", "WebFetch"]）
 
     Returns:
         ClaudeResponse: 包含成功狀態和回應訊息
@@ -109,18 +147,35 @@ async def call_claude(
         full_prompt = prompt
 
     # 建立 Claude CLI 命令（不使用 session）
-    cmd = ["claude", "-p", full_prompt, "--model", cli_model]
+    # 注意：-p 是獨立 flag，prompt 必須放在所有選項之後
+    cmd = [CLAUDE_PATH, "-p", "--model", cli_model]
 
     # 加入 system prompt
     if system_prompt:
         cmd.extend(["--system-prompt", system_prompt])
 
+    # 加入工具（需要 --permission-mode bypassPermissions 來跳過互動確認）
+    if tools:
+        tools_str = ",".join(tools)
+        cmd.extend([
+            "--tools", tools_str,
+            "--allowedTools", tools_str,
+            "--permission-mode", "bypassPermissions"
+        ])
+
+    # prompt 放在最後（作為位置參數）
+    cmd.append(full_prompt)
+
+    # DEBUG: 輸出實際執行的命令
+    print(f"[claude_agent] cmd: {cmd}")
+
     try:
-        # 建立非同步子程序
+        # 建立非同步子程序（使用獨立工作目錄，避免讀取專案的 CLAUDE.md）
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            cwd=WORKING_DIR,
         )
 
         # 等待完成（含超時）
@@ -184,13 +239,13 @@ async def call_claude_for_summary(
     Returns:
         ClaudeResponse: 包含壓縮後的摘要
     """
-    # 讀取 summarizer prompt
-    summarizer_prompt = get_prompt_content("summarizer")
+    # 從資料庫讀取 summarizer prompt
+    summarizer_prompt = await get_prompt_content("summarizer")
     if not summarizer_prompt:
         return ClaudeResponse(
             success=False,
             message="",
-            error="找不到 summarizer.md prompt 檔案",
+            error="找不到 summarizer prompt",
         )
 
     # 組合需要壓縮的對話

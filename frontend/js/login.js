@@ -10,7 +10,7 @@ const LoginModule = (function() {
   const SESSION_KEY = 'chingtech_session';
   const TOKEN_KEY = 'chingtech_token';
 
-  // API base URL (空字串表示同源)
+  // API base URL (空字串表示同源，由 config.js 自動處理)
   const API_BASE = '';
 
   /**

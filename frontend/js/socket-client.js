@@ -22,7 +22,12 @@ const SocketClient = (function () {
 
     console.log('[SocketClient] Connecting to', BACKEND_URL);
 
+    // 支援子路徑部署 (例如 /ctos/)
+    const basePath = window.API_BASE || '';
+    const socketPath = basePath ? `${basePath}/socket.io/` : '/socket.io/';
+
     socket = io(BACKEND_URL, {
+      path: socketPath,
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: 5,

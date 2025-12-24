@@ -1,5 +1,39 @@
 """資料模型"""
 
+from ching_tech_os.models.ai import (
+    # Chat models
+    ChatMessage,
+    ChatCreate,
+    ChatUpdate,
+    ChatResponse,
+    ChatDetailResponse,
+    PromptInfo,
+    SendMessageRequest,
+    CompressChatRequest,
+    # Prompt models
+    AiPromptCreate,
+    AiPromptUpdate,
+    AiPromptResponse,
+    AiPromptListItem,
+    AiPromptListResponse,
+    # Agent models
+    AiAgentCreate,
+    AiAgentUpdate,
+    AiAgentResponse,
+    AiAgentListItem,
+    AiAgentListResponse,
+    # Log models
+    AiLogCreate,
+    AiLogResponse,
+    AiLogListItem,
+    AiLogListResponse,
+    AiLogFilter,
+    AiLogStats,
+    # Test models
+    AiTestRequest,
+    AiTestResponse,
+)
+
 from ching_tech_os.models.knowledge import (
     KnowledgeAttachment,
     KnowledgeCreate,
@@ -47,6 +81,37 @@ from ching_tech_os.models.login_record import (
 )
 
 __all__ = [
+    # AI Chat
+    "ChatMessage",
+    "ChatCreate",
+    "ChatUpdate",
+    "ChatResponse",
+    "ChatDetailResponse",
+    "PromptInfo",
+    "SendMessageRequest",
+    "CompressChatRequest",
+    # AI Prompt
+    "AiPromptCreate",
+    "AiPromptUpdate",
+    "AiPromptResponse",
+    "AiPromptListItem",
+    "AiPromptListResponse",
+    # AI Agent
+    "AiAgentCreate",
+    "AiAgentUpdate",
+    "AiAgentResponse",
+    "AiAgentListItem",
+    "AiAgentListResponse",
+    # AI Log
+    "AiLogCreate",
+    "AiLogResponse",
+    "AiLogListItem",
+    "AiLogListResponse",
+    "AiLogFilter",
+    "AiLogStats",
+    # AI Test
+    "AiTestRequest",
+    "AiTestResponse",
     # Knowledge
     "KnowledgeAttachment",
     "KnowledgeCreate",

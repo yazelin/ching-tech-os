@@ -1034,7 +1034,7 @@ const FileManagerModule = (function() {
     } else if (IMAGE_EXTENSIONS.includes(ext)) {
       previewMainHTML = `
         <div class="fm-preview-image">
-          <img src="/api/nas/file?path=${encodeURIComponent(filePath)}&token=${encodeURIComponent(getToken())}" alt="${file.name}">
+          <img src="${window.API_BASE || ''}/api/nas/file?path=${encodeURIComponent(filePath)}&token=${encodeURIComponent(getToken())}" alt="${file.name}">
         </div>
       `;
     } else if (TEXT_EXTENSIONS.includes(ext)) {

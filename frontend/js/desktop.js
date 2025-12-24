@@ -13,7 +13,11 @@ const DesktopModule = (function() {
     { id: 'code-editor', name: '程式編輯器', icon: 'mdi-code-braces' },
     { id: 'project-management', name: '專案管理', icon: 'mdi-briefcase' },
     { id: 'ai-assistant', name: 'AI 助手', icon: 'mdi-robot' },
+    { id: 'prompt-editor', name: 'Prompt 編輯器', icon: 'mdi-file-document-edit-outline' },
+    { id: 'agent-settings', name: 'Agent 設定', icon: 'mdi-robot-outline' },
+    { id: 'ai-log', name: 'AI Log', icon: 'mdi-chart-timeline-variant' },
     { id: 'knowledge-base', name: '知識庫', icon: 'mdi-book-open-page-variant' },
+    { id: 'linebot', name: 'Line Bot', icon: 'mdi-message-text' },
     { id: 'settings', name: '系統設定', icon: 'mdi-cog' }
   ];
 
@@ -93,6 +97,21 @@ const DesktopModule = (function() {
           AIAssistantApp.open();
         }
         break;
+      case 'prompt-editor':
+        if (typeof PromptEditorApp !== 'undefined') {
+          PromptEditorApp.open();
+        }
+        break;
+      case 'agent-settings':
+        if (typeof AgentSettingsApp !== 'undefined') {
+          AgentSettingsApp.open();
+        }
+        break;
+      case 'ai-log':
+        if (typeof AILogApp !== 'undefined') {
+          AILogApp.open();
+        }
+        break;
       case 'file-manager':
         if (typeof FileManagerModule !== 'undefined') {
           FileManagerModule.open();
@@ -123,6 +142,9 @@ const DesktopModule = (function() {
           SettingsApp.open();
         }
         break;
+      case 'linebot':
+        openLineBotWindow();
+        break;
       default:
         const app = applications.find(a => a.id === appId);
         if (app) {
@@ -130,6 +152,31 @@ const DesktopModule = (function() {
         }
         break;
     }
+  }
+
+  /**
+   * Open Line Bot management window
+   */
+  function openLineBotWindow() {
+    const existingWindow = WindowModule.getWindowByAppId('linebot');
+    if (existingWindow) {
+      WindowModule.focusWindow(existingWindow.windowId);
+      return;
+    }
+
+    WindowModule.createWindow({
+      title: 'Line Bot',
+      icon: 'mdi-message-text',
+      width: 900,
+      height: 600,
+      appId: 'linebot',
+      onInit: (windowEl) => {
+        const content = windowEl.querySelector('.window-content');
+        if (content && typeof LineBotApp !== 'undefined') {
+          LineBotApp.init(content);
+        }
+      },
+    });
   }
 
   /**

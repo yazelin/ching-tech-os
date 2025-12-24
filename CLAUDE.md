@@ -40,8 +40,51 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 ## 前端開發
 - 使用原生 JavaScript（無框架）
 - 模組使用 IIFE 模式
-- CSS/JS 檔案需在 `index.html` 引入
+- CSS/JS 檔案需在 `index.html` **和** `login.html` 引入（兩個頁面都需要）
 - 桌面應用程式需在 `desktop.js` 的 `applications` 和 `openApp` 中註冊
+
+## 子路徑部署（/ctos）注意事項
+
+本專案支援部署在子路徑下（如 `https://ching-tech.ddns.net/ctos/`），由 `js/config.js` 統一處理。
+
+### 運作原理
+```
+前端 JS           →  瀏覽器發送             →  nginx 代理        →  後端收到
+/api/auth/login   →  /ctos/api/auth/login   →  去掉 /ctos/       →  /api/auth/login
+```
+
+- `config.js` 自動檢測路徑並設定 `window.API_BASE`
+- `config.js` 覆寫 `fetch()`，自動為 `/api/` 開頭的請求加上 base path
+- 後端程式碼**不需要任何修改**
+
+### 需要手動處理的情況
+
+**`fetch()` 呼叫**：自動處理，不需修改 ✅
+
+**HTML 標籤的 `href` / `src` 屬性**：需要手動加 `API_BASE` ⚠️
+```javascript
+// ❌ 錯誤：不會被 config.js 攔截
+`<a href="/api/files/${id}/download">下載</a>`
+`<img src="/api/files/${id}/preview">`
+
+// ✅ 正確：手動加上 API_BASE
+`<a href="${window.API_BASE || ''}/api/files/${id}/download">下載</a>`
+`<img src="${window.API_BASE || ''}/api/files/${id}/preview">`
+```
+
+**Socket.IO**：需要單獨處理（見 `socket-client.js`）
+```javascript
+const basePath = window.API_BASE || '';
+const socketPath = basePath ? `${basePath}/socket.io/` : '/socket.io/';
+socket = io(BACKEND_URL, { path: socketPath, ... });
+```
+
+### 檢查清單
+新增前端功能時，確認以下項目：
+- [ ] 新的 JS 檔案已加入 `index.html` 和 `login.html`
+- [ ] `<a href="/api/...">` 已加上 `${window.API_BASE || ''}`
+- [ ] `<img src="/api/...">` 已加上 `${window.API_BASE || ''}`
+- [ ] 其他 HTML 屬性中的 `/api/` 路徑已處理
 
 ## CSS 樣式注意事項
 

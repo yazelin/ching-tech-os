@@ -220,7 +220,7 @@
 }
 
 .mc-item.selected {
-  background-color: var(--bg-selected);
+  background-color: var(--accent-bg-subtle);
   border-color: var(--color-accent);
 }
 

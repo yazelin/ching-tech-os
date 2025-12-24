@@ -2,15 +2,87 @@
 
 import json
 import time
-from pathlib import Path
 from uuid import UUID
 
-from ..config import settings
 from ..database import get_connection
 
 
-# Prompts 目錄路徑
-PROMPTS_DIR = Path(settings.frontend_dir).parent / "data" / "prompts"
+# ============================================================
+# Agent/Prompt 查詢（使用資料庫）
+# ============================================================
+
+
+async def get_available_agents() -> list[dict]:
+    """取得可用的 Agent 列表（從資料庫）"""
+    async with get_connection() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT id, name, display_name, description, model, is_active
+            FROM ai_agents
+            WHERE is_active = true
+            ORDER BY name
+            """
+        )
+        return [dict(row) for row in rows]
+
+
+async def get_agent_system_prompt(agent_name: str) -> str | None:
+    """取得 Agent 的 system prompt 內容
+
+    Args:
+        agent_name: Agent 名稱
+
+    Returns:
+        System prompt 內容，若 Agent 不存在或無設定 prompt 則返回 None
+    """
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT p.content
+            FROM ai_agents a
+            LEFT JOIN ai_prompts p ON a.system_prompt_id = p.id
+            WHERE a.name = $1 AND a.is_active = true
+            """,
+            agent_name,
+        )
+        if row is None:
+            return None
+        return row["content"]
+
+
+async def get_agent_config(agent_name: str) -> dict | None:
+    """取得 Agent 設定（model、system_prompt、tools 等）
+
+    Args:
+        agent_name: Agent 名稱
+
+    Returns:
+        Agent 設定 dict，若不存在則返回 None
+    """
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT a.id, a.name, a.display_name, a.model, a.is_active, a.tools, a.settings,
+                   p.content as system_prompt
+            FROM ai_agents a
+            LEFT JOIN ai_prompts p ON a.system_prompt_id = p.id
+            WHERE a.name = $1
+            """,
+            agent_name,
+        )
+        if row is None:
+            return None
+        result = dict(row)
+        if result.get("settings"):
+            result["settings"] = json.loads(result["settings"])
+        if result.get("tools"):
+            result["tools"] = json.loads(result["tools"]) if isinstance(result["tools"], str) else result["tools"]
+        return result
+
+
+# ============================================================
+# Chat CRUD 操作
+# ============================================================
 
 
 async def get_user_chats(user_id: int) -> list[dict]:
@@ -229,66 +301,3 @@ async def update_chat_title(chat_id: UUID, title: str, user_id: int | None = Non
                 chat_id,
             )
         return "UPDATE 1" in result
-
-
-def get_available_prompts() -> list[dict]:
-    """取得可用的 prompts 列表（掃描 data/prompts/ 目錄）"""
-    prompts = []
-
-    if not PROMPTS_DIR.exists():
-        return prompts
-
-    for prompt_file in PROMPTS_DIR.glob("*.md"):
-        name = prompt_file.stem
-        # 跳過 summarizer（內部使用）
-        if name == "summarizer":
-            continue
-
-        # 讀取檔案第一行作為顯示名稱
-        try:
-            content = prompt_file.read_text(encoding="utf-8")
-            lines = content.strip().split("\n")
-            display_name = name
-            description = ""
-
-            for line in lines:
-                if line.startswith("# "):
-                    display_name = line[2:].strip()
-                    break
-
-            # 取得描述（第一段非標題文字）
-            in_description = False
-            for line in lines:
-                if line.startswith("# "):
-                    in_description = True
-                    continue
-                if in_description and line.strip():
-                    if not line.startswith("#"):
-                        description = line.strip()
-                        break
-
-            prompts.append(
-                {
-                    "name": name,
-                    "display_name": display_name,
-                    "description": description,
-                }
-            )
-        except Exception:
-            prompts.append(
-                {
-                    "name": name,
-                    "display_name": name,
-                    "description": "",
-                }
-            )
-
-    return prompts
-
-
-def get_prompt_content(prompt_name: str) -> str | None:
-    """讀取 prompt 檔案內容"""
-    prompt_file = PROMPTS_DIR / f"{prompt_name}.md"
-    if not prompt_file.exists():
-        return None
-    return prompt_file.read_text(encoding="utf-8")

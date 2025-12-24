@@ -5,8 +5,9 @@ from uuid import UUID
 
 from socketio import AsyncServer
 
-from ..services import ai_chat
-from ..services.claude_agent import call_claude, call_claude_for_summary, get_prompt_content
+from ..models.ai import AiLogCreate
+from ..services import ai_chat, ai_manager
+from ..services.claude_agent import call_claude, call_claude_for_summary
 from ..services.message import log_message
 
 
@@ -81,12 +82,20 @@ def register_events(sio: AsyncServer):
             to=sid,
         )
 
-        # 讀取 system prompt
-        prompt_name = chat.get("prompt_name", "default")
-        system_prompt = get_prompt_content(prompt_name)
+        # 讀取 system prompt（prompt_name 存的是 agent name）
+        agent_name = chat.get("prompt_name", "web-chat-default")
+        system_prompt = await ai_chat.get_agent_system_prompt(agent_name)
 
         # 取得對話歷史
         history = chat.get("messages", [])
+
+        # 取得 agent 資訊（用於 log 和 tools）
+        agent_config = await ai_chat.get_agent_config(agent_name)
+        agent_id = agent_config.get("id") if agent_config else None
+        agent_tools = agent_config.get("tools") if agent_config else None
+
+        # 記錄開始時間
+        start_time = time.time()
 
         # 呼叫 Claude CLI（自己管理歷史）
         response = await call_claude(
@@ -94,7 +103,11 @@ def register_events(sio: AsyncServer):
             model=model,
             history=history,
             system_prompt=system_prompt,
+            tools=agent_tools,
         )
+
+        # 計算耗時
+        duration_ms = int((time.time() - start_time) * 1000)
 
         # 結束 typing 狀態
         await sio.emit(
@@ -145,6 +158,24 @@ def register_events(sio: AsyncServer):
                 to=sid,
             )
 
+            # 記錄到 AI Log
+            if agent_id:
+                try:
+                    log_data = AiLogCreate(
+                        agent_id=agent_id,
+                        context_type="web-chat",
+                        context_id=chat_id_str,
+                        input_prompt=message,
+                        system_prompt=system_prompt,
+                        raw_response=response.message,
+                        model=model,
+                        success=True,
+                        duration_ms=duration_ms,
+                    )
+                    await ai_manager.create_log(log_data)
+                except Exception as e:
+                    print(f"[ai] create_log error: {e}")
+
             # 記錄 AI 對話訊息到訊息中心
             user_id = chat.get("user_id")
             if user_id:
@@ -161,6 +192,24 @@ def register_events(sio: AsyncServer):
                 except Exception as e:
                     print(f"[ai] log_message error: {e}")
         else:
+            # 記錄失敗到 AI Log
+            if agent_id:
+                try:
+                    log_data = AiLogCreate(
+                        agent_id=agent_id,
+                        context_type="web-chat",
+                        context_id=chat_id_str,
+                        input_prompt=message,
+                        system_prompt=system_prompt,
+                        model=model,
+                        success=False,
+                        error_message=response.error,
+                        duration_ms=duration_ms,
+                    )
+                    await ai_manager.create_log(log_data)
+                except Exception as e:
+                    print(f"[ai] create_log error: {e}")
+
             # 發送錯誤
             await sio.emit(
                 "ai_error",
@@ -247,8 +296,41 @@ def register_events(sio: AsyncServer):
         messages_to_keep = messages[-10:]
         messages_to_compress = messages[:-10]
 
+        # 取得 summarizer prompt ID（用於 log）
+        summarizer_prompt = await ai_manager.get_prompt_by_name("summarizer")
+        prompt_id = summarizer_prompt.get("id") if summarizer_prompt else None
+
+        # 組合輸入內容（用於 log）
+        input_text = "\n".join([
+            f"{msg.get('role', 'user')}: {msg.get('content', '')}"
+            for msg in messages_to_compress
+        ])
+
+        # 記錄開始時間
+        start_time = time.time()
+
         # 呼叫 Claude 產生摘要
         response = await call_claude_for_summary(messages_to_compress)
+
+        # 計算耗時
+        duration_ms = int((time.time() - start_time) * 1000)
+
+        # 記錄到 AI Log
+        try:
+            log_data = AiLogCreate(
+                prompt_id=prompt_id,
+                context_type="compress",
+                context_id=chat_id_str,
+                input_prompt=input_text[:2000],  # 限制長度
+                raw_response=response.message if response.success else None,
+                model="claude-haiku",
+                success=response.success,
+                error_message=response.error if not response.success else None,
+                duration_ms=duration_ms,
+            )
+            await ai_manager.create_log(log_data)
+        except Exception as e:
+            print(f"[ai] compress create_log error: {e}")
 
         if response.success:
             # 建立新的 messages 陣列：[摘要] + [最近 10 則]

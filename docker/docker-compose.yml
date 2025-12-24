@@ -8,7 +8,9 @@ services:
       POSTGRES_DB: ${DB_NAME:-ching_tech_os}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      # 注意：表格由 Alembic migration 管理，不使用 init.sql
+      # 如需啟用 PostgreSQL 擴充功能，可取消下行註解
+      # - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     ports:
       - "${DB_PORT:-5432}:5432"
     restart: unless-stopped

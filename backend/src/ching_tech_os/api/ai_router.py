@@ -9,7 +9,6 @@ from ..models.ai import (
     ChatDetailResponse,
     ChatResponse,
     ChatUpdate,
-    PromptInfo,
 )
 from ..services import ai_chat
 from ..services.session import session_manager
@@ -93,8 +92,4 @@ async def update_chat(
     return chat
 
 
-@router.get("/prompts", response_model=list[PromptInfo])
-async def list_prompts():
-    """取得可用的 System Prompts 列表"""
-    prompts = ai_chat.get_available_prompts()
-    return prompts
+# 注意：/prompts endpoint 已移至 ai_management.py，使用資料庫管理

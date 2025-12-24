@@ -1,19 +1,12 @@
 -- Ching Tech OS Database Initialization
--- 建立 users 表：記錄曾經登入過的使用者
-
-CREATE TABLE IF NOT EXISTS users (
-    id SERIAL PRIMARY KEY,
-    username VARCHAR(100) UNIQUE NOT NULL,
-    display_name VARCHAR(100),
-    created_at TIMESTAMP DEFAULT NOW(),
-    last_login_at TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
-
--- 插入系統說明
-COMMENT ON TABLE users IS '使用者表：記錄曾經透過 NAS 認證登入的使用者';
-COMMENT ON COLUMN users.username IS 'NAS 帳號';
-COMMENT ON COLUMN users.display_name IS '顯示名稱（可選）';
-COMMENT ON COLUMN users.created_at IS '首次登入時間';
-COMMENT ON COLUMN users.last_login_at IS '最後登入時間';
+--
+-- 注意：資料表由 Alembic migration 管理，請勿在此建立表格
+-- 此檔案僅用於啟用 PostgreSQL 擴充功能（如有需要）
+--
+-- 使用方式：
+-- 1. 取消 docker-compose.yml 中 init.sql 的註解
+-- 2. 在下方加入需要的擴充功能
+--
+-- 範例：
+-- CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- CREATE EXTENSION IF NOT EXISTS "pg_trgm";

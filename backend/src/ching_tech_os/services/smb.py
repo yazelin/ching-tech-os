@@ -341,7 +341,7 @@ class SMBService:
                     pass
 
     def write_file(self, share_name: str, path: str, data: bytes) -> None:
-        """寫入檔案內容
+        """寫入檔案內容（支援大檔案分塊寫入）
 
         Args:
             share_name: 共享資料夾名稱
@@ -369,8 +369,14 @@ class SMBService:
                 CreateOptions.FILE_NON_DIRECTORY_FILE,
             )
 
-            # 寫入檔案內容
-            file_open.write(data, 0)
+            # 分塊寫入（SMB 最大寫入大小約 8MB，使用 4MB 確保安全）
+            chunk_size = 4 * 1024 * 1024  # 4MB
+            offset = 0
+            while offset < len(data):
+                chunk = data[offset:offset + chunk_size]
+                file_open.write(chunk, offset)
+                offset += len(chunk)
+
             file_open.close()
 
         except Exception as e:

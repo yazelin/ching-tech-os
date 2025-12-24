@@ -13,7 +13,7 @@ from .database import init_db_pool, close_db_pool
 from .services.session import session_manager
 from .services.terminal import terminal_service
 from .services.scheduler import start_scheduler, stop_scheduler
-from .api import auth, knowledge, login_records, messages, nas, user, ai_router, project
+from .api import auth, knowledge, login_records, messages, nas, user, ai_router, ai_management, project, linebot_router
 
 # 建立 Socket.IO 伺服器
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
@@ -62,7 +62,9 @@ app.include_router(login_records.router)
 app.include_router(nas.router)
 app.include_router(user.router)
 app.include_router(ai_router.router)
+app.include_router(ai_management.router)
 app.include_router(project.router)
+app.include_router(linebot_router.router)
 
 
 @app.get("/api/health")

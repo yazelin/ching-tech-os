@@ -164,24 +164,34 @@
   display: flex;
 }
 
-.ai-model-selector {
+.ai-model-info {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
-}
-
-.ai-prompt-selector {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-}
-
-.ai-prompt-selector label {
+  gap: var(--spacing-xs);
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
 }
 
-.ai-prompt-select {
+.ai-model-name {
+  color: var(--color-text-primary);
+  font-weight: 500;
+}
+
+.ai-prompt-selector,
+.ai-agent-selector {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.ai-prompt-selector label,
+.ai-agent-selector label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.ai-prompt-select,
+.ai-agent-select {
   width: auto;
   min-width: 120px;
   padding: var(--spacing-xs) var(--spacing-sm);
@@ -192,12 +202,14 @@
   border-radius: var(--radius-md);
 }
 
-.ai-prompt-select:focus {
+.ai-prompt-select:focus,
+.ai-agent-select:focus {
   outline: none;
   border-color: var(--color-accent);
 }
 
-.ai-prompt-select option {
+.ai-prompt-select option,
+.ai-agent-select option {
   background-color: var(--color-background);
   color: var(--color-text-primary);
 }
@@ -220,31 +232,6 @@
   font-weight: 600;
 }
 
-.ai-model-selector label {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-}
-
-.ai-model-select {
-  width: auto;
-  min-width: 150px;
-  padding: var(--spacing-xs) var(--spacing-sm);
-  font-size: var(--font-size-sm);
-  background-color: var(--border-subtle);
-  color: var(--color-text-primary);
-  border: 1px solid var(--color-gray-dark);
-  border-radius: var(--radius-md);
-}
-
-.ai-model-select:focus {
-  outline: none;
-  border-color: var(--color-accent);
-}
-
-.ai-model-select option {
-  background-color: var(--color-background);
-  color: var(--color-text-primary);
-}
 
 /* ==========================================================================
    Token Warning Bar
