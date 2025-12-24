@@ -1483,3 +1483,57 @@
   align-items: center;
   gap: var(--spacing-xs);
 }
+
+
+/* ==========================================================================
+   Scope Badge
+   ========================================================================== */
+.kb-scope-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  margin-left: var(--spacing-xs);
+  vertical-align: middle;
+}
+
+.kb-scope-badge.global {
+  background-color: var(--accent-bg-medium);
+  color: var(--color-accent);
+}
+
+.kb-scope-badge.personal {
+  background-color: var(--status-in-progress-bg);
+  color: var(--status-in-progress-color);
+}
+
+.kb-scope-badge.large {
+  padding: 2px 10px;
+  font-size: var(--font-size-sm);
+}
+
+/* Scope badge in list item title */
+.kb-list-item-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}
+
+.kb-list-item-title .kb-scope-badge {
+  margin-left: 0;
+}
+
+/* Scope badge in content title */
+.kb-content-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+
+.kb-content-title .kb-scope-badge {
+  margin-left: 0;
+}

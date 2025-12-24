@@ -23,6 +23,7 @@ dependencies = [
     "line-bot-sdk>=3.0.0",
     "mcp>=1.0.0",
     "anthropic>=0.40.0",
+    "playwright>=1.57.0",
 ]
 
 [project.optional-dependencies]
@@ -43,3 +44,10 @@ include = ["src/ching_tech_os"]
 
 [tool.uv]
 package = true
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.0.2",
+    "pytest-asyncio>=1.3.0",
+]

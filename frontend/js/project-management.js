@@ -22,13 +22,22 @@ const ProjectManagementModule = (function() {
   let filterStatus = '';
 
   /**
+   * Get authentication token
+   */
+  function getToken() {
+    return LoginModule?.getToken?.() || localStorage.getItem('auth_token') || '';
+  }
+
+  /**
    * Make API request
    */
   async function apiRequest(endpoint, options = {}) {
     const url = endpoint.startsWith('http') ? endpoint : `${API_BASE}${endpoint}`;
+    const token = getToken();
     const response = await fetch(url, {
       headers: {
         'Content-Type': 'application/json',
+        ...(token && { 'Authorization': `Bearer ${token}` }),
         ...options.headers,
       },
       ...options,

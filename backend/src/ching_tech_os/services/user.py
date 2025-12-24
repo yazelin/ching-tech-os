@@ -43,12 +43,101 @@ async def get_user_by_username(username: str) -> dict | None:
     """
     async with get_connection() as conn:
         row = await conn.fetchrow(
-            "SELECT id, username, display_name, created_at, last_login_at FROM users WHERE username = $1",
+            "SELECT id, username, display_name, created_at, last_login_at, preferences FROM users WHERE username = $1",
             username,
         )
         if row:
             return dict(row)
         return None
+
+
+async def get_all_users() -> list[dict]:
+    """取得所有使用者列表
+
+    Returns:
+        使用者列表
+    """
+    async with get_connection() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT id, username, display_name, created_at, last_login_at, preferences
+            FROM users
+            ORDER BY created_at DESC
+            """
+        )
+        return [dict(row) for row in rows]
+
+
+async def get_user_by_id(user_id: int) -> dict | None:
+    """根據 ID 取得使用者資料
+
+    Args:
+        user_id: 使用者 ID
+
+    Returns:
+        使用者資料或 None
+    """
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            "SELECT id, username, display_name, created_at, last_login_at, preferences FROM users WHERE id = $1",
+            user_id,
+        )
+        if row:
+            return dict(row)
+        return None
+
+
+async def update_user_permissions(user_id: int, permissions: dict) -> dict:
+    """更新使用者權限
+
+    Args:
+        user_id: 使用者 ID
+        permissions: 要更新的權限（會與現有權限合併）
+
+    Returns:
+        更新後的完整偏好設定
+    """
+    import json
+
+    async with get_connection() as conn:
+        # 先取得現有偏好設定
+        row = await conn.fetchrow(
+            "SELECT preferences FROM users WHERE id = $1",
+            user_id,
+        )
+        if row is None:
+            raise ValueError(f"使用者 {user_id} 不存在")
+
+        current_prefs = _parse_preferences(row["preferences"])
+        current_perms = current_prefs.get("permissions", {})
+
+        # 深度合併權限
+        if "apps" in permissions:
+            if "apps" not in current_perms:
+                current_perms["apps"] = {}
+            current_perms["apps"].update(permissions["apps"])
+
+        if "knowledge" in permissions:
+            if "knowledge" not in current_perms:
+                current_perms["knowledge"] = {}
+            current_perms["knowledge"].update(permissions["knowledge"])
+
+        current_prefs["permissions"] = current_perms
+
+        # 更新資料庫
+        row = await conn.fetchrow(
+            """
+            UPDATE users
+            SET preferences = $2::jsonb
+            WHERE id = $1
+            RETURNING preferences
+            """,
+            user_id,
+            json.dumps(current_prefs),
+        )
+        if row and row["preferences"]:
+            return _parse_preferences(row["preferences"])
+        return current_prefs
 
 
 async def update_user_display_name(username: str, display_name: str) -> dict | None:

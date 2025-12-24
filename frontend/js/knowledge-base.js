@@ -26,13 +26,22 @@ const KnowledgeBaseModule = (function() {
   let filterLevel = '';
 
   /**
+   * Get authentication token
+   */
+  function getToken() {
+    return LoginModule?.getToken?.() || localStorage.getItem('auth_token') || '';
+  }
+
+  /**
    * Make API request
    */
   async function apiRequest(endpoint, options = {}) {
     const url = endpoint.startsWith('http') ? endpoint : `${API_BASE}${endpoint}`;
+    const token = getToken();
     const response = await fetch(url, {
       headers: {
         'Content-Type': 'application/json',
+        ...(token && { 'Authorization': `Bearer ${token}` }),
         ...options.headers,
       },
       ...options,
@@ -361,7 +370,10 @@ const KnowledgeBaseModule = (function() {
     listEl.innerHTML = knowledgeList.map(item => `
       <div class="kb-list-item ${selectedKnowledge?.id === item.id ? 'selected' : ''}"
            data-id="${item.id}">
-        <div class="kb-list-item-title">${highlightText(item.title)}</div>
+        <div class="kb-list-item-title">
+          ${highlightText(item.title)}
+          <span class="kb-scope-badge ${item.scope || 'global'}">${item.scope === 'personal' ? '個人' : '全域'}</span>
+        </div>
         <div class="kb-list-item-tags">
           ${item.tags.projects.map(p => `<span class="kb-tag project">${p}</span>`).join('')}
           <span class="kb-tag type">${item.type}</span>
@@ -424,6 +436,42 @@ const KnowledgeBaseModule = (function() {
   }
 
   /**
+   * 檢查是否有知識的寫入權限
+   */
+  function canEditKnowledge(kb) {
+    if (typeof PermissionsModule === 'undefined') return true;
+    const user = PermissionsModule.getCurrentUser();
+    if (!user) return false;
+    if (user.is_admin) return true;
+
+    // 個人知識：只有擁有者可編輯
+    if (kb.scope === 'personal') {
+      return kb.owner === user.username;
+    }
+
+    // 全域知識：需要 global_write 權限
+    return PermissionsModule.canAccessKnowledge('global_write');
+  }
+
+  /**
+   * 檢查是否有知識的刪除權限
+   */
+  function canDeleteKnowledge(kb) {
+    if (typeof PermissionsModule === 'undefined') return true;
+    const user = PermissionsModule.getCurrentUser();
+    if (!user) return false;
+    if (user.is_admin) return true;
+
+    // 個人知識：只有擁有者可刪除
+    if (kb.scope === 'personal') {
+      return kb.owner === user.username;
+    }
+
+    // 全域知識：需要 global_delete 權限
+    return PermissionsModule.canAccessKnowledge('global_delete');
+  }
+
+  /**
    * Render content view
    */
   function renderContentView(windowEl) {
@@ -436,15 +484,27 @@ const KnowledgeBaseModule = (function() {
     viewEl.style.display = 'flex';
 
     const kb = selectedKnowledge;
+    const canEdit = canEditKnowledge(kb);
+    const canDelete = canDeleteKnowledge(kb);
+
     viewEl.innerHTML = `
       <div class="kb-content-header">
         <div class="kb-content-title-section">
-          <h2 class="kb-content-title">${kb.title}</h2>
+          <h2 class="kb-content-title">
+            ${kb.title}
+            <span class="kb-scope-badge large ${kb.scope || 'global'}">${kb.scope === 'personal' ? '個人' : '全域'}</span>
+          </h2>
           <div class="kb-content-meta">
             <span class="kb-content-meta-item">
               <span class="icon">${getIcon('account')}</span>
               ${kb.author}
             </span>
+            ${kb.owner ? `
+            <span class="kb-content-meta-item">
+              <span class="icon">${getIcon('account-circle')}</span>
+              擁有者: ${kb.owner}
+            </span>
+            ` : ''}
             <span class="kb-content-meta-item">
               <span class="icon">${getIcon('clock-outline')}</span>
               ${formatDate(kb.updated_at)}
@@ -455,12 +515,16 @@ const KnowledgeBaseModule = (function() {
           <button class="kb-action-btn" id="kbBtnHistory" title="版本歷史">
             <span class="icon">${getIcon('clock-outline')}</span>
           </button>
+          ${canEdit ? `
           <button class="kb-action-btn" id="kbBtnEdit" title="編輯">
             <span class="icon">${getIcon('edit')}</span>
           </button>
+          ` : ''}
+          ${canDelete ? `
           <button class="kb-action-btn" id="kbBtnDelete" title="刪除" style="color: var(--color-error);">
             <span class="icon">${getIcon('delete')}</span>
           </button>
+          ` : ''}
         </div>
       </div>
       <div class="kb-tags-section">
@@ -489,13 +553,19 @@ const KnowledgeBaseModule = (function() {
     renderAttachments(viewEl, kb);
 
     // Bind action buttons
-    viewEl.querySelector('#kbBtnEdit').addEventListener('click', () => {
-      startEditKnowledge();
-    });
+    const editBtn = viewEl.querySelector('#kbBtnEdit');
+    if (editBtn) {
+      editBtn.addEventListener('click', () => {
+        startEditKnowledge();
+      });
+    }
 
-    viewEl.querySelector('#kbBtnDelete').addEventListener('click', () => {
-      confirmDeleteKnowledge();
-    });
+    const deleteBtn = viewEl.querySelector('#kbBtnDelete');
+    if (deleteBtn) {
+      deleteBtn.addEventListener('click', () => {
+        confirmDeleteKnowledge();
+      });
+    }
 
     viewEl.querySelector('#kbBtnHistory').addEventListener('click', () => {
       loadHistory();
@@ -981,6 +1051,7 @@ const KnowledgeBaseModule = (function() {
       content: '',
       type: 'knowledge',
       category: 'technical',
+      scope: 'personal',  // 預設為個人知識
       tags: {
         projects: [],
         roles: [],
@@ -1005,10 +1076,22 @@ const KnowledgeBaseModule = (function() {
       content: selectedKnowledge.content,
       type: selectedKnowledge.type,
       category: selectedKnowledge.category,
+      scope: selectedKnowledge.scope || 'global',
       tags: { ...selectedKnowledge.tags },
     };
 
     renderEditor(windowEl);
+  }
+
+  /**
+   * 檢查是否有建立全域知識的權限
+   */
+  function canCreateGlobalKnowledge() {
+    if (typeof PermissionsModule === 'undefined') return true;
+    const user = PermissionsModule.getCurrentUser();
+    if (!user) return false;
+    if (user.is_admin) return true;
+    return PermissionsModule.canAccessKnowledge('global_write');
   }
 
   /**
@@ -1024,11 +1107,27 @@ const KnowledgeBaseModule = (function() {
     editorEl.style.display = 'flex';
 
     const isNew = !selectedKnowledge;
+    const canCreateGlobal = canCreateGlobalKnowledge();
+
     editorEl.innerHTML = `
       <div class="kb-editor-header">
         <input type="text" class="kb-editor-title-input" id="kbEditorTitle"
                placeholder="知識標題" value="${editingData.title}">
         <div class="kb-editor-meta">
+          ${isNew ? `
+          <div class="kb-editor-field">
+            <label class="kb-editor-label">範圍</label>
+            <select class="kb-editor-select" id="kbEditorScope">
+              <option value="personal" ${editingData.scope === 'personal' ? 'selected' : ''}>個人知識</option>
+              ${canCreateGlobal ? `<option value="global" ${editingData.scope === 'global' ? 'selected' : ''}>全域知識</option>` : ''}
+            </select>
+          </div>
+          ` : `
+          <div class="kb-editor-field">
+            <label class="kb-editor-label">範圍</label>
+            <span class="kb-scope-badge large ${editingData.scope || 'global'}">${editingData.scope === 'personal' ? '個人' : '全域'}</span>
+          </div>
+          `}
           <div class="kb-editor-field">
             <label class="kb-editor-label">類型</label>
             <select class="kb-editor-select" id="kbEditorType">
@@ -1111,6 +1210,10 @@ const KnowledgeBaseModule = (function() {
     const projectSelect = windowEl.querySelector('#kbEditorProject');
     const projects = Array.from(projectSelect.selectedOptions).map(o => o.value);
 
+    // 讀取 scope（只有新增時才有選擇器）
+    const scopeSelect = windowEl.querySelector('#kbEditorScope');
+    const scope = scopeSelect ? scopeSelect.value : editingData.scope;
+
     if (!title) {
       NotificationModule.show({ title: '提醒', message: '請輸入標題', icon: 'alert' });
       return;
@@ -1131,14 +1234,15 @@ const KnowledgeBaseModule = (function() {
       };
 
       if (selectedKnowledge) {
-        // Update
+        // Update（不包含 scope，因為建立後不能更改）
         await apiRequest(`/${selectedKnowledge.id}`, {
           method: 'PUT',
           body: JSON.stringify(data),
         });
         NotificationModule.show({ title: '更新成功', message: '知識已更新', icon: 'check-circle' });
       } else {
-        // Create
+        // Create（包含 scope）
+        data.scope = scope;
         const result = await apiRequest('', {
           method: 'POST',
           body: JSON.stringify(data),

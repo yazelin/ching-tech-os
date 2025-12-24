@@ -209,7 +209,12 @@ const DesktopModule = (function() {
     const desktopArea = document.querySelector('.desktop-area');
     if (!desktopArea) return;
 
-    applications.forEach(app => {
+    // 根據權限過濾應用程式
+    const visibleApps = typeof PermissionsModule !== 'undefined'
+      ? PermissionsModule.getAccessibleApps(applications)
+      : applications;
+
+    visibleApps.forEach(app => {
       const iconElement = createIconElement(app);
       iconElement.addEventListener('click', handleIconClick);
       iconElement.addEventListener('dblclick', handleIconDoubleClick);

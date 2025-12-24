@@ -3,7 +3,7 @@
 import mimetypes
 from typing import Annotated
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response
 
 from ching_tech_os.services.message import log_message
@@ -35,6 +35,10 @@ from ching_tech_os.services.knowledge import (
     KnowledgeError,
     KnowledgeNotFoundError,
 )
+from ching_tech_os.services.permissions import check_knowledge_permission
+from ching_tech_os.services.user import get_user_preferences, _parse_preferences
+from ching_tech_os.api.auth import get_current_session
+from ching_tech_os.models.auth import SessionData
 
 router = APIRouter(prefix="/api/knowledge", tags=["knowledge"])
 
@@ -52,10 +56,13 @@ async def list_knowledge(
     role: str | None = Query(None, description="角色過濾"),
     level: str | None = Query(None, description="層級過濾"),
     topics: list[str] | None = Query(None, description="主題過濾"),
+    scope: str | None = Query(None, description="範圍過濾（global、personal）"),
+    session: SessionData = Depends(get_current_session),
 ) -> KnowledgeListResponse:
     """搜尋或列出知識
 
     支援關鍵字全文搜尋（使用 ripgrep）與多維度標籤過濾。
+    預設顯示全域知識 + 自己的個人知識。
     """
     try:
         return search_knowledge(
@@ -66,6 +73,8 @@ async def list_knowledge(
             role=role,
             level=level,
             topics=topics,
+            scope=scope,
+            current_username=session.username,
         )
     except KnowledgeError as e:
         raise HTTPException(
@@ -207,13 +216,30 @@ async def get_single_knowledge(kb_id: str) -> KnowledgeResponse:
     status_code=status.HTTP_201_CREATED,
     summary="新增知識",
 )
-async def create_new_knowledge(data: KnowledgeCreate) -> KnowledgeResponse:
+async def create_new_knowledge(
+    data: KnowledgeCreate,
+    session: SessionData = Depends(get_current_session),
+) -> KnowledgeResponse:
     """建立新知識
 
     系統會自動分配 ID，並根據標題產生 slug（若未提供）。
+    個人知識會自動設定 owner 為目前使用者。
+    建立全域知識需要 global_write 權限。
     """
+    # 權限檢查：建立全域知識需要權限
+    if data.scope == "global":
+        preferences = await get_user_preferences(session.user_id) if session.user_id else None
+        if not check_knowledge_permission(
+            session.username, preferences, None, "global", "write"
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="您沒有建立全域知識的權限",
+            )
+
     try:
-        result = create_knowledge(data)
+        # 傳入 owner（建立個人知識時使用）
+        result = create_knowledge(data, owner=session.username)
 
         # 記錄到訊息中心
         try:
@@ -223,7 +249,7 @@ async def create_new_knowledge(data: KnowledgeCreate) -> KnowledgeResponse:
                 title="知識庫新增",
                 content=f"新增知識: {result.title}",
                 category="app",
-                metadata={"kb_id": result.id, "title": result.title}
+                metadata={"kb_id": result.id, "title": result.title, "scope": result.scope}
             )
         except Exception as e:
             print(f"[knowledge] log_message error: {e}")
@@ -242,12 +268,34 @@ async def create_new_knowledge(data: KnowledgeCreate) -> KnowledgeResponse:
     summary="更新知識",
 )
 async def update_existing_knowledge(
-    kb_id: str, data: KnowledgeUpdate
+    kb_id: str,
+    data: KnowledgeUpdate,
+    session: SessionData = Depends(get_current_session),
 ) -> KnowledgeResponse:
     """更新知識內容或元資料
 
     只需提供要更新的欄位。
+    需要對該知識有寫入權限。
     """
+    # 取得知識以檢查權限
+    try:
+        knowledge = get_knowledge(kb_id)
+    except KnowledgeNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"知識 {kb_id} 不存在",
+        )
+
+    # 權限檢查
+    preferences = await get_user_preferences(session.user_id) if session.user_id else None
+    if not check_knowledge_permission(
+        session.username, preferences, knowledge.owner, knowledge.scope, "write"
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="您沒有編輯此知識的權限",
+        )
+
     try:
         result = update_knowledge(kb_id, data)
 
@@ -265,11 +313,6 @@ async def update_existing_knowledge(
             print(f"[knowledge] log_message error: {e}")
 
         return result
-    except KnowledgeNotFoundError:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"知識 {kb_id} 不存在",
-        )
     except KnowledgeError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -282,11 +325,34 @@ async def update_existing_knowledge(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="刪除知識",
 )
-async def delete_existing_knowledge(kb_id: str) -> None:
+async def delete_existing_knowledge(
+    kb_id: str,
+    session: SessionData = Depends(get_current_session),
+) -> None:
     """刪除知識
 
     會同時刪除檔案和索引記錄。
+    需要對該知識有刪除權限。
     """
+    # 取得知識以檢查權限
+    try:
+        knowledge = get_knowledge(kb_id)
+    except KnowledgeNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"知識 {kb_id} 不存在",
+        )
+
+    # 權限檢查
+    preferences = await get_user_preferences(session.user_id) if session.user_id else None
+    if not check_knowledge_permission(
+        session.username, preferences, knowledge.owner, knowledge.scope, "delete"
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="您沒有刪除此知識的權限",
+        )
+
     try:
         delete_knowledge(kb_id)
 
@@ -303,11 +369,6 @@ async def delete_existing_knowledge(kb_id: str) -> None:
         except Exception as e:
             print(f"[knowledge] log_message error: {e}")
 
-    except KnowledgeNotFoundError:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"知識 {kb_id} 不存在",
-        )
     except KnowledgeError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

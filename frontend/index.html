@@ -120,6 +120,7 @@
   <script src="js/agent-settings.js"></script>
   <script src="js/ai-log.js"></script>
   <script src="js/linebot.js"></script>
+  <script src="js/permissions.js"></script>
   <script src="js/desktop.js"></script>
   <script src="js/taskbar.js"></script>
   <script>
@@ -144,6 +145,9 @@
         window.location.href = 'login.html';
         return;
       }
+
+      // 載入使用者資訊（包含權限）
+      await PermissionsModule.init();
 
       // Initialize all modules
       WindowModule.init();

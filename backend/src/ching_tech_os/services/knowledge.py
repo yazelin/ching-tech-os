@@ -168,6 +168,8 @@ def _metadata_to_response(
         title=metadata.get("title", ""),
         type=metadata.get("type", "knowledge"),
         category=metadata.get("category", "technical"),
+        scope=metadata.get("scope", "global"),
+        owner=metadata.get("owner"),
         tags=tags,
         source=source,
         related=metadata.get("related", []),
@@ -212,6 +214,8 @@ def search_knowledge(
     role: str | None = None,
     level: str | None = None,
     topics: list[str] | None = None,
+    scope: str | None = None,
+    current_username: str | None = None,
 ) -> KnowledgeListResponse:
     """搜尋知識
 
@@ -223,6 +227,8 @@ def search_knowledge(
         role: 角色過濾
         level: 層級過濾
         topics: 主題過濾
+        scope: 範圍過濾（global、personal、all）
+        current_username: 目前使用者帳號（用於過濾個人知識）
 
     Returns:
         符合條件的知識列表
@@ -295,6 +301,24 @@ def search_knowledge(
         if matching_files is not None and entry.filename not in matching_files:
             continue
 
+        # Scope 過濾
+        entry_scope = getattr(entry, "scope", "global")
+        entry_owner = getattr(entry, "owner", None)
+
+        if scope:
+            if scope == "global" and entry_scope != "global":
+                continue
+            if scope == "personal":
+                if entry_scope != "personal":
+                    continue
+                # 個人知識只顯示自己的
+                if current_username and entry_owner != current_username:
+                    continue
+        else:
+            # 預設行為：全域知識 + 自己的個人知識
+            if entry_scope == "personal" and entry_owner != current_username:
+                continue
+
         # 專案過濾
         if project and project not in entry.tags.projects:
             continue
@@ -331,6 +355,8 @@ def search_knowledge(
                 title=entry.title,
                 type=entry.type,
                 category=entry.category,
+                scope=entry_scope,
+                owner=entry_owner,
                 tags=entry.tags,
                 author=entry.author,
                 updated_at=updated_at,
@@ -344,11 +370,12 @@ def search_knowledge(
     return KnowledgeListResponse(items=results, total=len(results), query=query)
 
 
-def create_knowledge(data: KnowledgeCreate) -> KnowledgeResponse:
+def create_knowledge(data: KnowledgeCreate, owner: str | None = None) -> KnowledgeResponse:
     """建立新知識
 
     Args:
         data: 知識資料
+        owner: 擁有者帳號（建立個人知識時設定）
 
     Returns:
         建立的知識
@@ -378,11 +405,19 @@ def create_knowledge(data: KnowledgeCreate) -> KnowledgeResponse:
 
     # 準備元資料
     today = date.today()
+
+    # 設定 scope 和 owner
+    # 如果是個人知識且有 owner，設定 scope 為 personal
+    knowledge_scope = data.scope
+    knowledge_owner = owner if knowledge_scope == "personal" else None
+
     metadata = {
         "id": kb_id,
         "title": data.title,
         "type": data.type,
         "category": data.category,
+        "scope": knowledge_scope,
+        "owner": knowledge_owner,
         "tags": {
             "projects": data.tags.projects,
             "roles": data.tags.roles,
@@ -419,6 +454,8 @@ def create_knowledge(data: KnowledgeCreate) -> KnowledgeResponse:
         filename=filename,
         type=data.type,
         category=data.category,
+        scope=knowledge_scope,
+        owner=knowledge_owner,
         tags=data.tags,
         author=data.author,
         created_at=today.isoformat(),
