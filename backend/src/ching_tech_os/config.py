@@ -1,5 +1,9 @@
-"""應用程式設定"""
+"""應用程式設定
 
+所有敏感設定從環境變數讀取，請確保 .env 檔案正確設定。
+"""
+
+import logging
 import os
 from pathlib import Path
 
@@ -9,53 +13,83 @@ from dotenv import load_dotenv
 _project_root = Path(__file__).parent.parent.parent.parent
 load_dotenv(_project_root / ".env")
 
+logger = logging.getLogger(__name__)
+
+
+def _get_env(key: str, default: str = "", required: bool = False) -> str:
+    """取得環境變數，可設定是否必要"""
+    value = os.getenv(key, default)
+    if required and not value:
+        logger.warning(f"環境變數 {key} 未設定，相關功能可能無法正常運作")
+    return value
+
+
+def _get_env_int(key: str, default: int) -> int:
+    """取得整數環境變數"""
+    value = os.getenv(key)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        logger.warning(f"環境變數 {key} 不是有效的整數，使用預設值 {default}")
+        return default
+
 
 class Settings:
     """應用程式設定"""
 
-    # 前端目錄
-    frontend_dir: str = "/home/ct/SDD/ching-tech-os/frontend"
+    # ===================
+    # 管理員設定
+    # ===================
+    admin_username: str = _get_env("ADMIN_USERNAME", required=True)
 
-    # NAS 設定
-    nas_host: str = "192.168.11.50"
-    nas_port: int = 445
-
-    # 測試帳號（開發用）
-    test_username: str = "yazelin"
-    test_password: str = "REMOVED_PASSWORD"
-
+    # ===================
     # 資料庫設定
-    db_host: str = "localhost"
-    db_port: int = 5432
-    db_user: str = "ching_tech"
-    db_password: str = "REMOVED_PASSWORD"
-    db_name: str = "ching_tech_os"
+    # ===================
+    db_host: str = _get_env("DB_HOST", "localhost")
+    db_port: int = _get_env_int("DB_PORT", 5432)
+    db_user: str = _get_env("DB_USER", "ching_tech")
+    db_password: str = _get_env("DB_PASSWORD", required=True)
+    db_name: str = _get_env("DB_NAME", "ching_tech_os")
 
+    # ===================
+    # NAS 設定（統一設定，各功能共用）
+    # ===================
+    nas_host: str = _get_env("NAS_HOST", "192.168.11.50")
+    nas_port: int = _get_env_int("NAS_PORT", 445)
+    nas_user: str = _get_env("NAS_USER", required=True)
+    nas_password: str = _get_env("NAS_PASSWORD", required=True)
+    nas_share: str = _get_env("NAS_SHARE", "擎添開發")
+
+    # ===================
     # Session 設定
-    session_ttl_hours: int = 8
+    # ===================
+    session_ttl_hours: int = _get_env_int("SESSION_TTL_HOURS", 8)
     session_cleanup_interval_minutes: int = 10
 
-    # 知識庫 NAS 設定
-    knowledge_nas_host: str = "192.168.11.50"
-    knowledge_nas_share: str = "擎添開發"
-    knowledge_nas_path: str = "ching-tech-os/knowledge"
-    knowledge_nas_user: str = "yazelin"
-    knowledge_nas_password: str = "REMOVED_PASSWORD"
+    # ===================
+    # 路徑設定
+    # ===================
+    frontend_dir: str = _get_env("FRONTEND_DIR", "/home/ct/SDD/ching-tech-os/frontend")
 
-    # 專案管理 NAS 設定
-    project_nas_host: str = "192.168.11.50"
-    project_nas_share: str = "擎添開發"
-    project_nas_path: str = "ching-tech-os/projects"
-    project_nas_user: str = "yazelin"
-    project_nas_password: str = "REMOVED_PASSWORD"
+    # NAS 路徑（相對於 nas_share）
+    knowledge_nas_path: str = _get_env("KNOWLEDGE_NAS_PATH", "ching-tech-os/knowledge")
+    project_nas_path: str = _get_env("PROJECT_NAS_PATH", "ching-tech-os/projects")
+    line_files_nas_path: str = _get_env("LINEBOT_NAS_PATH", "ching-tech-os/linebot/files")
 
-    # 專案附件本機儲存路徑
-    project_attachments_path: str = "/home/ct/SDD/ching-tech-os/data/projects/attachments"
+    # 本機路徑
+    project_attachments_path: str = _get_env(
+        "PROJECT_ATTACHMENTS_PATH",
+        "/home/ct/SDD/ching-tech-os/data/projects/attachments"
+    )
 
-    # Line Bot 設定（從環境變數載入）
-    line_channel_secret: str = os.getenv("LINE_CHANNEL_SECRET", "")
-    line_channel_access_token: str = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
-    line_files_nas_path: str = "ching-tech-os/linebot/files"
+    # ===================
+    # Line Bot 設定
+    # ===================
+    line_channel_secret: str = _get_env("LINE_CHANNEL_SECRET", required=True)
+    line_channel_access_token: str = _get_env("LINE_CHANNEL_ACCESS_TOKEN", required=True)
+
     # Bot 觸發名稱（用於群組 @ 觸發，檢查訊息是否包含 @名稱）
     line_bot_trigger_names: list[str] = [
         "ChingTech 擎添工業",  # Line 自動填入的完整名稱
@@ -64,7 +98,10 @@ class Settings:
         "ctos",                # 系統簡稱
     ]
 
-    # CORS 設定（credentials=True 時不能用 "*"）
+    # ===================
+    # CORS 設定
+    # ===================
+    # credentials=True 時不能用 "*"
     cors_origins: list[str] = [
         "http://localhost:8080",
         "http://localhost:8088",
@@ -74,6 +111,44 @@ class Settings:
         "http://127.0.0.1:8088",
     ]
 
+    # ===================
+    # 相容性屬性（向後相容，使用統一的 NAS 設定）
+    # ===================
+    @property
+    def knowledge_nas_host(self) -> str:
+        return self.nas_host
+
+    @property
+    def knowledge_nas_share(self) -> str:
+        return self.nas_share
+
+    @property
+    def knowledge_nas_user(self) -> str:
+        return self.nas_user
+
+    @property
+    def knowledge_nas_password(self) -> str:
+        return self.nas_password
+
+    @property
+    def project_nas_host(self) -> str:
+        return self.nas_host
+
+    @property
+    def project_nas_share(self) -> str:
+        return self.nas_share
+
+    @property
+    def project_nas_user(self) -> str:
+        return self.nas_user
+
+    @property
+    def project_nas_password(self) -> str:
+        return self.nas_password
+
+    # ===================
+    # 資料庫 URL
+    # ===================
     @property
     def database_url(self) -> str:
         """同步 database URL (for Alembic/SQLAlchemy)"""
@@ -81,6 +156,7 @@ class Settings:
 
     @property
     def async_database_url(self) -> str:
+        """非同步 database URL"""
         return f"postgresql+asyncpg://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
 
 
