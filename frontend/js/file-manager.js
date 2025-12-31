@@ -1107,7 +1107,9 @@ const FileManagerModule = (function() {
 
     try {
       // 使用 fetch 帶認證 token 下載
-      const response = await fetch(`/api/nas/download?path=${encodeURIComponent(filePath)}`);
+      const response = await fetch(`/api/nas/download?path=${encodeURIComponent(filePath)}`, {
+        headers: { 'Authorization': `Bearer ${getToken()}` }
+      });
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({ detail: '下載失敗' }));
