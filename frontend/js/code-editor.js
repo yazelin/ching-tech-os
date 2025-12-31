@@ -6,17 +6,15 @@
 const CodeEditorModule = (function() {
   'use strict';
 
-  const CODE_SERVER_BASE_URL = 'http://localhost:8443';
   let windowId = null;
 
   /**
    * Get code-server URL with theme-appropriate settings
-   * Note: code-server 本身不支援 URL 主題參數，主題需在 VS Code 設定中配置
-   * 建議在 ~/.local/share/code-server/User/settings.json 設定：
-   * { "workbench.colorTheme": "Default Dark Modern" }
+   * 使用相對路徑，由 nginx 代理到 code-server
    */
   function getCodeServerUrl() {
-    return CODE_SERVER_BASE_URL;
+    const basePath = window.API_BASE || '';
+    return `${basePath}/code/`;
   }
 
   /**
@@ -99,7 +97,7 @@ const CodeEditorModule = (function() {
    */
   async function checkAvailability() {
     try {
-      const response = await fetch(CODE_SERVER_BASE_URL, {
+      const response = await fetch(getCodeServerUrl(), {
         method: 'HEAD',
         mode: 'no-cors'
       });

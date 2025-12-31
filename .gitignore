@@ -32,5 +32,14 @@ docker/.env
 # Credentials
 docker/code-server.git-credentials
 
+# Knowledge Base (private content)
+# 保留 .example 範例，排除實際內容
+data/knowledge/entries/
+data/knowledge/assets/
+data/knowledge/index.json
+!data/knowledge/entries.example/
+!data/knowledge/assets.example/
+!data/knowledge/index.example.json
+
 # Node (if added later)
 node_modules/

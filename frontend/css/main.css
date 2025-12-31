@@ -3,8 +3,15 @@
    ========================================================================== */
 
 /* ==========================================================================
-   Font - 使用系統字型，不載入外部字型
+   Web Fonts - Nerd Font for terminal icons
    ========================================================================== */
+@font-face {
+  font-family: 'JetBrainsMono NF';
+  src: url('../fonts/JetBrainsMonoNerdFont-Regular.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
 
 /* ==========================================================================
    CSS Variables (Design Tokens)

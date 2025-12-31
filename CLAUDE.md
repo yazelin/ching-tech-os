@@ -27,8 +27,9 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - 資料庫 schema 變更必須使用 Alembic migration
 - Migration 檔案放在 `backend/migrations/versions/`
 - 檔案命名格式：`00X_description.py`
-- 不要直接修改 `docker/init.sql`（僅用於初始化基本表）
+- `docker/init.sql` 已停用，所有表格由 Alembic migration 管理
 - 執行 migration：`cd backend && uv run alembic upgrade head`
+- 直接查詢資料庫：`docker exec ching-tech-os-db psql -U ching_tech -d ching_tech_os -c "SQL語句"`
 
 ## 後端開發
 - 使用 FastAPI + asyncpg

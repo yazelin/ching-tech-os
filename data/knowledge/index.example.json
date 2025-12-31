@@ -1,0 +1,14 @@
+{
+  "version": "1.0",
+  "entries": [
+    {
+      "id": "kb-001",
+      "title": "知識庫使用指南",
+      "filename": "kb-001-example.md",
+      "category": "guide",
+      "tags": ["入門", "教學"],
+      "created_at": "2025-01-01T00:00:00Z",
+      "updated_at": "2025-01-01T00:00:00Z"
+    }
+  ]
+}
