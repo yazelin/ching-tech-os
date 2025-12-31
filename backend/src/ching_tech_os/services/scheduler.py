@@ -4,10 +4,13 @@ ChingTech OS - 排程服務
 """
 
 import logging
+import os
+import time
 from datetime import datetime, timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
 from ..database import get_connection
 
@@ -108,6 +111,37 @@ async def create_next_month_partitions():
             logger.error(f"建立分區失敗: {e}")
 
 
+async def cleanup_linebot_temp_images():
+    """
+    清理 Line Bot 圖片暫存檔
+    刪除修改時間超過 1 小時的暫存檔
+    """
+    temp_dir = "/tmp/linebot-images"
+
+    if not os.path.exists(temp_dir):
+        logger.debug("Line Bot 圖片暫存目錄不存在，跳過清理")
+        return
+
+    try:
+        one_hour_ago = time.time() - 3600  # 1 小時前
+        deleted_count = 0
+
+        for filename in os.listdir(temp_dir):
+            filepath = os.path.join(temp_dir, filename)
+            if os.path.isfile(filepath):
+                if os.path.getmtime(filepath) < one_hour_ago:
+                    os.unlink(filepath)
+                    deleted_count += 1
+
+        if deleted_count > 0:
+            logger.info(f"清理 Line Bot 圖片暫存檔: 刪除 {deleted_count} 個檔案")
+        else:
+            logger.debug("Line Bot 圖片暫存檔清理: 無過期檔案")
+
+    except Exception as e:
+        logger.error(f"清理 Line Bot 圖片暫存檔失敗: {e}")
+
+
 def start_scheduler():
     """
     啟動排程器
@@ -127,6 +161,15 @@ def start_scheduler():
         CronTrigger(day=25, hour=4, minute=0),
         id='create_next_month_partitions',
         name='建立下月分區',
+        replace_existing=True
+    )
+
+    # 每小時清理 Line Bot 圖片暫存檔
+    scheduler.add_job(
+        cleanup_linebot_temp_images,
+        IntervalTrigger(hours=1),
+        id='cleanup_linebot_temp_images',
+        name='清理 Line Bot 圖片暫存',
         replace_existing=True
     )
 

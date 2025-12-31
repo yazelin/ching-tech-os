@@ -1419,3 +1419,86 @@ def is_reset_command(content: str) -> bool:
         "/忘记",
     ]
     return content.strip().lower() in [cmd.lower() for cmd in reset_commands]
+
+
+# ============================================================
+# 圖片暫存服務
+# ============================================================
+
+# 暫存目錄
+TEMP_IMAGE_DIR = "/tmp/linebot-images"
+
+
+def get_temp_image_path(line_message_id: str) -> str:
+    """取得圖片暫存路徑
+
+    Args:
+        line_message_id: Line 訊息 ID
+
+    Returns:
+        暫存檔案路徑
+    """
+    return f"{TEMP_IMAGE_DIR}/{line_message_id}.jpg"
+
+
+async def ensure_temp_image(line_message_id: str, nas_path: str) -> str | None:
+    """確保圖片暫存檔存在
+
+    如果暫存檔不存在，從 NAS 讀取並寫入暫存。
+
+    Args:
+        line_message_id: Line 訊息 ID
+        nas_path: NAS 上的檔案路徑
+
+    Returns:
+        暫存檔案路徑，失敗回傳 None
+    """
+    import os
+
+    # 確保暫存目錄存在
+    os.makedirs(TEMP_IMAGE_DIR, exist_ok=True)
+
+    temp_path = get_temp_image_path(line_message_id)
+
+    # 如果暫存檔已存在，直接回傳
+    if os.path.exists(temp_path):
+        return temp_path
+
+    # 從 NAS 讀取圖片
+    content = await read_file_from_nas(nas_path)
+    if content is None:
+        logger.warning(f"無法從 NAS 讀取圖片: {nas_path}")
+        return None
+
+    # 寫入暫存檔
+    try:
+        with open(temp_path, "wb") as f:
+            f.write(content)
+        logger.debug(f"已建立圖片暫存: {temp_path}")
+        return temp_path
+    except Exception as e:
+        logger.error(f"寫入暫存檔失敗: {e}")
+        return None
+
+
+async def get_image_info_by_line_message_id(line_message_id: str) -> dict | None:
+    """透過 Line 訊息 ID 取得圖片資訊
+
+    Args:
+        line_message_id: Line 訊息 ID
+
+    Returns:
+        包含 nas_path 等資訊的字典，找不到回傳 None
+    """
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT f.nas_path, f.file_type, m.id as message_uuid
+            FROM line_files f
+            JOIN line_messages m ON f.message_id = m.id
+            WHERE m.message_id = $1
+              AND f.file_type = 'image'
+            """,
+            line_message_id,
+        )
+        return dict(row) if row else None

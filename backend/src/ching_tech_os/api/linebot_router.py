@@ -162,9 +162,14 @@ async def process_message_event(event: MessageEvent) -> None:
     file_size = None
     duration = None
 
+    # 用於處理回覆舊訊息
+    quoted_message_id = None
+
     if isinstance(message, TextMessageContent):
         message_type = "text"
         content = message.text
+        # 取得被回覆的訊息 ID（如果用戶回覆了某則訊息）
+        quoted_message_id = getattr(message, "quoted_message_id", None)
     elif isinstance(message, ImageMessageContent):
         message_type = "image"
         content = None
@@ -267,6 +272,7 @@ async def process_message_event(event: MessageEvent) -> None:
             line_user_id=line_user_id,
             line_group_id=group_uuid,
             reply_token=event.reply_token,
+            quoted_message_id=quoted_message_id,
         )
 
 

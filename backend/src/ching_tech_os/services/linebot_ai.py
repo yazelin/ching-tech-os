@@ -16,6 +16,9 @@ from .linebot import (
     save_bot_response,
     reset_conversation,
     is_reset_command,
+    ensure_temp_image,
+    get_image_info_by_line_message_id,
+    get_temp_image_path,
 )
 from . import ai_manager
 from .linebot_agents import get_linebot_agent, AGENT_LINEBOT_PERSONAL, AGENT_LINEBOT_GROUP
@@ -37,6 +40,7 @@ async def process_message_with_ai(
     line_user_id: str | None,
     reply_token: str | None,
     user_display_name: str | None = None,
+    quoted_message_id: str | None = None,
 ) -> str | None:
     """
     使用 AI 處理訊息
@@ -48,6 +52,7 @@ async def process_message_with_ai(
         line_user_id: Line 用戶 ID（個人對話用）
         reply_token: Line 回覆 token（可能已過期）
         user_display_name: 發送者顯示名稱
+        quoted_message_id: 被回覆的訊息 ID（Line 的 quotedMessageId）
 
     Returns:
         AI 回應文字，或 None（如果不需處理）
@@ -91,30 +96,56 @@ async def process_message_with_ai(
         agent = await get_linebot_agent(is_group)
         agent_name = AGENT_LINEBOT_GROUP if is_group else AGENT_LINEBOT_PERSONAL
 
-        if agent:
-            # 從 Agent 取得 model 和基礎 prompt
-            model = agent["model"].replace("claude-", "")  # claude-sonnet -> sonnet
-            base_prompt = agent.get("system_prompt", {}).get("content", "")
-            # 從 Agent 取得內建工具權限（如 WebSearch, WebFetch）
-            agent_tools = agent.get("tools") or []
-            logger.info(f"使用 Agent '{agent_name}' 設定，內建工具: {agent_tools}")
-        else:
-            # Fallback：使用預設值
-            model = "haiku" if is_group else "sonnet"
-            base_prompt = ""
-            agent_tools = []
-            logger.warning(f"Agent '{agent_name}' 不存在，使用 fallback 設定")
+        if not agent:
+            error_msg = f"⚠️ AI 設定錯誤：Agent '{agent_name}' 不存在"
+            logger.error(error_msg)
+            if reply_token:
+                await reply_text(reply_token, error_msg)
+            return error_msg
+
+        # 從 Agent 取得 model 和基礎 prompt
+        model = agent["model"].replace("claude-", "")  # claude-sonnet -> sonnet
+        base_prompt = agent.get("system_prompt", {}).get("content", "")
+        # 從 Agent 取得內建工具權限（如 WebSearch, WebFetch）
+        agent_tools = agent.get("tools") or []
+        logger.info(f"使用 Agent '{agent_name}' 設定，內建工具: {agent_tools}")
+
+        if not base_prompt:
+            error_msg = f"⚠️ AI 設定錯誤：Agent '{agent_name}' 沒有設定 system_prompt"
+            logger.error(error_msg)
+            if reply_token:
+                await reply_text(reply_token, error_msg)
+            return error_msg
 
         # 建立系統提示（加入群組資訊）
         system_prompt = await build_system_prompt(line_group_id, base_prompt)
 
-        # 取得對話歷史（20 則提供更好的上下文理解）
-        history = await get_conversation_context(line_group_id, line_user_id, limit=20)
+        # 取得對話歷史（20 則提供更好的上下文理解，包含圖片）
+        history, images = await get_conversation_context(line_group_id, line_user_id, limit=20)
+
+        # 處理回覆舊圖片（quotedMessageId）
+        quoted_image_path = None
+        if quoted_message_id:
+            image_info = await get_image_info_by_line_message_id(quoted_message_id)
+            if image_info and image_info.get("nas_path"):
+                # 確保圖片暫存存在
+                temp_path = await ensure_temp_image(quoted_message_id, image_info["nas_path"])
+                if temp_path:
+                    quoted_image_path = temp_path
+                    logger.info(f"用戶回覆圖片: {quoted_message_id} -> {temp_path}")
+
+        # 確保對話歷史中的圖片暫存存在
+        for img in images:
+            await ensure_temp_image(img["line_message_id"], img["nas_path"])
 
         # 準備用戶訊息
         user_message = content
         if user_display_name:
             user_message = f"{user_display_name}: {content}"
+
+        # 如果是回覆圖片，在訊息開頭標註
+        if quoted_image_path:
+            user_message = f"[回覆圖片: {quoted_image_path}]\n{user_message}"
 
         # MCP 工具列表（固定）
         mcp_tools = [
@@ -130,8 +161,8 @@ async def process_message_with_ai(
             "mcp__ching-tech-os__add_note",
         ]
 
-        # 合併內建工具（從 Agent 設定）和 MCP 工具
-        all_tools = agent_tools + mcp_tools
+        # 合併內建工具（從 Agent 設定）、MCP 工具和 Read（用於讀取圖片）
+        all_tools = agent_tools + mcp_tools + ["Read"]
 
         # 計時開始
         start_time = time.time()
@@ -249,9 +280,9 @@ async def get_conversation_context(
     line_group_id: UUID | None,
     line_user_id: str | None,
     limit: int = 20,
-) -> list[dict]:
+) -> tuple[list[dict], list[dict]]:
     """
-    取得對話上下文
+    取得對話上下文（包含圖片訊息）
 
     Args:
         line_group_id: 群組 UUID（None 表示個人對話）
@@ -259,19 +290,25 @@ async def get_conversation_context(
         limit: 取得的訊息數量
 
     Returns:
-        訊息列表 [{"role": "user/assistant", "content": "..."}]
+        (context, images) tuple:
+        - context: 訊息列表 [{"role": "user/assistant", "content": "..."}]
+        - images: 圖片資訊列表 [{"line_message_id": "...", "nas_path": "..."}]
     """
+    from .linebot import get_temp_image_path
+
     async with get_connection() as conn:
         if line_group_id:
-            # 群組對話
+            # 群組對話（包含 text 和 image）
             rows = await conn.fetch(
                 """
-                SELECT m.content, m.is_from_bot, u.display_name
+                SELECT m.content, m.is_from_bot, u.display_name,
+                       m.message_type, m.message_id as line_message_id, f.nas_path
                 FROM line_messages m
                 LEFT JOIN line_users u ON m.line_user_id = u.id
+                LEFT JOIN line_files f ON f.message_id = m.id AND f.file_type = 'image'
                 WHERE m.line_group_id = $1
-                  AND m.message_type = 'text'
-                  AND m.content IS NOT NULL
+                  AND m.message_type IN ('text', 'image')
+                  AND (m.content IS NOT NULL OR m.message_type = 'image')
                 ORDER BY m.created_at DESC
                 LIMIT $2
                 """,
@@ -282,13 +319,15 @@ async def get_conversation_context(
             # 個人對話：查詢該用戶的對話歷史，考慮對話重置時間
             rows = await conn.fetch(
                 """
-                SELECT m.content, m.is_from_bot, u.display_name
+                SELECT m.content, m.is_from_bot, u.display_name,
+                       m.message_type, m.message_id as line_message_id, f.nas_path
                 FROM line_messages m
                 LEFT JOIN line_users u ON m.line_user_id = u.id
+                LEFT JOIN line_files f ON f.message_id = m.id AND f.file_type = 'image'
                 WHERE u.line_user_id = $1
                   AND m.line_group_id IS NULL
-                  AND m.message_type = 'text'
-                  AND m.content IS NOT NULL
+                  AND m.message_type IN ('text', 'image')
+                  AND (m.content IS NOT NULL OR m.message_type = 'image')
                   AND (
                     u.conversation_reset_at IS NULL
                     OR m.created_at > u.conversation_reset_at
@@ -300,67 +339,60 @@ async def get_conversation_context(
                 limit,
             )
         else:
-            return []
+            return [], []
 
         # 反轉順序（從舊到新）
         rows = list(reversed(rows))
 
+        # 找出最新的圖片訊息 ID（用於標記）
+        latest_image_id = None
+        for row in reversed(rows):  # 從新到舊找第一張有 nas_path 的圖片
+            if row["message_type"] == "image" and row["nas_path"]:
+                latest_image_id = row["line_message_id"]
+                break
+
         context = []
+        images = []
+
         for row in rows:
             role = "assistant" if row["is_from_bot"] else "user"
-            content = row["content"]
+
+            if row["message_type"] == "image" and row["nas_path"]:
+                # 圖片訊息：格式化為特殊標記
+                temp_path = get_temp_image_path(row["line_message_id"])
+                # 標記最新的圖片
+                if row["line_message_id"] == latest_image_id:
+                    content = f"[上傳圖片（最近）: {temp_path}]"
+                else:
+                    content = f"[上傳圖片: {temp_path}]"
+                # 記錄圖片資訊供後續載入
+                images.append({
+                    "line_message_id": row["line_message_id"],
+                    "nas_path": row["nas_path"],
+                })
+            else:
+                content = row["content"]
+
             # 群組對話才加發送者名稱，個人對話不需要
             if line_group_id and not row["is_from_bot"] and row["display_name"]:
                 content = f"{row['display_name']}: {content}"
+
             context.append({"role": role, "content": content})
 
-        return context
+        return context, images
 
 
-FALLBACK_PROMPT = """你是擎添工業的 AI 助理，透過 Line 與用戶互動。
-
-你可以使用以下工具：
-
-【專案查詢】
-- query_project: 查詢專案（可用關鍵字搜尋，取得專案 ID）
-- get_project_milestones: 取得專案里程碑（需要 project_id）
-- get_project_meetings: 取得專案會議記錄（需要 project_id）
-- get_project_members: 取得專案成員與聯絡人（需要 project_id）
-- summarize_chat: 取得群組聊天記錄（需要 line_group_id）
-
-【知識庫】
-- search_knowledge: 搜尋知識庫（輸入關鍵字，回傳標題列表）
-- get_knowledge_item: 取得知識庫文件完整內容（輸入 kb_id，如 kb-001）
-- update_knowledge_item: 更新知識庫文件（可更新標題、內容、分類、標籤）
-- delete_knowledge_item: 刪除知識庫文件
-- add_note: 新增筆記到知識庫（輸入標題和內容）
-
-對話管理：
-- 用戶可以發送 /新對話 或 /reset 來清除對話歷史，開始新對話
-- 當用戶說「忘記之前的對話」或類似內容時，建議他們使用 /新對話 指令
-
-回應原則：
-- 使用繁體中文
-- 保持簡潔（Line 訊息不宜過長）
-- 善用工具查詢資訊，主動提供有用的資料
-- 回覆用戶時不要顯示 UUID，只顯示名稱"""
-
-
-async def build_system_prompt(line_group_id: UUID | None, base_prompt: str = "") -> str:
+async def build_system_prompt(line_group_id: UUID | None, base_prompt: str) -> str:
     """
     建立系統提示
 
     Args:
         line_group_id: 群組 UUID
-        base_prompt: 從 Agent 取得的基礎 prompt（為空時使用 fallback）
+        base_prompt: 從 Agent 取得的基礎 prompt
 
     Returns:
         系統提示文字
     """
-    # 如果沒有提供 base_prompt，使用 fallback
-    if not base_prompt:
-        base_prompt = FALLBACK_PROMPT
-        logger.warning("使用 fallback prompt")
 
     # 如果是群組，加入群組資訊
     if line_group_id:
@@ -395,6 +427,7 @@ async def handle_text_message(
     line_user_id: str,
     line_group_id: UUID | None,
     reply_token: str | None,
+    quoted_message_id: str | None = None,
 ) -> None:
     """
     處理文字訊息的 Webhook 入口
@@ -406,6 +439,7 @@ async def handle_text_message(
         line_user_id: Line 用戶 ID
         line_group_id: 內部群組 UUID（個人對話為 None）
         reply_token: Line 回覆 token
+        quoted_message_id: 被回覆的訊息 ID（用戶回覆舊訊息時）
     """
     # 取得用戶顯示名稱
     user_display_name = None
@@ -425,4 +459,5 @@ async def handle_text_message(
         line_user_id=line_user_id,
         reply_token=reply_token,
         user_display_name=user_display_name,
+        quoted_message_id=quoted_message_id,
     )
