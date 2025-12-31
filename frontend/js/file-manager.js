@@ -1100,17 +1100,34 @@ const FileManagerModule = (function() {
   /**
    * Download selected file
    */
-  function downloadSelected() {
+  async function downloadSelected() {
     if (selectedFiles.size !== 1) return;
     const name = [...selectedFiles][0];
     const filePath = currentPath === '/' ? `/${name}` : `${currentPath}/${name}`;
 
-    const link = document.createElement('a');
-    link.href = `/api/nas/download?path=${encodeURIComponent(filePath)}`;
-    link.download = name;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    try {
+      // 使用 fetch 帶認證 token 下載
+      const response = await fetch(`/api/nas/download?path=${encodeURIComponent(filePath)}`);
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ detail: '下載失敗' }));
+        throw new Error(error.detail || '下載失敗');
+      }
+
+      // 將回應轉換為 Blob 並下載
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('下載失敗:', error);
+      alert(`下載失敗：${error.message}`);
+    }
   }
 
   /**
