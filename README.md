@@ -14,11 +14,14 @@ ChingTech OS 是擎添工業打造的整合式智慧工作空間，以 Web 技�
 | 檔案管理 | 完成 | NAS 檔案瀏覽、上傳、下載、刪除、搜尋、預覽 |
 | 終端機 | 完成 | PTY shell session、WebSocket 即時通訊、多終端機 |
 | AI 助手 | 完成 | 對話介面、多對話管理、歷史持久化、Markdown 渲染 |
+| AI 管理 | 完成 | Agent 設定、Prompt 管理、AI Log 查詢 |
 | 知識庫 | 完成 | Markdown 知識管理、全文搜尋、版本歷史、附件管理 |
 | 程式編輯器 | 完成 | code-server 整合（VS Code 體驗） |
 | 文字檢視器 | 完成 | Markdown/JSON/YAML/XML 格式化顯示、語法色彩 |
 | 專案管理 | 完成 | 專案、成員、會議、附件、連結、里程碑管理 |
+| Line Bot | 完成 | 群組管理、訊息記錄、用戶綁定、AI 對話整合 |
 | 訊息中心 | 完成 | 系統訊息、登入記錄追蹤、未讀狀態管理 |
+| 使用者管理 | 完成 | 使用者列表、功能權限設定（管理員） |
 | 系統設定 | 完成 | 亮色/暗色主題切換 |
 
 ## 快速開始
@@ -43,7 +46,7 @@ uv sync
 uv run alembic upgrade head
 
 # 3. 啟動後端服務
-uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8089
+uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8088
 
 # 4. 啟動前端（另開終端）
 cd frontend
@@ -70,6 +73,9 @@ python3 -m http.server 8080
 - Socket.IO (終端機、AI 即時通訊)
 - SMB/CIFS (NAS 檔案存取)
 - Alembic (資料庫 migration)
+- Line Bot SDK v3 (Line Messaging API)
+- Claude CLI (AI 對話處理)
+- MCP Server (AI 工具整合)
 
 ### 基礎設施
 - PostgreSQL (Docker 容器)
@@ -121,9 +127,12 @@ ching-tech-os/
 |------|------|
 | [docs/database-design.md](docs/database-design.md) | 資料庫設計、Alembic Migration |
 | [docs/ai-agent-design.md](docs/ai-agent-design.md) | AI Agent 架構設計 |
+| [docs/ai-management.md](docs/ai-management.md) | AI 管理系統（Agent、Prompt、Log） |
 | [docs/realtime.md](docs/realtime.md) | Socket.IO 即時通訊、終端機 PTY |
 | [docs/smb-nas-architecture.md](docs/smb-nas-architecture.md) | SMB/NAS 檔案系統架構 |
 | [docs/file-manager.md](docs/file-manager.md) | 檔案管理器設計 |
+| [docs/linebot.md](docs/linebot.md) | Line Bot 整合設計 |
+| [docs/mcp-server.md](docs/mcp-server.md) | MCP Server（AI 工具） |
 
 ### 部署與安全
 
@@ -142,9 +151,11 @@ ching-tech-os/
 ## API 文件
 
 啟動後端後，訪問：
-- Swagger UI: http://localhost:8089/docs
-- ReDoc: http://localhost:8089/redoc
+- Swagger UI: http://localhost:8088/docs
+- ReDoc: http://localhost:8088/redoc
 
 ## 授權
 
-&copy; 2024-2025 擎添工業 Ching Tech Industrial Co., Ltd.
+MIT License
+
+Copyright (c) 2024-2025 擎添工業 Ching Tech Industrial Co., Ltd.

@@ -13,6 +13,7 @@ from .database import init_db_pool, close_db_pool
 from .services.session import session_manager
 from .services.terminal import terminal_service
 from .services.scheduler import start_scheduler, stop_scheduler
+from .services.linebot_agents import ensure_default_linebot_agents
 from .api import auth, knowledge, login_records, messages, nas, user, ai_router, ai_management, project, linebot_router
 
 # 建立 Socket.IO 伺服器
@@ -24,6 +25,7 @@ async def lifespan(app: FastAPI):
     """應用程式生命週期管理"""
     # 啟動時
     await init_db_pool()
+    await ensure_default_linebot_agents()  # 確保 Line Bot Agent 存在
     await session_manager.start_cleanup_task()
     await terminal_service.start_cleanup_task()
     start_scheduler()
