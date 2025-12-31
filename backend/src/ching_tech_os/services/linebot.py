@@ -359,23 +359,33 @@ async def get_or_create_bot_user() -> UUID:
 async def save_bot_response(
     group_uuid: UUID | None,
     content: str,
+    responding_to_line_user_id: str | None = None,
 ) -> UUID:
     """儲存 Bot 回應訊息到資料庫
 
     Args:
         group_uuid: 群組內部 UUID（個人對話為 None）
         content: 回應內容
+        responding_to_line_user_id: 回應的對象用戶 Line ID（個人對話用）
 
     Returns:
         訊息 UUID
     """
     import uuid as uuid_module
 
-    # 取得 Bot 用戶 UUID
-    bot_user_uuid = await get_or_create_bot_user()
-
     # 產生唯一的 message_id（Bot 回應沒有 Line message_id）
     message_id = f"bot_{uuid_module.uuid4().hex[:16]}"
+
+    # 決定使用哪個用戶 ID
+    if group_uuid:
+        # 群組對話：使用 Bot 用戶 ID
+        user_uuid = await get_or_create_bot_user()
+    elif responding_to_line_user_id:
+        # 個人對話：使用對話對象的用戶 ID（這樣查詢歷史時可以一起取得）
+        user_uuid = await get_or_create_user(responding_to_line_user_id, None)
+    else:
+        # Fallback：使用 Bot 用戶 ID
+        user_uuid = await get_or_create_bot_user()
 
     async with get_connection() as conn:
         row = await conn.fetchrow(
@@ -388,7 +398,7 @@ async def save_bot_response(
             RETURNING id
             """,
             message_id,
-            bot_user_uuid,
+            user_uuid,
             group_uuid,
             content,
         )
@@ -1356,3 +1366,56 @@ async def list_users_with_binding(
             offset,
         )
         return [dict(row) for row in rows], total
+
+
+# ============================================================
+# 對話管理
+# ============================================================
+
+
+async def reset_conversation(line_user_id: str) -> bool:
+    """重置用戶的對話歷史
+
+    設定 conversation_reset_at 為當前時間，
+    之後查詢對話歷史時會忽略這個時間之前的訊息。
+
+    Args:
+        line_user_id: Line 用戶 ID
+
+    Returns:
+        是否成功
+    """
+    async with get_connection() as conn:
+        result = await conn.execute(
+            """
+            UPDATE line_users
+            SET conversation_reset_at = NOW()
+            WHERE line_user_id = $1
+            """,
+            line_user_id,
+        )
+        success = result == "UPDATE 1"
+        if success:
+            logger.info(f"已重置對話歷史: {line_user_id}")
+        return success
+
+
+def is_reset_command(content: str) -> bool:
+    """檢查訊息是否為重置對話指令
+
+    Args:
+        content: 訊息內容
+
+    Returns:
+        是否為重置指令
+    """
+    reset_commands = [
+        "/新對話",
+        "/新对话",
+        "/reset",
+        "/清除對話",
+        "/清除对话",
+        "/忘記",
+        "/忘记",
+    ]
+    return content.strip().lower() in [cmd.lower() for cmd in reset_commands]

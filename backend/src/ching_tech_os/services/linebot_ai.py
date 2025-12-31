@@ -14,8 +14,11 @@ from .linebot import (
     mark_message_ai_processed,
     should_trigger_ai,
     save_bot_response,
+    reset_conversation,
+    is_reset_command,
 )
 from . import ai_manager
+from .linebot_agents import get_linebot_agent, AGENT_LINEBOT_PERSONAL, AGENT_LINEBOT_GROUP
 from ..database import get_connection
 from ..models.ai import AiLogCreate
 
@@ -31,6 +34,7 @@ async def process_message_with_ai(
     message_uuid: UUID,
     content: str,
     line_group_id: UUID | None,
+    line_user_id: str | None,
     reply_token: str | None,
     user_display_name: str | None = None,
 ) -> str | None:
@@ -41,6 +45,7 @@ async def process_message_with_ai(
         message_uuid: 訊息的內部 UUID
         content: 訊息內容
         line_group_id: 群組 UUID（個人對話為 None）
+        line_user_id: Line 用戶 ID（個人對話用）
         reply_token: Line 回覆 token（可能已過期）
         user_display_name: 發送者顯示名稱
 
@@ -48,6 +53,30 @@ async def process_message_with_ai(
         AI 回應文字，或 None（如果不需處理）
     """
     is_group = line_group_id is not None
+
+    # 檢查是否為重置對話指令（僅限個人對話）
+    if is_reset_command(content):
+        if is_group:
+            # 群組不支援重置，靜默忽略
+            return None
+        elif line_user_id:
+            # 個人對話：執行重置
+            await reset_conversation(line_user_id)
+            reset_msg = "已清除對話歷史，開始新對話！有什麼可以幫你的嗎？"
+            # 儲存 Bot 回應
+            await save_bot_response(
+                group_uuid=None,
+                content=reset_msg,
+                responding_to_line_user_id=line_user_id,
+            )
+            # 回覆訊息
+            if reply_token:
+                try:
+                    await reply_text(reply_token, reset_msg)
+                except Exception as e:
+                    logger.warning(f"回覆重置訊息失敗: {e}")
+            return reset_msg
+        return None
 
     # 檢查是否應該觸發 AI
     should_trigger = should_trigger_ai(content, is_group)
@@ -58,18 +87,36 @@ async def process_message_with_ai(
         return None
 
     try:
-        # 取得對話歷史
-        history = await get_conversation_context(line_group_id, limit=10)
+        # 取得 Agent 設定
+        agent = await get_linebot_agent(is_group)
+        agent_name = AGENT_LINEBOT_GROUP if is_group else AGENT_LINEBOT_PERSONAL
 
-        # 建立系統提示
-        system_prompt = await build_system_prompt(line_group_id)
+        if agent:
+            # 從 Agent 取得 model 和基礎 prompt
+            model = agent["model"].replace("claude-", "")  # claude-sonnet -> sonnet
+            base_prompt = agent.get("system_prompt", {}).get("content", "")
+            # 從 Agent 取得內建工具權限（如 WebSearch, WebFetch）
+            agent_tools = agent.get("tools") or []
+            logger.info(f"使用 Agent '{agent_name}' 設定，內建工具: {agent_tools}")
+        else:
+            # Fallback：使用預設值
+            model = "haiku" if is_group else "sonnet"
+            base_prompt = ""
+            agent_tools = []
+            logger.warning(f"Agent '{agent_name}' 不存在，使用 fallback 設定")
+
+        # 建立系統提示（加入群組資訊）
+        system_prompt = await build_system_prompt(line_group_id, base_prompt)
+
+        # 取得對話歷史（20 則提供更好的上下文理解）
+        history = await get_conversation_context(line_group_id, line_user_id, limit=20)
 
         # 準備用戶訊息
         user_message = content
         if user_display_name:
             user_message = f"{user_display_name}: {content}"
 
-        # MCP 工具列表
+        # MCP 工具列表（固定）
         mcp_tools = [
             "mcp__ching-tech-os__query_project",
             "mcp__ching-tech-os__get_project_milestones",
@@ -83,17 +130,20 @@ async def process_message_with_ai(
             "mcp__ching-tech-os__add_note",
         ]
 
+        # 合併內建工具（從 Agent 設定）和 MCP 工具
+        all_tools = agent_tools + mcp_tools
+
         # 計時開始
         start_time = time.time()
 
         # 呼叫 Claude CLI
         response = await call_claude(
             prompt=user_message,
-            model="sonnet",
+            model=model,
             history=history,
             system_prompt=system_prompt,
             timeout=90,  # MCP 工具可能需要較長時間
-            tools=mcp_tools,
+            tools=all_tools,
         )
 
         # 計算耗時
@@ -103,8 +153,10 @@ async def process_message_with_ai(
         await log_linebot_ai_call(
             message_uuid=message_uuid,
             line_group_id=line_group_id,
+            is_group=is_group,
             input_prompt=user_message,
             system_prompt=system_prompt,
+            model=model,
             response=response,
             duration_ms=duration_ms,
         )
@@ -123,6 +175,7 @@ async def process_message_with_ai(
             await save_bot_response(
                 group_uuid=line_group_id,
                 content=ai_response,
+                responding_to_line_user_id=line_user_id if not is_group else None,
             )
 
         # 回覆訊息（如果有 reply_token）
@@ -142,8 +195,10 @@ async def process_message_with_ai(
 async def log_linebot_ai_call(
     message_uuid: UUID,
     line_group_id: UUID | None,
+    is_group: bool,
     input_prompt: str,
     system_prompt: str,
+    model: str,
     response,
     duration_ms: int,
 ) -> None:
@@ -153,14 +208,17 @@ async def log_linebot_ai_call(
     Args:
         message_uuid: 訊息 UUID
         line_group_id: 群組 UUID
+        is_group: 是否為群組對話
         input_prompt: 輸入的 prompt
         system_prompt: 系統提示
+        model: 使用的模型
         response: Claude 回應物件
         duration_ms: 耗時（毫秒）
     """
     try:
-        # 取得 linebot Agent ID（如果有設定的話）
-        agent = await ai_manager.get_agent_by_name("linebot")
+        # 根據對話類型取得對應的 Agent
+        agent_name = AGENT_LINEBOT_GROUP if is_group else AGENT_LINEBOT_PERSONAL
+        agent = await ai_manager.get_agent_by_name(agent_name)
         agent_id = agent["id"] if agent else None
         prompt_id = agent.get("system_prompt", {}).get("id") if agent else None
 
@@ -168,19 +226,19 @@ async def log_linebot_ai_call(
         log_data = AiLogCreate(
             agent_id=agent_id,
             prompt_id=prompt_id,
-            context_type="linebot",
+            context_type="linebot-group" if is_group else "linebot-personal",
             context_id=str(message_uuid),
             input_prompt=input_prompt,
             system_prompt=system_prompt,
             raw_response=response.message if response.success else None,
-            model="sonnet",
+            model=model,
             success=response.success,
             error_message=response.error if not response.success else None,
             duration_ms=duration_ms,
         )
 
         await ai_manager.create_log(log_data)
-        logger.debug(f"已記錄 AI Log: message_uuid={message_uuid}, success={response.success}")
+        logger.debug(f"已記錄 AI Log: agent={agent_name}, message_uuid={message_uuid}, success={response.success}")
 
     except Exception as e:
         # Log 記錄失敗不影響主流程
@@ -189,13 +247,15 @@ async def log_linebot_ai_call(
 
 async def get_conversation_context(
     line_group_id: UUID | None,
-    limit: int = 10,
+    line_user_id: str | None,
+    limit: int = 20,
 ) -> list[dict]:
     """
     取得對話上下文
 
     Args:
         line_group_id: 群組 UUID（None 表示個人對話）
+        line_user_id: Line 用戶 ID（個人對話用）
         limit: 取得的訊息數量
 
     Returns:
@@ -218,8 +278,28 @@ async def get_conversation_context(
                 line_group_id,
                 limit,
             )
+        elif line_user_id:
+            # 個人對話：查詢該用戶的對話歷史，考慮對話重置時間
+            rows = await conn.fetch(
+                """
+                SELECT m.content, m.is_from_bot, u.display_name
+                FROM line_messages m
+                LEFT JOIN line_users u ON m.line_user_id = u.id
+                WHERE u.line_user_id = $1
+                  AND m.line_group_id IS NULL
+                  AND m.message_type = 'text'
+                  AND m.content IS NOT NULL
+                  AND (
+                    u.conversation_reset_at IS NULL
+                    OR m.created_at > u.conversation_reset_at
+                  )
+                ORDER BY m.created_at DESC
+                LIMIT $2
+                """,
+                line_user_id,
+                limit,
+            )
         else:
-            # 個人對話（目前簡化處理）
             return []
 
         # 反轉順序（從舊到新）
@@ -229,24 +309,15 @@ async def get_conversation_context(
         for row in rows:
             role = "assistant" if row["is_from_bot"] else "user"
             content = row["content"]
-            if not row["is_from_bot"] and row["display_name"]:
+            # 群組對話才加發送者名稱，個人對話不需要
+            if line_group_id and not row["is_from_bot"] and row["display_name"]:
                 content = f"{row['display_name']}: {content}"
             context.append({"role": role, "content": content})
 
         return context
 
 
-async def build_system_prompt(line_group_id: UUID | None) -> str:
-    """
-    建立系統提示
-
-    Args:
-        line_group_id: 群組 UUID
-
-    Returns:
-        系統提示文字
-    """
-    base_prompt = """你是擎添工業的 AI 助理，透過 Line 與用戶互動。
+FALLBACK_PROMPT = """你是擎添工業的 AI 助理，透過 Line 與用戶互動。
 
 你可以使用以下工具：
 
@@ -264,19 +335,32 @@ async def build_system_prompt(line_group_id: UUID | None) -> str:
 - delete_knowledge_item: 刪除知識庫文件
 - add_note: 新增筆記到知識庫（輸入標題和內容）
 
-使用工具的流程：
-1. 如果下方有提供「專案 ID」，直接使用該 ID 查詢
-2. 如果沒有專案 ID，先用 query_project 搜尋專案名稱取得 ID
-3. 查詢知識庫時，先用 search_knowledge 找到文件 ID，再用 get_knowledge_item 取得完整內容
-4. 用戶要求「記住」或「記錄」某事時，使用 add_note 新增筆記
-5. 用戶要求修改或更新知識時，使用 update_knowledge_item
-6. 用戶要求刪除知識時，使用 delete_knowledge_item
+對話管理：
+- 用戶可以發送 /新對話 或 /reset 來清除對話歷史，開始新對話
+- 當用戶說「忘記之前的對話」或類似內容時，建議他們使用 /新對話 指令
 
 回應原則：
 - 使用繁體中文
 - 保持簡潔（Line 訊息不宜過長）
 - 善用工具查詢資訊，主動提供有用的資料
 - 回覆用戶時不要顯示 UUID，只顯示名稱"""
+
+
+async def build_system_prompt(line_group_id: UUID | None, base_prompt: str = "") -> str:
+    """
+    建立系統提示
+
+    Args:
+        line_group_id: 群組 UUID
+        base_prompt: 從 Agent 取得的基礎 prompt（為空時使用 fallback）
+
+    Returns:
+        系統提示文字
+    """
+    # 如果沒有提供 base_prompt，使用 fallback
+    if not base_prompt:
+        base_prompt = FALLBACK_PROMPT
+        logger.warning("使用 fallback prompt")
 
     # 如果是群組，加入群組資訊
     if line_group_id:
@@ -338,6 +422,7 @@ async def handle_text_message(
         message_uuid=message_uuid,
         content=content,
         line_group_id=line_group_id,
+        line_user_id=line_user_id,
         reply_token=reply_token,
         user_display_name=user_display_name,
     )
