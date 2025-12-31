@@ -29,9 +29,34 @@ ChingTech OS 是擎添工業內部使用的整合式工作平台，以 Web 技�
 ### 需求
 
 - Python 3.11+
-- uv (Python 套件管理)
 - Docker & Docker Compose
-- Node.js (選用，用於前端開發伺服器)
+- Node.js 20+
+
+#### 系統套件安裝
+
+```bash
+# Ubuntu/Debian
+sudo apt install smbclient ripgrep git
+
+# uv (Python 套件管理)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Claude CLI (Line Bot AI 功能)
+npm install -g @anthropic-ai/claude-code
+```
+
+#### 環境變數設定
+
+```bash
+# 複製範本並填入實際值
+cp .env.example .env
+```
+
+必要的環境變數：
+- `ADMIN_USERNAME` - 管理員帳號
+- `DB_PASSWORD` - 資料庫密碼
+- `NAS_USER` / `NAS_PASSWORD` - NAS 服務帳號
+- `LINE_CHANNEL_SECRET` / `LINE_CHANNEL_ACCESS_TOKEN` - Line Bot（如需使用）
 
 ### 啟動服務
 
