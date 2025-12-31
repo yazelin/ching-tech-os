@@ -67,7 +67,7 @@ const ProjectManagementModule = (function() {
     windowId = WindowModule.createWindow({
       title: '專案管理',
       appId: 'project-management',
-      icon: 'briefcase',
+      icon: 'clipboard-text',
       width: 1100,
       height: 750,
       content: renderContent(),

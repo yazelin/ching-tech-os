@@ -621,7 +621,7 @@ const AgentSettingsApp = (function() {
     WindowModule.createWindow({
       title: 'Agent 設定',
       appId: APP_ID,
-      icon: 'robot-outline',
+      icon: 'tune-variant',
       width: 850,
       height: 600,
       content: buildWindowContent(),

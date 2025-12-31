@@ -461,7 +461,7 @@ const PromptEditorApp = (function() {
     WindowModule.createWindow({
       title: 'Prompt 編輯器',
       appId: APP_ID,
-      icon: 'file-document-edit-outline',
+      icon: 'script-text',
       width: 900,
       height: 600,
       content: buildWindowContent(),

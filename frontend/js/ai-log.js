@@ -502,7 +502,7 @@ const AILogApp = (function() {
     WindowModule.createWindow({
       title: 'AI Log',
       appId: APP_ID,
-      icon: 'chart-timeline-variant',
+      icon: 'history',
       width: 950,
       height: 650,
       content: buildWindowContent(),
