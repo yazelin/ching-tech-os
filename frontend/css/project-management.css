@@ -1038,6 +1038,16 @@
   min-height: 80px;
 }
 
+/* Date input - 暗色模式樣式 */
+:root:not([data-theme="light"]) .pm-form-group input[type="date"] {
+  color-scheme: dark;
+}
+
+:root:not([data-theme="light"]) .pm-form-group input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.8);
+  cursor: pointer;
+}
+
 .pm-form-hint {
   margin-top: 4px;
   font-size: 12px;

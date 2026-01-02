@@ -111,35 +111,42 @@ async def create_next_month_partitions():
             logger.error(f"建立分區失敗: {e}")
 
 
-async def cleanup_linebot_temp_images():
+async def cleanup_linebot_temp_files():
     """
-    清理 Line Bot 圖片暫存檔
+    清理 Line Bot 暫存檔（圖片和檔案）
     刪除修改時間超過 1 小時的暫存檔
     """
-    temp_dir = "/tmp/linebot-images"
+    temp_dirs = [
+        "/tmp/linebot-images",
+        "/tmp/linebot-files",
+    ]
 
-    if not os.path.exists(temp_dir):
-        logger.debug("Line Bot 圖片暫存目錄不存在，跳過清理")
-        return
+    one_hour_ago = time.time() - 3600  # 1 小時前
+    total_deleted = 0
 
-    try:
-        one_hour_ago = time.time() - 3600  # 1 小時前
-        deleted_count = 0
+    for temp_dir in temp_dirs:
+        if not os.path.exists(temp_dir):
+            continue
 
-        for filename in os.listdir(temp_dir):
-            filepath = os.path.join(temp_dir, filename)
-            if os.path.isfile(filepath):
-                if os.path.getmtime(filepath) < one_hour_ago:
-                    os.unlink(filepath)
-                    deleted_count += 1
+        try:
+            deleted_count = 0
 
-        if deleted_count > 0:
-            logger.info(f"清理 Line Bot 圖片暫存檔: 刪除 {deleted_count} 個檔案")
-        else:
-            logger.debug("Line Bot 圖片暫存檔清理: 無過期檔案")
+            for filename in os.listdir(temp_dir):
+                filepath = os.path.join(temp_dir, filename)
+                if os.path.isfile(filepath):
+                    if os.path.getmtime(filepath) < one_hour_ago:
+                        os.unlink(filepath)
+                        deleted_count += 1
 
-    except Exception as e:
-        logger.error(f"清理 Line Bot 圖片暫存檔失敗: {e}")
+            total_deleted += deleted_count
+
+        except Exception as e:
+            logger.error(f"清理 {temp_dir} 失敗: {e}")
+
+    if total_deleted > 0:
+        logger.info(f"清理 Line Bot 暫存檔: 刪除 {total_deleted} 個檔案")
+    else:
+        logger.debug("Line Bot 暫存檔清理: 無過期檔案")
 
 
 def start_scheduler():
@@ -164,12 +171,12 @@ def start_scheduler():
         replace_existing=True
     )
 
-    # 每小時清理 Line Bot 圖片暫存檔
+    # 每小時清理 Line Bot 暫存檔（圖片和檔案）
     scheduler.add_job(
-        cleanup_linebot_temp_images,
+        cleanup_linebot_temp_files,
         IntervalTrigger(hours=1),
-        id='cleanup_linebot_temp_images',
-        name='清理 Line Bot 圖片暫存',
+        id='cleanup_linebot_temp_files',
+        name='清理 Line Bot 暫存',
         replace_existing=True
     )
 

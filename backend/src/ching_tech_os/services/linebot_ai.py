@@ -19,6 +19,12 @@ from .linebot import (
     ensure_temp_image,
     get_image_info_by_line_message_id,
     get_temp_image_path,
+    # 檔案暫存相關
+    ensure_temp_file,
+    get_file_info_by_line_message_id,
+    get_temp_file_path,
+    is_readable_file,
+    MAX_READABLE_FILE_SIZE,
 )
 from . import ai_manager
 from .linebot_agents import get_linebot_agent, AGENT_LINEBOT_PERSONAL, AGENT_LINEBOT_GROUP
@@ -117,15 +123,17 @@ async def process_message_with_ai(
                 await reply_text(reply_token, error_msg)
             return error_msg
 
-        # 建立系統提示（加入群組資訊）
-        system_prompt = await build_system_prompt(line_group_id, base_prompt)
+        # 建立系統提示（加入群組資訊和內建工具說明）
+        system_prompt = await build_system_prompt(line_group_id, base_prompt, agent_tools)
 
-        # 取得對話歷史（20 則提供更好的上下文理解，包含圖片）
-        history, images = await get_conversation_context(line_group_id, line_user_id, limit=20)
+        # 取得對話歷史（20 則提供更好的上下文理解，包含圖片和檔案）
+        history, images, files = await get_conversation_context(line_group_id, line_user_id, limit=20)
 
-        # 處理回覆舊圖片（quotedMessageId）
+        # 處理回覆舊圖片或檔案（quotedMessageId）
         quoted_image_path = None
+        quoted_file_path = None
         if quoted_message_id:
+            # 先嘗試查詢圖片
             image_info = await get_image_info_by_line_message_id(quoted_message_id)
             if image_info and image_info.get("nas_path"):
                 # 確保圖片暫存存在
@@ -133,33 +141,62 @@ async def process_message_with_ai(
                 if temp_path:
                     quoted_image_path = temp_path
                     logger.info(f"用戶回覆圖片: {quoted_message_id} -> {temp_path}")
+            else:
+                # 嘗試查詢檔案
+                file_info = await get_file_info_by_line_message_id(quoted_message_id)
+                if file_info and file_info.get("nas_path") and file_info.get("file_name"):
+                    file_name = file_info["file_name"]
+                    file_size = file_info.get("file_size")
+                    if is_readable_file(file_name):
+                        if file_size and file_size > MAX_READABLE_FILE_SIZE:
+                            logger.info(f"用戶回覆檔案過大: {quoted_message_id} -> {file_name}")
+                        else:
+                            # 確保檔案暫存存在
+                            temp_path = await ensure_temp_file(
+                                quoted_message_id, file_info["nas_path"], file_name, file_size
+                            )
+                            if temp_path:
+                                quoted_file_path = temp_path
+                                logger.info(f"用戶回覆檔案: {quoted_message_id} -> {temp_path}")
+                    else:
+                        logger.info(f"用戶回覆檔案類型不支援: {quoted_message_id} -> {file_name}")
 
         # 確保對話歷史中的圖片暫存存在
         for img in images:
             await ensure_temp_image(img["line_message_id"], img["nas_path"])
+
+        # 確保對話歷史中的檔案暫存存在
+        for f in files:
+            await ensure_temp_file(
+                f["line_message_id"], f["nas_path"], f["file_name"], f.get("file_size")
+            )
 
         # 準備用戶訊息
         user_message = content
         if user_display_name:
             user_message = f"{user_display_name}: {content}"
 
-        # 如果是回覆圖片，在訊息開頭標註
+        # 如果是回覆圖片或檔案，在訊息開頭標註
         if quoted_image_path:
             user_message = f"[回覆圖片: {quoted_image_path}]\n{user_message}"
+        elif quoted_file_path:
+            user_message = f"[回覆檔案: {quoted_file_path}]\n{user_message}"
 
-        # MCP 工具列表（固定）
+        # MCP 工具列表
         mcp_tools = [
             "mcp__ching-tech-os__query_project",
             "mcp__ching-tech-os__get_project_milestones",
             "mcp__ching-tech-os__get_project_meetings",
             "mcp__ching-tech-os__get_project_members",
-            "mcp__ching-tech-os__summarize_chat",
             "mcp__ching-tech-os__search_knowledge",
             "mcp__ching-tech-os__get_knowledge_item",
             "mcp__ching-tech-os__update_knowledge_item",
             "mcp__ching-tech-os__delete_knowledge_item",
             "mcp__ching-tech-os__add_note",
         ]
+        # 群組專用工具
+        if is_group:
+            mcp_tools.append("mcp__ching-tech-os__summarize_chat")
 
         # 合併內建工具（從 Agent 設定）、MCP 工具和 Read（用於讀取圖片）
         all_tools = agent_tools + mcp_tools + ["Read"]
@@ -173,7 +210,7 @@ async def process_message_with_ai(
             model=model,
             history=history,
             system_prompt=system_prompt,
-            timeout=90,  # MCP 工具可能需要較長時間
+            timeout=180,  # MCP 工具可能需要較長時間（延長至 3 分鐘）
             tools=all_tools,
         )
 
@@ -253,6 +290,21 @@ async def log_linebot_ai_call(
         agent_id = agent["id"] if agent else None
         prompt_id = agent.get("system_prompt", {}).get("id") if agent else None
 
+        # 將 tool_calls 轉換為可序列化的格式
+        parsed_response = None
+        if response.tool_calls:
+            parsed_response = {
+                "tool_calls": [
+                    {
+                        "id": tc.id,
+                        "name": tc.name,
+                        "input": tc.input,
+                        "output": tc.output,
+                    }
+                    for tc in response.tool_calls
+                ]
+            }
+
         # 建立 Log
         log_data = AiLogCreate(
             agent_id=agent_id,
@@ -262,10 +314,13 @@ async def log_linebot_ai_call(
             input_prompt=input_prompt,
             system_prompt=system_prompt,
             raw_response=response.message if response.success else None,
+            parsed_response=parsed_response,
             model=model,
             success=response.success,
             error_message=response.error if not response.success else None,
             duration_ms=duration_ms,
+            input_tokens=response.input_tokens,
+            output_tokens=response.output_tokens,
         )
 
         await ai_manager.create_log(log_data)
@@ -280,9 +335,9 @@ async def get_conversation_context(
     line_group_id: UUID | None,
     line_user_id: str | None,
     limit: int = 20,
-) -> tuple[list[dict], list[dict]]:
+) -> tuple[list[dict], list[dict], list[dict]]:
     """
-    取得對話上下文（包含圖片訊息）
+    取得對話上下文（包含圖片和檔案訊息）
 
     Args:
         line_group_id: 群組 UUID（None 表示個人對話）
@@ -290,25 +345,27 @@ async def get_conversation_context(
         limit: 取得的訊息數量
 
     Returns:
-        (context, images) tuple:
+        (context, images, files) tuple:
         - context: 訊息列表 [{"role": "user/assistant", "content": "..."}]
         - images: 圖片資訊列表 [{"line_message_id": "...", "nas_path": "..."}]
+        - files: 檔案資訊列表 [{"line_message_id": "...", "nas_path": "...", "file_name": "...", "file_size": ...}]
     """
     from .linebot import get_temp_image_path
 
     async with get_connection() as conn:
         if line_group_id:
-            # 群組對話（包含 text 和 image）
+            # 群組對話（包含 text、image 和 file）
             rows = await conn.fetch(
                 """
                 SELECT m.content, m.is_from_bot, u.display_name,
-                       m.message_type, m.message_id as line_message_id, f.nas_path
+                       m.message_type, m.message_id as line_message_id,
+                       f.nas_path, f.file_name, f.file_size, f.file_type as actual_file_type
                 FROM line_messages m
                 LEFT JOIN line_users u ON m.line_user_id = u.id
-                LEFT JOIN line_files f ON f.message_id = m.id AND f.file_type = 'image'
+                LEFT JOIN line_files f ON f.message_id = m.id
                 WHERE m.line_group_id = $1
-                  AND m.message_type IN ('text', 'image')
-                  AND (m.content IS NOT NULL OR m.message_type = 'image')
+                  AND m.message_type IN ('text', 'image', 'file')
+                  AND (m.content IS NOT NULL OR m.message_type IN ('image', 'file'))
                 ORDER BY m.created_at DESC
                 LIMIT $2
                 """,
@@ -320,14 +377,15 @@ async def get_conversation_context(
             rows = await conn.fetch(
                 """
                 SELECT m.content, m.is_from_bot, u.display_name,
-                       m.message_type, m.message_id as line_message_id, f.nas_path
+                       m.message_type, m.message_id as line_message_id,
+                       f.nas_path, f.file_name, f.file_size, f.file_type as actual_file_type
                 FROM line_messages m
                 LEFT JOIN line_users u ON m.line_user_id = u.id
-                LEFT JOIN line_files f ON f.message_id = m.id AND f.file_type = 'image'
+                LEFT JOIN line_files f ON f.message_id = m.id
                 WHERE u.line_user_id = $1
                   AND m.line_group_id IS NULL
-                  AND m.message_type IN ('text', 'image')
-                  AND (m.content IS NOT NULL OR m.message_type = 'image')
+                  AND m.message_type IN ('text', 'image', 'file')
+                  AND (m.content IS NOT NULL OR m.message_type IN ('image', 'file'))
                   AND (
                     u.conversation_reset_at IS NULL
                     OR m.created_at > u.conversation_reset_at
@@ -339,7 +397,7 @@ async def get_conversation_context(
                 limit,
             )
         else:
-            return [], []
+            return [], [], []
 
         # 反轉順序（從舊到新）
         rows = list(reversed(rows))
@@ -351,8 +409,16 @@ async def get_conversation_context(
                 latest_image_id = row["line_message_id"]
                 break
 
+        # 找出最新的檔案訊息 ID（用於標記）
+        latest_file_id = None
+        for row in reversed(rows):
+            if row["message_type"] == "file" and row["nas_path"]:
+                latest_file_id = row["line_message_id"]
+                break
+
         context = []
         images = []
+        files = []
 
         for row in rows:
             role = "assistant" if row["is_from_bot"] else "user"
@@ -370,6 +436,32 @@ async def get_conversation_context(
                     "line_message_id": row["line_message_id"],
                     "nas_path": row["nas_path"],
                 })
+            elif row["message_type"] == "file" and row["nas_path"]:
+                # 檔案訊息：根據是否可讀取決定顯示方式
+                file_name = row["file_name"] or "unknown"
+                file_size = row["file_size"]
+
+                if is_readable_file(file_name):
+                    if file_size and file_size > MAX_READABLE_FILE_SIZE:
+                        # 檔案過大
+                        content = f"[上傳檔案: {file_name}（檔案過大）]"
+                    else:
+                        # 可讀取的檔案
+                        temp_path = get_temp_file_path(row["line_message_id"], file_name)
+                        if row["line_message_id"] == latest_file_id:
+                            content = f"[上傳檔案（最近）: {temp_path}]"
+                        else:
+                            content = f"[上傳檔案: {temp_path}]"
+                        # 記錄檔案資訊供後續載入
+                        files.append({
+                            "line_message_id": row["line_message_id"],
+                            "nas_path": row["nas_path"],
+                            "file_name": file_name,
+                            "file_size": file_size,
+                        })
+                else:
+                    # 不可讀取的檔案類型
+                    content = f"[上傳檔案: {file_name}（無法讀取此類型）]"
             else:
                 content = row["content"]
 
@@ -379,20 +471,58 @@ async def get_conversation_context(
 
             context.append({"role": role, "content": content})
 
-        return context, images
+        return context, images, files
 
 
-async def build_system_prompt(line_group_id: UUID | None, base_prompt: str) -> str:
+async def build_system_prompt(
+    line_group_id: UUID | None,
+    base_prompt: str,
+    builtin_tools: list[str] | None = None,
+) -> str:
     """
     建立系統提示
 
     Args:
         line_group_id: 群組 UUID
         base_prompt: 從 Agent 取得的基礎 prompt
+        builtin_tools: 內建工具列表（如 WebSearch, WebFetch）
 
     Returns:
         系統提示文字
     """
+    # 添加內建工具說明（根據啟用的工具動態組合）
+    # Read 工具永遠啟用
+    all_tools = set(builtin_tools or [])
+    all_tools.add("Read")
+
+    tool_sections = []
+
+    # WebFetch 工具說明（包含 Google 文件處理）
+    if "WebFetch" in all_tools:
+        tool_sections.append("""【網頁讀取】
+- 網頁連結（http/https）→ 使用 WebFetch 工具讀取
+- Google 文件連結處理：
+  · Google Docs: https://docs.google.com/document/d/{id}/... → 轉成 https://docs.google.com/document/d/{id}/export?format=txt
+  · Google Sheets: https://docs.google.com/spreadsheets/d/{id}/... → 轉成 https://docs.google.com/spreadsheets/d/{id}/export?format=csv
+  · Google Slides: https://docs.google.com/presentation/d/{id}/... → 轉成 https://docs.google.com/presentation/d/{id}/export?format=txt
+  · 轉換後再用 WebFetch 讀取""")
+
+    # WebSearch 工具說明
+    if "WebSearch" in all_tools:
+        tool_sections.append("""【網路搜尋】
+- WebSearch - 搜尋網路資訊，可用於查詢天氣、新聞、公司資訊等""")
+
+    # Read 工具說明（用戶上傳內容處理）
+    if "Read" in all_tools:
+        tool_sections.append("""【用戶上傳內容處理】
+對話歷史中可能包含用戶上傳的圖片或檔案：
+- [上傳圖片: /tmp/linebot-images/xxx.jpg] → 使用 Read 工具讀取圖片
+- [上傳檔案: /tmp/linebot-files/xxx_filename.txt] → 使用 Read 工具讀取檔案
+- [上傳檔案: filename（無法讀取此類型）] → 告知用戶此類型不支援
+支援的檔案類型：txt, md, json, csv, log, xml, yaml, yml, pdf""")
+
+    if tool_sections:
+        base_prompt += "\n\n" + "\n\n".join(tool_sections)
 
     # 如果是群組，加入群組資訊
     if line_group_id:

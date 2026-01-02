@@ -158,9 +158,24 @@ def register_events(sio: AsyncServer):
                 to=sid,
             )
 
-            # 記錄到 AI Log
+            # 記錄到 AI Log（含工具調用詳情）
             if agent_id:
                 try:
+                    # 將 tool_calls 轉換為可序列化的格式
+                    parsed_response = None
+                    if response.tool_calls:
+                        parsed_response = {
+                            "tool_calls": [
+                                {
+                                    "id": tc.id,
+                                    "name": tc.name,
+                                    "input": tc.input,
+                                    "output": tc.output,
+                                }
+                                for tc in response.tool_calls
+                            ]
+                        }
+
                     log_data = AiLogCreate(
                         agent_id=agent_id,
                         context_type="web-chat",
@@ -168,9 +183,12 @@ def register_events(sio: AsyncServer):
                         input_prompt=message,
                         system_prompt=system_prompt,
                         raw_response=response.message,
+                        parsed_response=parsed_response,
                         model=model,
                         success=True,
                         duration_ms=duration_ms,
+                        input_tokens=response.input_tokens,
+                        output_tokens=response.output_tokens,
                     )
                     await ai_manager.create_log(log_data)
                 except Exception as e:
@@ -205,6 +223,8 @@ def register_events(sio: AsyncServer):
                         success=False,
                         error_message=response.error,
                         duration_ms=duration_ms,
+                        input_tokens=response.input_tokens,
+                        output_tokens=response.output_tokens,
                     )
                     await ai_manager.create_log(log_data)
                 except Exception as e:
@@ -315,7 +335,7 @@ def register_events(sio: AsyncServer):
         # 計算耗時
         duration_ms = int((time.time() - start_time) * 1000)
 
-        # 記錄到 AI Log
+        # 記錄到 AI Log（含 token 統計）
         try:
             log_data = AiLogCreate(
                 prompt_id=prompt_id,
@@ -327,6 +347,8 @@ def register_events(sio: AsyncServer):
                 success=response.success,
                 error_message=response.error if not response.success else None,
                 duration_ms=duration_ms,
+                input_tokens=response.input_tokens,
+                output_tokens=response.output_tokens,
             )
             await ai_manager.create_log(log_data)
         except Exception as e:

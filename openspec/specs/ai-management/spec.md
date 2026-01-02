@@ -83,36 +83,25 @@ AI 管理系統 SHALL 支援管理 AI Agent 配置。
 ---
 
 ### Requirement: AI Log 記錄
-AI 管理系統 SHALL 記錄所有 AI 調用日誌。
+AI 管理系統 SHALL 記錄所有 AI 調用日誌，**包含完整的工具調用過程**。
 
-#### Scenario: 記錄 AI 調用
-- **WHEN** 系統調用 AI（透過 AI Service）
-- **THEN** 系統記錄 input_prompt、raw_response、parsed_response
+#### Scenario: 記錄 AI 調用（含工具調用）
+- **WHEN** 系統調用 AI（透過 Claude CLI）
+- **THEN** 系統使用 `--output-format stream-json --verbose` 取得完整輸出
+- **AND** 解析並記錄 input_prompt、raw_response
+- **AND** 解析並記錄 tool_calls 到 parsed_response
 - **AND** 記錄 agent_id、context_type、context_id
 - **AND** 記錄 duration_ms、input_tokens、output_tokens
 
-#### Scenario: 記錄失敗調用
-- **WHEN** AI 調用失敗（timeout、API 錯誤等）
-- **THEN** 系統記錄 success=false 和 error_message
+#### Scenario: tool_calls 資料格式
+- **WHEN** AI 調用包含工具使用
+- **THEN** parsed_response.tool_calls 為陣列
+- **AND** 每個元素包含 id、name、input、output
+- **AND** 順序反映實際調用順序
 
-#### Scenario: 取得 Log 列表
-- **WHEN** 使用者請求 `GET /api/ai/logs`
-- **THEN** 系統回傳 AI logs 列表（分頁）
-- **AND** 每筆包含 id、agent 名稱、context_type、success、duration_ms、created_at
-
-#### Scenario: 過濾 Logs
-- **WHEN** 使用者請求 `GET /api/ai/logs?agent_id={id}&context_type={type}&start_date={date}`
-- **THEN** 系統回傳符合條件的 logs
-
-#### Scenario: 取得 Log 詳情
-- **WHEN** 使用者請求 `GET /api/ai/logs/{id}`
-- **THEN** 系統回傳 log 完整資訊
-- **AND** 包含完整的 input_prompt 和 raw_response
-
-#### Scenario: 取得 Log 統計
-- **WHEN** 使用者請求 `GET /api/ai/logs/stats`
-- **THEN** 系統回傳統計資訊
-- **AND** 包含總調用次數、成功率、平均 duration、token 統計
+#### Scenario: 無工具調用
+- **WHEN** AI 調用未使用任何工具
+- **THEN** parsed_response.tool_calls 為空陣列或 null
 
 ---
 
@@ -203,35 +192,26 @@ AI 管理系統 SHALL 提供統一的 AI 調用服務。
 ---
 
 ### Requirement: AI Log 應用
-系統 SHALL 提供獨立的 AI Log 桌面應用。
+系統 SHALL 提供獨立的 AI Log 桌面應用，**包含執行流程視覺化**。
 
-#### Scenario: 開啟 AI Log
-- **WHEN** 使用者點擊 Taskbar 的 AI Log 圖示
-- **THEN** 開啟 AI Log 視窗
-
-#### Scenario: 顯示 Log 列表
-- **WHEN** AI Log 視窗開啟
-- **THEN** 顯示 Log 列表
-- **AND** 上方顯示過濾器（Agent、類型、日期）
-- **AND** 顯示統計卡片（今日次數、成功率、平均耗時）
-
-#### Scenario: 過濾 Logs
-- **WHEN** 使用者選擇過濾條件
-- **THEN** 列表即時更新顯示符合條件的 logs
-
-#### Scenario: 查看 Log 詳情
+#### Scenario: 查看 Log 詳情（含執行流程）
 - **WHEN** 使用者點擊 Log 項目
-- **THEN** 下方或右側顯示該 Log 詳情
-- **AND** 顯示完整的 input_prompt 和 raw_response
-- **AND** 顯示 token 統計
+- **THEN** 詳情面板顯示完整資訊
+- **AND** 若 parsed_response.tool_calls 存在且非空，顯示「執行流程」區塊
+- **AND** 執行流程按順序顯示每個工具調用
+- **AND** 每個工具調用顯示名稱、輸入、輸出
+- **AND** 最後顯示最終回應
 
-#### Scenario: 分頁瀏覽
-- **WHEN** Log 數量超過單頁顯示
-- **THEN** 顯示分頁控制項
-- **WHEN** 使用者點擊分頁
-- **THEN** 載入對應頁的 logs
+#### Scenario: 工具調用收合展開
+- **WHEN** 執行流程包含多個工具調用
+- **THEN** 每個工具調用區塊可收合/展開
+- **AND** 預設第一個展開，其餘收合
+- **AND** 輸入輸出 JSON 格式化顯示
 
----
+#### Scenario: 舊 Log 相容
+- **WHEN** Log 的 parsed_response 為 null 或不含 tool_calls
+- **THEN** 不顯示「執行流程」區塊
+- **AND** 其他資訊正常顯示
 
 ### Requirement: AI 對話 Agent 整合
 現有 AI 對話應用 SHALL 改用資料庫的 Agent/Prompt 設定。

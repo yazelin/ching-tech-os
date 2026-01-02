@@ -5,16 +5,17 @@
 """
 
 import asyncio
+import json
 import os
 import shutil
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Any, Optional
 
 from . import ai_manager
 
 
 # Claude CLI 超時設定（秒）
-DEFAULT_TIMEOUT = 120
+DEFAULT_TIMEOUT = 180  # 延長至 3 分鐘，以支援複雜搜尋任務
 
 # 工作目錄（使用獨立目錄，避免讀取專案的 CLAUDE.md）
 WORKING_DIR = "/tmp/ching-tech-os-cli"
@@ -63,12 +64,25 @@ MODEL_MAP = {
 
 
 @dataclass
+class ToolCall:
+    """工具調用記錄"""
+
+    id: str  # tool_use_id
+    name: str  # 工具名稱
+    input: dict  # 輸入參數
+    output: Optional[str] = None  # 輸出結果
+
+
+@dataclass
 class ClaudeResponse:
     """Claude CLI 回應"""
 
     success: bool
     message: str
     error: Optional[str] = None
+    tool_calls: list[ToolCall] = field(default_factory=list)
+    input_tokens: Optional[int] = None
+    output_tokens: Optional[int] = None
 
 
 async def get_prompt_content(prompt_name: str) -> str | None:
@@ -116,6 +130,91 @@ def compose_prompt_with_history(
     return "\n".join(parts)
 
 
+def _parse_stream_json(stdout: str) -> tuple[str, list[ToolCall], int | None, int | None]:
+    """解析 stream-json 輸出
+
+    Args:
+        stdout: Claude CLI 的 stream-json 輸出（多行 JSON）
+
+    Returns:
+        tuple: (最終回應文字, 工具調用列表, input_tokens, output_tokens)
+    """
+    result_text = ""
+    tool_calls: list[ToolCall] = []
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+
+    # 暫存 tool_use，等待配對 tool_result
+    pending_tools: dict[str, ToolCall] = {}
+
+    for line in stdout.strip().split("\n"):
+        if not line.strip():
+            continue
+
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+        event_type = event.get("type")
+
+        if event_type == "assistant":
+            # 解析 assistant 訊息中的 content
+            message = event.get("message", {})
+            contents = message.get("content", [])
+            for content in contents:
+                content_type = content.get("type")
+                if content_type == "tool_use":
+                    # 記錄工具調用
+                    tool_id = content.get("id", "")
+                    tool_call = ToolCall(
+                        id=tool_id,
+                        name=content.get("name", ""),
+                        input=content.get("input", {}),
+                    )
+                    pending_tools[tool_id] = tool_call
+                elif content_type == "text":
+                    # 累積文字回應（可能有多段）
+                    text = content.get("text", "")
+                    if text:
+                        if result_text:
+                            result_text += "\n"
+                        result_text += text
+
+        elif event_type == "user":
+            # 解析 user 訊息中的 tool_result
+            message = event.get("message", {})
+            contents = message.get("content", [])
+            for content in contents:
+                if content.get("type") == "tool_result":
+                    tool_id = content.get("tool_use_id", "")
+                    if tool_id in pending_tools:
+                        # 配對工具輸出
+                        pending_tools[tool_id].output = content.get("content", "")
+                        tool_calls.append(pending_tools.pop(tool_id))
+
+        elif event_type == "result":
+            # 最終結果，包含 usage 統計
+            # 優先使用 result 中的文字作為最終回應
+            if event.get("result"):
+                result_text = event.get("result", "")
+
+            # 計算 token 統計（包含 cache tokens）
+            usage = event.get("usage", {})
+            # 總輸入 = 非快取 + 新建快取 + 讀取快取
+            base_input = usage.get("input_tokens") or 0
+            cache_creation = usage.get("cache_creation_input_tokens") or 0
+            cache_read = usage.get("cache_read_input_tokens") or 0
+            input_tokens = base_input + cache_creation + cache_read
+            output_tokens = usage.get("output_tokens")
+
+    # 將未配對的 tool_use 也加入（可能沒有 result）
+    for tool in pending_tools.values():
+        tool_calls.append(tool)
+
+    return result_text, tool_calls, input_tokens, output_tokens
+
+
 async def call_claude(
     prompt: str,
     model: str = "sonnet",
@@ -135,7 +234,7 @@ async def call_claude(
         tools: 允許使用的工具列表（可選，如 ["WebSearch", "WebFetch"]）
 
     Returns:
-        ClaudeResponse: 包含成功狀態和回應訊息
+        ClaudeResponse: 包含成功狀態、回應訊息、工具調用記錄和 token 統計
     """
     # 轉換模型名稱
     cli_model = MODEL_MAP.get(model, model)
@@ -147,8 +246,13 @@ async def call_claude(
         full_prompt = prompt
 
     # 建立 Claude CLI 命令（不使用 session）
-    # 注意：-p 是獨立 flag，prompt 必須放在所有選項之後
-    cmd = [CLAUDE_PATH, "-p", "--model", cli_model]
+    # 使用 stream-json 格式以獲取工具調用詳情和 token 統計
+    cmd = [
+        CLAUDE_PATH, "-p",
+        "--model", cli_model,
+        "--output-format", "stream-json",
+        "--verbose",
+    ]
 
     # 加入 system prompt
     if system_prompt:
@@ -196,9 +300,15 @@ async def call_claude(
                 error=error_msg,
             )
 
+        # 解析 stream-json 輸出
+        result_text, tool_calls, input_tokens, output_tokens = _parse_stream_json(stdout)
+
         return ClaudeResponse(
             success=True,
-            message=stdout,
+            message=result_text,
+            tool_calls=tool_calls,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
         )
 
     except asyncio.TimeoutError:

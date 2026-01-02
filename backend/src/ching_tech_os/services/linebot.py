@@ -1422,11 +1422,36 @@ def is_reset_command(content: str) -> bool:
 
 
 # ============================================================
-# 圖片暫存服務
+# 檔案暫存服務
 # ============================================================
 
 # 暫存目錄
 TEMP_IMAGE_DIR = "/tmp/linebot-images"
+TEMP_FILE_DIR = "/tmp/linebot-files"
+
+# 可讀取的檔案副檔名（AI 可透過 Read 工具讀取）
+READABLE_FILE_EXTENSIONS = {
+    ".txt", ".md", ".json", ".csv", ".log",
+    ".xml", ".yaml", ".yml", ".pdf",
+}
+
+# 最大可讀取檔案大小（5MB）
+MAX_READABLE_FILE_SIZE = 5 * 1024 * 1024
+
+
+def is_readable_file(filename: str) -> bool:
+    """判斷檔案是否為可讀取類型
+
+    Args:
+        filename: 檔案名稱
+
+    Returns:
+        是否可讀取
+    """
+    if not filename:
+        return False
+    ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    return ext in READABLE_FILE_EXTENSIONS
 
 
 def get_temp_image_path(line_message_id: str) -> str:
@@ -1498,6 +1523,112 @@ async def get_image_info_by_line_message_id(line_message_id: str) -> dict | None
             JOIN line_messages m ON f.message_id = m.id
             WHERE m.message_id = $1
               AND f.file_type = 'image'
+            """,
+            line_message_id,
+        )
+        return dict(row) if row else None
+
+
+# ============================================================
+# 檔案暫存服務（非圖片）
+# ============================================================
+
+
+def get_temp_file_path(line_message_id: str, filename: str) -> str:
+    """取得檔案暫存路徑
+
+    Args:
+        line_message_id: Line 訊息 ID
+        filename: 原始檔案名稱
+
+    Returns:
+        暫存檔案路徑
+    """
+    # 移除不安全的字元
+    safe_filename = filename.replace("/", "_").replace("\\", "_")
+    return f"{TEMP_FILE_DIR}/{line_message_id}_{safe_filename}"
+
+
+async def ensure_temp_file(
+    line_message_id: str,
+    nas_path: str,
+    filename: str,
+    file_size: int | None = None,
+) -> str | None:
+    """確保檔案暫存檔存在
+
+    如果暫存檔不存在，從 NAS 讀取並寫入暫存。
+
+    Args:
+        line_message_id: Line 訊息 ID
+        nas_path: NAS 上的檔案路徑
+        filename: 原始檔案名稱
+        file_size: 檔案大小（用於檢查是否超過限制）
+
+    Returns:
+        暫存檔案路徑，失敗或不符合條件回傳 None
+    """
+    import os
+
+    # 檢查是否為可讀取類型
+    if not is_readable_file(filename):
+        logger.debug(f"檔案類型不支援讀取: {filename}")
+        return None
+
+    # 檢查檔案大小
+    if file_size is not None and file_size > MAX_READABLE_FILE_SIZE:
+        logger.debug(f"檔案過大，跳過暫存: {filename} ({file_size} bytes)")
+        return None
+
+    # 確保暫存目錄存在
+    os.makedirs(TEMP_FILE_DIR, exist_ok=True)
+
+    temp_path = get_temp_file_path(line_message_id, filename)
+
+    # 如果暫存檔已存在，直接回傳
+    if os.path.exists(temp_path):
+        return temp_path
+
+    # 從 NAS 讀取檔案
+    content = await read_file_from_nas(nas_path)
+    if content is None:
+        logger.warning(f"無法從 NAS 讀取檔案: {nas_path}")
+        return None
+
+    # 再次檢查實際檔案大小
+    if len(content) > MAX_READABLE_FILE_SIZE:
+        logger.debug(f"檔案實際大小超過限制: {filename} ({len(content)} bytes)")
+        return None
+
+    # 寫入暫存檔
+    try:
+        with open(temp_path, "wb") as f:
+            f.write(content)
+        logger.debug(f"已建立檔案暫存: {temp_path}")
+        return temp_path
+    except Exception as e:
+        logger.error(f"寫入暫存檔失敗: {e}")
+        return None
+
+
+async def get_file_info_by_line_message_id(line_message_id: str) -> dict | None:
+    """透過 Line 訊息 ID 取得檔案資訊（非圖片）
+
+    Args:
+        line_message_id: Line 訊息 ID
+
+    Returns:
+        包含 nas_path, file_name, file_size 等資訊的字典，找不到回傳 None
+    """
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT f.nas_path, f.file_type, f.file_name, f.file_size,
+                   m.id as message_uuid
+            FROM line_files f
+            JOIN line_messages m ON f.message_id = m.id
+            WHERE m.message_id = $1
+              AND f.file_type = 'file'
             """,
             line_message_id,
         )

@@ -174,8 +174,12 @@ const AILogApp = (function() {
             <span class="ai-log-stat-label">平均耗時</span>
           </div>
           <div class="ai-log-stat-card">
-            <span class="ai-log-stat-value" id="stat-tokens">--</span>
-            <span class="ai-log-stat-label">總 Tokens</span>
+            <span class="ai-log-stat-value" id="stat-input-tokens">--</span>
+            <span class="ai-log-stat-label">輸入 Tokens</span>
+          </div>
+          <div class="ai-log-stat-card">
+            <span class="ai-log-stat-value" id="stat-output-tokens">--</span>
+            <span class="ai-log-stat-label">輸出 Tokens</span>
           </div>
         </div>
 
@@ -269,12 +273,14 @@ const AILogApp = (function() {
     const totalEl = document.querySelector(`#${windowId} #stat-total`);
     const rateEl = document.querySelector(`#${windowId} #stat-rate`);
     const durationEl = document.querySelector(`#${windowId} #stat-duration`);
-    const tokensEl = document.querySelector(`#${windowId} #stat-tokens`);
+    const inputTokensEl = document.querySelector(`#${windowId} #stat-input-tokens`);
+    const outputTokensEl = document.querySelector(`#${windowId} #stat-output-tokens`);
 
     if (totalEl) totalEl.textContent = stats.total_calls.toLocaleString();
     if (rateEl) rateEl.textContent = `${stats.success_rate}%`;
     if (durationEl) durationEl.textContent = stats.avg_duration_ms ? `${(stats.avg_duration_ms / 1000).toFixed(2)}s` : '--';
-    if (tokensEl) tokensEl.textContent = (stats.total_input_tokens + stats.total_output_tokens).toLocaleString();
+    if (inputTokensEl) inputTokensEl.textContent = (stats.total_input_tokens || 0).toLocaleString();
+    if (outputTokensEl) outputTokensEl.textContent = (stats.total_output_tokens || 0).toLocaleString();
   }
 
   /**
@@ -313,8 +319,12 @@ const AILogApp = (function() {
     const log = await loadLogDetail(logId);
     if (!log) return;
 
+    // 判斷是否有執行流程
+    const hasFlow = log.parsed_response?.tool_calls?.length > 0;
+
     detailPanel.style.display = 'flex';
     detailPanel.innerHTML = `
+      <div class="ai-log-detail-resizer" title="拖曳調整高度"></div>
       <div class="ai-log-detail-header">
         <span class="ai-log-detail-title">Log 詳情</span>
         <button class="ai-log-detail-close">
@@ -332,12 +342,14 @@ const AILogApp = (function() {
           <div class="ai-log-detail-section-title">使用者輸入</div>
           <div class="ai-log-detail-text">${escapeHtml(log.input_prompt)}</div>
         </div>
-        <div class="ai-log-detail-section">
-          <div class="ai-log-detail-section-title">AI 輸出</div>
-          <div class="ai-log-detail-text ${log.error_message ? 'error' : ''}">
-            ${log.error_message ? escapeHtml(log.error_message) : escapeHtml(log.raw_response || '無回應')}
+        ${hasFlow ? renderExecutionFlow(log) : `
+          <div class="ai-log-detail-section">
+            <div class="ai-log-detail-section-title">AI 輸出</div>
+            <div class="ai-log-detail-text ${log.error_message ? 'error' : ''}">
+              ${log.error_message ? escapeHtml(log.error_message) : escapeHtml(log.raw_response || '無回應')}
+            </div>
           </div>
-        </div>
+        `}
       </div>
       <div class="ai-log-detail-meta">
         <span>Model: ${log.model || '-'}</span>
@@ -354,6 +366,37 @@ const AILogApp = (function() {
       document.querySelectorAll(`#${windowId} #log-list-body tr`).forEach(row => {
         row.classList.remove('selected');
       });
+    });
+
+    // 拖曳調整高度
+    const resizer = detailPanel.querySelector('.ai-log-detail-resizer');
+    let isResizing = false;
+    let startY = 0;
+    let startHeight = 0;
+
+    resizer.addEventListener('mousedown', (e) => {
+      isResizing = true;
+      startY = e.clientY;
+      startHeight = detailPanel.offsetHeight;
+      document.body.style.cursor = 'ns-resize';
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isResizing) return;
+      // 往上拖 = 增加高度（因為面板在底部）
+      const deltaY = startY - e.clientY;
+      const newHeight = Math.max(200, Math.min(startHeight + deltaY, window.innerHeight * 0.7));
+      detailPanel.style.height = `${newHeight}px`;
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (isResizing) {
+        isResizing = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
     });
   }
 
@@ -397,6 +440,88 @@ const AILogApp = (function() {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+  }
+
+  /**
+   * 格式化 JSON 為可讀格式
+   */
+  function formatJson(obj) {
+    if (obj === null || obj === undefined) {
+      return '<span style="color: var(--text-muted)">(無資料)</span>';
+    }
+    if (typeof obj === 'string') {
+      // 如果是長字串，直接顯示（不嘗試 JSON 解析）
+      if (obj.length > 500) {
+        return escapeHtml(obj);
+      }
+      try {
+        obj = JSON.parse(obj);
+      } catch (e) {
+        return escapeHtml(obj);
+      }
+    }
+    return escapeHtml(JSON.stringify(obj, null, 2));
+  }
+
+  /**
+   * 渲染執行流程區塊
+   */
+  function renderExecutionFlow(log) {
+    const toolCalls = log.parsed_response?.tool_calls;
+    if (!toolCalls || toolCalls.length === 0) {
+      return '';
+    }
+
+    const toolItems = toolCalls.map((tc, index) => {
+      const isFirst = index === 0;
+      return `
+        <div class="ai-log-flow-item" data-expanded="${isFirst}">
+          <div class="ai-log-flow-header" onclick="this.parentElement.dataset.expanded = this.parentElement.dataset.expanded === 'true' ? 'false' : 'true'">
+            <span class="ai-log-flow-number">${index + 1}</span>
+            <span class="ai-log-flow-icon">${getIcon('wrench')}</span>
+            <span class="ai-log-flow-name">${escapeHtml(tc.name)}</span>
+            <span class="ai-log-flow-toggle">${getIcon('chevron-down')}</span>
+          </div>
+          <div class="ai-log-flow-body">
+            <div class="ai-log-flow-section">
+              <div class="ai-log-flow-section-label">輸入</div>
+              <pre class="ai-log-flow-code">${formatJson(tc.input)}</pre>
+            </div>
+            <div class="ai-log-flow-section">
+              <div class="ai-log-flow-section-label">輸出</div>
+              <pre class="ai-log-flow-code">${formatJson(tc.output)}</pre>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    // 最終回應
+    const finalResponse = `
+      <div class="ai-log-flow-item ai-log-flow-final" data-expanded="true">
+        <div class="ai-log-flow-header">
+          <span class="ai-log-flow-number">${toolCalls.length + 1}</span>
+          <span class="ai-log-flow-icon">${getIcon('chat')}</span>
+          <span class="ai-log-flow-name">最終回應</span>
+        </div>
+        <div class="ai-log-flow-body">
+          <div class="ai-log-flow-response">${escapeHtml(log.raw_response || '')}</div>
+        </div>
+      </div>
+    `;
+
+    return `
+      <div class="ai-log-detail-section">
+        <div class="ai-log-detail-section-title">
+          <span class="icon">${getIcon('list-status')}</span>
+          執行流程
+        </div>
+        <div class="ai-log-flow">
+          ${toolItems}
+          ${finalResponse}
+        </div>
+      </div>
+    `;
   }
 
   /**
