@@ -13,7 +13,7 @@ const TaskbarModule = (function() {
   const quickLaunchApps = [
     { id: 'file-manager', name: '檔案管理', icon: 'mdi-folder' },
     { id: 'terminal', name: '終端機', icon: 'mdi-console' },
-    { id: 'code-editor', name: '程式編輯器', icon: 'mdi-code-braces' },
+    { id: 'code-editor', name: 'VSCode', icon: 'mdi-code-braces' },
     { id: 'ai-assistant', name: 'AI 助手', icon: 'mdi-robot' },
     { id: 'settings', name: '系統設定', icon: 'mdi-cog' }
   ];

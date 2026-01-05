@@ -10,7 +10,7 @@ const DesktopModule = (function() {
   const applications = [
     { id: 'file-manager', name: '檔案管理', icon: 'mdi-folder' },
     { id: 'terminal', name: '終端機', icon: 'mdi-console' },
-    { id: 'code-editor', name: '程式編輯器', icon: 'mdi-code-braces' },
+    { id: 'code-editor', name: 'VSCode', icon: 'mdi-code-braces' },
     { id: 'project-management', name: '專案管理', icon: 'mdi-clipboard-text' },
     { id: 'ai-assistant', name: 'AI 助手', icon: 'mdi-robot' },
     { id: 'prompt-editor', name: 'Prompt 編輯器', icon: 'mdi-script-text' },

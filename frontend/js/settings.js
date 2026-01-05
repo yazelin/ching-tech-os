@@ -13,7 +13,7 @@ const SettingsApp = (function () {
   const APP_NAMES = {
     'file-manager': '檔案管理',
     'terminal': '終端機',
-    'code-editor': '程式編輯器',
+    'code-editor': 'VSCode',
     'project-management': '專案管理',
     'ai-assistant': 'AI 助手',
     'prompt-editor': 'Prompt 編輯器',

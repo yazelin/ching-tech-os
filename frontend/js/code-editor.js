@@ -29,7 +29,7 @@ const CodeEditorModule = (function() {
 
     // Create window with larger default size for better editing experience
     windowId = WindowModule.createWindow({
-      title: '程式編輯器',
+      title: 'VSCode',
       appId: 'code-editor',
       icon: 'mdi-code-braces',
       width: 1200,
