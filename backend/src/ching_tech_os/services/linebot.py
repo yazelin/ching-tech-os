@@ -116,8 +116,18 @@ def verify_signature(body: bytes, signature: str) -> bool:
 # 用戶管理
 # ============================================================
 
-async def get_or_create_user(line_user_id: str, profile: dict | None = None) -> UUID:
-    """取得或建立 Line 用戶，回傳內部 UUID"""
+async def get_or_create_user(
+    line_user_id: str,
+    profile: dict | None = None,
+    is_friend: bool | None = None,
+) -> UUID:
+    """取得或建立 Line 用戶，回傳內部 UUID
+
+    Args:
+        line_user_id: Line 用戶 ID
+        profile: 用戶資料（displayName, pictureUrl, statusMessage）
+        is_friend: 是否為好友（僅在建立新用戶時使用）
+    """
     async with get_connection() as conn:
         # 查詢現有用戶
         row = await conn.fetchrow(
@@ -126,6 +136,7 @@ async def get_or_create_user(line_user_id: str, profile: dict | None = None) -> 
         )
         if row:
             # 更新用戶資訊（如果有 profile）
+            # 注意：不更新 is_friend，好友狀態由 FollowEvent/UnfollowEvent 決定
             if profile:
                 await conn.execute(
                     """
@@ -146,20 +157,25 @@ async def get_or_create_user(line_user_id: str, profile: dict | None = None) -> 
         # 建立新用戶
         row = await conn.fetchrow(
             """
-            INSERT INTO line_users (line_user_id, display_name, picture_url, status_message)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO line_users (line_user_id, display_name, picture_url, status_message, is_friend)
+            VALUES ($1, $2, $3, $4, $5)
             RETURNING id
             """,
             line_user_id,
             profile.get("displayName") if profile else None,
             profile.get("pictureUrl") if profile else None,
             profile.get("statusMessage") if profile else None,
+            is_friend if is_friend is not None else False,  # 預設為非好友
         )
         return row["id"]
 
 
 async def get_user_profile(line_user_id: str) -> dict | None:
-    """從 Line API 取得用戶 profile"""
+    """從 Line API 取得用戶 profile（個人對話用）
+
+    注意：此 API 只能取得與 Bot 有好友關係的用戶資料。
+    群組訊息請使用 get_group_member_profile()。
+    """
     try:
         api = await get_messaging_api()
         profile = await api.get_profile(line_user_id)
@@ -170,6 +186,31 @@ async def get_user_profile(line_user_id: str) -> dict | None:
         }
     except Exception as e:
         logger.warning(f"無法取得用戶 profile: {e}")
+        return None
+
+
+async def get_group_member_profile(line_group_id: str, line_user_id: str) -> dict | None:
+    """從 Line API 取得群組成員 profile
+
+    此 API 可取得群組內任何成員的資料，不需要好友關係。
+
+    Args:
+        line_group_id: Line 群組 ID
+        line_user_id: Line 用戶 ID
+
+    Returns:
+        包含 displayName、pictureUrl 的字典，失敗回傳 None
+    """
+    try:
+        api = await get_messaging_api()
+        profile = await api.get_group_member_profile(line_group_id, line_user_id)
+        return {
+            "displayName": profile.display_name,
+            "pictureUrl": profile.picture_url,
+            # 群組成員 API 不回傳 statusMessage
+        }
+    except Exception as e:
+        logger.warning(f"無法取得群組成員 profile: {e}")
         return None
 
 
@@ -288,8 +329,18 @@ async def save_message(
 ) -> UUID:
     """儲存訊息到資料庫，回傳訊息 UUID"""
     # 取得或建立用戶
-    user_profile = await get_user_profile(line_user_id) if not is_from_bot else None
-    user_uuid = await get_or_create_user(line_user_id, user_profile)
+    # 群組訊息使用 get_group_member_profile（可取得非好友用戶資料）
+    # 個人對話使用 get_user_profile（用戶必定與 Bot 有好友關係）
+    user_profile = None
+    is_friend = None  # 預設不設定，讓 get_or_create_user 決定
+    if not is_from_bot:
+        if line_group_id:
+            user_profile = await get_group_member_profile(line_group_id, line_user_id)
+            is_friend = False  # 群組成員預設為非好友
+        else:
+            user_profile = await get_user_profile(line_user_id)
+            is_friend = True  # 個人對話必定是好友
+    user_uuid = await get_or_create_user(line_user_id, user_profile, is_friend)
 
     # 取得或建立群組（如果是群組訊息）
     group_uuid = None
@@ -336,21 +387,30 @@ async def get_or_create_bot_user() -> UUID:
     async with get_connection() as conn:
         # 查詢現有 Bot 用戶
         row = await conn.fetchrow(
-            "SELECT id FROM line_users WHERE line_user_id = $1",
+            "SELECT id, is_friend FROM line_users WHERE line_user_id = $1",
             bot_line_id,
         )
         if row:
+            # 確保 Bot 用戶的 is_friend 為 false 且名稱正確
+            await conn.execute(
+                """
+                UPDATE line_users
+                SET is_friend = false, display_name = 'ChingTech AI (Bot)'
+                WHERE id = $1
+                """,
+                row["id"],
+            )
             return row["id"]
 
-        # 建立 Bot 用戶
+        # 建立 Bot 用戶（is_friend = false）
         row = await conn.fetchrow(
             """
-            INSERT INTO line_users (line_user_id, display_name)
-            VALUES ($1, $2)
+            INSERT INTO line_users (line_user_id, display_name, is_friend)
+            VALUES ($1, $2, false)
             RETURNING id
             """,
             bot_line_id,
-            "ChingTech AI",
+            "ChingTech AI (Bot)",
         )
         logger.info("已建立 Bot 用戶")
         return row["id"]

@@ -226,6 +226,7 @@ class AiLogCreate(BaseModel):
     context_id: str | None = Field(None, max_length=64)
     input_prompt: str
     system_prompt: str | None = Field(None, description="實際使用的 system prompt 內容")
+    allowed_tools: list[str] | None = Field(None, description="允許使用的工具列表")
     raw_response: str | None = None
     parsed_response: dict[str, Any] | None = None
     model: str | None = Field(None, max_length=32)
@@ -247,6 +248,7 @@ class AiLogResponse(BaseModel):
     context_id: str | None
     input_prompt: str
     system_prompt: str | None = None  # 實際使用的 system prompt 內容
+    allowed_tools: list[str] | None = None  # 允許使用的工具列表
     raw_response: str | None
     parsed_response: dict[str, Any] | None
     model: str | None
@@ -265,6 +267,8 @@ class AiLogListItem(BaseModel):
     agent_id: UUID | None
     agent_name: str | None
     context_type: str | None
+    allowed_tools: list[str] | None = None  # 允許使用的工具列表
+    used_tools: list[str] | None = None  # 實際使用的工具（從 parsed_response 解析）
     success: bool
     duration_ms: int | None
     input_tokens: int | None

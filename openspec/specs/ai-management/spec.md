@@ -83,25 +83,20 @@ AI 管理系統 SHALL 支援管理 AI Agent 配置。
 ---
 
 ### Requirement: AI Log 記錄
-AI 管理系統 SHALL 記錄所有 AI 調用日誌，**包含完整的工具調用過程**。
+AI 管理系統 SHALL 記錄所有 AI 調用日誌，**包含完整的請求資訊**。
 
-#### Scenario: 記錄 AI 調用（含工具調用）
-- **WHEN** 系統調用 AI（透過 Claude CLI）
-- **THEN** 系統使用 `--output-format stream-json --verbose` 取得完整輸出
-- **AND** 解析並記錄 input_prompt、raw_response
-- **AND** 解析並記錄 tool_calls 到 parsed_response
-- **AND** 記錄 agent_id、context_type、context_id
-- **AND** 記錄 duration_ms、input_tokens、output_tokens
+#### Scenario: 記錄完整對話輸入
+- **WHEN** 系統透過 `call_agent()` 調用 AI
+- **AND** 傳入對話歷史 `history`
+- **THEN** 系統記錄 `input_prompt` 為組合後的完整對話內容
 
-#### Scenario: tool_calls 資料格式
-- **WHEN** AI 調用包含工具使用
-- **THEN** parsed_response.tool_calls 為陣列
-- **AND** 每個元素包含 id、name、input、output
-- **AND** 順序反映實際調用順序
+#### Scenario: 記錄允許的工具
+- **WHEN** 系統調用 AI 且 Agent 設定有 tools
+- **THEN** 系統記錄 `allowed_tools` 為當時允許使用的工具列表
 
-#### Scenario: 無工具調用
-- **WHEN** AI 調用未使用任何工具
-- **THEN** parsed_response.tool_calls 為空陣列或 null
+#### Scenario: 無工具設定
+- **WHEN** 系統調用 AI 但 Agent 無 tools 設定
+- **THEN** `allowed_tools` 記錄為 null
 
 ---
 
@@ -192,26 +187,24 @@ AI 管理系統 SHALL 提供統一的 AI 調用服務。
 ---
 
 ### Requirement: AI Log 應用
-系統 SHALL 提供獨立的 AI Log 桌面應用，**包含執行流程視覺化**。
+系統 SHALL 提供獨立的 AI Log 桌面應用，**包含工具使用視覺化**。
 
-#### Scenario: 查看 Log 詳情（含執行流程）
-- **WHEN** 使用者點擊 Log 項目
-- **THEN** 詳情面板顯示完整資訊
-- **AND** 若 parsed_response.tool_calls 存在且非空，顯示「執行流程」區塊
-- **AND** 執行流程按順序顯示每個工具調用
-- **AND** 每個工具調用顯示名稱、輸入、輸出
-- **AND** 最後顯示最終回應
+#### Scenario: Log 列表顯示 Tools
+- **WHEN** 使用者查看 Log 列表
+- **THEN** 列表在「類型」後、「耗時」前顯示 Tools 欄位
+- **AND** 可用且有使用的工具顯示為實心背景 + 白字
+- **AND** 可用但未使用的工具顯示為色框 + 色字
 
-#### Scenario: 工具調用收合展開
-- **WHEN** 執行流程包含多個工具調用
-- **THEN** 每個工具調用區塊可收合/展開
-- **AND** 預設第一個展開，其餘收合
-- **AND** 輸入輸出 JSON 格式化顯示
+#### Scenario: Tool Calls 預設折疊
+- **WHEN** 使用者點擊 Log 查看詳情
+- **AND** 該 Log 有工具調用記錄
+- **THEN** 執行流程區塊中的 Tool Calls 預設為折疊狀態
 
-#### Scenario: 舊 Log 相容
-- **WHEN** Log 的 parsed_response 為 null 或不含 tool_calls
-- **THEN** 不顯示「執行流程」區塊
-- **AND** 其他資訊正常顯示
+#### Scenario: 複製完整請求
+- **WHEN** 使用者點擊「複製完整請求」按鈕
+- **THEN** 系統組合 system_prompt、allowed_tools、input_prompt
+- **AND** 複製到剪貼簿
+- **AND** 顯示複製成功提示
 
 ### Requirement: AI 對話 Agent 整合
 現有 AI 對話應用 SHALL 改用資料庫的 Agent/Prompt 設定。
@@ -237,28 +230,10 @@ AI 管理系統 SHALL 提供統一的 AI 調用服務。
 ### Requirement: 資料庫儲存
 AI 管理系統 SHALL 使用 PostgreSQL 資料庫儲存資料。
 
-#### Scenario: ai_prompts 資料表
-- **WHEN** 系統儲存 prompt
-- **THEN** prompt 資料存於 `ai_prompts` 資料表
-- **AND** 包含欄位：id、name、display_name、category、content、description、variables、created_at、updated_at
-
-#### Scenario: ai_agents 資料表
-- **WHEN** 系統儲存 agent
-- **THEN** agent 資料存於 `ai_agents` 資料表
-- **AND** 包含欄位：id、name、display_name、description、model、system_prompt_id、is_active、settings、created_at、updated_at
-
-#### Scenario: ai_logs 分區表
+#### Scenario: ai_logs 新增 allowed_tools 欄位
 - **WHEN** 系統儲存 AI log
-- **THEN** log 資料存於 `ai_logs` 分區表
-- **AND** 按月份分區（如 ai_logs_2025_01）
+- **THEN** log 資料包含 `allowed_tools JSONB` 欄位
+- **AND** 欄位可為 null
 
-#### Scenario: 自動建立分區
-- **WHEN** 新月份開始且對應分區不存在
-- **THEN** 系統自動建立新月份的分區
-
-#### Scenario: 級聯處理
-- **WHEN** 刪除 prompt
-- **THEN** 引用該 prompt 的 agents 之 system_prompt_id 設為 null
-- **WHEN** 刪除 agent
-- **THEN** 相關的 ai_logs 之 agent_id 設為 null
+---
 

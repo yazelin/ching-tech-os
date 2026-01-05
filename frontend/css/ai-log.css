@@ -315,11 +315,38 @@
 }
 
 .ai-log-detail-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 11px;
   font-weight: 500;
   color: var(--text-muted);
   text-transform: uppercase;
   margin-bottom: 8px;
+}
+
+.ai-log-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ai-log-copy-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.ai-log-copy-btn.copied {
+  color: var(--color-success);
 }
 
 .ai-log-detail-text {
@@ -331,7 +358,7 @@
   font-size: 12px;
   line-height: 1.5;
   overflow-y: auto;
-  white-space: pre-wrap;
+  white-space: pre-line;
   word-break: break-word;
   color: var(--text-primary);
 }
@@ -532,4 +559,64 @@
   word-break: break-word;
   overflow: auto;
   max-height: 300px;
+}
+
+/* ========================================
+   Tools 標籤
+   ======================================== */
+
+.ai-log-no-tools {
+  color: var(--text-muted);
+}
+
+.ai-log-tool-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  margin: 1px 2px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-family: 'JetBrains Mono', monospace;
+  white-space: nowrap;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  /* 未使用：色框 + 色字 */
+  border: 1px solid var(--color-accent);
+  color: var(--color-accent);
+  background: transparent;
+}
+
+.ai-log-tool-badge.used {
+  /* 已使用：實心背景 + 白字 */
+  background: var(--color-accent);
+  color: #fff;
+  border-color: var(--color-accent);
+}
+
+/* 複製完整請求按鈕 */
+.ai-log-copy-full-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ai-log-copy-full-btn:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+  border-color: var(--color-accent);
+}
+
+.ai-log-copy-full-btn.copied {
+  background: var(--color-success);
+  color: #fff;
+  border-color: var(--color-success);
 }

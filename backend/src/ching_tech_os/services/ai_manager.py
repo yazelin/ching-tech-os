@@ -22,7 +22,7 @@ from ..models.ai import (
     AiPromptResponse,
     AiPromptUpdate,
 )
-from .claude_agent import call_claude
+from .claude_agent import call_claude, compose_prompt_with_history
 
 
 # ============================================================
@@ -474,16 +474,17 @@ async def delete_agent(agent_id: UUID) -> bool:
 async def create_log(data: AiLogCreate) -> dict:
     """建立 AI Log"""
     parsed_json = json.dumps(data.parsed_response) if data.parsed_response else None
+    allowed_tools_json = json.dumps(data.allowed_tools) if data.allowed_tools else None
 
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
             INSERT INTO ai_logs (agent_id, prompt_id, context_type, context_id,
-                                input_prompt, system_prompt, raw_response, parsed_response, model,
+                                input_prompt, system_prompt, allowed_tools, raw_response, parsed_response, model,
                                 success, error_message, duration_ms, input_tokens, output_tokens)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14)
+            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9::jsonb, $10, $11, $12, $13, $14, $15)
             RETURNING id, agent_id, prompt_id, context_type, context_id,
-                      input_prompt, system_prompt, raw_response, parsed_response, model,
+                      input_prompt, system_prompt, allowed_tools, raw_response, parsed_response, model,
                       success, error_message, duration_ms, input_tokens, output_tokens, created_at
             """,
             data.agent_id,
@@ -492,6 +493,7 @@ async def create_log(data: AiLogCreate) -> dict:
             data.context_id,
             data.input_prompt,
             data.system_prompt,
+            allowed_tools_json,
             data.raw_response,
             parsed_json,
             data.model,
@@ -504,6 +506,8 @@ async def create_log(data: AiLogCreate) -> dict:
         result = dict(row)
         if result.get("parsed_response"):
             result["parsed_response"] = json.loads(result["parsed_response"])
+        if result.get("allowed_tools"):
+            result["allowed_tools"] = json.loads(result["allowed_tools"]) if isinstance(result["allowed_tools"], str) else result["allowed_tools"]
         return result
 
 
@@ -568,6 +572,7 @@ async def get_logs(
         rows = await conn.fetch(
             f"""
             SELECT l.id, l.agent_id, a.name as agent_name, l.context_type,
+                   l.allowed_tools, l.parsed_response,
                    l.success, l.duration_ms, l.input_tokens, l.output_tokens, l.created_at
             FROM ai_logs l
             LEFT JOIN ai_agents a ON l.agent_id = a.id
@@ -578,7 +583,25 @@ async def get_logs(
             *params,
         )
 
-        return [dict(row) for row in rows], total
+        # 處理每筆資料，解析 allowed_tools 和 used_tools
+        items = []
+        for row in rows:
+            item = dict(row)
+            # 解析 allowed_tools
+            if item.get("allowed_tools"):
+                item["allowed_tools"] = json.loads(item["allowed_tools"]) if isinstance(item["allowed_tools"], str) else item["allowed_tools"]
+            # 從 parsed_response 提取 used_tools
+            if item.get("parsed_response"):
+                parsed = json.loads(item["parsed_response"]) if isinstance(item["parsed_response"], str) else item["parsed_response"]
+                tool_calls = parsed.get("tool_calls", []) if parsed else []
+                item["used_tools"] = list(set(tc.get("name") for tc in tool_calls if tc.get("name")))
+            else:
+                item["used_tools"] = []
+            # 移除 parsed_response（列表不需要完整內容）
+            del item["parsed_response"]
+            items.append(item)
+
+        return items, total
 
 
 async def get_log(log_id: UUID) -> dict | None:
@@ -588,7 +611,7 @@ async def get_log(log_id: UUID) -> dict | None:
             """
             SELECT l.id, l.agent_id, a.name as agent_name, l.prompt_id,
                    l.context_type, l.context_id, l.input_prompt, l.system_prompt,
-                   l.raw_response, l.parsed_response, l.model, l.success, l.error_message,
+                   l.allowed_tools, l.raw_response, l.parsed_response, l.model, l.success, l.error_message,
                    l.duration_ms, l.input_tokens, l.output_tokens, l.created_at
             FROM ai_logs l
             LEFT JOIN ai_agents a ON l.agent_id = a.id
@@ -601,6 +624,8 @@ async def get_log(log_id: UUID) -> dict | None:
         result = dict(row)
         if result.get("parsed_response"):
             result["parsed_response"] = json.loads(result["parsed_response"])
+        if result.get("allowed_tools"):
+            result["allowed_tools"] = json.loads(result["allowed_tools"]) if isinstance(result["allowed_tools"], str) else result["allowed_tools"]
         return result
 
 
@@ -735,14 +760,21 @@ async def call_agent(
     )
     duration_ms = int((time.time() - start_time) * 1000)
 
+    # 組合完整輸入（含歷史對話）
+    if history:
+        full_input = compose_prompt_with_history(history, message)
+    else:
+        full_input = message
+
     # 建立 Log
     log_data = AiLogCreate(
         agent_id=agent["id"],
         prompt_id=prompt_id,
         context_type=context_type,
         context_id=context_id,
-        input_prompt=message,
+        input_prompt=full_input,
         system_prompt=system_prompt,
+        allowed_tools=tools,
         raw_response=result.message if result.success else None,
         model=agent["model"],
         success=result.success,

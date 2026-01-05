@@ -8,7 +8,7 @@ import logging
 import time
 from uuid import UUID
 
-from .claude_agent import call_claude
+from .claude_agent import call_claude, compose_prompt_with_history
 from .linebot import (
     reply_text,
     mark_message_ai_processed,
@@ -127,7 +127,10 @@ async def process_message_with_ai(
         system_prompt = await build_system_prompt(line_group_id, base_prompt, agent_tools)
 
         # 取得對話歷史（20 則提供更好的上下文理解，包含圖片和檔案）
-        history, images, files = await get_conversation_context(line_group_id, line_user_id, limit=20)
+        # 排除當前訊息，避免重複（compose_prompt_with_history 會再加一次）
+        history, images, files = await get_conversation_context(
+            line_group_id, line_user_id, limit=20, exclude_message_id=message_uuid
+        )
 
         # 處理回覆舊圖片或檔案（quotedMessageId）
         quoted_image_path = None
@@ -223,7 +226,9 @@ async def process_message_with_ai(
             line_group_id=line_group_id,
             is_group=is_group,
             input_prompt=user_message,
+            history=history,
             system_prompt=system_prompt,
+            allowed_tools=all_tools,
             model=model,
             response=response,
             duration_ms=duration_ms,
@@ -265,7 +270,9 @@ async def log_linebot_ai_call(
     line_group_id: UUID | None,
     is_group: bool,
     input_prompt: str,
+    history: list[dict] | None,
     system_prompt: str,
+    allowed_tools: list[str] | None,
     model: str,
     response,
     duration_ms: int,
@@ -277,8 +284,10 @@ async def log_linebot_ai_call(
         message_uuid: 訊息 UUID
         line_group_id: 群組 UUID
         is_group: 是否為群組對話
-        input_prompt: 輸入的 prompt
+        input_prompt: 輸入的 prompt（當前訊息）
+        history: 對話歷史
         system_prompt: 系統提示
+        allowed_tools: 允許使用的工具列表
         model: 使用的模型
         response: Claude 回應物件
         duration_ms: 耗時（毫秒）
@@ -305,14 +314,21 @@ async def log_linebot_ai_call(
                 ]
             }
 
+        # 組合完整輸入（含歷史對話）
+        if history:
+            full_input = compose_prompt_with_history(history, input_prompt)
+        else:
+            full_input = input_prompt
+
         # 建立 Log
         log_data = AiLogCreate(
             agent_id=agent_id,
             prompt_id=prompt_id,
             context_type="linebot-group" if is_group else "linebot-personal",
             context_id=str(message_uuid),
-            input_prompt=input_prompt,
+            input_prompt=full_input,
             system_prompt=system_prompt,
+            allowed_tools=allowed_tools,
             raw_response=response.message if response.success else None,
             parsed_response=parsed_response,
             model=model,
@@ -335,6 +351,7 @@ async def get_conversation_context(
     line_group_id: UUID | None,
     line_user_id: str | None,
     limit: int = 20,
+    exclude_message_id: UUID | None = None,
 ) -> tuple[list[dict], list[dict], list[dict]]:
     """
     取得對話上下文（包含圖片和檔案訊息）
@@ -343,6 +360,7 @@ async def get_conversation_context(
         line_group_id: 群組 UUID（None 表示個人對話）
         line_user_id: Line 用戶 ID（個人對話用）
         limit: 取得的訊息數量
+        exclude_message_id: 要排除的訊息 ID（避免當前訊息重複）
 
     Returns:
         (context, images, files) tuple:
@@ -364,6 +382,7 @@ async def get_conversation_context(
                 LEFT JOIN line_users u ON m.line_user_id = u.id
                 LEFT JOIN line_files f ON f.message_id = m.id
                 WHERE m.line_group_id = $1
+                  AND ($3::uuid IS NULL OR m.id != $3)
                   AND m.message_type IN ('text', 'image', 'file')
                   AND (m.content IS NOT NULL OR m.message_type IN ('image', 'file'))
                 ORDER BY m.created_at DESC
@@ -371,6 +390,7 @@ async def get_conversation_context(
                 """,
                 line_group_id,
                 limit,
+                exclude_message_id,
             )
         elif line_user_id:
             # 個人對話：查詢該用戶的對話歷史，考慮對話重置時間
@@ -383,6 +403,7 @@ async def get_conversation_context(
                 LEFT JOIN line_users u ON m.line_user_id = u.id
                 LEFT JOIN line_files f ON f.message_id = m.id
                 WHERE u.line_user_id = $1
+                  AND ($3::uuid IS NULL OR m.id != $3)
                   AND m.line_group_id IS NULL
                   AND m.message_type IN ('text', 'image', 'file')
                   AND (m.content IS NOT NULL OR m.message_type IN ('image', 'file'))
@@ -395,6 +416,7 @@ async def get_conversation_context(
                 """,
                 line_user_id,
                 limit,
+                exclude_message_id,
             )
         else:
             return [], [], []

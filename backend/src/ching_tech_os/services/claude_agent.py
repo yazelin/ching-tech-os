@@ -195,8 +195,9 @@ def _parse_stream_json(stdout: str) -> tuple[str, list[ToolCall], int | None, in
 
         elif event_type == "result":
             # 最終結果，包含 usage 統計
-            # 優先使用 result 中的文字作為最終回應
-            if event.get("result"):
+            # 只在還沒有累積回應時才使用 result 欄位
+            # （result 欄位可能包含整個對話歷史，包括 user 訊息）
+            if not result_text and event.get("result"):
                 result_text = event.get("result", "")
 
             # 計算 token 統計（包含 cache tokens）

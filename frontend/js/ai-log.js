@@ -192,6 +192,7 @@ const AILogApp = (function() {
                   <th style="width: 160px;">時間</th>
                   <th>Agent</th>
                   <th>類型</th>
+                  <th>Tools</th>
                   <th style="width: 80px;">耗時</th>
                   <th style="width: 100px;">Tokens</th>
                 </tr>
@@ -230,7 +231,7 @@ const AILogApp = (function() {
     if (logs.length === 0) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="6">
+          <td colspan="7">
             <div class="ai-log-empty">
               <span class="icon">${getIcon('file-document-outline')}</span>
               <p>沒有符合條件的日誌</p>
@@ -251,6 +252,7 @@ const AILogApp = (function() {
         <td>${formatDateTime(log.created_at)}</td>
         <td>${log.agent_name || '-'}</td>
         <td>${log.context_type || '-'}</td>
+        <td>${renderToolsBadges(log.allowed_tools, log.used_tools)}</td>
         <td><span class="ai-log-duration">${formatDuration(log.duration_ms)}</span></td>
         <td><span class="ai-log-tokens">${formatTokens(log.input_tokens, log.output_tokens)}</span></td>
       </tr>
@@ -327,14 +329,25 @@ const AILogApp = (function() {
       <div class="ai-log-detail-resizer" title="拖曳調整高度"></div>
       <div class="ai-log-detail-header">
         <span class="ai-log-detail-title">Log 詳情</span>
-        <button class="ai-log-detail-close">
-          <span class="icon">${getIcon('close')}</span>
-        </button>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <button class="ai-log-copy-full-btn" data-copy="full-request" title="複製完整請求（含 System Prompt、Tools、Messages）">
+            <span class="icon">${getIcon('copy')}</span>
+            複製完整請求
+          </button>
+          <button class="ai-log-detail-close">
+            <span class="icon">${getIcon('close')}</span>
+          </button>
+        </div>
       </div>
       <div class="ai-log-detail-content">
         ${log.system_prompt ? `
           <div class="ai-log-detail-section">
-            <div class="ai-log-detail-section-title">System Prompt</div>
+            <div class="ai-log-detail-section-title">
+              System Prompt
+              <button class="ai-log-copy-btn" data-copy="system-prompt" title="複製 System Prompt">
+                <span class="icon">${getIcon('copy')}</span>
+              </button>
+            </div>
             <div class="ai-log-detail-text system-prompt">${escapeHtml(log.system_prompt)}</div>
           </div>
         ` : ''}
@@ -367,6 +380,23 @@ const AILogApp = (function() {
         row.classList.remove('selected');
       });
     });
+
+    // 複製 System Prompt 按鈕
+    const copyBtn = detailPanel.querySelector('.ai-log-copy-btn[data-copy="system-prompt"]');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', async () => {
+        await copyToClipboard(log.system_prompt, copyBtn);
+      });
+    }
+
+    // 複製完整請求按鈕
+    const copyFullBtn = detailPanel.querySelector('.ai-log-copy-full-btn[data-copy="full-request"]');
+    if (copyFullBtn) {
+      copyFullBtn.addEventListener('click', async () => {
+        const fullRequest = buildFullRequest(log);
+        await copyToClipboard(fullRequest, copyFullBtn);
+      });
+    }
 
     // 拖曳調整高度
     const resizer = detailPanel.querySelector('.ai-log-detail-resizer');
@@ -433,6 +463,88 @@ const AILogApp = (function() {
   }
 
   /**
+   * 渲染 Tools 標籤
+   * @param {string[]|null} allowedTools - 允許使用的工具
+   * @param {string[]|null} usedTools - 實際使用的工具
+   */
+  function renderToolsBadges(allowedTools, usedTools) {
+    if (!allowedTools || allowedTools.length === 0) {
+      return '<span class="ai-log-no-tools">-</span>';
+    }
+
+    const usedSet = new Set(usedTools || []);
+
+    return allowedTools.map(tool => {
+      const isUsed = usedSet.has(tool);
+      const className = isUsed ? 'ai-log-tool-badge used' : 'ai-log-tool-badge';
+      return `<span class="${className}" title="${tool}">${tool}</span>`;
+    }).join('');
+  }
+
+  /**
+   * 複製文字到剪貼簿
+   * @param {string} text - 要複製的文字
+   * @param {HTMLElement} btn - 按鈕元素（用於顯示成功狀態）
+   */
+  async function copyToClipboard(text, btn) {
+    try {
+      // 使用 fallback 方案支援非 HTTPS 環境
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        // fallback: 使用 textarea + execCommand
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+      // 顯示複製成功提示
+      const originalTitle = btn.title;
+      btn.title = '已複製！';
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.title = originalTitle;
+        btn.classList.remove('copied');
+      }, 2000);
+    } catch (e) {
+      console.error('[AILog] Failed to copy:', e);
+    }
+  }
+
+  /**
+   * 建立完整請求文字（用於複製）
+   * @param {Object} log - Log 物件
+   * @returns {string} 完整請求文字
+   */
+  function buildFullRequest(log) {
+    const parts = [];
+
+    // System Prompt
+    if (log.system_prompt) {
+      parts.push('=== System Prompt ===');
+      parts.push(log.system_prompt);
+      parts.push('');
+    }
+
+    // Allowed Tools
+    if (log.allowed_tools && log.allowed_tools.length > 0) {
+      parts.push('=== Allowed Tools ===');
+      parts.push(log.allowed_tools.join(', '));
+      parts.push('');
+    }
+
+    // Messages (完整輸入)
+    parts.push('=== Messages ===');
+    parts.push(log.input_prompt || '');
+
+    return parts.join('\n');
+  }
+
+  /**
    * HTML 轉義
    */
   function escapeHtml(text) {
@@ -473,9 +585,9 @@ const AILogApp = (function() {
     }
 
     const toolItems = toolCalls.map((tc, index) => {
-      const isFirst = index === 0;
+      
       return `
-        <div class="ai-log-flow-item" data-expanded="${isFirst}">
+        <div class="ai-log-flow-item" data-expanded="false">
           <div class="ai-log-flow-header" onclick="this.parentElement.dataset.expanded = this.parentElement.dataset.expanded === 'true' ? 'false' : 'true'">
             <span class="ai-log-flow-number">${index + 1}</span>
             <span class="ai-log-flow-icon">${getIcon('wrench')}</span>
