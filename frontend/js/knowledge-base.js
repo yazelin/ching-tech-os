@@ -615,64 +615,42 @@ const KnowledgeBaseModule = (function() {
   function renderAttachmentItem(att, idx) {
     const isNas = att.path.startsWith('nas://');
     const filename = att.path.split('/').pop();
-    const iconType = getAttachmentIconType(att.type, filename);
+    // 使用 FileUtils 取得圖示和類型 class
+    const iconName = FileUtils.getFileIcon(filename, att.type);
+    const typeClass = FileUtils.getFileTypeClass(filename, att.type);
     const escapedPath = escapeHtmlAttr(att.path);
     const escapedDesc = escapeHtmlAttr(att.description || '');
     const description = att.description ? `<div class="kb-attachment-desc">${escapeHtmlAttr(att.description)}</div>` : '';
 
     return `
       <div class="kb-attachment-item" data-idx="${idx}" data-path="${escapedPath}" data-type="${att.type}" data-description="${escapedDesc}">
-        <div class="kb-attachment-icon ${iconType}">
-          <span class="icon">${getIcon(getAttachmentIcon(iconType))}</span>
+        <div class="file-icon-wrapper ${typeClass}">
+          <span class="icon">${getIcon(iconName)}</span>
         </div>
         <div class="kb-attachment-info">
           <div class="kb-attachment-name">${filename}</div>
           ${description}
           <div class="kb-attachment-meta">
             <span>${att.size}</span>
-            <span class="kb-attachment-location ${isNas ? 'nas' : 'local'}">${isNas ? 'NAS' : '本機'}</span>
+            <span class="storage-badge ${isNas ? 'nas' : 'local'}">${isNas ? 'NAS' : '本機'}</span>
           </div>
         </div>
         <div class="kb-attachment-actions">
-          <button class="kb-attachment-action" data-action="preview" title="預覽">
+          <button class="file-icon-btn" data-action="preview" title="預覽">
             <span class="icon">${getIcon('eye')}</span>
           </button>
-          <button class="kb-attachment-action" data-action="download" title="下載">
+          <button class="file-icon-btn" data-action="download" title="下載">
             <span class="icon">${getIcon('download')}</span>
           </button>
-          <button class="kb-attachment-action" data-action="edit" title="編輯">
+          <button class="file-icon-btn" data-action="edit" title="編輯">
             <span class="icon">${getIcon('edit')}</span>
           </button>
-          <button class="kb-attachment-action" data-action="delete" title="刪除" style="color: var(--color-error);">
+          <button class="file-icon-btn danger" data-action="delete" title="刪除">
             <span class="icon">${getIcon('delete')}</span>
           </button>
         </div>
       </div>
     `;
-  }
-
-  /**
-   * Get attachment icon type based on file type
-   */
-  function getAttachmentIconType(type, filename) {
-    if (type === 'image' || /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(filename)) {
-      return 'image';
-    }
-    if (type === 'video' || /\.(mp4|webm|avi|mov)$/i.test(filename)) {
-      return 'video';
-    }
-    return 'document';
-  }
-
-  /**
-   * Get attachment icon name
-   */
-  function getAttachmentIcon(iconType) {
-    switch (iconType) {
-      case 'image': return 'image';
-      case 'video': return 'video';
-      default: return 'file-document';
-    }
   }
 
   /**
@@ -689,7 +667,7 @@ const KnowledgeBaseModule = (function() {
 
     // Attachment item actions
     attachmentsList?.addEventListener('click', (e) => {
-      const actionBtn = e.target.closest('.kb-attachment-action');
+      const actionBtn = e.target.closest('.file-icon-btn');
       if (!actionBtn) return;
 
       const item = actionBtn.closest('.kb-attachment-item');
@@ -708,6 +686,16 @@ const KnowledgeBaseModule = (function() {
       } else if (action === 'delete') {
         deleteAttachment(kb.id, idx);
       }
+    });
+
+    // 雙擊附件卡片開啟預覽
+    attachmentsList?.querySelectorAll('.kb-attachment-item').forEach(item => {
+      item.addEventListener('dblclick', (e) => {
+        // 排除按鈕區域
+        if (e.target.closest('.kb-attachment-actions')) return;
+        const path = item.dataset.path;
+        previewAttachment(kb.id, path);
+      });
     });
   }
 
@@ -876,30 +864,15 @@ const KnowledgeBaseModule = (function() {
   function previewAttachment(kbId, path) {
     const url = getAttachmentUrl(path);
     const filename = path.split('/').pop();
-    const ext = filename.split('.').pop().toLowerCase();
     const basePath = window.API_BASE || '';
 
-    // Image files
-    if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(ext)) {
-      if (typeof ImageViewerModule !== 'undefined') {
-        ImageViewerModule.open(url);
-      } else {
-        window.open(`${basePath}${url}`, '_blank');
-      }
+    // 使用 FileOpener 統一入口開啟檔案
+    if (typeof FileOpener !== 'undefined' && FileOpener.canOpen(filename)) {
+      FileOpener.open(url, filename);
       return;
     }
 
-    // Text files
-    if (['txt', 'md', 'json', 'js', 'ts', 'py', 'html', 'css', 'xml', 'yaml', 'yml', 'log', 'sh', 'bash'].includes(ext)) {
-      if (typeof TextViewerModule !== 'undefined') {
-        TextViewerModule.open(url, filename);
-      } else {
-        window.open(`${basePath}${url}`, '_blank');
-      }
-      return;
-    }
-
-    // Other files - just download
+    // 不支援的檔案類型 - 直接下載
     window.open(`${basePath}${url}`, '_blank');
   }
 
@@ -1021,7 +994,7 @@ const KnowledgeBaseModule = (function() {
    */
   function getAttachmentUrl(path) {
     const isNas = path.startsWith('nas://');
-    // 不加 base path，由 ImageViewerModule/TextViewerModule 統一處理
+    // 不加 base path，由 FileOpener 統一處理
 
     if (isNas) {
       // NAS path: nas://knowledge/attachments/kb-001/file.bin

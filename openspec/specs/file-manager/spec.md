@@ -46,25 +46,11 @@ TBD - created by archiving change add-file-manager. Update Purpose after archive
 ### Requirement: 檔案預覽面板
 系統 SHALL 在檔案管理視窗右側提供快速預覽面板。
 
-#### Scenario: 預覽文字檔
-- Given 檔案管理視窗已開啟
-- When 選取一個文字檔（txt, md, json, log 等）
-- Then 預覽面板顯示檔案內容前數行
-- And 顯示檔案名稱和大小
-
-#### Scenario: 預覽圖片檔
-- Given 檔案管理視窗已開啟
-- When 選取一個圖片檔（jpg, png, gif, svg）
-- Then 預覽面板顯示圖片縮圖
-- And 顯示檔案名稱和尺寸
-
-#### Scenario: 不支援預覽的檔案
-- Given 檔案管理視窗已開啟
-- When 選取一個不支援預覽的檔案類型
-- Then 預覽面板顯示檔案圖示和基本資訊
-- And 不顯示內容預覽
-
----
+#### Scenario: 雙擊開啟檔案
+- **GIVEN** 檔案管理視窗已開啟
+- **WHEN** 雙擊支援的檔案類型（圖片、文字、PDF）
+- **THEN** 呼叫 `FileOpener.open()` 開啟對應的檢視器
+> 原本直接呼叫各 Viewer，改為統一使用 FileOpener
 
 ### Requirement: 檔案操作
 系統 SHALL 提供基本的檔案操作功能。
@@ -147,35 +133,4 @@ TBD - created by archiving change add-file-manager. Update Purpose after archive
 - And 回到正常檔案瀏覽模式
 
 ---
-
-### Requirement: 圖片檢視器
-系統 SHALL 提供獨立的圖片檢視器 App。
-
-#### Scenario: 從檔案管理開啟圖片
-- Given 檔案管理視窗已開啟
-- When 雙擊圖片檔
-- Then 開啟圖片檢視器視窗
-- And 顯示該圖片
-
-#### Scenario: 縮放圖片
-- Given 圖片檢視器已開啟
-- When 點擊放大/縮小按鈕或使用滾輪
-- Then 圖片縮放顯示
-- And 可恢復原始大小
-
----
-
-### Requirement: 文字檢視器
-系統 SHALL 提供獨立的文字檢視器 App。
-
-#### Scenario: 從檔案管理開啟文字檔
-- Given 檔案管理視窗已開啟
-- When 雙擊文字檔
-- Then 開啟文字檢視器視窗
-- And 顯示檔案內容
-
-#### Scenario: 捲動大型文字檔
-- Given 文字檢視器顯示大型檔案
-- When 使用者捲動
-- Then 可檢視檔案全部內容
 

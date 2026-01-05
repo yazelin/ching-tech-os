@@ -23,29 +23,6 @@ const FileManagerModule = (function() {
   let searchResults = [];
   let searchTimer = null;
 
-  // Text MIME types for preview
-  const TEXT_EXTENSIONS = ['txt', 'md', 'json', 'js', 'css', 'html', 'log', 'csv', 'xml', 'yaml', 'yml'];
-  const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'];
-
-  // File extension to icon mapping
-  const FILE_ICONS = {
-    folder: 'folder',
-    txt: 'file-document',
-    md: 'file-document',
-    json: 'code-braces',
-    js: 'code-braces',
-    css: 'code-braces',
-    html: 'code-braces',
-    jpg: 'file-image',
-    jpeg: 'file-image',
-    png: 'file-image',
-    gif: 'file-image',
-    svg: 'file-image',
-    webp: 'file-image',
-    pdf: 'file-document',
-    default: 'file'
-  };
-
   /**
    * Get auth token
    */
@@ -54,34 +31,27 @@ const FileManagerModule = (function() {
   }
 
   /**
-   * Get file icon based on type and extension
+   * Get file icon based on type and extension (委派給 FileUtils)
    */
   function getFileIcon(type, name) {
-    if (type === 'directory') return FILE_ICONS.folder;
-    const ext = name.split('.').pop().toLowerCase();
-    return FILE_ICONS[ext] || FILE_ICONS.default;
+    if (type === 'directory') return 'folder';
+    return FileUtils.getFileIcon(name);
   }
 
   /**
-   * Get file type class for styling
+   * Get file type class for styling (委派給 FileUtils)
    */
   function getFileTypeClass(type, name) {
     if (type === 'directory') return 'folder';
-    const ext = name.split('.').pop().toLowerCase();
-    if (IMAGE_EXTENSIONS.includes(ext)) return 'image';
-    if (TEXT_EXTENSIONS.includes(ext)) return 'text';
-    return '';
+    return FileUtils.getFileTypeClass(name);
   }
 
   /**
-   * Format file size
+   * Format file size (委派給 FileUtils)
    */
   function formatSize(bytes) {
     if (bytes === null || bytes === undefined) return '-';
-    if (bytes === 0) return '0 B';
-    const units = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(1024));
-    return (bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0) + ' ' + units[i];
+    return FileUtils.formatFileSize(bytes);
   }
 
   /**
@@ -780,16 +750,10 @@ const FileManagerModule = (function() {
    */
   function openFile(name) {
     const filePath = currentPath === '/' ? `/${name}` : `${currentPath}/${name}`;
-    const ext = name.split('.').pop().toLowerCase();
 
-    if (IMAGE_EXTENSIONS.includes(ext)) {
-      if (typeof ImageViewerModule !== 'undefined') {
-        ImageViewerModule.open(filePath, name);
-      }
-    } else if (TEXT_EXTENSIONS.includes(ext)) {
-      if (typeof TextViewerModule !== 'undefined') {
-        TextViewerModule.open(filePath, name);
-      }
+    // 使用 FileOpener 統一入口開啟檔案
+    if (typeof FileOpener !== 'undefined' && FileOpener.canOpen(name)) {
+      FileOpener.open(filePath, name);
     }
   }
 
@@ -1031,13 +995,13 @@ const FileManagerModule = (function() {
           <span class="icon">${getIcon('folder')}</span>
         </div>
       `;
-    } else if (IMAGE_EXTENSIONS.includes(ext)) {
+    } else if (FileUtils.isImageFile(file.name)) {
       previewMainHTML = `
         <div class="fm-preview-image">
           <img src="${window.API_BASE || ''}/api/nas/file?path=${encodeURIComponent(filePath)}&token=${encodeURIComponent(getToken())}" alt="${file.name}">
         </div>
       `;
-    } else if (TEXT_EXTENSIONS.includes(ext)) {
+    } else if (FileUtils.isTextFile(file.name)) {
       previewMainHTML = `<div class="fm-preview-text" id="fmPreviewText">載入中...</div>`;
     } else {
       previewMainHTML = `
@@ -1077,7 +1041,7 @@ const FileManagerModule = (function() {
     previewContent.innerHTML = previewHTML;
 
     // Load text content async
-    if (TEXT_EXTENSIONS.includes(ext)) {
+    if (FileUtils.isTextFile(file.name)) {
       try {
         const response = await fetch(`/api/nas/file?path=${encodeURIComponent(filePath)}`, {
           headers: { 'Authorization': `Bearer ${getToken()}` }

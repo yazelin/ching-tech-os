@@ -490,16 +490,21 @@
     flex: 1;
     overflow-y: auto;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
     gap: 12px;
     padding: 4px;
 }
 
+/* 檔案卡片 - 與專案附件/知識庫統一風格 */
 .linebot-file-card {
-    background: var(--bg-surface);
-    border: 1px solid var(--border-light);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: var(--bg-surface-dark);
     border-radius: 8px;
-    overflow: hidden;
+    border: 1px solid var(--border-subtle);
+    cursor: pointer;
     transition: all 0.2s;
 }
 
@@ -508,91 +513,124 @@
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
-.linebot-file-preview {
-    width: 100%;
-    height: 120px;
-    background: var(--bg-surface-dark);
+/* 檔案圖示 */
+.linebot-file-icon-wrapper {
+    width: 40px;
+    height: 40px;
     display: flex;
     align-items: center;
     justify-content: center;
-    overflow: hidden;
+    border-radius: 8px;
+    flex-shrink: 0;
 }
 
-.linebot-file-preview img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
+.linebot-file-icon-wrapper.image {
+    background: var(--tag-bg-green);
+    color: var(--tag-color-green);
 }
 
-.linebot-file-icon {
-    font-size: 40px;
-    opacity: 0.6;
+.linebot-file-icon-wrapper.video {
+    background: var(--tag-bg-purple, rgba(156, 39, 176, 0.15));
+    color: var(--tag-color-purple, #9c27b0);
 }
 
+.linebot-file-icon-wrapper.audio {
+    background: var(--tag-bg-yellow);
+    color: var(--tag-color-yellow);
+}
+
+.linebot-file-icon-wrapper.file {
+    background: var(--tag-bg-gray);
+    color: var(--tag-color-gray);
+}
+
+/* 檔案資訊 */
 .linebot-file-info {
-    padding: 10px;
+    flex: 1;
+    min-width: 0;
 }
 
 .linebot-file-name {
-    font-size: 13px;
-    font-weight: 600;
+    font-weight: 500;
     color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    margin-bottom: 4px;
 }
 
 .linebot-file-meta {
     display: flex;
     gap: 8px;
+    align-items: center;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.linebot-storage-badge {
+    padding: 1px 6px;
+    border-radius: 8px;
+    font-size: 10px;
+}
+
+.linebot-storage-badge.nas {
+    background: var(--tag-bg-blue);
+    color: var(--tag-color-blue);
+}
+
+.linebot-storage-badge.none {
+    background: var(--tag-bg-gray);
+    color: var(--tag-color-gray);
+}
+
+.linebot-file-source {
+    display: flex;
+    align-items: center;
+    gap: 4px;
     font-size: 11px;
     color: var(--text-secondary);
-    margin-bottom: 2px;
+    margin-top: 4px;
+}
+
+.linebot-file-source .icon {
+    width: 12px;
+    height: 12px;
 }
 
 .linebot-file-date {
-    font-size: 11px;
+    margin-left: auto;
     color: var(--text-muted);
 }
 
+/* 操作按鈕 */
 .linebot-file-actions {
-    padding: 8px 10px;
-    border-top: 1px solid var(--border-light);
     display: flex;
-    justify-content: flex-end;
-    gap: 8px;
+    gap: 4px;
 }
 
-.linebot-file-download {
-    padding: 4px 8px;
-    font-size: 14px;
-    text-decoration: none;
-    border-radius: 4px;
-    transition: background 0.2s;
-}
-
-.linebot-file-download:hover {
-    background: var(--bg-surface-dark);
-}
-
-.linebot-file-unavailable {
-    font-size: 14px;
-    opacity: 0.5;
-}
-
-.linebot-file-delete {
-    padding: 4px 8px;
-    font-size: 14px;
-    background: none;
+.linebot-icon-btn {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
     border: none;
     border-radius: 4px;
     cursor: pointer;
-    transition: background 0.2s;
+    color: var(--text-secondary);
+    transition: all 0.15s;
 }
 
-.linebot-file-delete:hover {
-    background: var(--bg-danger-subtle, rgba(255, 100, 100, 0.2));
+.linebot-icon-btn:hover {
+    background: var(--bg-surface);
+    color: var(--text-primary);
+}
+
+.linebot-icon-btn.danger:hover {
+    background: rgba(255, 100, 100, 0.15);
+    color: var(--color-error);
 }
 
 /* ============================================================
@@ -908,7 +946,7 @@
     }
 
     .linebot-files-grid {
-        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        grid-template-columns: 1fr;
     }
 
     .linebot-binding-status {

@@ -1,0 +1,190 @@
+/* ==========================================================================
+   ChingTech OS - 檔案顯示通用樣式
+   統一的檔案圖示顏色、卡片樣式、儲存位置標籤
+   ========================================================================== */
+
+/* ==========================================================================
+   檔案圖示包裝器 - 依檔案類型著色
+   ========================================================================== */
+.file-icon-wrapper {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.file-icon-wrapper .icon {
+  width: 20px;
+  height: 20px;
+}
+
+/* 檔案類型顏色 */
+.file-icon-wrapper.image {
+  background: var(--tag-bg-green);
+  color: var(--tag-color-green);
+}
+
+.file-icon-wrapper.video {
+  background: var(--tag-bg-purple);
+  color: var(--tag-color-purple);
+}
+
+.file-icon-wrapper.audio {
+  background: var(--tag-bg-yellow);
+  color: var(--tag-color-yellow);
+}
+
+.file-icon-wrapper.pdf {
+  background: var(--tag-bg-red);
+  color: var(--tag-color-red);
+}
+
+.file-icon-wrapper.document {
+  background: var(--tag-bg-blue);
+  color: var(--tag-color-blue);
+}
+
+.file-icon-wrapper.code {
+  background: rgba(34, 211, 238, 0.2);
+  color: var(--tag-color-cyan);
+}
+
+.file-icon-wrapper.cad {
+  background: var(--tag-bg-orange);
+  color: var(--tag-color-orange);
+}
+
+.file-icon-wrapper.archive {
+  background: var(--tag-bg-pink);
+  color: var(--tag-color-pink);
+}
+
+.file-icon-wrapper.text {
+  background: var(--tag-bg-gray);
+  color: var(--tag-color-gray);
+}
+
+.file-icon-wrapper.spreadsheet {
+  background: var(--tag-bg-green);
+  color: var(--tag-color-green);
+}
+
+.file-icon-wrapper.presentation {
+  background: var(--tag-bg-orange);
+  color: var(--tag-color-orange);
+}
+
+.file-icon-wrapper.folder {
+  background: var(--tag-bg-yellow);
+  color: var(--tag-color-yellow);
+}
+
+.file-icon-wrapper.default {
+  background: var(--tag-bg-gray);
+  color: var(--tag-color-gray);
+}
+
+/* ==========================================================================
+   儲存位置標籤
+   ========================================================================== */
+.storage-badge {
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.storage-badge.nas {
+  background: var(--tag-bg-blue);
+  color: var(--tag-color-blue);
+}
+
+.storage-badge.local {
+  background: var(--tag-bg-gray);
+  color: var(--tag-color-gray);
+}
+
+/* ==========================================================================
+   檔案卡片基礎樣式
+   ========================================================================== */
+.file-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg-surface-dark);
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.file-card:hover {
+  background: var(--bg-surface-darker);
+  border-color: var(--border-light);
+}
+
+.file-card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.file-card-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.file-card-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* ==========================================================================
+   檔案操作按鈕
+   ========================================================================== */
+.file-icon-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all 0.15s;
+}
+
+.file-icon-btn:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+.file-icon-btn.danger:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--color-error);
+}
+
+.file-icon-btn .icon {
+  width: 16px;
+  height: 16px;
+}

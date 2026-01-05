@@ -74,6 +74,7 @@ def _load_index() -> KnowledgeIndex:
 def _save_index(index: KnowledgeIndex) -> None:
     """儲存知識索引"""
     try:
+        INDEX_PATH.parent.mkdir(parents=True, exist_ok=True)
         index.last_updated = datetime.now().isoformat()
         with open(INDEX_PATH, "w", encoding="utf-8") as f:
             json.dump(index.model_dump(), f, ensure_ascii=False, indent=2)
@@ -440,8 +441,9 @@ def create_knowledge(data: KnowledgeCreate, owner: str | None = None) -> Knowled
     front_matter = _generate_front_matter(metadata)
     file_content = front_matter + data.content
 
-    # 寫入檔案
+    # 寫入檔案（自動建立目錄）
     try:
+        file_path.parent.mkdir(parents=True, exist_ok=True)
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(file_content)
     except Exception as e:

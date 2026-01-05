@@ -599,11 +599,15 @@ async def api_download_file(file_id: UUID):
         # 從 nas_path 取得檔名
         file_name = nas_path.split("/")[-1]
 
+    # 處理檔名中的非 ASCII 字元（使用 RFC 5987 編碼）
+    from urllib.parse import quote
+    safe_filename = quote(file_name, safe="")
+
     return Response(
         content=content,
         media_type=mime_type,
         headers={
-            "Content-Disposition": f'attachment; filename="{file_name}"',
+            "Content-Disposition": f"inline; filename*=UTF-8''{safe_filename}",
         },
     )
 

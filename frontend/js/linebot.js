@@ -681,62 +681,48 @@ const LineBotApp = (function () {
         }
 
         container.innerHTML = state.files.map(file => {
-            const typeIcon = getFileTypeIcon(file.file_type);
             const fileName = file.file_name || `${file.file_type}_${file.id.slice(0, 8)}`;
-            const fileSize = formatFileSize(file.file_size);
-
-            // 圖片預覽 URL（如果有 NAS 路徑）
-            const previewUrl = file.nas_path ? `${window.API_BASE || ''}/api/linebot/files/${file.id}/download` : null;
+            // 使用 FileUtils 取得圖示和類型 class
+            const iconName = FileUtils.getFileIcon(fileName, file.file_type);
+            const typeClass = FileUtils.getFileTypeClass(fileName, file.file_type);
+            const fileSize = FileUtils.formatFileSize(file.file_size);
+            const hasNas = !!file.nas_path;
 
             return `
                 <div class="linebot-file-card" data-id="${file.id}">
-                    <div class="linebot-file-preview">
-                        ${file.file_type === 'image' && previewUrl
-                            ? `<img src="${previewUrl}" alt="${fileName}" loading="lazy">`
-                            : `<div class="linebot-file-icon">${typeIcon}</div>`
-                        }
+                    <div class="file-icon-wrapper ${typeClass}">
+                        <span class="icon">${getIcon(iconName)}</span>
                     </div>
                     <div class="linebot-file-info">
                         <div class="linebot-file-name" title="${escapeHtml(fileName)}">${escapeHtml(fileName)}</div>
                         <div class="linebot-file-meta">
-                            <span>${file.group_name || '個人'}</span>
-                            ${fileSize ? `<span>${fileSize}</span>` : ''}
+                            ${fileSize !== '-' ? `<span>${fileSize}</span>` : ''}
+                            ${hasNas ? `<span class="storage-badge nas">NAS</span>` : ''}
                         </div>
-                        <div class="linebot-file-date">
-                            ${new Date(file.created_at).toLocaleDateString()}
+                        <div class="linebot-file-source">
+                            <span class="icon">${getIcon(file.group_name ? 'account-group' : 'account')}</span>
+                            ${file.group_name || '個人'}
+                            <span class="linebot-file-date">${new Date(file.created_at).toLocaleDateString()}</span>
                         </div>
                     </div>
                     <div class="linebot-file-actions">
-                        ${file.nas_path
-                            ? `<a href="${window.API_BASE || ''}/api/linebot/files/${file.id}/download" class="linebot-file-download" title="下載">⬇️</a>`
-                            : '<span class="linebot-file-unavailable" title="檔案未儲存">❌</span>'
-                        }
-                        <button class="linebot-file-delete" data-file-id="${file.id}" title="刪除">🗑️</button>
+                        ${hasNas ? `
+                            <button class="file-icon-btn" data-action="preview" title="預覽">
+                                <span class="icon">${getIcon('eye')}</span>
+                            </button>
+                            <button class="file-icon-btn" data-action="download" title="下載">
+                                <span class="icon">${getIcon('download')}</span>
+                            </button>
+                        ` : ''}
+                        <button class="file-icon-btn danger" data-action="delete" title="刪除">
+                            <span class="icon">${getIcon('delete')}</span>
+                        </button>
                     </div>
                 </div>
             `;
         }).join('');
 
         renderPagination('files');
-    }
-
-    // 取得檔案類型圖示
-    function getFileTypeIcon(fileType) {
-        const icons = {
-            image: '🖼️',
-            video: '🎬',
-            audio: '🎵',
-            file: '📄',
-        };
-        return icons[fileType] || '📄';
-    }
-
-    // 格式化檔案大小
-    function formatFileSize(bytes) {
-        if (!bytes) return null;
-        if (bytes < 1024) return `${bytes} B`;
-        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-        return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
     }
 
     // 渲染分頁
@@ -1023,22 +1009,82 @@ const LineBotApp = (function () {
         }
     }
 
-    // 設置檔案刪除事件委派
+    // 設置檔案事件委派
     function setupFileDeleteEvents() {
         const container = document.querySelector('.linebot-files-grid');
         if (!container) return;
 
+        // 點擊按鈕
         container.addEventListener('click', (e) => {
-            const deleteBtn = e.target.closest('.linebot-file-delete');
-            if (deleteBtn) {
-                e.preventDefault();
-                e.stopPropagation();
-                const fileId = deleteBtn.dataset.fileId;
-                const card = deleteBtn.closest('.linebot-file-card');
-                const fileName = card?.querySelector('.linebot-file-name')?.textContent || '此檔案';
-                confirmDeleteFile(fileId, fileName);
+            const btn = e.target.closest('.file-icon-btn');
+            if (!btn) return;
+
+            e.preventDefault();
+            e.stopPropagation();
+
+            const action = btn.dataset.action;
+            const card = btn.closest('.linebot-file-card');
+            const fileId = card?.dataset.id;
+            const file = state.files.find(f => f.id === fileId);
+
+            if (!file) return;
+
+            switch (action) {
+                case 'preview':
+                    openFile(file);
+                    break;
+                case 'download':
+                    window.open(`${window.API_BASE || ''}/api/linebot/files/${file.id}/download`, '_blank');
+                    break;
+                case 'delete':
+                    const fileName = card?.querySelector('.linebot-file-name')?.textContent || '此檔案';
+                    confirmDeleteFile(file.id, fileName);
+                    break;
             }
         });
+
+        // 雙擊開啟檔案
+        container.addEventListener('dblclick', (e) => {
+            const card = e.target.closest('.linebot-file-card');
+            if (!card) return;
+
+            // 避免在按鈕上雙擊時觸發
+            if (e.target.closest('.linebot-file-actions')) return;
+
+            const fileId = card.dataset.id;
+            const file = state.files.find(f => f.id === fileId);
+            if (!file || !file.nas_path) {
+                NotificationModule?.show?.('此檔案無法開啟', 'warning');
+                return;
+            }
+
+            openFile(file);
+        });
+    }
+
+    // 開啟檔案（使用 FileOpener）
+    function openFile(file) {
+        if (!file.nas_path) {
+            NotificationModule?.show?.('此檔案無法開啟', 'warning');
+            return;
+        }
+
+        let fileName = file.file_name || `${file.file_type}_${file.id.slice(0, 8)}`;
+        const fileUrl = `/api/linebot/files/${file.id}/download`;
+
+        // 如果檔名沒有副檔名，根據 file_type 加上預設副檔名
+        if (!fileName.includes('.')) {
+            const defaultExt = { image: '.jpg', video: '.mp4', audio: '.mp3', file: '.bin' };
+            fileName += defaultExt[file.file_type] || '';
+        }
+
+        // 使用 FileOpener 開啟
+        if (typeof FileOpener !== 'undefined' && FileOpener.canOpen(fileName)) {
+            FileOpener.open(fileUrl, fileName);
+        } else {
+            // 不支援的類型，直接下載
+            window.open(`${window.API_BASE || ''}${fileUrl}`, '_blank');
+        }
     }
 
     return {

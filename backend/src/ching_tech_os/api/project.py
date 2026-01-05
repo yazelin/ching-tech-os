@@ -1,6 +1,7 @@
 """專案管理 API"""
 
 import mimetypes
+from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
@@ -433,11 +434,13 @@ async def api_download_attachment(project_id: UUID, attachment_id: UUID) -> Resp
     try:
         content, filename = await get_attachment_content(project_id, attachment_id)
         mime_type, _ = mimetypes.guess_type(filename)
+        # 使用 RFC 5987 編碼處理非 ASCII 字元
+        safe_filename = quote(filename, safe="")
         return Response(
             content=content,
             media_type=mime_type or "application/octet-stream",
             headers={
-                "Content-Disposition": f'attachment; filename="{filename}"'
+                "Content-Disposition": f"attachment; filename*=UTF-8''{safe_filename}",
             },
         )
     except ProjectNotFoundError as e:
@@ -461,11 +464,13 @@ async def api_preview_attachment(project_id: UUID, attachment_id: UUID) -> Respo
     try:
         content, filename = await get_attachment_content(project_id, attachment_id)
         mime_type, _ = mimetypes.guess_type(filename)
+        # 使用 RFC 5987 編碼處理非 ASCII 字元
+        safe_filename = quote(filename, safe="")
         return Response(
             content=content,
             media_type=mime_type or "application/octet-stream",
             headers={
-                "Content-Disposition": f'inline; filename="{filename}"'
+                "Content-Disposition": f"inline; filename*=UTF-8''{safe_filename}",
             },
         )
     except ProjectNotFoundError as e:

@@ -912,41 +912,45 @@ const ProjectManagementModule = (function() {
         </button>
       </div>
       <div class="pm-attachments-grid">
-        ${attachments.length === 0 ? '<div class="pm-empty-tab">尚無附件</div>' : attachments.map(a => `
+        ${attachments.length === 0 ? '<div class="pm-empty-tab">尚無附件</div>' : attachments.map(a => {
+          // 使用 FileUtils 取得圖示和類型 class
+          const iconName = FileUtils.getFileIcon(a.filename, a.file_type);
+          const typeClass = FileUtils.getFileTypeClass(a.filename, a.file_type);
+          const isNas = a.storage_path.startsWith('nas://');
+          return `
           <div class="pm-attachment-card" data-id="${a.id}">
-            <div class="pm-attachment-icon ${a.file_type}">
-              <span class="icon">${getIcon(getAttachmentIcon(a.file_type))}</span>
+            <div class="file-icon-wrapper ${typeClass}">
+              <span class="icon">${getIcon(iconName)}</span>
             </div>
             <div class="pm-attachment-info">
               <div class="pm-attachment-name" title="${a.filename}">${a.filename}</div>
               <div class="pm-attachment-meta">
-                <span>${formatFileSize(a.file_size)}</span>
-                <span class="pm-storage-badge ${a.storage_path.startsWith('nas://') ? 'nas' : 'local'}">
-                  ${a.storage_path.startsWith('nas://') ? 'NAS' : '本機'}
-                </span>
+                <span>${FileUtils.formatFileSize(a.file_size)}</span>
+                <span class="storage-badge ${isNas ? 'nas' : 'local'}">${isNas ? 'NAS' : '本機'}</span>
               </div>
               ${a.description ? `<div class="pm-attachment-desc">${a.description}</div>` : ''}
             </div>
             <div class="pm-attachment-actions">
-              <button class="pm-icon-btn" data-action="preview" title="預覽">
+              <button class="file-icon-btn" data-action="preview" title="預覽">
                 <span class="icon">${getIcon('eye')}</span>
               </button>
-              <button class="pm-icon-btn" data-action="download" title="下載">
+              <button class="file-icon-btn" data-action="download" title="下載">
                 <span class="icon">${getIcon('download')}</span>
               </button>
-              <button class="pm-icon-btn danger" data-action="delete" title="刪除">
+              <button class="file-icon-btn danger" data-action="delete" title="刪除">
                 <span class="icon">${getIcon('delete')}</span>
               </button>
             </div>
           </div>
-        `).join('')}
+        `}).join('')}
       </div>
     `;
 
     // Bind events
     contentEl.querySelector('#pmBtnUpload')?.addEventListener('click', () => showUploadModal());
     contentEl.querySelectorAll('.pm-attachment-card').forEach(card => {
-      card.querySelectorAll('.pm-icon-btn').forEach(btn => {
+      // 按鈕點擊
+      card.querySelectorAll('.file-icon-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
           const attId = card.dataset.id;
@@ -955,24 +959,13 @@ const ProjectManagementModule = (function() {
           else if (btn.dataset.action === 'delete') confirmDeleteAttachment(attId);
         });
       });
+      // 雙擊預覽
+      card.addEventListener('dblclick', (e) => {
+        // 避免在按鈕上雙擊時觸發
+        if (e.target.closest('.pm-attachment-actions')) return;
+        previewAttachment(card.dataset.id);
+      });
     });
-  }
-
-  function getAttachmentIcon(fileType) {
-    const map = {
-      image: 'image',
-      pdf: 'file-pdf-box',
-      cad: 'ruler-square',
-      document: 'file-document',
-    };
-    return map[fileType] || 'file';
-  }
-
-  function formatFileSize(bytes) {
-    if (!bytes) return '0 B';
-    const units = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(1024));
-    return (bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0) + ' ' + units[i];
   }
 
   function showUploadModal() {
@@ -1053,6 +1046,9 @@ const ProjectManagementModule = (function() {
     dropzone.style.display = 'none';
     progressEl.style.display = 'block';
 
+    let successCount = 0;
+    const failedFiles = [];
+
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const progress = Math.round((i / files.length) * 100);
@@ -1064,23 +1060,39 @@ const ProjectManagementModule = (function() {
         const formData = new FormData();
         formData.append('file', file);
 
-        await fetch(`${API_BASE}/${selectedProject.id}/attachments`, {
+        const response = await fetch(`${API_BASE}/${selectedProject.id}/attachments`, {
           method: 'POST',
           body: formData,
         });
+
+        if (!response.ok) {
+          const errorMsg = response.status === 413 ? '檔案太大' : `錯誤 ${response.status}`;
+          throw new Error(errorMsg);
+        }
+        successCount++;
       } catch (error) {
-        NotificationModule.show({ title: '上傳失敗', message: `${file.name}: ${error.message}`, icon: 'alert-circle' });
+        failedFiles.push({ name: file.name, error: error.message });
       }
     }
 
     fillEl.style.width = '100%';
     percentEl.textContent = '100%';
-    fileNameEl.textContent = '上傳完成！';
+
+    if (failedFiles.length > 0) {
+      fileNameEl.textContent = `完成，${failedFiles.length} 個失敗`;
+      failedFiles.forEach(f => {
+        NotificationModule.show({ title: '上傳失敗', message: `${f.name}: ${f.error}`, icon: 'alert-circle' });
+      });
+    } else {
+      fileNameEl.textContent = '上傳完成！';
+    }
 
     setTimeout(async () => {
       modal.remove();
       await selectProject(selectedProject.id);
-      NotificationModule.show({ title: '上傳完成', message: `已上傳 ${files.length} 個檔案`, icon: 'check-circle' });
+      if (successCount > 0) {
+        NotificationModule.show({ title: '上傳完成', message: `已上傳 ${successCount} 個檔案`, icon: 'check-circle' });
+      }
     }, 500);
   }
 
@@ -1088,20 +1100,15 @@ const ProjectManagementModule = (function() {
     const att = selectedProject.attachments.find(a => a.id === attachmentId);
     if (!att) return;
 
-    const basePath = window.API_BASE || '';
-    const url = `${basePath}${API_BASE}/${selectedProject.id}/attachments/${attachmentId}/preview`;
+    const url = `/api/projects/${selectedProject.id}/attachments/${attachmentId}/preview`;
 
-    if (att.file_type === 'image') {
-      if (typeof ImageViewerModule !== 'undefined') {
-        ImageViewerModule.open(url);
-      } else {
-        window.open(url, '_blank');
-      }
-    } else if (att.file_type === 'pdf') {
-      // TODO: PDF viewer
-      window.open(url, '_blank');
+    // 使用統一的 FileOpener
+    if (typeof FileOpener !== 'undefined' && FileOpener.canOpen(att.filename)) {
+      FileOpener.open(url, att.filename);
     } else {
-      window.open(url, '_blank');
+      // 回退到新視窗開啟
+      const basePath = window.API_BASE || '';
+      window.open(`${basePath}${url}`, '_blank');
     }
   }
 

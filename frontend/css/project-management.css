@@ -738,6 +738,13 @@
   background: var(--bg-surface-dark);
   border-radius: 8px;
   border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pm-attachment-card:hover {
+  background: var(--bg-surface-darker);
+  border-color: var(--border-light);
 }
 
 .pm-attachment-icon {
