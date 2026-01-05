@@ -12,7 +12,8 @@
 - **可編輯的路徑欄**（點擊路徑欄直接輸入路徑）
 - 檔案操作：上傳、下載、刪除、重命名、新增資料夾
 - 右鍵選單
-- 獨立的圖片檢視器與文字檢視器
+- **統一的檔案開啟入口（FileOpener）**
+- 獨立的圖片檢視器、文字檢視器、PDF 檢視器
 - **統一的深色主題捲軸樣式**
 
 ## 視窗結構
@@ -53,9 +54,13 @@
 |------|------|
 | `frontend/js/file-manager.js` | FileManagerModule 主模組 |
 | `frontend/css/file-manager.css` | 樣式（工具列、列表、預覽、選單、對話框、捲軸） |
+| `frontend/js/file-utils.js` | FileUtils 統一檔案工具（類型判斷、圖示、格式化） |
+| `frontend/js/file-opener.js` | FileOpener 統一檔案開啟入口 |
 | `frontend/js/image-viewer.js` | ImageViewerModule 圖片檢視器 |
 | `frontend/js/text-viewer.js` | TextViewerModule 文字檢視器 |
+| `frontend/js/pdf-viewer.js` | PdfViewerModule PDF 檢視器（使用 PDF.js） |
 | `frontend/css/viewer.css` | 檢視器共用樣式 |
+| `frontend/css/file-common.css` | 統一檔案顯示樣式（圖示顏色、卡片、標籤） |
 
 ## FileManagerModule API
 
@@ -286,6 +291,131 @@ TextViewerModule.open('/home/文件/readme.txt', 'readme.txt');
 │ 4 行                                    │  ← 狀態列
 └─────────────────────────────────────────┘
 ```
+
+## PDF 檢視器 (PdfViewerModule)
+
+### 功能
+
+- 渲染 PDF 文件（使用 PDF.js，CDN 動態載入）
+- 頁面導航：上一頁、下一頁、跳至指定頁
+- 縮放：25% ~ 400%
+- 適合寬度、適合頁面
+
+### 開啟方式
+
+```javascript
+// 從檔案管理雙擊 PDF 時呼叫
+PdfViewerModule.open('/home/文件/report.pdf', 'report.pdf');
+
+// 或透過 FileOpener 統一入口
+FileOpener.open('/home/文件/report.pdf', 'report.pdf');
+```
+
+### 視窗結構
+
+```
+┌─────────────────────────────────────────┐
+│ report.pdf                   [_] [□] [✕] │
+├─────────────────────────────────────────┤
+│ [◀] [1/10] [▶]  [➖][100%][➕] [寬][頁]  │  ← 工具列
+├─────────────────────────────────────────┤
+│                                         │
+│              [PDF 頁面]                  │
+│                                         │
+├─────────────────────────────────────────┤
+│ report.pdf | 100%                       │  ← 狀態列
+└─────────────────────────────────────────┘
+```
+
+## FileOpener 統一入口
+
+FileOpener 提供統一的檔案開啟介面，自動根據副檔名判斷應使用哪個檢視器。
+
+### API
+
+```javascript
+// 開啟檔案（自動判斷類型）
+FileOpener.open(filePath, filename);
+
+// 檢查是否支援開啟
+FileOpener.canOpen(filename);  // 回傳 boolean
+
+// 取得對應的檢視器類型
+FileOpener.getViewerType(filename);  // 回傳 'image' | 'text' | 'pdf' | null
+```
+
+### 支援的副檔名
+
+| 類型 | 副檔名 | 檢視器 |
+|------|--------|--------|
+| 圖片 | jpg, jpeg, png, gif, svg, webp, bmp, ico | ImageViewerModule |
+| 文字 | txt, md, json, yaml, yml, xml, html, css, js, py, log, ini, conf, sh, sql | TextViewerModule |
+| PDF | pdf | PdfViewerModule |
+
+### 使用範例
+
+```javascript
+// 檔案管理雙擊檔案時
+function openFile(name) {
+  const filePath = currentPath + '/' + name;
+  if (FileOpener.canOpen(name)) {
+    FileOpener.open(filePath, name);
+  }
+}
+
+// 專案管理、知識庫附件預覽
+FileOpener.open('/api/projects/attachments/xxx/file.pdf', 'file.pdf');
+```
+
+## FileUtils 工具模組
+
+FileUtils 提供統一的檔案類型判斷、圖示對應、格式化等功能，供各模組共用。
+
+### API
+
+```javascript
+// 取得檔案類型分類
+FileUtils.getFileCategory('photo.jpg');  // 'image'
+FileUtils.getFileCategory('app.js');     // 'code'
+FileUtils.getFileCategory('drawing.dwg'); // 'cad'
+
+// 取得檔案圖示名稱（對應 icons.js）
+FileUtils.getFileIcon('photo.jpg');   // 'image'
+FileUtils.getFileIcon('report.pdf');  // 'file-pdf-box'
+FileUtils.getFileIcon('archive.zip'); // 'folder-zip'
+
+// 取得 CSS 類別（用於顏色樣式）
+FileUtils.getFileTypeClass('photo.jpg');  // 'image'
+FileUtils.getFileTypeClass('video.mp4');  // 'video'
+
+// 格式化檔案大小
+FileUtils.formatFileSize(1536);     // '1.5 KB'
+FileUtils.formatFileSize(1572864);  // '1.5 MB'
+
+// 類型判斷輔助函式
+FileUtils.isImageFile('photo.jpg');  // true
+FileUtils.isTextFile('readme.md');   // true
+FileUtils.isPdfFile('report.pdf');   // true
+FileUtils.isVideoFile('movie.mp4');  // true
+FileUtils.isAudioFile('song.mp3');   // true
+```
+
+### 檔案類型分類
+
+| 類型 | 副檔名 | 圖示顏色 |
+|------|--------|----------|
+| image | jpg, jpeg, png, gif, svg, webp, bmp, heic, ico, tiff | 綠色 |
+| video | mp4, webm, avi, mov, mkv, m4v, wmv, flv, 3gp | 紫色 |
+| audio | mp3, m4a, wav, ogg, flac, aac, wma, aiff | 黃色 |
+| pdf | pdf | 紅色 |
+| document | doc, docx, odt, rtf | 藍色 |
+| spreadsheet | xls, xlsx, ods, csv | 綠色 |
+| presentation | ppt, pptx, odp | 橘色 |
+| code | js, ts, py, java, c, cpp, h, cs, go, rs, rb, php, html, css, json, xml, yaml, yml, sql, sh, bash | 青色 |
+| text | txt, md, log, ini, conf, cfg | 灰色 |
+| cad | dwg, dxf, step, stp, iges, igs, stl, 3ds, obj, fbx | 橘色 |
+| archive | zip, rar, 7z, tar, gz, bz2 | 粉色 |
+| default | 其他 | 灰色 |
 
 ## CSS 類別
 

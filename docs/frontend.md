@@ -14,6 +14,7 @@ ChingTech OS 前端採用純 HTML5/CSS3/JavaScript（無框架），使用 IIFE�
 | Socket.IO Client | 即時通訊（終端機、AI） |
 | xterm.js | 終端機模擬器 |
 | marked.js | Markdown 渲染 |
+| PDF.js | PDF 文件渲染（CDN 動態載入） |
 
 ## 專案結構
 
@@ -30,6 +31,7 @@ frontend/
 │   ├── window.css      # 視窗系統
 │   ├── ai-assistant.css
 │   ├── file-manager.css
+│   ├── file-common.css # 統一檔案顯示樣式（圖示顏色、卡片、標籤）
 │   ├── terminal.css
 │   ├── knowledge-base.css
 │   ├── code-editor.css
@@ -37,7 +39,7 @@ frontend/
 │   ├── message-center.css
 │   ├── settings.css
 │   ├── user-profile.css
-│   └── viewer.css      # 圖片/文字檢視器
+│   └── viewer.css      # 圖片/文字/PDF 檢視器
 ├── js/
 │   ├── icons.js        # SVG 圖示庫
 │   ├── api-client.js   # REST API 客戶端
@@ -49,6 +51,8 @@ frontend/
 │   ├── window.js       # 視窗管理
 │   ├── theme.js        # 主題切換
 │   ├── notification.js # 通知系統
+│   ├── file-utils.js   # 統一檔案工具（類型判斷、圖示、格式化）
+│   ├── file-opener.js  # 統一檔案開啟入口
 │   ├── ai-assistant.js
 │   ├── file-manager.js
 │   ├── terminal.js
@@ -58,8 +62,9 @@ frontend/
 │   ├── message-center.js
 │   ├── settings.js
 │   ├── user-profile.js
-│   ├── image-viewer.js
-│   ├── text-viewer.js
+│   ├── image-viewer.js # 圖片檢視器
+│   ├── text-viewer.js  # 文字檢視器
+│   ├── pdf-viewer.js   # PDF 檢視器（使用 PDF.js）
 │   ├── matrix-rain.js  # 登入頁 Matrix 效果
 │   └── device-fingerprint.js # 裝置指紋
 └── assets/
