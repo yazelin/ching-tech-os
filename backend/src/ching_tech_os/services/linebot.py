@@ -170,6 +170,29 @@ async def get_or_create_user(
         return row["id"]
 
 
+async def update_user_friend_status(line_user_id: str, is_friend: bool) -> bool:
+    """更新用戶的好友狀態
+
+    Args:
+        line_user_id: Line 用戶 ID
+        is_friend: 是否為好友
+
+    Returns:
+        是否更新成功
+    """
+    async with get_connection() as conn:
+        result = await conn.execute(
+            """
+            UPDATE line_users
+            SET is_friend = $2, updated_at = NOW()
+            WHERE line_user_id = $1
+            """,
+            line_user_id,
+            is_friend,
+        )
+        return result == "UPDATE 1"
+
+
 async def get_user_profile(line_user_id: str) -> dict | None:
     """從 Line API 取得用戶 profile（個人對話用）
 
@@ -1303,9 +1326,12 @@ async def get_binding_status(user_id: int) -> dict:
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
-            SELECT lu.display_name, lu.picture_url, lu.updated_at
+            SELECT lu.display_name, lu.picture_url, bc.used_at as bound_at
             FROM line_users lu
+            LEFT JOIN line_binding_codes bc ON bc.used_by_line_user_id = lu.id
             WHERE lu.user_id = $1
+            ORDER BY bc.used_at DESC NULLS LAST
+            LIMIT 1
             """,
             user_id,
         )
@@ -1315,7 +1341,7 @@ async def get_binding_status(user_id: int) -> dict:
                 "is_bound": True,
                 "line_display_name": row["display_name"],
                 "line_picture_url": row["picture_url"],
-                "bound_at": row["updated_at"],
+                "bound_at": row["bound_at"],
             }
         else:
             return {

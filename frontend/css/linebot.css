@@ -368,6 +368,15 @@
     object-fit: cover;
 }
 
+/* 頭像載入失敗的 fallback */
+.avatar-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+}
+
 .linebot-user-info {
     flex: 1;
     min-width: 0;

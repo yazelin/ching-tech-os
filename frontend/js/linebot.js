@@ -932,6 +932,21 @@ const LineBotApp = (function () {
 
         // 設置檔案刪除事件
         setupFileDeleteEvents();
+
+        // 處理頭像圖片載入失敗（使用 capture 因為 error 事件不冒泡）
+        container.addEventListener('error', (e) => {
+            if (e.target.tagName === 'IMG' && e.target.closest('.linebot-user-avatar, .linebot-group-avatar, .linebot-message-avatar, .linebot-binding-avatar, .linebot-detail-avatar')) {
+                // 隱藏壞掉的圖片，顯示預設 emoji
+                e.target.style.display = 'none';
+                const parent = e.target.parentElement;
+                if (parent && !parent.querySelector('.avatar-fallback')) {
+                    const fallback = document.createElement('span');
+                    fallback.className = 'avatar-fallback';
+                    fallback.textContent = parent.classList.contains('linebot-group-avatar') ? '👥' : '👤';
+                    parent.appendChild(fallback);
+                }
+            }
+        }, true);
     }
 
     // 更新群組篩選器

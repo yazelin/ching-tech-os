@@ -62,6 +62,7 @@ from ..services.linebot import (
     unbind_group_from_project,
     get_or_create_group,
     get_or_create_user,
+    update_user_friend_status,
     get_group_profile,
     get_user_profile,
     # 綁定與存取控制
@@ -368,18 +369,20 @@ async def process_follow_event(event: FollowEvent) -> None:
 
     if line_user_id:
         profile = await get_user_profile(line_user_id)
-        await get_or_create_user(line_user_id, profile)
+        await get_or_create_user(line_user_id, profile, is_friend=True)
+        # 更新現有用戶的好友狀態
+        await update_user_friend_status(line_user_id, is_friend=True)
         logger.info(f"用戶加好友: {line_user_id}")
 
 
 async def process_unfollow_event(event: UnfollowEvent) -> None:
-    """處理用戶封鎖事件"""
+    """處理用戶封鎖/取消好友事件"""
     source = event.source
     line_user_id = source.user_id if hasattr(source, "user_id") else None
 
     if line_user_id:
-        # TODO: 標記用戶為非好友
-        logger.info(f"用戶封鎖: {line_user_id}")
+        await update_user_friend_status(line_user_id, is_friend=False)
+        logger.info(f"用戶封鎖/取消好友: {line_user_id}")
 
 
 # ============================================================
