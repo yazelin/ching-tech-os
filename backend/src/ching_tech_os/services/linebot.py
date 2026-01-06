@@ -443,6 +443,7 @@ async def save_bot_response(
     group_uuid: UUID | None,
     content: str,
     responding_to_line_user_id: str | None = None,
+    line_message_id: str | None = None,
 ) -> UUID:
     """儲存 Bot 回應訊息到資料庫
 
@@ -450,14 +451,15 @@ async def save_bot_response(
         group_uuid: 群組內部 UUID（個人對話為 None）
         content: 回應內容
         responding_to_line_user_id: 回應的對象用戶 Line ID（個人對話用）
+        line_message_id: Line 回傳的訊息 ID（用於回覆觸發）
 
     Returns:
         訊息 UUID
     """
     import uuid as uuid_module
 
-    # 產生唯一的 message_id（Bot 回應沒有 Line message_id）
-    message_id = f"bot_{uuid_module.uuid4().hex[:16]}"
+    # 使用 Line 回傳的 message_id，或產生唯一的 ID
+    message_id = line_message_id or f"bot_{uuid_module.uuid4().hex[:16]}"
 
     # 決定使用哪個用戶 ID
     if group_uuid:
@@ -770,35 +772,52 @@ async def ensure_nas_directory(smb: SMBService, file_path: str) -> None:
 # 回覆訊息
 # ============================================================
 
-async def reply_text(reply_token: str, text: str) -> None:
-    """回覆文字訊息"""
+async def reply_text(reply_token: str, text: str) -> str | None:
+    """回覆文字訊息
+
+    Returns:
+        Line 訊息 ID，如果失敗則為 None
+    """
     try:
         api = await get_messaging_api()
-        await api.reply_message(
+        response = await api.reply_message(
             ReplyMessageRequest(
                 reply_token=reply_token,
                 messages=[TextMessage(text=text)],
             )
         )
         logger.info(f"回覆訊息: {text[:50]}...")
+        # 取得 Line 回傳的訊息 ID
+        if response and response.sent_messages:
+            return response.sent_messages[0].id
+        return None
     except Exception as e:
         logger.error(f"回覆訊息失敗: {e}")
+        return None
 
 
 # ============================================================
 # AI 觸發判斷
 # ============================================================
 
-def should_trigger_ai(message_content: str, is_group: bool) -> bool:
+def should_trigger_ai(
+    message_content: str,
+    is_group: bool,
+    is_reply_to_bot: bool = False,
+) -> bool:
     """
     判斷是否應該觸發 AI 處理
 
     規則：
     - 個人對話：所有訊息都觸發
-    - 群組對話：訊息包含 @bot_name 時觸發（支援多個名稱）
+    - 群組對話：訊息包含 @bot_name 或回覆機器人訊息時觸發
     """
     if not is_group:
         # 個人對話：全部觸發
+        return True
+
+    # 群組對話：檢查是否回覆機器人訊息
+    if is_reply_to_bot:
         return True
 
     # 群組對話：檢查是否被 @ 提及
@@ -810,6 +829,26 @@ def should_trigger_ai(message_content: str, is_group: bool) -> bool:
             return True
 
     return False
+
+
+async def is_bot_message(line_message_id: str) -> bool:
+    """
+    檢查訊息是否為機器人發送的
+
+    Args:
+        line_message_id: Line 訊息 ID
+
+    Returns:
+        True 如果是機器人發送的訊息
+    """
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            "SELECT is_from_bot FROM line_messages WHERE message_id = $1",
+            line_message_id,
+        )
+        if row:
+            return row["is_from_bot"] is True
+        return False
 
 
 # ============================================================

@@ -13,6 +13,7 @@ from .linebot import (
     reply_text,
     mark_message_ai_processed,
     should_trigger_ai,
+    is_bot_message,
     save_bot_response,
     reset_conversation,
     is_reset_command,
@@ -89,9 +90,16 @@ async def process_message_with_ai(
             return reset_msg
         return None
 
+    # 檢查是否回覆機器人訊息（群組對話用）
+    is_reply_to_bot = False
+    logger.info(f"檢查回覆: is_group={is_group}, quoted_message_id={quoted_message_id}")
+    if is_group and quoted_message_id:
+        is_reply_to_bot = await is_bot_message(quoted_message_id)
+        logger.info(f"is_bot_message({quoted_message_id}) = {is_reply_to_bot}")
+
     # 檢查是否應該觸發 AI
-    should_trigger = should_trigger_ai(content, is_group)
-    logger.info(f"AI 觸發判斷: is_group={is_group}, content={content[:50]!r}, should_trigger={should_trigger}")
+    should_trigger = should_trigger_ai(content, is_group, is_reply_to_bot)
+    logger.info(f"AI 觸發判斷: is_group={is_group}, is_reply_to_bot={is_reply_to_bot}, content={content[:50]!r}, should_trigger={should_trigger}")
 
     if not should_trigger:
         logger.debug(f"訊息不觸發 AI: {content[:50]}...")
@@ -223,20 +231,22 @@ async def process_message_with_ai(
         # 標記訊息已處理
         await mark_message_ai_processed(message_uuid)
 
-        # 儲存 Bot 回應到資料庫
+        # 回覆訊息並取得 Line 訊息 ID（用於回覆觸發功能）
+        line_message_id = None
+        if reply_token and ai_response:
+            try:
+                line_message_id = await reply_text(reply_token, ai_response)
+            except Exception as e:
+                logger.warning(f"回覆訊息失敗（token 可能已過期）: {e}")
+
+        # 儲存 Bot 回應到資料庫（包含 Line 訊息 ID）
         if ai_response:
             await save_bot_response(
                 group_uuid=line_group_id,
                 content=ai_response,
                 responding_to_line_user_id=line_user_id if not is_group else None,
+                line_message_id=line_message_id,
             )
-
-        # 回覆訊息（如果有 reply_token）
-        if reply_token and ai_response:
-            try:
-                await reply_text(reply_token, ai_response)
-            except Exception as e:
-                logger.warning(f"回覆訊息失敗（token 可能已過期）: {e}")
 
         return ai_response
 
@@ -541,6 +551,21 @@ async def build_system_prompt(
 重要：Read 工具僅用於「檢視」圖片/檔案內容（例如「這張圖是什麼？」）。
 若要將圖片/檔案「加入知識庫」，請使用 get_message_attachments 查詢 NAS 路徑，
 再使用 add_note_with_attachments 或 add_attachments_to_knowledge。""")
+
+    # 分享連結工具說明
+    tool_sections.append("""【公開分享連結】
+當用戶想要分享知識庫或專案給其他人（例如沒有帳號的人）查看時，使用 create_share_link 工具：
+- resource_type: "knowledge"（知識庫）或 "project"（專案）
+- resource_id: 知識庫 ID（如 kb-001）或專案 UUID
+- expires_in: 有效期限，可選 "1h"、"24h"、"7d"、"null"（永久），預設 24h
+
+使用情境：
+- 「幫我產生 kb-001 的分享連結」
+- 「我想分享這個知識給客戶看」
+- 「產生一個永久的專案連結」
+- 「給我一個 7 天有效的連結」
+
+連結可以讓沒有帳號的人直接在瀏覽器查看內容。""")
 
     if tool_sections:
         base_prompt += "\n\n" + "\n\n".join(tool_sections)

@@ -38,6 +38,25 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - API 路由放在 `api/` 目錄
 - 新增路由後記得在 `main.py` 註冊
 
+## MCP 工具開發
+MCP 工具定義在 `services/mcp_server.py`。
+
+**重要**：MCP Server 是獨立執行的，不會經過 FastAPI 的啟動流程，因此：
+- 需要資料庫操作時，**必須**先呼叫 `await ensure_db_connection()` 確保連線
+- 參考現有的 `create_project`、`add_note` 等工具的寫法
+
+```python
+@mcp.tool()
+async def my_tool(param: str) -> str:
+    await ensure_db_connection()  # 必須！確保資料庫連線
+    # ... 資料庫操作 ...
+```
+
+**Prompt 更新**：新增 MCP 工具後，需要同步更新三個地方：
+1. `linebot_agents.py` - 程式碼中的 prompt 定義
+2. `migrations/versions/013_update_linebot_prompts.py` - migration 檔案
+3. 資料庫中的 prompt 資料 - 執行 migration 或直接 SQL 更新
+
 ## 前端開發
 - 使用原生 JavaScript（無框架）
 - 模組使用 IIFE 模式

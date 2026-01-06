@@ -1,0 +1,356 @@
+/**
+ * 分享對話框樣式
+ */
+
+/* 對話框遮罩 */
+.share-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--bg-overlay-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.share-dialog-overlay.show {
+  opacity: 1;
+}
+
+/* 對話框主體 */
+.share-dialog {
+  background: var(--modal-bg);
+  border: 1px solid var(--modal-border);
+  border-radius: 12px;
+  width: 420px;
+  max-width: calc(100vw - 40px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  transform: scale(0.95);
+  transition: transform 0.2s ease;
+}
+
+.share-dialog-overlay.show .share-dialog {
+  transform: scale(1);
+}
+
+/* 對話框標頭 */
+.share-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.share-dialog-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.share-dialog-header h3 .icon {
+  color: var(--color-primary);
+}
+
+.share-dialog-header h3 .icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.share-dialog-close .icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.share-dialog-close {
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.share-dialog-close:hover {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+/* 對話框內容 */
+.share-dialog-body {
+  padding: 20px;
+}
+
+/* 建立分享表單 */
+.share-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.share-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.share-form-group label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.share-form-group select {
+  padding: 8px 12px;
+  border: 1px solid var(--border-medium);
+  border-radius: 6px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.share-form-group select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.share-form-group select option {
+  background-color: var(--color-background);
+  color: var(--text-primary);
+}
+
+/* 建立按鈕 */
+.share-create-btn {
+  padding: 10px 16px;
+  background: var(--color-primary);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.15s ease;
+}
+
+.share-create-btn:hover {
+  background: var(--color-primary-hover);
+}
+
+.share-create-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.share-create-btn .icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* 分享結果區 */
+.share-result {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* QR Code 區域 */
+.share-qr-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.share-qr-code {
+  padding: 16px;
+  background: white;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.share-qr-code canvas {
+  display: block;
+}
+
+.share-qr-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* 連結區域 */
+.share-link-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.share-link-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.share-link-input-group {
+  display: flex;
+  gap: 8px;
+}
+
+.share-link-input {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--border-medium);
+  border-radius: 6px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: 'SF Mono', 'Consolas', monospace;
+}
+
+.share-link-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.share-copy-btn {
+  padding: 10px 16px;
+  background: var(--color-primary);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.share-copy-btn:hover {
+  background: var(--color-primary-hover);
+}
+
+.share-copy-btn.copied {
+  background: var(--color-success);
+}
+
+.share-copy-btn .icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* 過期資訊 */
+.share-expires-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.share-expires-info .icon {
+  font-size: 14px;
+}
+
+/* 對話框底部 */
+.share-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border-light);
+}
+
+.share-dialog-footer .btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.share-dialog-footer .btn-ghost {
+  background: transparent;
+  border: 1px solid var(--border-medium);
+  color: var(--text-secondary);
+}
+
+.share-dialog-footer .btn-ghost:hover {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+/* 載入狀態 */
+.share-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 40px 0;
+}
+
+.share-loading .icon {
+  font-size: 32px;
+  color: var(--color-primary);
+}
+
+.share-loading span {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+/* 錯誤狀態 */
+.share-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 20px;
+  text-align: center;
+}
+
+.share-error .icon {
+  font-size: 32px;
+  color: var(--color-error);
+}
+
+.share-error-message {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.share-retry-btn {
+  padding: 8px 16px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-medium);
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.share-retry-btn:hover {
+  background: var(--bg-surface-dark);
+}

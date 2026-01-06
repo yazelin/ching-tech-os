@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>擎添工業 - 分享內容</title>
+    <!-- 子路徑部署：使用絕對路徑 -->
+    <script>
+      // 計算 base path 並設為全域變數供其他腳本使用
+      window.PUBLIC_BASE = (function() {
+        var path = window.location.pathname;
+        if (path.indexOf('/ctos/') === 0) return '/ctos';
+        return '';
+      })();
+    </script>
+    <link rel="icon" type="image/svg+xml" href="/ctos/assets/images/logo.svg">
+    <link rel="stylesheet" href="/ctos/css/public.css">
+    <!-- Markdown 渲染 -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- 程式碼高亮 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+</head>
+<body>
+    <!-- 頂部導覽列 -->
+    <header class="public-header">
+        <div class="header-left">
+            <img src="/ctos/assets/images/logo-cyan-static.svg" alt="擎添工業" class="logo">
+            <span class="brand-name">擎添工業</span>
+        </div>
+        <div class="header-right">
+            <button id="print-btn" class="header-btn" title="列印">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                    <rect x="6" y="14" width="12" height="8"></rect>
+                </svg>
+                <span>列印</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- 主內容區 -->
+    <main class="public-main">
+        <!-- 載入中 -->
+        <div id="loading" class="loading-container">
+            <div class="loading-spinner"></div>
+            <p>載入中...</p>
+        </div>
+
+        <!-- 錯誤頁面 -->
+        <div id="error-page" class="error-container" style="display: none;">
+            <div class="error-icon">
+                <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <circle cx="12" cy="16" r="0.5" fill="currentColor"></circle>
+                </svg>
+            </div>
+            <h2 id="error-title">連結無效</h2>
+            <p id="error-message">此連結不存在或已被撤銷</p>
+            <a href="/ctos/" class="error-link">前往首頁</a>
+        </div>
+
+        <!-- 內容區 -->
+        <article id="content-container" class="content-container" style="display: none;">
+            <!-- 文件標題區 -->
+            <header class="document-header">
+                <h1 id="doc-title" class="document-title"></h1>
+                <div class="document-meta">
+                    <span id="doc-meta-info"></span>
+                </div>
+            </header>
+
+            <!-- Markdown 內容 -->
+            <div id="doc-content" class="document-content markdown-body"></div>
+
+            <!-- 附件區（知識庫用） -->
+            <section id="attachments-section" class="attachments-section" style="display: none;">
+                <h3 class="section-title">附件</h3>
+                <div id="attachments-list" class="attachments-list"></div>
+            </section>
+
+            <!-- 里程碑區（專案用） -->
+            <section id="milestones-section" class="milestones-section" style="display: none;">
+                <h3 class="section-title">里程碑</h3>
+                <div id="milestones-list" class="milestones-list"></div>
+            </section>
+
+            <!-- 成員區（專案用） -->
+            <section id="members-section" class="members-section" style="display: none;">
+                <h3 class="section-title">團隊成員</h3>
+                <div id="members-list" class="members-list"></div>
+            </section>
+
+            <!-- 相關知識區（知識庫用） -->
+            <section id="related-section" class="related-section" style="display: none;">
+                <h3 class="section-title">相關知識</h3>
+                <ul id="related-list" class="related-list"></ul>
+            </section>
+        </article>
+    </main>
+
+    <!-- 底部資訊 -->
+    <footer class="public-footer">
+        <div class="footer-content">
+            <span id="footer-info">此內容由擎添工業分享</span>
+            <span class="footer-divider">|</span>
+            <a href="/ctos/" class="footer-link">登入 CTOS 系統</a>
+        </div>
+    </footer>
+
+    <!-- 圖片預覽 Modal -->
+    <div id="image-modal" class="image-modal" style="display: none;">
+        <div class="image-modal-backdrop"></div>
+        <div class="image-modal-content">
+            <button class="image-modal-close">&times;</button>
+            <img id="image-modal-img" src="" alt="">
+        </div>
+    </div>
+
+    <script src="/ctos/js/public.js"></script>
+</body>
+</html>

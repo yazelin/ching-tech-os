@@ -14,7 +14,7 @@ from .services.session import session_manager
 from .services.terminal import terminal_service
 from .services.scheduler import start_scheduler, stop_scheduler
 from .services.linebot_agents import ensure_default_linebot_agents
-from .api import auth, knowledge, login_records, messages, nas, user, ai_router, ai_management, project, linebot_router
+from .api import auth, knowledge, login_records, messages, nas, user, ai_router, ai_management, project, linebot_router, share
 
 # 建立 Socket.IO 伺服器
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
@@ -68,6 +68,8 @@ app.include_router(ai_router.router)
 app.include_router(ai_management.router)
 app.include_router(project.router)
 app.include_router(linebot_router.router)
+app.include_router(share.router)
+app.include_router(share.public_router)
 
 
 @app.get("/api/health")
@@ -96,6 +98,18 @@ async def login_page():
 async def desktop_page():
     """桌面頁面"""
     return FileResponse(FRONTEND / "index.html")
+
+
+@app.get("/public.html")
+async def public_page():
+    """公開分享頁面"""
+    return FileResponse(FRONTEND / "public.html")
+
+
+@app.get("/s/{token}")
+async def short_share_url(token: str):
+    """短網址重導向到公開頁面"""
+    return FileResponse(FRONTEND / "public.html")
 
 
 # 掛載靜態檔案（放在最後，避免覆蓋 API 路由）

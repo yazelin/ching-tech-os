@@ -512,6 +512,9 @@ const KnowledgeBaseModule = (function() {
           </div>
         </div>
         <div class="kb-content-actions">
+          <button class="kb-action-btn" id="kbBtnShare" title="分享">
+            <span class="icon">${getIcon('share-variant')}</span>
+          </button>
           <button class="kb-action-btn" id="kbBtnHistory" title="版本歷史">
             <span class="icon">${getIcon('clock-outline')}</span>
           </button>
@@ -570,6 +573,20 @@ const KnowledgeBaseModule = (function() {
     viewEl.querySelector('#kbBtnHistory').addEventListener('click', () => {
       loadHistory();
     });
+
+    // 分享按鈕
+    const shareBtn = viewEl.querySelector('#kbBtnShare');
+    if (shareBtn) {
+      shareBtn.addEventListener('click', () => {
+        if (typeof ShareDialogModule !== 'undefined') {
+          ShareDialogModule.show({
+            resourceType: 'knowledge',
+            resourceId: kb.id,
+            resourceTitle: kb.title
+          });
+        }
+      });
+    }
   }
 
   /**

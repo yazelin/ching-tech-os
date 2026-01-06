@@ -46,6 +46,9 @@ Environment="PATH=/home/ct/.local/bin:/home/ct/.nvm/versions/node/v24.11.1/bin:/
 ExecStartPre=/usr/bin/docker compose -f /home/ct/SDD/ching-tech-os/docker/docker-compose.yml up -d postgres
 ExecStartPre=/bin/sleep 3
 
+# 確保端口未被佔用（- 前綴表示失敗時繼續）
+ExecStartPre=-/usr/bin/fuser -k 8088/tcp
+
 # 執行資料庫遷移並啟動應用程式
 ExecStartPre=/home/ct/.local/bin/uv run alembic upgrade head
 ExecStart=/home/ct/.local/bin/uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8088

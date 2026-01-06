@@ -170,7 +170,8 @@ async def process_message_event(event: MessageEvent) -> None:
         message_type = "text"
         content = message.text
         # 取得被回覆的訊息 ID（如果用戶回覆了某則訊息）
-        quoted_message_id = getattr(message, "quoted_message_id", None)
+        quoted_message_id = message.quoted_message_id
+        logger.info(f"TextMessage: quoted_message_id={quoted_message_id}")
     elif isinstance(message, ImageMessageContent):
         message_type = "image"
         content = None

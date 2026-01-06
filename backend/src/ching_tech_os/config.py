@@ -99,6 +99,11 @@ class Settings:
     ]
 
     # ===================
+    # 公開連結設定
+    # ===================
+    public_url: str = _get_env("PUBLIC_URL", "https://ching-tech.ddns.net/ctos")
+
+    # ===================
     # CORS 設定
     # ===================
     # credentials=True 時不能用 "*"

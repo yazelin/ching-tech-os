@@ -149,6 +149,8 @@ async def create_project(
     from ..models.project import ProjectCreate
     from .project import create_project as svc_create_project
 
+    await ensure_db_connection()
+
     try:
         # 解析日期
         parsed_start = None
@@ -503,6 +505,7 @@ async def update_knowledge_item(
 async def add_attachments_to_knowledge(
     kb_id: str,
     attachments: list[str],
+    descriptions: list[str] | None = None,
 ) -> str:
     """
     為現有知識庫新增附件
@@ -510,6 +513,7 @@ async def add_attachments_to_knowledge(
     Args:
         kb_id: 知識 ID（如 kb-001）
         attachments: 附件的 NAS 路徑列表（從 get_message_attachments 取得）
+        descriptions: 附件描述列表（與 attachments 一一對應，如「圖1 水切爐」）
     """
     from . import knowledge as kb_service
 
@@ -519,18 +523,31 @@ async def add_attachments_to_knowledge(
 
     # 確認知識存在
     try:
-        kb_service.get_knowledge(kb_id)
+        knowledge = kb_service.get_knowledge(kb_id)
     except Exception:
         return f"找不到知識 {kb_id}"
+
+    # 取得目前附件數量（用來計算新附件的 index）
+    current_attachment_count = len(knowledge.attachments)
 
     # 處理附件
     success_count = 0
     failed_attachments = []
+    added_descriptions = []
 
-    for nas_path in attachments:
+    for i, nas_path in enumerate(attachments):
         try:
             kb_service.copy_linebot_attachment_to_knowledge(kb_id, nas_path)
             success_count += 1
+
+            # 如果有對應的描述，更新附件描述
+            if descriptions and i < len(descriptions) and descriptions[i]:
+                try:
+                    new_index = current_attachment_count + success_count - 1
+                    kb_service.update_attachment_description(kb_id, new_index, descriptions[i])
+                    added_descriptions.append(descriptions[i])
+                except Exception as e:
+                    logger.warning(f"設定描述失敗 {descriptions[i]}: {e}")
         except Exception as e:
             logger.warning(f"附件複製失敗 {nas_path}: {e}")
             failed_attachments.append(nas_path)
@@ -540,6 +557,9 @@ async def add_attachments_to_knowledge(
         return f"所有附件都無法加入：{', '.join(failed_attachments)}"
 
     output = [f"✅ 已為 {kb_id} 新增 {success_count} 個附件"]
+
+    if added_descriptions:
+        output.append(f"📝 已設定描述：{', '.join(added_descriptions)}")
 
     if failed_attachments:
         output.append(f"⚠️ 以下附件無法加入：")
@@ -943,6 +963,72 @@ async def get_message_attachments(
         output.append("提示：使用 NAS 路徑作為 add_note_with_attachments 的 attachments 參數")
 
         return "\n".join(output)
+
+
+@mcp.tool()
+async def create_share_link(
+    resource_type: str,
+    resource_id: str,
+    expires_in: str | None = "24h",
+) -> str:
+    """
+    建立公開分享連結，讓沒有帳號的人也能查看知識庫或專案
+
+    Args:
+        resource_type: 資源類型，knowledge（知識庫）或 project（專案）
+        resource_id: 資源 ID（如 kb-001 或專案 UUID）
+        expires_in: 有效期限，可選 1h、24h、7d、null（永久），預設 24h
+    """
+    await ensure_db_connection()
+
+    from .share import (
+        create_share_link as _create_share_link,
+        ShareError,
+        ResourceNotFoundError,
+    )
+    from ..models.share import ShareLinkCreate
+
+    # 驗證資源類型
+    if resource_type not in ("knowledge", "project"):
+        return f"錯誤：資源類型必須是 knowledge 或 project，收到：{resource_type}"
+
+    # 驗證有效期限
+    valid_expires = {"1h", "24h", "7d", "null", None}
+    if expires_in not in valid_expires:
+        return f"錯誤：有效期限必須是 1h、24h、7d 或 null（永久），收到：{expires_in}"
+
+    try:
+        data = ShareLinkCreate(
+            resource_type=resource_type,
+            resource_id=resource_id,
+            expires_in=expires_in,
+        )
+        # 使用 system 作為建立者（Line Bot 代理建立）
+        result = await _create_share_link(data, "linebot")
+
+        # 轉換為台北時區顯示
+        if result.expires_at:
+            from datetime import timezone, timedelta
+            taipei_tz = timezone(timedelta(hours=8))
+            expires_taipei = result.expires_at.astimezone(taipei_tz)
+            expires_text = f"有效至 {expires_taipei.strftime('%Y-%m-%d %H:%M')}"
+        else:
+            expires_text = "永久有效"
+
+        return f"""分享連結已建立！
+
+📎 連結：{result.full_url}
+📄 資源：{result.resource_title}
+⏰ {expires_text}
+
+可以直接把連結傳給需要查看的人。"""
+
+    except ResourceNotFoundError as e:
+        return f"錯誤：找不到資源 - {e}"
+    except ShareError as e:
+        return f"錯誤：{e}"
+    except Exception as e:
+        return f"建立分享連結時發生錯誤：{e}"
 
 
 # ============================================================

@@ -405,6 +405,9 @@ const ProjectManagementModule = (function() {
           <span class="pm-status-badge large ${p.status}">${getStatusText(p.status)}</span>
         </div>
         <div class="pm-content-actions">
+          <button class="pm-action-btn" id="pmBtnShare" title="分享">
+            <span class="icon">${getIcon('share-variant')}</span>
+          </button>
           <button class="pm-action-btn" id="pmBtnEdit" title="編輯">
             <span class="icon">${getIcon('edit')}</span>
           </button>
@@ -441,6 +444,15 @@ const ProjectManagementModule = (function() {
     `;
 
     // Bind events
+    viewEl.querySelector('#pmBtnShare').addEventListener('click', () => {
+      if (typeof ShareDialogModule !== 'undefined') {
+        ShareDialogModule.show({
+          resourceType: 'project',
+          resourceId: p.id,
+          resourceTitle: p.name
+        });
+      }
+    });
     viewEl.querySelector('#pmBtnEdit').addEventListener('click', () => startEditProject());
     viewEl.querySelector('#pmBtnDelete').addEventListener('click', () => confirmDeleteProject());
 
