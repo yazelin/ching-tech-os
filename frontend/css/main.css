@@ -445,6 +445,48 @@
   padding: 0;
 }
 
+/* ==========================================================================
+   Global Scrollbar Styles (全局捲軸樣式)
+   ========================================================================== */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-hover);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* 亮色主題捲軸 */
+:root[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.2);
+}
+
+/* ==========================================================================
+   Theme Transition (主題切換過渡效果)
+   ========================================================================== */
+/* 只有在切換主題時才啟用過渡，避免初始載入時的閃爍 */
+.theme-transitioning,
+.theme-transitioning * {
+  transition: background-color 0.5s ease-in-out,
+              border-color 0.5s ease-in-out,
+              color 0.5s ease-in-out,
+              box-shadow 0.5s ease-in-out !important;
+}
+
 html {
   font-size: 16px;
   -webkit-font-smoothing: antialiased;

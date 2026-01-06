@@ -9,28 +9,6 @@
   background: var(--bg-primary);
 }
 
-/* Scrollbar */
-.prompt-editor ::-webkit-scrollbar {
-  width: 8px;
-}
-
-.prompt-editor ::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.prompt-editor ::-webkit-scrollbar-thumb {
-  background-color: var(--border-light);
-  border-radius: 4px;
-}
-
-.prompt-editor ::-webkit-scrollbar-thumb:hover {
-  background-color: var(--scrollbar-hover);
-}
-
-.prompt-editor ::-webkit-scrollbar-corner {
-  background: transparent;
-}
-
 /* 側邊欄 */
 .prompt-sidebar {
   width: 280px;

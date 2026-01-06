@@ -3,32 +3,6 @@
    ========================================================================== */
 
 /* ==========================================================================
-   Global Scrollbar Styles (Dark Theme)
-   ========================================================================== */
-.message-center ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-.message-center ::-webkit-scrollbar-track {
-  background: var(--bg-surface-dark);
-  border-radius: 4px;
-}
-
-.message-center ::-webkit-scrollbar-thumb {
-  background-color: var(--border-strong);
-  border-radius: 4px;
-}
-
-.message-center ::-webkit-scrollbar-thumb:hover {
-  background-color: var(--scrollbar-hover);
-}
-
-.message-center ::-webkit-scrollbar-corner {
-  background: transparent;
-}
-
-/* ==========================================================================
    Message Center Container
    ========================================================================== */
 .message-center {

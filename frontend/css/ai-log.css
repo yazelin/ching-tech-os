@@ -10,28 +10,6 @@
   background: var(--bg-primary);
 }
 
-/* Scrollbar */
-.ai-log ::-webkit-scrollbar {
-  width: 8px;
-}
-
-.ai-log ::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.ai-log ::-webkit-scrollbar-thumb {
-  background-color: var(--border-light);
-  border-radius: 4px;
-}
-
-.ai-log ::-webkit-scrollbar-thumb:hover {
-  background-color: var(--scrollbar-hover);
-}
-
-.ai-log ::-webkit-scrollbar-corner {
-  background: transparent;
-}
-
 /* 過濾器列 */
 .ai-log-filters {
   display: flex;

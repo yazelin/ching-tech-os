@@ -40,11 +40,25 @@ const ThemeManager = (function () {
   /**
    * 套用主題到 DOM
    * @param {string} theme - 主題名稱 ('dark' | 'light')
+   * @param {boolean} animate - 是否啟用過渡動畫
    */
-  function applyTheme(theme) {
+  function applyTheme(theme, animate = false) {
     const validTheme = theme === 'light' ? 'light' : 'dark';
+
+    // 如果需要動畫，先加上過渡 class
+    if (animate) {
+      document.body.classList.add('theme-transitioning');
+    }
+
     document.documentElement.dataset.theme = validTheme;
     currentTheme = validTheme;
+
+    // 過渡完成後移除 class
+    if (animate) {
+      setTimeout(() => {
+        document.body.classList.remove('theme-transitioning');
+      }, 550); // 比 CSS transition 時間稍長
+    }
 
     // 通知終端機更新主題
     updateTerminalTheme();
@@ -74,9 +88,10 @@ const ThemeManager = (function () {
   /**
    * 設定主題
    * @param {string} theme - 主題名稱 ('dark' | 'light')
+   * @param {boolean} animate - 是否啟用過渡動畫（預設 true）
    */
-  function setTheme(theme) {
-    applyTheme(theme);
+  function setTheme(theme, animate = true) {
+    applyTheme(theme, animate);
     storeTheme(theme);
   }
 

@@ -53,12 +53,38 @@
   justify-content: center;
   min-height: 100vh;
   padding: var(--spacing-lg);
-  background: linear-gradient(135deg, var(--color-background) 0%, #101010 100%);
+  position: relative;
+  background: transparent;
 }
 
-/* 亮色主題：漸層從淺灰到白 */
-:root[data-theme="light"] .login-container {
+/* 背景漸層過渡效果 - 使用偽元素實現，z-index: -1 讓 canvas 在上面 */
+.login-container::before,
+.login-container::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* 暗色主題背景（底層） */
+.login-container::before {
+  background: linear-gradient(135deg, #1a1a1a 0%, #101010 100%);
+}
+
+/* 亮色主題背景（上層，透過 opacity 控制） */
+.login-container::after {
   background: linear-gradient(135deg, #e0e0e0 0%, #f5f5f5 100%);
+  opacity: 0;
+  transition: opacity 0.5s ease-in-out;
+}
+
+/* 亮色主題：顯示亮色背景（蓋住暗色背景） */
+:root[data-theme="light"] .login-container::after {
+  opacity: 1;
 }
 
 /* Logo Section */
@@ -68,6 +94,8 @@
   align-items: center;
   margin-bottom: var(--spacing-lg);
   text-align: center;
+  position: relative;
+  z-index: 1;
 }
 
 .login-logo-icon {
@@ -143,6 +171,8 @@
   padding: var(--spacing-xl);
   box-shadow: var(--shadow-lg);
   backdrop-filter: blur(6px);
+  position: relative;
+  z-index: 1;
 }
 
 /* 亮色主題：login-card 玻璃效果 */
@@ -255,6 +285,8 @@
   text-align: center;
   color: var(--text-muted);
   font-size: var(--font-size-xs);
+  position: relative;
+  z-index: 1;
 }
 
 /* Decorative Elements - 暫時停用
