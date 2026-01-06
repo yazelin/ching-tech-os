@@ -582,24 +582,30 @@ const KnowledgeBaseModule = (function() {
     const attachments = kb.attachments || [];
 
     attachmentsEl.innerHTML = `
-      <div class="kb-attachments-header">
-        <div class="kb-attachments-title">
-          <span class="icon">${getIcon('attachment')}</span>
-          附件
-          <span class="kb-attachments-count">(${attachments.length})</span>
+      <div class="kb-attachments-resizer" title="拖曳調整高度"></div>
+      <div class="kb-attachments-body">
+        <div class="kb-attachments-header">
+          <div class="kb-attachments-title">
+            <span class="icon">${getIcon('attachment')}</span>
+            附件
+            <span class="kb-attachments-count">(${attachments.length})</span>
+          </div>
+          <button class="kb-attachments-upload-btn" id="kbBtnUploadAttachment">
+            <span class="icon">${getIcon('upload')}</span>
+            上傳
+          </button>
         </div>
-        <button class="kb-attachments-upload-btn" id="kbBtnUploadAttachment">
-          <span class="icon">${getIcon('upload')}</span>
-          上傳
-        </button>
-      </div>
-      <div class="kb-attachments-list" id="kbAttachmentsList">
-        ${attachments.length === 0 ?
-          '<div class="kb-attachments-empty">目前沒有附件</div>' :
-          attachments.map((att, idx) => renderAttachmentItem(att, idx)).join('')
-        }
+        <div class="kb-attachments-list" id="kbAttachmentsList">
+          ${attachments.length === 0 ?
+            '<div class="kb-attachments-empty">目前沒有附件</div>' :
+            attachments.map((att, idx) => renderAttachmentItem(att, idx)).join('')
+          }
+        </div>
       </div>
     `;
+
+    // 綁定拖曳調整高度事件
+    bindAttachmentsResizer(attachmentsEl);
 
     // Bind attachment events
     bindAttachmentEvents(windowEl, kb);
@@ -651,6 +657,43 @@ const KnowledgeBaseModule = (function() {
         </div>
       </div>
     `;
+  }
+
+  /**
+   * 綁定附件區塊拖曳調整高度事件
+   */
+  function bindAttachmentsResizer(attachmentsEl) {
+    const resizer = attachmentsEl.querySelector('.kb-attachments-resizer');
+    if (!resizer) return;
+
+    let isResizing = false;
+    let startY = 0;
+    let startHeight = 0;
+
+    resizer.addEventListener('mousedown', (e) => {
+      isResizing = true;
+      startY = e.clientY;
+      startHeight = attachmentsEl.offsetHeight;
+      document.body.style.cursor = 'ns-resize';
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isResizing) return;
+      // 往上拖 = 增加高度（因為附件區在底部）
+      const deltaY = startY - e.clientY;
+      const newHeight = Math.max(60, Math.min(startHeight + deltaY, window.innerHeight * 0.5));
+      attachmentsEl.style.height = `${newHeight}px`;
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (isResizing) {
+        isResizing = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
+    });
   }
 
   /**
