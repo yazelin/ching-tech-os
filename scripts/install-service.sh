@@ -80,7 +80,7 @@ if [ -f "/etc/systemd/system/mnt-nas.mount" ]; then
     rm -f /etc/systemd/system/mnt-nas.mount
 fi
 
-# 建立 ctos mount unit（讀寫）
+# 建立 ctos mount unit（讀寫）- 使用 credentials file
 echo "建立 ctos mount unit..."
 cat > /etc/systemd/system/${MOUNT_CTOS_UNIT} << EOF
 [Unit]
@@ -92,13 +92,13 @@ Wants=network-online.target
 What=//${NAS_HOST}/${NAS_SHARE}/ching-tech-os
 Where=${MOUNT_CTOS_PATH}
 Type=cifs
-Options=username=${NAS_USER},password=${NAS_PASSWORD},uid=1000,gid=1000,iocharset=utf8,_netdev
+Options=credentials=${NAS_CREDENTIALS_FILE},uid=1000,gid=1000,iocharset=utf8,_netdev
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-# 建立 projects mount unit（唯讀）
+# 建立 projects mount unit（唯讀）- 使用 credentials file
 echo "建立 projects mount unit..."
 cat > /etc/systemd/system/${MOUNT_PROJECTS_UNIT} << EOF
 [Unit]
@@ -110,7 +110,7 @@ Wants=network-online.target
 What=//${NAS_HOST}/擎添共用區/在案資料分享
 Where=${MOUNT_PROJECTS_PATH}
 Type=cifs
-Options=username=${NAS_USER},password=${NAS_PASSWORD},uid=1000,gid=1000,iocharset=utf8,_netdev,ro
+Options=credentials=${NAS_CREDENTIALS_FILE},uid=1000,gid=1000,iocharset=utf8,_netdev,ro
 
 [Install]
 WantedBy=multi-user.target
