@@ -111,6 +111,25 @@ async def create_next_month_partitions():
             logger.error(f"建立分區失敗: {e}")
 
 
+async def cleanup_expired_share_links():
+    """
+    清理過期的分享連結
+    刪除所有 expires_at < 當前時間 的連結
+    """
+    from .share import cleanup_expired_links
+
+    logger.debug("開始清理過期分享連結...")
+
+    try:
+        deleted_count = await cleanup_expired_links()
+        if deleted_count > 0:
+            logger.info(f"清理過期分享連結: 刪除 {deleted_count} 個連結")
+        else:
+            logger.debug("過期分享連結清理: 無過期連結")
+    except Exception as e:
+        logger.error(f"清理過期分享連結失敗: {e}")
+
+
 async def cleanup_linebot_temp_files():
     """
     清理 Line Bot 暫存檔（圖片和檔案）
@@ -177,6 +196,15 @@ def start_scheduler():
         IntervalTrigger(hours=1),
         id='cleanup_linebot_temp_files',
         name='清理 Line Bot 暫存',
+        replace_existing=True
+    )
+
+    # 每小時清理過期分享連結
+    scheduler.add_job(
+        cleanup_expired_share_links,
+        IntervalTrigger(hours=1),
+        id='cleanup_expired_share_links',
+        name='清理過期分享連結',
         replace_existing=True
     )
 

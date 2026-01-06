@@ -565,6 +565,63 @@ body {
 }
 
 /* ============================================
+   NAS 檔案區
+   ============================================ */
+.nas-file-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: var(--public-spacing-xl);
+    text-align: center;
+}
+
+.nas-file-icon {
+    font-size: 72px;
+    margin-bottom: var(--public-spacing-md);
+}
+
+.nas-file-info {
+    margin-bottom: var(--public-spacing-lg);
+}
+
+.nas-file-name {
+    font-size: 20px;
+    font-weight: 500;
+    color: var(--public-text);
+    margin-bottom: var(--public-spacing-xs);
+    word-break: break-word;
+}
+
+.nas-file-size {
+    font-size: 14px;
+    color: var(--public-text-secondary);
+}
+
+a.nas-file-download-btn,
+.markdown-body a.nas-file-download-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--public-spacing-sm);
+    padding: var(--public-spacing-md) var(--public-spacing-xl);
+    background: var(--public-primary) !important;
+    color: white !important;
+    border: none;
+    border-radius: var(--public-radius-md);
+    font-size: 16px;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none !important;
+    transition: background 0.2s;
+}
+
+a.nas-file-download-btn:hover,
+.markdown-body a.nas-file-download-btn:hover {
+    background: var(--public-primary-hover) !important;
+    color: white !important;
+    text-decoration: none !important;
+}
+
+/* ============================================
    底部資訊
    ============================================ */
 .public-footer {

@@ -7,12 +7,17 @@ set -e
 
 SERVICE_NAME="ching-tech-os"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-MOUNT_UNIT_FILE="/etc/systemd/system/mnt-nas.mount"
 NAS_CREDENTIALS_FILE="/etc/nas-credentials"
-NAS_MOUNT_PATH="/mnt/nas"
+NAS_MOUNT_BASE="/mnt/nas"
 PROJECT_DIR="/home/ct/SDD/ching-tech-os"
 BACKEND_DIR="${PROJECT_DIR}/backend"
 ENV_FILE="${PROJECT_DIR}/.env"
+
+# 掛載設定
+MOUNT_CTOS_UNIT="mnt-nas-ctos.mount"
+MOUNT_CTOS_PATH="${NAS_MOUNT_BASE}/ctos"
+MOUNT_PROJECTS_UNIT="mnt-nas-projects.mount"
+MOUNT_PROJECTS_PATH="${NAS_MOUNT_BASE}/projects"
 
 # 檢查是否以 root 執行
 if [ "$EUID" -ne 0 ]; then
@@ -54,27 +59,58 @@ EOF
 chmod 600 ${NAS_CREDENTIALS_FILE}
 
 # 建立掛載點目錄
-mkdir -p ${NAS_MOUNT_PATH}
+mkdir -p ${MOUNT_CTOS_PATH}
+mkdir -p ${MOUNT_PROJECTS_PATH}
 
 # 停止現有掛載（如果存在）
-if systemctl is-active --quiet mnt-nas.mount; then
-    echo "停止現有 NAS 掛載..."
-    systemctl stop mnt-nas.mount
+if systemctl is-active --quiet ${MOUNT_CTOS_UNIT}; then
+    echo "停止現有 ctos 掛載..."
+    systemctl stop ${MOUNT_CTOS_UNIT}
+fi
+if systemctl is-active --quiet ${MOUNT_PROJECTS_UNIT}; then
+    echo "停止現有 projects 掛載..."
+    systemctl stop ${MOUNT_PROJECTS_UNIT}
 fi
 
-# 建立 systemd mount unit
-echo "建立 NAS mount unit..."
-cat > ${MOUNT_UNIT_FILE} << EOF
+# 移除舊的單一掛載（如果存在）
+if [ -f "/etc/systemd/system/mnt-nas.mount" ]; then
+    echo "移除舊的 mnt-nas.mount..."
+    systemctl stop mnt-nas.mount 2>/dev/null || true
+    systemctl disable mnt-nas.mount 2>/dev/null || true
+    rm -f /etc/systemd/system/mnt-nas.mount
+fi
+
+# 建立 ctos mount unit（讀寫）
+echo "建立 ctos mount unit..."
+cat > /etc/systemd/system/${MOUNT_CTOS_UNIT} << EOF
 [Unit]
-Description=NAS CIFS Mount (擎添開發)
+Description=NAS CIFS Mount - CTOS System (擎添開發/ching-tech-os)
 After=network-online.target
 Wants=network-online.target
 
 [Mount]
-What=//${NAS_HOST}/${NAS_SHARE}
-Where=${NAS_MOUNT_PATH}
+What=//${NAS_HOST}/${NAS_SHARE}/ching-tech-os
+Where=${MOUNT_CTOS_PATH}
 Type=cifs
 Options=username=${NAS_USER},password=${NAS_PASSWORD},uid=1000,gid=1000,iocharset=utf8,_netdev
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# 建立 projects mount unit（唯讀）
+echo "建立 projects mount unit..."
+cat > /etc/systemd/system/${MOUNT_PROJECTS_UNIT} << EOF
+[Unit]
+Description=NAS CIFS Mount - Projects Archive (擎添共用區/在案資料分享)
+After=network-online.target
+Wants=network-online.target
+
+[Mount]
+What=//${NAS_HOST}/擎添共用區/在案資料分享
+Where=${MOUNT_PROJECTS_PATH}
+Type=cifs
+Options=username=${NAS_USER},password=${NAS_PASSWORD},uid=1000,gid=1000,iocharset=utf8,_netdev,ro
 
 [Install]
 WantedBy=multi-user.target
@@ -83,14 +119,25 @@ EOF
 # 啟用並啟動 NAS 掛載
 echo "啟用 NAS 掛載..."
 systemctl daemon-reload
-systemctl enable mnt-nas.mount
-systemctl start mnt-nas.mount
+systemctl enable ${MOUNT_CTOS_UNIT}
+systemctl enable ${MOUNT_PROJECTS_UNIT}
+systemctl start ${MOUNT_CTOS_UNIT}
+systemctl start ${MOUNT_PROJECTS_UNIT}
 
 # 確認掛載成功
-if mountpoint -q ${NAS_MOUNT_PATH}; then
-    echo "NAS 掛載成功: ${NAS_MOUNT_PATH}"
+MOUNT_SUCCESS=true
+if mountpoint -q ${MOUNT_CTOS_PATH}; then
+    echo "ctos 掛載成功: ${MOUNT_CTOS_PATH}"
 else
-    echo "警告：NAS 掛載可能未成功，請檢查 systemctl status mnt-nas.mount"
+    echo "警告：ctos 掛載可能未成功，請檢查 systemctl status ${MOUNT_CTOS_UNIT}"
+    MOUNT_SUCCESS=false
+fi
+
+if mountpoint -q ${MOUNT_PROJECTS_PATH}; then
+    echo "projects 掛載成功: ${MOUNT_PROJECTS_PATH}"
+else
+    echo "警告：projects 掛載可能未成功，請檢查 systemctl status ${MOUNT_PROJECTS_UNIT}"
+    MOUNT_SUCCESS=false
 fi
 
 # ===================
@@ -99,11 +146,12 @@ fi
 
 # 建立 systemd service 檔案
 echo "建立 systemd service 檔案..."
-cat > ${SERVICE_FILE} << 'EOF'
+cat > ${SERVICE_FILE} << EOF
 [Unit]
 Description=Ching Tech OS Web Desktop Service
-After=network.target docker.service mnt-nas.mount
-Requires=docker.service mnt-nas.mount
+After=network.target docker.service ${MOUNT_CTOS_UNIT}
+Requires=docker.service ${MOUNT_CTOS_UNIT}
+Wants=${MOUNT_PROJECTS_UNIT}
 
 [Service]
 Type=simple
@@ -161,6 +209,9 @@ echo "  sudo systemctl status ${SERVICE_NAME}   # 查看狀態"
 echo "  sudo systemctl restart ${SERVICE_NAME}  # 重啟服務"
 echo "  sudo systemctl stop ${SERVICE_NAME}     # 停止服務"
 echo "  sudo journalctl -u ${SERVICE_NAME} -f   # 查看日誌"
-echo "  sudo systemctl status mnt-nas.mount     # 查看 NAS 掛載狀態"
+echo "  sudo systemctl status ${MOUNT_CTOS_UNIT}     # 查看 ctos 掛載狀態"
+echo "  sudo systemctl status ${MOUNT_PROJECTS_UNIT} # 查看 projects 掛載狀態"
 echo ""
-echo "NAS 掛載點: ${NAS_MOUNT_PATH}"
+echo "NAS 掛載點:"
+echo "  ${MOUNT_CTOS_PATH} (讀寫) - 系統檔案"
+echo "  ${MOUNT_PROJECTS_PATH} (唯讀) - 專案資料分享"

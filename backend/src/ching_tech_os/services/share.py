@@ -5,6 +5,8 @@ import string
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
+from pathlib import Path
+
 from ..config import settings
 from ..database import get_connection
 from ..models.share import (
@@ -15,6 +17,16 @@ from ..models.share import (
 )
 from .knowledge import get_knowledge, KnowledgeNotFoundError
 from .project import get_project, ProjectNotFoundError
+
+
+class NasFileNotFoundError(Exception):
+    """NAS 檔案不存在"""
+    pass
+
+
+class NasFileAccessDenied(Exception):
+    """NAS 檔案存取被拒絕"""
+    pass
 
 
 class ShareError(Exception):
@@ -76,6 +88,48 @@ def get_full_url(token: str) -> str:
     return f"{settings.public_url}/s/{token}"
 
 
+def validate_nas_file_path(file_path: str) -> Path:
+    """驗證 NAS 檔案路徑
+
+    Args:
+        file_path: 檔案路徑（完整路徑或相對路徑）
+
+    Returns:
+        驗證後的完整路徑
+
+    Raises:
+        NasFileAccessDenied: 路徑不在允許範圍內
+        NasFileNotFoundError: 檔案不存在
+    """
+    projects_path = Path(settings.projects_mount_path)
+
+    # 正規化路徑
+    if file_path.startswith(settings.projects_mount_path):
+        full_path = Path(file_path)
+    else:
+        # 相對路徑（移除開頭的 /）
+        rel_path = file_path.lstrip("/")
+        full_path = projects_path / rel_path
+
+    # 安全檢查：確保路徑在允許範圍內
+    try:
+        full_path = full_path.resolve()
+        if not str(full_path).startswith(str(projects_path.resolve())):
+            raise NasFileAccessDenied(f"不允許存取此路徑：{file_path}")
+    except NasFileAccessDenied:
+        raise
+    except Exception:
+        raise NasFileAccessDenied(f"無效的路徑：{file_path}")
+
+    if not full_path.exists():
+        raise NasFileNotFoundError(f"檔案不存在：{file_path}")
+
+    if not full_path.is_file():
+        raise NasFileNotFoundError(f"路徑不是檔案：{file_path}")
+
+    return full_path
+
+
 async def get_resource_title(resource_type: str, resource_id: str) -> str:
     """取得資源標題"""
     try:
@@ -85,10 +139,18 @@ async def get_resource_title(resource_type: str, resource_id: str) -> str:
         elif resource_type == "project":
             project = await get_project(UUID(resource_id))
             return project.name
+        elif resource_type == "nas_file":
+            # 驗證路徑並回傳檔名
+            full_path = validate_nas_file_path(resource_id)
+            return full_path.name
         else:
             return "未知資源"
     except (KnowledgeNotFoundError, ProjectNotFoundError):
         raise ResourceNotFoundError(f"資源 {resource_type}/{resource_id} 不存在")
+    except NasFileNotFoundError as e:
+        raise ResourceNotFoundError(str(e))
+    except NasFileAccessDenied as e:
+        raise ResourceNotFoundError(str(e))
 
 
 async def create_share_link(
@@ -356,6 +418,35 @@ async def get_public_resource(token: str) -> PublicResourceResponse:
                 }
             except ProjectNotFoundError:
                 raise ResourceNotFoundError("原始內容已被刪除")
+
+        elif resource_type == "nas_file":
+            try:
+                # 驗證檔案存在且可存取
+                full_path = validate_nas_file_path(resource_id)
+                stat = full_path.stat()
+
+                # 格式化大小
+                size = stat.st_size
+                if size >= 1024 * 1024:
+                    size_str = f"{size / 1024 / 1024:.2f} MB"
+                elif size >= 1024:
+                    size_str = f"{size / 1024:.2f} KB"
+                else:
+                    size_str = f"{size} bytes"
+
+                # 回傳檔案資訊（實際下載透過另一個端點）
+                data = {
+                    "file_name": full_path.name,
+                    "file_path": str(full_path),
+                    "file_size": size,
+                    "file_size_str": size_str,
+                    "download_url": f"/api/public/{token}/download",
+                }
+            except (NasFileNotFoundError, NasFileAccessDenied) as e:
+                raise ResourceNotFoundError(str(e))
+            except Exception as e:
+                raise ResourceNotFoundError(f"無法存取檔案：{e}")
+
         else:
             raise ShareError(f"不支援的資源類型：{resource_type}")
 
@@ -392,3 +483,26 @@ async def get_link_info(token: str) -> dict:
             "resource_type": row["resource_type"],
             "resource_id": row["resource_id"],
         }
+
+
+async def cleanup_expired_links() -> int:
+    """清理過期的分享連結
+
+    刪除所有 expires_at < 當前時間 的連結。
+    expires_at 為 NULL（永久連結）的不會被刪除。
+
+    Returns:
+        刪除的連結數量
+    """
+    async with get_connection() as conn:
+        now = datetime.now(timezone.utc)
+        result = await conn.execute(
+            """
+            DELETE FROM public_share_links
+            WHERE expires_at IS NOT NULL AND expires_at < $1
+            """,
+            now,
+        )
+        # result 格式為 "DELETE N"
+        deleted_count = int(result.split()[-1]) if result else 0
+        return deleted_count

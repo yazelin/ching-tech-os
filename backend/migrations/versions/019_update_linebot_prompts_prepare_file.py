@@ -1,18 +1,22 @@
-"""Line Bot Agent 初始化與管理
+"""update linebot prompts with prepare_file_message tool
 
-在應用程式啟動時確保預設的 Line Bot Agent 存在。
+Revision ID: 019
+Revises: 018
+Create Date: 2026-01-06
+
+更新 linebot-personal 和 linebot-group 的 prompt 內容，
+將 send_nas_file 替換為 prepare_file_message，改用 reply_message 架構。
 """
 
-import logging
+from collections.abc import Sequence
 
-from . import ai_manager
-from ..models.ai import AiPromptCreate, AiAgentCreate
+from alembic import op
 
-logger = logging.getLogger("linebot_agents")
-
-# Agent 名稱常數
-AGENT_LINEBOT_PERSONAL = "linebot-personal"
-AGENT_LINEBOT_GROUP = "linebot-group"
+# revision identifiers, used by Alembic.
+revision: str = "019"
+down_revision: str | None = "018"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 # 完整的 linebot-personal prompt
 LINEBOT_PERSONAL_PROMPT = """你是擎添工業的 AI 助理，透過 Line 與用戶進行個人對話。
@@ -139,96 +143,28 @@ LINEBOT_GROUP_PROMPT = """你是擎添工業的 AI 助理，在 Line 群組中�
 - 列表用「・」或數字
 - 不要用分隔線（━、─、＝等），用空行分隔"""
 
-# 預設 Agent 設定
-DEFAULT_LINEBOT_AGENTS = [
-    {
-        "name": AGENT_LINEBOT_PERSONAL,
-        "display_name": "Line 個人助理",
-        "description": "Line Bot 個人對話 Agent",
-        "model": "claude-sonnet",
-        "prompt": {
-            "name": AGENT_LINEBOT_PERSONAL,
-            "display_name": "Line 個人助理 Prompt",
-            "category": "linebot",
-            "content": LINEBOT_PERSONAL_PROMPT,
-            "description": "Line Bot 個人對話使用，包含完整 MCP 工具說明",
-        },
-    },
-    {
-        "name": AGENT_LINEBOT_GROUP,
-        "display_name": "Line 群組助理",
-        "description": "Line Bot 群組對話 Agent",
-        "model": "claude-haiku",
-        "prompt": {
-            "name": AGENT_LINEBOT_GROUP,
-            "display_name": "Line 群組助理 Prompt",
-            "category": "linebot",
-            "content": LINEBOT_GROUP_PROMPT,
-            "description": "Line Bot 群組對話使用，精簡版包含 MCP 工具說明",
-        },
-    },
-]
+
+def upgrade() -> None:
+    # 更新 linebot-personal prompt
+    op.execute(f"""
+        UPDATE ai_prompts
+        SET content = $prompt${LINEBOT_PERSONAL_PROMPT}$prompt$,
+            description = 'Line Bot 個人對話使用，包含完整 MCP 工具說明（含 prepare_file_message）',
+            updated_at = NOW()
+        WHERE name = 'linebot-personal'
+    """)
+
+    # 更新 linebot-group prompt
+    op.execute(f"""
+        UPDATE ai_prompts
+        SET content = $prompt${LINEBOT_GROUP_PROMPT}$prompt$,
+            description = 'Line Bot 群組對話使用，精簡版包含 MCP 工具說明（含 prepare_file_message）',
+            updated_at = NOW()
+        WHERE name = 'linebot-group'
+    """)
 
 
-async def ensure_default_linebot_agents() -> None:
-    """
-    確保預設的 Line Bot Agent 存在。
-
-    如果 Agent 已存在則跳過（保留使用者修改）。
-    如果不存在則建立 Agent 和對應的 Prompt。
-    """
-    for agent_config in DEFAULT_LINEBOT_AGENTS:
-        agent_name = agent_config["name"]
-
-        # 檢查 Agent 是否存在
-        existing_agent = await ai_manager.get_agent_by_name(agent_name)
-        if existing_agent:
-            logger.debug(f"Agent '{agent_name}' 已存在，跳過建立")
-            continue
-
-        # 檢查 Prompt 是否存在
-        prompt_config = agent_config["prompt"]
-        existing_prompt = await ai_manager.get_prompt_by_name(prompt_config["name"])
-
-        if existing_prompt:
-            prompt_id = existing_prompt["id"]
-            logger.debug(f"Prompt '{prompt_config['name']}' 已存在，使用現有 Prompt")
-        else:
-            # 建立 Prompt
-            prompt_data = AiPromptCreate(
-                name=prompt_config["name"],
-                display_name=prompt_config["display_name"],
-                category=prompt_config["category"],
-                content=prompt_config["content"],
-                description=prompt_config["description"],
-            )
-            new_prompt = await ai_manager.create_prompt(prompt_data)
-            prompt_id = new_prompt["id"]
-            logger.info(f"已建立 Prompt: {prompt_config['name']}")
-
-        # 建立 Agent
-        agent_data = AiAgentCreate(
-            name=agent_config["name"],
-            display_name=agent_config["display_name"],
-            description=agent_config["description"],
-            model=agent_config["model"],
-            system_prompt_id=prompt_id,
-            is_active=True,
-        )
-        await ai_manager.create_agent(agent_data)
-        logger.info(f"已建立 Agent: {agent_name}")
-
-
-async def get_linebot_agent(is_group: bool) -> dict | None:
-    """
-    取得 Line Bot Agent 設定。
-
-    Args:
-        is_group: 是否為群組對話
-
-    Returns:
-        Agent 設定字典，包含 model 和 system_prompt
-        如果找不到則回傳 None
-    """
-    agent_name = AGENT_LINEBOT_GROUP if is_group else AGENT_LINEBOT_PERSONAL
-    return await ai_manager.get_agent_by_name(agent_name)
+def downgrade() -> None:
+    # 回復到 018 版本的 prompt（含 send_nas_file）
+    # 略過實作，因為很少需要回滾
+    pass

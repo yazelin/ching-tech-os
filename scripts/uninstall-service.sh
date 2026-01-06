@@ -7,9 +7,16 @@ set -e
 
 SERVICE_NAME="ching-tech-os"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-MOUNT_UNIT_FILE="/etc/systemd/system/mnt-nas.mount"
 NAS_CREDENTIALS_FILE="/etc/nas-credentials"
-NAS_MOUNT_PATH="/mnt/nas"
+NAS_MOUNT_BASE="/mnt/nas"
+
+# 掛載設定
+MOUNT_CTOS_UNIT="mnt-nas-ctos.mount"
+MOUNT_CTOS_PATH="${NAS_MOUNT_BASE}/ctos"
+MOUNT_PROJECTS_UNIT="mnt-nas-projects.mount"
+MOUNT_PROJECTS_PATH="${NAS_MOUNT_BASE}/projects"
+# 舊的掛載（向後相容）
+MOUNT_OLD_UNIT="mnt-nas.mount"
 
 # 檢查是否以 root 執行
 if [ "$EUID" -ne 0 ]; then
@@ -46,21 +53,46 @@ fi
 # ===================
 echo "清理 NAS 掛載設定..."
 
-# 停止並停用 NAS 掛載
-if systemctl is-active --quiet mnt-nas.mount; then
-    echo "停止 NAS 掛載..."
-    systemctl stop mnt-nas.mount
+# 清理 ctos 掛載
+if systemctl is-active --quiet ${MOUNT_CTOS_UNIT}; then
+    echo "停止 ctos 掛載..."
+    systemctl stop ${MOUNT_CTOS_UNIT}
+fi
+if systemctl is-enabled --quiet ${MOUNT_CTOS_UNIT} 2>/dev/null; then
+    echo "停用 ctos 掛載..."
+    systemctl disable ${MOUNT_CTOS_UNIT}
+fi
+if [ -f "/etc/systemd/system/${MOUNT_CTOS_UNIT}" ]; then
+    echo "刪除 ctos mount unit 檔案..."
+    rm -f /etc/systemd/system/${MOUNT_CTOS_UNIT}
 fi
 
-if systemctl is-enabled --quiet mnt-nas.mount 2>/dev/null; then
-    echo "停用 NAS 掛載..."
-    systemctl disable mnt-nas.mount
+# 清理 projects 掛載
+if systemctl is-active --quiet ${MOUNT_PROJECTS_UNIT}; then
+    echo "停止 projects 掛載..."
+    systemctl stop ${MOUNT_PROJECTS_UNIT}
+fi
+if systemctl is-enabled --quiet ${MOUNT_PROJECTS_UNIT} 2>/dev/null; then
+    echo "停用 projects 掛載..."
+    systemctl disable ${MOUNT_PROJECTS_UNIT}
+fi
+if [ -f "/etc/systemd/system/${MOUNT_PROJECTS_UNIT}" ]; then
+    echo "刪除 projects mount unit 檔案..."
+    rm -f /etc/systemd/system/${MOUNT_PROJECTS_UNIT}
 fi
 
-# 刪除 mount unit 檔案
-if [ -f "${MOUNT_UNIT_FILE}" ]; then
-    echo "刪除 mount unit 檔案..."
-    rm -f ${MOUNT_UNIT_FILE}
+# 清理舊的單一掛載（向後相容）
+if systemctl is-active --quiet ${MOUNT_OLD_UNIT} 2>/dev/null; then
+    echo "停止舊的 NAS 掛載..."
+    systemctl stop ${MOUNT_OLD_UNIT}
+fi
+if systemctl is-enabled --quiet ${MOUNT_OLD_UNIT} 2>/dev/null; then
+    echo "停用舊的 NAS 掛載..."
+    systemctl disable ${MOUNT_OLD_UNIT}
+fi
+if [ -f "/etc/systemd/system/${MOUNT_OLD_UNIT}" ]; then
+    echo "刪除舊的 mount unit 檔案..."
+    rm -f /etc/systemd/system/${MOUNT_OLD_UNIT}
 fi
 
 # 刪除 NAS 憑證檔案
@@ -70,9 +102,17 @@ if [ -f "${NAS_CREDENTIALS_FILE}" ]; then
 fi
 
 # 刪除掛載點目錄（如果為空）
-if [ -d "${NAS_MOUNT_PATH}" ] && [ -z "$(ls -A ${NAS_MOUNT_PATH})" ]; then
-    echo "刪除掛載點目錄..."
-    rmdir ${NAS_MOUNT_PATH}
+if [ -d "${MOUNT_CTOS_PATH}" ] && [ -z "$(ls -A ${MOUNT_CTOS_PATH} 2>/dev/null)" ]; then
+    echo "刪除 ctos 掛載點目錄..."
+    rmdir ${MOUNT_CTOS_PATH} 2>/dev/null || true
+fi
+if [ -d "${MOUNT_PROJECTS_PATH}" ] && [ -z "$(ls -A ${MOUNT_PROJECTS_PATH} 2>/dev/null)" ]; then
+    echo "刪除 projects 掛載點目錄..."
+    rmdir ${MOUNT_PROJECTS_PATH} 2>/dev/null || true
+fi
+if [ -d "${NAS_MOUNT_BASE}" ] && [ -z "$(ls -A ${NAS_MOUNT_BASE} 2>/dev/null)" ]; then
+    echo "刪除 NAS 掛載基礎目錄..."
+    rmdir ${NAS_MOUNT_BASE} 2>/dev/null || true
 fi
 
 # 重新載入 systemd

@@ -23,11 +23,37 @@ const FileManagerModule = (function() {
   let searchResults = [];
   let searchTimer = null;
 
+  // 可分享路徑前綴（對應系統掛載點 /mnt/nas/projects）
+  const SHAREABLE_PATH_PREFIX = '/擎添共用區/在案資料分享';
+
   /**
    * Get auth token
    */
   function getToken() {
     return localStorage.getItem('chingtech_token');
+  }
+
+  /**
+   * 檢查路徑是否可分享
+   * @param {string} path - 檔案管理器路徑
+   * @returns {boolean}
+   */
+  function isShareablePath(path) {
+    return path.startsWith(SHAREABLE_PATH_PREFIX);
+  }
+
+  /**
+   * 將檔案管理器路徑轉換為系統掛載點路徑
+   * @param {string} fmPath - 檔案管理器路徑（如 /擎添共用區/在案資料分享/亦達光學/xxx.pdf）
+   * @returns {string} - 系統掛載點路徑（如 /mnt/nas/projects/亦達光學/xxx.pdf）
+   */
+  function toSystemMountPath(fmPath) {
+    if (!fmPath.startsWith(SHAREABLE_PATH_PREFIX)) {
+      return null;
+    }
+    // 移除前綴，加上系統掛載點路徑
+    const relativePath = fmPath.slice(SHAREABLE_PATH_PREFIX.length);
+    return '/mnt/nas/projects' + relativePath;
   }
 
   /**
@@ -798,6 +824,10 @@ const FileManagerModule = (function() {
       }
       if (isFile) {
         menuItems += `<div class="fm-context-menu-item" data-action="download"><span class="icon">${getIcon('download')}</span>下載</div>`;
+        // 只對可分享路徑下的檔案顯示「產生分享連結」選項
+        if (isShareablePath(currentPath)) {
+          menuItems += `<div class="fm-context-menu-item" data-action="share"><span class="icon">${getIcon('share-variant')}</span>產生分享連結</div>`;
+        }
       }
       menuItems += `<div class="fm-context-menu-divider"></div>`;
       if (selectedFiles.size === 1) {
@@ -863,6 +893,9 @@ const FileManagerModule = (function() {
         break;
       case 'download':
         downloadSelected();
+        break;
+      case 'share':
+        showShareDialog();
         break;
       case 'rename':
         showRenameDialog();
@@ -1057,6 +1090,46 @@ const FileManagerModule = (function() {
       } catch (e) {
         const previewText = windowEl.querySelector('#fmPreviewText');
         if (previewText) previewText.textContent = '無法載入預覽';
+      }
+    }
+  }
+
+  /**
+   * Show share dialog for selected file
+   */
+  function showShareDialog() {
+    if (selectedFiles.size !== 1) return;
+    const name = [...selectedFiles][0];
+    const filePath = currentPath === '/' ? `/${name}` : `${currentPath}/${name}`;
+
+    // 檢查是否在可分享路徑
+    if (!isShareablePath(filePath)) {
+      if (typeof DesktopModule !== 'undefined') {
+        DesktopModule.showToast('此檔案無法產生公開連結', 'error');
+      }
+      return;
+    }
+
+    // 轉換為系統掛載點路徑
+    const systemPath = toSystemMountPath(filePath);
+    if (!systemPath) {
+      if (typeof DesktopModule !== 'undefined') {
+        DesktopModule.showToast('路徑轉換失敗', 'error');
+      }
+      return;
+    }
+
+    // 呼叫 ShareDialogModule
+    if (typeof ShareDialogModule !== 'undefined') {
+      ShareDialogModule.show({
+        resourceType: 'nas_file',
+        resourceId: systemPath,
+        resourceTitle: name
+      });
+    } else {
+      console.error('ShareDialogModule not available');
+      if (typeof DesktopModule !== 'undefined') {
+        DesktopModule.showToast('分享功能尚未載入', 'error');
       }
     }
   }

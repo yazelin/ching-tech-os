@@ -64,6 +64,8 @@ class Settings:
 
     # NAS 掛載路徑（系統功能透過此路徑存取 NAS）
     nas_mount_path: str = _get_env("NAS_MOUNT_PATH", "/mnt/nas")
+    ctos_mount_path: str = _get_env("CTOS_MOUNT_PATH", "/mnt/nas/ctos")
+    projects_mount_path: str = _get_env("PROJECTS_MOUNT_PATH", "/mnt/nas/projects")
 
     # ===================
     # Session 設定
@@ -76,10 +78,10 @@ class Settings:
     # ===================
     frontend_dir: str = _get_env("FRONTEND_DIR", "/home/ct/SDD/ching-tech-os/frontend")
 
-    # NAS 路徑（相對於 nas_share）
-    knowledge_nas_path: str = _get_env("KNOWLEDGE_NAS_PATH", "ching-tech-os/knowledge")
-    project_nas_path: str = _get_env("PROJECT_NAS_PATH", "ching-tech-os/projects")
-    line_files_nas_path: str = _get_env("LINEBOT_NAS_PATH", "ching-tech-os/linebot/files")
+    # NAS 路徑（相對於 ctos_mount_path）
+    knowledge_nas_path: str = _get_env("KNOWLEDGE_NAS_PATH", "knowledge")
+    project_nas_path: str = _get_env("PROJECT_NAS_PATH", "projects")
+    line_files_nas_path: str = _get_env("LINEBOT_NAS_PATH", "linebot/files")
 
     # 本機路徑
     project_attachments_path: str = _get_env(
@@ -160,17 +162,17 @@ class Settings:
     @property
     def knowledge_local_path(self) -> str:
         """知識庫本機路徑（透過 NAS 掛載）"""
-        return f"{self.nas_mount_path}/{self.knowledge_nas_path}"
+        return f"{self.ctos_mount_path}/{self.knowledge_nas_path}"
 
     @property
     def project_local_path(self) -> str:
         """專案本機路徑（透過 NAS 掛載）"""
-        return f"{self.nas_mount_path}/{self.project_nas_path}"
+        return f"{self.ctos_mount_path}/{self.project_nas_path}"
 
     @property
     def linebot_local_path(self) -> str:
         """Line Bot 檔案本機路徑（透過 NAS 掛載）"""
-        return f"{self.nas_mount_path}/{self.line_files_nas_path}"
+        return f"{self.ctos_mount_path}/{self.line_files_nas_path}"
 
     # ===================
     # 資料庫 URL

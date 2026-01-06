@@ -17,10 +17,13 @@ from ching_tech_os.services.share import (
     revoke_link,
     get_public_resource,
     get_link_info,
+    validate_nas_file_path,
     ShareError,
     ShareLinkNotFoundError,
     ShareLinkExpiredError,
     ResourceNotFoundError,
+    NasFileNotFoundError,
+    NasFileAccessDenied,
 )
 from ching_tech_os.config import settings
 from ching_tech_os.services.knowledge import get_nas_attachment, KnowledgeError
@@ -72,6 +75,21 @@ async def create_link(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"知識 {data.resource_id} 不存在",
+            )
+
+    elif data.resource_type == "nas_file":
+        # 驗證 NAS 檔案存在且在允許範圍內
+        try:
+            validate_nas_file_path(data.resource_id)
+        except NasFileNotFoundError as e:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(e),
+            )
+        except NasFileAccessDenied as e:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=str(e),
             )
 
     # 專案目前不做權限檢查，任何登入使用者都可以分享
@@ -291,4 +309,80 @@ async def get_public_attachment(token: str, path: str) -> Response:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
+        )
+
+
+@public_router.get(
+    "/{token}/download",
+    summary="下載 NAS 檔案",
+)
+async def download_nas_file(token: str) -> Response:
+    """透過分享連結下載 NAS 檔案
+
+    僅限 nas_file 類型的分享連結，無需登入。
+    """
+    from urllib.parse import quote
+
+    try:
+        # 驗證 token 有效
+        link_info = await get_link_info(token)
+
+        # 只支援 NAS 檔案
+        if link_info["resource_type"] != "nas_file":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="此連結不是檔案下載連結",
+            )
+
+        file_path = link_info["resource_id"]
+
+        # 驗證並取得檔案路徑
+        full_path = validate_nas_file_path(file_path)
+
+        # 讀取檔案內容
+        content = full_path.read_bytes()
+        filename = full_path.name
+
+        # 取得 MIME 類型
+        mime_type, _ = mimetypes.guess_type(filename)
+
+        # 處理檔名編碼（支援中文）
+        encoded_filename = quote(filename)
+
+        # 圖片用 inline（讓 Line PC 能顯示），其他用 attachment
+        is_image = mime_type and mime_type.startswith("image/")
+        disposition = "inline" if is_image else "attachment"
+
+        return Response(
+            content=content,
+            media_type=mime_type or "application/octet-stream",
+            headers={
+                "Content-Disposition": f"{disposition}; filename*=UTF-8''{encoded_filename}",
+            },
+        )
+
+    except ShareLinkNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="連結不存在",
+        )
+    except ShareLinkExpiredError:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="此連結已過期",
+        )
+    except NasFileNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except NasFileAccessDenied as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"下載失敗：{e}",
         )

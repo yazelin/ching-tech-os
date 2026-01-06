@@ -357,6 +357,38 @@
     }
 
     /**
+     * 渲染 NAS 檔案內容
+     */
+    function renderNasFile(data, sharedBy, sharedAt, expiresAt) {
+        // 標題
+        docTitleEl.textContent = data.file_name;
+
+        // 元資訊
+        docMetaEl.textContent = `分享者：${sharedBy} | ${formatDateTime(sharedAt)}`;
+
+        // 檔案資訊與下載
+        const icon = getAttachmentIcon('file', data.file_name);
+        const base = getApiBase();
+        const downloadUrl = `${base}${data.download_url}`;
+
+        docContentEl.innerHTML = `
+            <div class="nas-file-container">
+                <div class="nas-file-icon">${icon}</div>
+                <div class="nas-file-info">
+                    <div class="nas-file-name">${data.file_name}</div>
+                    <div class="nas-file-size">${data.file_size_str}</div>
+                </div>
+                <a href="${downloadUrl}" class="nas-file-download-btn" download="${data.file_name}">
+                    下載檔案
+                </a>
+            </div>
+        `;
+
+        // 底部資訊
+        updateFooter(sharedBy, expiresAt);
+    }
+
+    /**
      * 更新底部資訊
      */
     function updateFooter(sharedBy, expiresAt) {
@@ -477,6 +509,8 @@
                 renderKnowledge(result.data, result.shared_by, result.shared_at, result.expires_at);
             } else if (result.type === 'project') {
                 renderProject(result.data, result.shared_by, result.shared_at, result.expires_at);
+            } else if (result.type === 'nas_file') {
+                renderNasFile(result.data, result.shared_by, result.shared_at, result.expires_at);
             } else {
                 showError('不支援的類型', `無法顯示此類型的內容：${result.type}`);
             }

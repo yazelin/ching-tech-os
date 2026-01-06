@@ -11,6 +11,7 @@ from uuid import UUID
 from .claude_agent import call_claude, compose_prompt_with_history
 from .linebot import (
     reply_text,
+    reply_messages,
     mark_message_ai_processed,
     should_trigger_ai,
     is_bot_message,
@@ -33,6 +34,122 @@ from ..database import get_connection
 from ..models.ai import AiLogCreate
 
 logger = logging.getLogger("linebot_ai")
+
+
+# ============================================================
+# AI 回應解析與發送
+# ============================================================
+
+
+def parse_ai_response(response: str) -> tuple[str, list[dict]]:
+    """
+    解析 AI 回應，提取文字和檔案訊息
+
+    Args:
+        response: AI 回應原始文字
+
+    Returns:
+        (text, files): 純文字回覆和檔案訊息列表
+    """
+    import re
+    import json
+
+    if not response:
+        return "", []
+
+    # 匹配 [FILE_MESSAGE:{...}] 標記（非貪婪匹配到最後的 }]）
+    pattern = r'\[FILE_MESSAGE:(\{.*?\})\]'
+    files = []
+
+    for match in re.finditer(pattern, response):
+        try:
+            file_info = json.loads(match.group(1))
+            files.append(file_info)
+        except json.JSONDecodeError as e:
+            logger.warning(f"解析 FILE_MESSAGE 失敗: {e}")
+
+    # 移除標記，保留純文字
+    text = re.sub(pattern, '', response).strip()
+
+    # 清理多餘的空行
+    text = re.sub(r'\n{3,}', '\n\n', text)
+
+    return text, files
+
+
+async def send_ai_response(
+    reply_token: str,
+    text: str,
+    file_messages: list[dict],
+) -> list[str]:
+    """
+    發送 AI 回應（文字 + 檔案訊息）
+
+    Args:
+        reply_token: Line 回覆 token
+        text: 文字回覆
+        file_messages: 檔案訊息列表
+
+    Returns:
+        發送成功的訊息 ID 列表
+    """
+    from linebot.v3.messaging import TextMessage, ImageMessage
+
+    messages = []
+
+    # 先加入文字訊息（顯示在上方）
+    if text:
+        messages.append(TextMessage(text=text))
+
+    # 再處理檔案訊息
+    for file_info in file_messages:
+        file_type = file_info.get("type", "file")
+        url = file_info.get("url", "")
+        name = file_info.get("name", "")
+        size = file_info.get("size", "")
+
+        if file_type == "image" and url:
+            # 圖片：使用 ImageMessage（顯示在文字下方）
+            messages.append(ImageMessage(
+                original_content_url=url,
+                preview_image_url=url,
+            ))
+        elif file_type == "file" and url:
+            # 非圖片檔案：加入連結文字
+            link_text = f"📎 {name}"
+            if size:
+                link_text += f"（{size}）"
+            link_text += f"\n{url}\n⏰ 連結 24 小時內有效"
+
+            if messages and isinstance(messages[0], TextMessage):
+                # 追加到現有文字訊息
+                messages[0] = TextMessage(text=messages[0].text + "\n\n" + link_text)
+            else:
+                messages.append(TextMessage(text=link_text))
+
+    # Line 限制每次最多 5 則訊息
+    # 如果檔案太多，只發送前 4 張圖片（預留 1 則給文字）
+    if len(messages) > 5:
+        # 提取超出的圖片訊息
+        extra_messages = messages[5:]
+        messages = messages[:5]
+
+        # 將超出的圖片轉為連結，追加到文字訊息（文字在最前）
+        extra_links = []
+        for msg in extra_messages:
+            if isinstance(msg, ImageMessage):
+                extra_links.append(msg.original_content_url)
+
+        if extra_links and messages and isinstance(messages[0], TextMessage):
+            messages[0] = TextMessage(
+                text=messages[0].text + "\n\n其他圖片連結：\n" + "\n".join(extra_links)
+            )
+
+    if not messages:
+        return []
+
+    # 發送訊息
+    return await reply_messages(reply_token, messages)
 
 
 # ============================================================
@@ -231,24 +348,48 @@ async def process_message_with_ai(
         # 標記訊息已處理
         await mark_message_ai_processed(message_uuid)
 
+        # 解析 AI 回應，提取檔案訊息標記
+        text_response, file_messages = parse_ai_response(ai_response)
+
         # 回覆訊息並取得 Line 訊息 ID（用於回覆觸發功能）
-        line_message_id = None
-        if reply_token and ai_response:
+        line_message_ids = []
+        if reply_token and (text_response or file_messages):
             try:
-                line_message_id = await reply_text(reply_token, ai_response)
+                line_message_ids = await send_ai_response(
+                    reply_token=reply_token,
+                    text=text_response,
+                    file_messages=file_messages,
+                )
             except Exception as e:
                 logger.warning(f"回覆訊息失敗（token 可能已過期）: {e}")
 
-        # 儲存 Bot 回應到資料庫（包含 Line 訊息 ID）
-        if ai_response:
-            await save_bot_response(
-                group_uuid=line_group_id,
-                content=ai_response,
-                responding_to_line_user_id=line_user_id if not is_group else None,
-                line_message_id=line_message_id,
-            )
+        # 儲存 Bot 回應到資料庫（包含所有 Line 訊息 ID）
+        # 計算文字和圖片訊息的對應關係
+        # send_ai_response 順序：先文字（如有），再圖片
+        text_msg_count = 1 if text_response else 0
+        image_messages = [f for f in file_messages if f.get("type") == "image"]
 
-        return ai_response
+        for i, msg_id in enumerate(line_message_ids):
+            if i == 0 and text_response:
+                # 第一則是文字訊息
+                await save_bot_response(
+                    group_uuid=line_group_id,
+                    content=text_response,
+                    responding_to_line_user_id=line_user_id if not is_group else None,
+                    line_message_id=msg_id,
+                )
+            else:
+                # 圖片訊息
+                img_idx = i - text_msg_count
+                file_name = image_messages[img_idx].get("name", "附件") if img_idx < len(image_messages) else "附件"
+                await save_bot_response(
+                    group_uuid=line_group_id,
+                    content=f"[Bot 發送的圖片: {file_name}]",
+                    responding_to_line_user_id=line_user_id if not is_group else None,
+                    line_message_id=msg_id,
+                )
+
+        return text_response
 
     except Exception as e:
         logger.error(f"AI 處理訊息失敗: {e}")

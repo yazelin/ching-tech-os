@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 import socketio
 
 from .config import settings
@@ -108,8 +108,74 @@ async def public_page():
 
 @app.get("/s/{token}")
 async def short_share_url(token: str):
-    """短網址重導向到公開頁面"""
-    return FileResponse(FRONTEND / "public.html")
+    """短網址 - 產生帶有動態 OG 標籤的 HTML（供 Line 預覽）"""
+    from .services.share import get_link_info, ShareLinkNotFoundError, ShareLinkExpiredError
+
+    # 預設 OG 資訊
+    og_title = "擎添工業 - 分享內容"
+    og_description = "此為擎添工業內部分享的文件或專案資訊"
+    og_type = "article"
+
+    try:
+        link_info = await get_link_info(token)
+        resource_type = link_info["resource_type"]
+        resource_id = link_info["resource_id"]
+
+        if resource_type == "knowledge":
+            from .services.knowledge import get_knowledge
+            try:
+                kb = get_knowledge(resource_id)
+                og_title = f"{kb.title} - 擎添工業"
+                # 截取前 100 字作為描述
+                content_preview = (kb.content or "")[:100].replace("\n", " ").strip()
+                if content_preview:
+                    og_description = content_preview + ("..." if len(kb.content or "") > 100 else "")
+            except Exception:
+                pass
+
+        elif resource_type == "project":
+            from .services import project_service
+            try:
+                project = await project_service.get_project(resource_id)
+                if project:
+                    og_title = f"{project['name']} - 擎添工業專案"
+                    if project.get("description"):
+                        og_description = project["description"][:100]
+            except Exception:
+                pass
+
+        elif resource_type == "nas_file":
+            # 從路徑取得檔名
+            file_name = resource_id.split("/")[-1] if "/" in resource_id else resource_id
+            og_title = f"{file_name} - 擎添工業"
+            og_description = f"點擊下載檔案：{file_name}"
+
+    except (ShareLinkNotFoundError, ShareLinkExpiredError):
+        # 連結無效或過期，使用預設值（讓前端 JS 處理錯誤顯示）
+        pass
+    except Exception:
+        pass
+
+    # 讀取 public.html 模板
+    html_template = (FRONTEND / "public.html").read_text(encoding="utf-8")
+
+    # 將靜態 OG 標籤替換為動態內容
+    import html
+    og_title_escaped = html.escape(og_title)
+    og_description_escaped = html.escape(og_description)
+
+    html_content = html_template.replace(
+        '<meta property="og:title" content="擎添工業 - 分享內容">',
+        f'<meta property="og:title" content="{og_title_escaped}">'
+    ).replace(
+        '<meta property="og:description" content="此為擎添工業內部分享的文件或專案資訊">',
+        f'<meta property="og:description" content="{og_description_escaped}">'
+    ).replace(
+        '<title>擎添工業 - 分享內容</title>',
+        f'<title>{og_title_escaped}</title>'
+    )
+
+    return HTMLResponse(content=html_content)
 
 
 # 掛載靜態檔案（放在最後，避免覆蓋 API 路由）

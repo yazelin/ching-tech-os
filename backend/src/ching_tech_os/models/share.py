@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 class ShareLinkCreate(BaseModel):
     """建立分享連結請求"""
 
-    resource_type: Literal["knowledge", "project"]
+    resource_type: Literal["knowledge", "project", "nas_file"]
     resource_id: str
     expires_in: str | None = "24h"  # 1h, 24h, 7d, null（永久）
 
@@ -64,7 +64,7 @@ class PublicProjectData(BaseModel):
 class PublicResourceResponse(BaseModel):
     """公開資源回應"""
 
-    type: Literal["knowledge", "project"]
+    type: Literal["knowledge", "project", "nas_file"]
     data: dict[str, Any]
     shared_by: str
     shared_at: datetime

@@ -1086,17 +1086,206 @@ async def get_message_attachments(
 
 
 @mcp.tool()
+async def search_nas_files(
+    keywords: str,
+    file_types: str | None = None,
+    limit: int = 100,
+) -> str:
+    """
+    搜尋 NAS 共享檔案
+
+    Args:
+        keywords: 搜尋關鍵字，多個關鍵字用逗號分隔（AND 匹配，大小寫不敏感）
+        file_types: 檔案類型過濾，多個類型用逗號分隔（如：pdf,xlsx,dwg）
+        limit: 最大回傳數量，預設 100
+    """
+    from pathlib import Path
+    from ..config import settings
+
+    # 取得專案掛載點路徑
+    projects_path = Path(settings.projects_mount_path)
+
+    if not projects_path.exists():
+        return f"錯誤：掛載點 {settings.projects_mount_path} 不存在或未掛載"
+
+    # 解析關鍵字（大小寫不敏感）
+    keyword_list = [k.strip().lower() for k in keywords.split(",") if k.strip()]
+    if not keyword_list:
+        return "錯誤：請提供至少一個關鍵字"
+
+    # 解析檔案類型
+    type_list = []
+    if file_types:
+        type_list = [t.strip().lower().lstrip(".") for t in file_types.split(",") if t.strip()]
+
+    # 搜尋檔案
+    matched_files = []
+    try:
+        for file_path in projects_path.rglob("*"):
+            if not file_path.is_file():
+                continue
+
+            # 取得相對路徑（用於匹配和顯示）
+            rel_path = file_path.relative_to(projects_path)
+            rel_path_str = str(rel_path)
+            rel_path_lower = rel_path_str.lower()
+
+            # 關鍵字匹配（所有關鍵字都要匹配路徑）
+            if not all(kw in rel_path_lower for kw in keyword_list):
+                continue
+
+            # 檔案類型匹配
+            if type_list:
+                suffix = file_path.suffix.lower().lstrip(".")
+                if suffix not in type_list:
+                    continue
+
+            # 取得檔案資訊
+            try:
+                stat = file_path.stat()
+                size = stat.st_size
+                modified = datetime.fromtimestamp(stat.st_mtime)
+            except OSError:
+                size = 0
+                modified = None
+
+            matched_files.append({
+                "path": f"/{rel_path_str}",
+                "name": file_path.name,
+                "size": size,
+                "modified": modified,
+            })
+
+            if len(matched_files) >= limit:
+                break
+
+    except PermissionError:
+        return "錯誤：沒有權限存取檔案系統"
+    except Exception as e:
+        return f"搜尋時發生錯誤：{str(e)}"
+
+    if not matched_files:
+        type_hint = f"（類型：{file_types}）" if file_types else ""
+        return f"找不到符合「{keywords}」的檔案{type_hint}"
+
+    # 格式化輸出
+    output = [f"找到 {len(matched_files)} 個檔案：\n"]
+    for f in matched_files:
+        size_str = ""
+        if f["size"]:
+            if f["size"] >= 1024 * 1024:
+                size_str = f" ({f['size'] / 1024 / 1024:.1f} MB)"
+            elif f["size"] >= 1024:
+                size_str = f" ({f['size'] / 1024:.1f} KB)"
+
+        output.append(f"📄 {f['path']}{size_str}")
+
+    if len(matched_files) >= limit:
+        output.append(f"\n（已達上限 {limit} 筆，可能還有更多結果）")
+
+    output.append("\n提示：使用 get_nas_file_info 取得詳細資訊，或 create_share_link 產生下載連結")
+    return "\n".join(output)
+
+
+@mcp.tool()
+async def get_nas_file_info(file_path: str) -> str:
+    """
+    取得 NAS 檔案詳細資訊
+
+    Args:
+        file_path: 檔案路徑（相對於 /mnt/nas/projects 或完整路徑）
+    """
+    from pathlib import Path
+    from ..config import settings
+
+    projects_path = Path(settings.projects_mount_path)
+
+    # 正規化路徑
+    if file_path.startswith(settings.projects_mount_path):
+        # 完整路徑
+        full_path = Path(file_path)
+    else:
+        # 相對路徑（移除開頭的 /）
+        rel_path = file_path.lstrip("/")
+        full_path = projects_path / rel_path
+
+    # 安全檢查：確保路徑在允許範圍內
+    try:
+        full_path = full_path.resolve()
+        if not str(full_path).startswith(str(projects_path.resolve())):
+            return "錯誤：不允許存取此路徑"
+    except Exception:
+        return "錯誤：無效的路徑"
+
+    if not full_path.exists():
+        return f"錯誤：檔案不存在 - {file_path}"
+
+    if not full_path.is_file():
+        return f"錯誤：路徑不是檔案 - {file_path}"
+
+    # 取得檔案資訊
+    try:
+        stat = full_path.stat()
+        size = stat.st_size
+        modified = datetime.fromtimestamp(stat.st_mtime)
+        rel_path = full_path.relative_to(projects_path)
+    except OSError as e:
+        return f"錯誤：無法讀取檔案資訊 - {e}"
+
+    # 格式化大小
+    if size >= 1024 * 1024:
+        size_str = f"{size / 1024 / 1024:.2f} MB"
+    elif size >= 1024:
+        size_str = f"{size / 1024:.2f} KB"
+    else:
+        size_str = f"{size} bytes"
+
+    # 判斷檔案類型
+    suffix = full_path.suffix.lower()
+    type_map = {
+        ".pdf": "PDF 文件",
+        ".doc": "Word 文件",
+        ".docx": "Word 文件",
+        ".xls": "Excel 試算表",
+        ".xlsx": "Excel 試算表",
+        ".ppt": "PowerPoint 簡報",
+        ".pptx": "PowerPoint 簡報",
+        ".png": "PNG 圖片",
+        ".jpg": "JPEG 圖片",
+        ".jpeg": "JPEG 圖片",
+        ".gif": "GIF 圖片",
+        ".dwg": "AutoCAD 圖檔",
+        ".dxf": "AutoCAD 交換檔",
+        ".zip": "ZIP 壓縮檔",
+        ".rar": "RAR 壓縮檔",
+        ".txt": "文字檔",
+        ".csv": "CSV 檔案",
+    }
+    file_type = type_map.get(suffix, f"{suffix} 檔案")
+
+    return f"""📄 **{full_path.name}**
+
+類型：{file_type}
+大小：{size_str}
+修改時間：{modified.strftime('%Y-%m-%d %H:%M:%S')}
+完整路徑：{str(full_path)}
+
+可用操作：
+- create_share_link(resource_type="nas_file", resource_id="{str(full_path)}") 產生下載連結"""
+
+
+@mcp.tool()
 async def create_share_link(
     resource_type: str,
     resource_id: str,
     expires_in: str | None = "24h",
 ) -> str:
     """
-    建立公開分享連結，讓沒有帳號的人也能查看知識庫或專案
+    建立公開分享連結，讓沒有帳號的人也能查看知識庫、專案或下載 NAS 檔案
 
     Args:
-        resource_type: 資源類型，knowledge（知識庫）或 project（專案）
-        resource_id: 資源 ID（如 kb-001 或專案 UUID）
+        resource_type: 資源類型，knowledge（知識庫）、project（專案）或 nas_file（NAS 檔案）
+        resource_id: 資源 ID（如 kb-001、專案 UUID 或 NAS 檔案路徑）
         expires_in: 有效期限，可選 1h、24h、7d、null（永久），預設 24h
     """
     await ensure_db_connection()
@@ -1109,8 +1298,8 @@ async def create_share_link(
     from ..models.share import ShareLinkCreate
 
     # 驗證資源類型
-    if resource_type not in ("knowledge", "project"):
-        return f"錯誤：資源類型必須是 knowledge 或 project，收到：{resource_type}"
+    if resource_type not in ("knowledge", "project", "nas_file"):
+        return f"錯誤：資源類型必須是 knowledge、project 或 nas_file，收到：{resource_type}"
 
     # 驗證有效期限
     valid_expires = {"1h", "24h", "7d", "null", None}
@@ -1149,6 +1338,216 @@ async def create_share_link(
         return f"錯誤：{e}"
     except Exception as e:
         return f"建立分享連結時發生錯誤：{e}"
+
+
+@mcp.tool()
+async def send_nas_file(
+    file_path: str,
+    line_user_id: str | None = None,
+    line_group_id: str | None = None,
+) -> str:
+    """
+    直接發送 NAS 檔案給用戶。圖片會直接顯示在對話中，其他檔案會發送下載連結。
+
+    Args:
+        file_path: NAS 檔案的完整路徑（從 search_nas_files 取得）
+        line_user_id: Line 用戶 ID（個人對話時使用，從【對話識別】取得）
+        line_group_id: Line 群組的內部 UUID（群組對話時使用，從【對話識別】取得）
+
+    注意：
+    - 圖片（jpg/jpeg/png/gif/webp）< 10MB 會直接顯示
+    - 其他檔案會發送下載連結
+    - 必須提供 line_user_id 或 line_group_id 其中之一
+    """
+    await ensure_db_connection()
+
+    from pathlib import Path
+    from .share import (
+        create_share_link as _create_share_link,
+        validate_nas_file_path,
+        ShareError,
+        NasFileNotFoundError,
+        NasFileAccessDenied,
+    )
+    from ..models.share import ShareLinkCreate
+    from .linebot import push_image, push_text
+
+    # 驗證必要參數
+    if not line_user_id and not line_group_id:
+        return "錯誤：請從【對話識別】區塊取得 line_user_id 或 line_group_id"
+
+    # 驗證檔案路徑
+    try:
+        full_path = validate_nas_file_path(file_path)
+    except NasFileNotFoundError as e:
+        return f"錯誤：{e}"
+    except NasFileAccessDenied as e:
+        return f"錯誤：{e}"
+
+    # 取得檔案資訊
+    file_name = full_path.name
+    file_size = full_path.stat().st_size
+    file_ext = full_path.suffix.lower().lstrip(".")
+
+    # 判斷是否為圖片
+    image_extensions = {"jpg", "jpeg", "png", "gif", "webp"}
+    is_image = file_ext in image_extensions
+
+    # Line ImageMessage 限制 10MB
+    max_image_size = 10 * 1024 * 1024
+
+    # 產生分享連結
+    try:
+        data = ShareLinkCreate(
+            resource_type="nas_file",
+            resource_id=file_path,
+            expires_in="24h",
+        )
+        result = await _create_share_link(data, "linebot")
+    except Exception as e:
+        return f"建立分享連結失敗：{e}"
+
+    # 決定發送目標（優先使用群組 ID）
+    # line_group_id 是內部 UUID，需要轉換為 Line group ID
+    target_id = None
+    if line_group_id:
+        # 查詢 Line group ID
+        async with get_connection() as conn:
+            row = await conn.fetchrow(
+                "SELECT line_group_id FROM line_groups WHERE id = $1",
+                UUID(line_group_id),
+            )
+            if row:
+                target_id = row["line_group_id"]
+            else:
+                return f"錯誤：找不到群組 {line_group_id}"
+    elif line_user_id:
+        target_id = line_user_id
+
+    if not target_id:
+        return "錯誤：無法確定發送目標"
+
+    # 發送訊息
+    try:
+        if is_image and file_size <= max_image_size:
+            # 小圖片：直接發送 ImageMessage
+            # 下載連結需要加上 /download
+            download_url = result.full_url.replace("/s/", "/api/public/") + "/download"
+            message_id, error = await push_image(target_id, download_url)
+            if message_id:
+                return f"已發送圖片：{file_name}"
+            else:
+                # 發送圖片失敗，fallback 到連結
+                fallback_msg = f"📎 {file_name}\n{result.full_url}\n⏰ 連結 24 小時內有效"
+                fallback_id, fallback_error = await push_text(target_id, fallback_msg)
+                if fallback_id:
+                    return f"圖片發送失敗（{error}），已改發連結：{file_name}"
+                else:
+                    # 連結也發不出去，回傳連結讓 AI 在回覆中告訴用戶
+                    return f"無法直接發送（{fallback_error}），以下是下載連結：\n{result.full_url}\n（24 小時內有效）"
+        else:
+            # 其他檔案或大圖片：發送連結
+            size_str = f"{file_size / 1024 / 1024:.1f}MB" if file_size >= 1024 * 1024 else f"{file_size / 1024:.1f}KB"
+            message = f"📎 {file_name}（{size_str}）\n{result.full_url}\n⏰ 連結 24 小時內有效"
+            message_id, error = await push_text(target_id, message)
+            if message_id:
+                return f"已發送檔案連結：{file_name}"
+            else:
+                # 發送失敗，回傳連結讓 AI 在回覆中告訴用戶
+                return f"無法直接發送（{error}），以下是下載連結：\n{result.full_url}\n（24 小時內有效）"
+    except Exception as e:
+        return f"發送訊息失敗：{e}，連結：{result.full_url}"
+
+
+@mcp.tool()
+async def prepare_file_message(
+    file_path: str,
+) -> str:
+    """
+    準備檔案訊息供 Line Bot 回覆。圖片會直接顯示在回覆中，其他檔案會以連結形式呈現。
+
+    Args:
+        file_path: NAS 檔案的完整路徑（從 search_nas_files 取得）
+
+    Returns:
+        包含檔案訊息標記的字串，系統會自動處理並在回覆中顯示圖片或連結
+    """
+    await ensure_db_connection()
+
+    import json
+    from pathlib import Path
+    from .share import (
+        create_share_link as _create_share_link,
+        validate_nas_file_path,
+        ShareError,
+        NasFileNotFoundError,
+        NasFileAccessDenied,
+    )
+    from ..models.share import ShareLinkCreate
+
+    # 驗證檔案路徑
+    try:
+        full_path = validate_nas_file_path(file_path)
+    except NasFileNotFoundError as e:
+        return f"錯誤：{e}"
+    except NasFileAccessDenied as e:
+        return f"錯誤：{e}"
+
+    # 取得檔案資訊
+    file_name = full_path.name
+    file_size = full_path.stat().st_size
+    file_ext = full_path.suffix.lower().lstrip(".")
+
+    # 格式化檔案大小
+    if file_size >= 1024 * 1024:
+        size_str = f"{file_size / 1024 / 1024:.1f}MB"
+    else:
+        size_str = f"{file_size / 1024:.1f}KB"
+
+    # 判斷是否為圖片（Line ImageMessage 支援的格式）
+    image_extensions = {"jpg", "jpeg", "png", "gif", "webp"}
+    is_image = file_ext in image_extensions
+
+    # Line ImageMessage 限制 10MB
+    max_image_size = 10 * 1024 * 1024
+
+    # 產生分享連結
+    try:
+        data = ShareLinkCreate(
+            resource_type="nas_file",
+            resource_id=file_path,
+            expires_in="24h",
+        )
+        result = await _create_share_link(data, "linebot")
+    except Exception as e:
+        return f"建立分享連結失敗：{e}"
+
+    # 下載連結需要加上 /download
+    download_url = result.full_url.replace("/s/", "/api/public/") + "/download"
+
+    # 組合檔案訊息標記
+    if is_image and file_size <= max_image_size:
+        # 小圖片：標記為 image 類型
+        file_info = {
+            "type": "image",
+            "url": download_url,
+            "name": file_name,
+        }
+        hint = f"已準備好圖片 {file_name}，會顯示在回覆中"
+    else:
+        # 其他檔案或大圖片：標記為 file 類型
+        file_info = {
+            "type": "file",
+            "url": result.full_url,
+            "name": file_name,
+            "size": size_str,
+        }
+        hint = f"已準備好檔案 {file_name}（{size_str}），會以連結形式顯示"
+
+    # 回傳標記（linebot_ai.py 會解析這個標記）
+    marker = f"[FILE_MESSAGE:{json.dumps(file_info, ensure_ascii=False)}]"
+
+    return f"{hint}\n{marker}"
 
 
 # ============================================================
