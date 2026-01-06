@@ -45,6 +45,8 @@ LINEBOT_PERSONAL_PROMPT = """你是擎添工業的 AI 助理，透過 Line 與�
 - get_message_attachments: 查詢對話中的附件（圖片、檔案），可指定 days 天數範圍
 - add_note_with_attachments: 新增筆記並加入附件（attachments 填入 NAS 路徑列表）
 - add_attachments_to_knowledge: 為現有知識新增附件（輸入 kb_id 和 attachments）
+- get_knowledge_attachments: 查詢知識庫的附件列表（索引、檔名、說明）
+- update_knowledge_attachment: 更新附件說明（輸入 kb_id、attachment_index、description）
 
 使用工具的流程：
 1. 先用 query_project 搜尋專案名稱取得 ID，若不存在可用 create_project 建立
@@ -58,6 +60,9 @@ LINEBOT_PERSONAL_PROMPT = """你是擎添工業的 AI 助理，透過 Line 與�
 7. 用戶要求建立專案並關聯知識庫時：
    - 先用 create_project 建立專案，取得專案名稱
    - 再用 update_knowledge_item 的 projects 參數關聯知識庫
+8. 用戶要求標記附件（如「把附件標記為圖1、圖2」）時：
+   - 先用 get_knowledge_item 或 get_knowledge_attachments 查看附件列表
+   - 用 update_knowledge_attachment 為每個附件設定說明（如「圖1 水切爐」）
 
 對話管理：
 - 用戶可以發送 /新對話 或 /reset 來清除對話歷史，開始新對話
@@ -79,6 +84,7 @@ LINEBOT_GROUP_PROMPT = """你是擎添工業的 AI 助理，在 Line 群組中�
 - add_note: 新增筆記
 - get_message_attachments: 查詢附件（可調整 days 參數查更長時間）
 - add_note_with_attachments / add_attachments_to_knowledge: 新增筆記或為現有知識加入附件
+- get_knowledge_attachments / update_knowledge_attachment: 查詢或更新知識庫附件說明
 - summarize_chat: 取得群組聊天記錄摘要
 
 回應原則：

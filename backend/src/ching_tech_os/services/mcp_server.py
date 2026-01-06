@@ -407,6 +407,7 @@ async def get_knowledge_item(kb_id: str) -> str:
         kb_id: 知識 ID（如 kb-001、kb-002）
     """
     from . import knowledge as kb_service
+    from pathlib import Path
 
     try:
         item = kb_service.get_knowledge(kb_id)
@@ -421,6 +422,17 @@ async def get_knowledge_item(kb_id: str) -> str:
             "",
             item.content or "（無內容）",
         ]
+
+        # 加入附件資訊
+        if item.attachments:
+            output.append("")
+            output.append("---")
+            output.append("")
+            output.append(f"📎 **附件** ({len(item.attachments)} 個)")
+            for idx, att in enumerate(item.attachments):
+                filename = Path(att.path).name
+                desc = f" - {att.description}" if att.description else ""
+                output.append(f"  [{idx}] {att.type}: {filename}{desc}")
 
         return "\n".join(output)
 
@@ -554,6 +566,78 @@ async def delete_knowledge_item(kb_id: str) -> str:
     except Exception as e:
         logger.error(f"刪除知識失敗: {e}")
         return f"刪除失敗：{str(e)}"
+
+
+@mcp.tool()
+async def get_knowledge_attachments(kb_id: str) -> str:
+    """
+    取得知識庫的附件列表
+
+    Args:
+        kb_id: 知識 ID（如 kb-001、kb-002）
+    """
+    from . import knowledge as kb_service
+    from pathlib import Path
+
+    try:
+        item = kb_service.get_knowledge(kb_id)
+
+        if not item.attachments:
+            return f"知識 {kb_id} 沒有附件"
+
+        output = [f"📎 **{kb_id} 附件列表** ({len(item.attachments)} 個)\n"]
+
+        for idx, att in enumerate(item.attachments):
+            filename = Path(att.path).name
+            output.append(f"[{idx}] {att.type}")
+            output.append(f"    檔名：{filename}")
+            if att.size:
+                output.append(f"    大小：{att.size}")
+            if att.description:
+                output.append(f"    說明：{att.description}")
+            else:
+                output.append("    說明：（無）")
+            output.append("")
+
+        output.append("提示：使用 update_knowledge_attachment 更新附件說明")
+        return "\n".join(output)
+
+    except Exception as e:
+        logger.error(f"取得附件列表失敗: {e}")
+        return f"找不到知識 {kb_id}：{str(e)}"
+
+
+@mcp.tool()
+async def update_knowledge_attachment(
+    kb_id: str,
+    attachment_index: int,
+    description: str | None = None,
+) -> str:
+    """
+    更新知識庫附件的說明
+
+    Args:
+        kb_id: 知識 ID（如 kb-001）
+        attachment_index: 附件索引（從 0 開始，可用 get_knowledge_attachments 查詢）
+        description: 附件說明（如「圖1 水切爐畫面」）
+    """
+    from . import knowledge as kb_service
+    from pathlib import Path
+
+    try:
+        attachment = kb_service.update_attachment(
+            kb_id=kb_id,
+            attachment_idx=attachment_index,
+            description=description,
+        )
+
+        filename = Path(attachment.path).name
+        desc = attachment.description or "（無）"
+        return f"✅ 已更新 {kb_id} 附件 [{attachment_index}]\n檔名：{filename}\n說明：{desc}"
+
+    except Exception as e:
+        logger.error(f"更新附件失敗: {e}")
+        return f"更新失敗：{str(e)}"
 
 
 @mcp.tool()
