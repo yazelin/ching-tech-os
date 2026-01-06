@@ -36,7 +36,7 @@ ChingTech OS 是擎添工業內部使用的整合式工作平台，以 Web 技�
 
 ```bash
 # Ubuntu/Debian
-sudo apt install smbclient ripgrep git
+sudo apt install smbclient cifs-utils ripgrep git
 
 # uv (Python 套件管理)
 curl -LsSf https://astral.sh/uv/install.sh | sh
