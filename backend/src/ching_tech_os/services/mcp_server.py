@@ -130,6 +130,51 @@ async def query_project(project_id: str | None = None, keyword: str | None = Non
 
 
 @mcp.tool()
+async def create_project(
+    name: str,
+    description: str | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> str:
+    """
+    建立新專案
+
+    Args:
+        name: 專案名稱（必填）
+        description: 專案描述
+        start_date: 開始日期（格式：YYYY-MM-DD）
+        end_date: 結束日期（格式：YYYY-MM-DD）
+    """
+    from datetime import date as date_type
+    from ..models.project import ProjectCreate
+    from .project import create_project as svc_create_project
+
+    try:
+        # 解析日期
+        parsed_start = None
+        parsed_end = None
+        if start_date:
+            parsed_start = date_type.fromisoformat(start_date)
+        if end_date:
+            parsed_end = date_type.fromisoformat(end_date)
+
+        # 建立專案
+        data = ProjectCreate(
+            name=name,
+            description=description,
+            start_date=parsed_start,
+            end_date=parsed_end,
+        )
+        result = await svc_create_project(data, created_by="linebot")
+
+        return f"✅ 已建立專案「{result.name}」\n專案 ID：{result.id}"
+
+    except Exception as e:
+        logger.error(f"建立專案失敗: {e}")
+        return f"建立專案失敗：{str(e)}"
+
+
+@mcp.tool()
 async def get_project_milestones(
     project_id: str,
     status: str | None = None,
@@ -391,6 +436,10 @@ async def update_knowledge_item(
     content: str | None = None,
     category: str | None = None,
     topics: list[str] | None = None,
+    projects: list[str] | None = None,
+    roles: list[str] | None = None,
+    level: str | None = None,
+    type: str | None = None,
 ) -> str:
     """
     更新知識庫文件
@@ -400,18 +449,33 @@ async def update_knowledge_item(
         title: 新標題（不填則不更新）
         content: 新內容（不填則不更新）
         category: 新分類（不填則不更新）
-        topics: 新標籤列表（不填則不更新）
+        topics: 主題標籤列表（不填則不更新）
+        projects: 關聯專案列表（不填則不更新）
+        roles: 適用角色列表（不填則不更新）
+        level: 難度層級，如 beginner、intermediate、advanced（不填則不更新）
+        type: 知識類型，如 note、spec、guide（不填則不更新）
     """
     from ..models.knowledge import KnowledgeUpdate, KnowledgeTags
     from . import knowledge as kb_service
 
     try:
+        # 建立標籤更新資料（任一標籤欄位有值就建立 KnowledgeTags）
+        tags = None
+        if any([topics, projects, roles, level]):
+            tags = KnowledgeTags(
+                topics=topics or [],
+                projects=projects or [],
+                roles=roles or [],
+                level=level,
+            )
+
         # 建立更新資料
         update_data = KnowledgeUpdate(
             title=title,
             content=content,
             category=category,
-            tags=KnowledgeTags(topics=topics) if topics else None,
+            type=type,
+            tags=tags,
         )
 
         item = kb_service.update_knowledge(kb_id, update_data)
@@ -421,6 +485,56 @@ async def update_knowledge_item(
     except Exception as e:
         logger.error(f"更新知識失敗: {e}")
         return f"更新失敗：{str(e)}"
+
+
+@mcp.tool()
+async def add_attachments_to_knowledge(
+    kb_id: str,
+    attachments: list[str],
+) -> str:
+    """
+    為現有知識庫新增附件
+
+    Args:
+        kb_id: 知識 ID（如 kb-001）
+        attachments: 附件的 NAS 路徑列表（從 get_message_attachments 取得）
+    """
+    from . import knowledge as kb_service
+
+    # 限制附件數量
+    if len(attachments) > 10:
+        return "附件數量不能超過 10 個"
+
+    # 確認知識存在
+    try:
+        kb_service.get_knowledge(kb_id)
+    except Exception:
+        return f"找不到知識 {kb_id}"
+
+    # 處理附件
+    success_count = 0
+    failed_attachments = []
+
+    for nas_path in attachments:
+        try:
+            kb_service.copy_linebot_attachment_to_knowledge(kb_id, nas_path)
+            success_count += 1
+        except Exception as e:
+            logger.warning(f"附件複製失敗 {nas_path}: {e}")
+            failed_attachments.append(nas_path)
+
+    # 回傳結果
+    if success_count == 0 and failed_attachments:
+        return f"所有附件都無法加入：{', '.join(failed_attachments)}"
+
+    output = [f"✅ 已為 {kb_id} 新增 {success_count} 個附件"]
+
+    if failed_attachments:
+        output.append(f"⚠️ 以下附件無法加入：")
+        for path in failed_attachments:
+            output.append(f"  - {path}")
+
+    return "\n".join(output)
 
 
 @mcp.tool()
@@ -501,6 +615,93 @@ async def add_note(
 
 
 @mcp.tool()
+async def add_note_with_attachments(
+    title: str,
+    content: str,
+    attachments: list[str],
+    category: str = "note",
+    topics: list[str] | None = None,
+    project: str | None = None,
+) -> str:
+    """
+    新增筆記到知識庫並加入附件
+
+    Args:
+        title: 筆記標題
+        content: 筆記內容（Markdown 格式）
+        attachments: 附件的 NAS 路徑列表（從 get_message_attachments 取得）
+        category: 分類，預設 note（可選：technical, process, tool, note）
+        topics: 主題標籤列表
+        project: 關聯的專案名稱
+    """
+    from ..models.knowledge import KnowledgeCreate, KnowledgeTags, KnowledgeSource
+    from . import knowledge as kb_service
+
+    # 限制附件數量
+    if len(attachments) > 10:
+        return "附件數量不能超過 10 個"
+
+    try:
+        # 1. 建立知識庫筆記
+        tags = KnowledgeTags(
+            projects=[project] if project else [],
+            roles=[],
+            topics=topics or [],
+            level=None,
+        )
+
+        source = KnowledgeSource(
+            project=None,
+            path="linebot",
+            commit=None,
+        )
+
+        data = KnowledgeCreate(
+            title=title,
+            content=content,
+            type="note",
+            category=category,
+            scope="global",
+            tags=tags,
+            source=source,
+            related=[],
+            author="linebot",
+        )
+
+        result = kb_service.create_knowledge(data)
+        kb_id = result.id
+
+        # 2. 處理附件
+        success_count = 0
+        failed_attachments = []
+
+        for nas_path in attachments:
+            try:
+                kb_service.copy_linebot_attachment_to_knowledge(kb_id, nas_path)
+                success_count += 1
+            except Exception as e:
+                logger.warning(f"附件複製失敗 {nas_path}: {e}")
+                failed_attachments.append(nas_path)
+
+        # 3. 回傳結果
+        output = [f"✅ 筆記已新增！", f"ID：{kb_id}", f"標題：{title}"]
+
+        if success_count > 0:
+            output.append(f"附件：已加入 {success_count} 個")
+
+        if failed_attachments:
+            output.append(f"⚠️ 以下附件無法加入：")
+            for path in failed_attachments:
+                output.append(f"  - {path}")
+
+        return "\n".join(output)
+
+    except Exception as e:
+        logger.error(f"新增筆記失敗: {e}")
+        return f"新增筆記失敗：{str(e)}"
+
+
+@mcp.tool()
 async def summarize_chat(
     line_group_id: str,
     hours: int = 24,
@@ -558,6 +759,108 @@ async def summarize_chat(
         return "\n".join(messages)
 
 
+@mcp.tool()
+async def get_message_attachments(
+    line_user_id: str | None = None,
+    line_group_id: str | None = None,
+    days: int = 7,
+    file_type: str | None = None,
+    limit: int = 20,
+) -> str:
+    """
+    查詢對話中的附件（圖片、檔案等），用於將附件加入知識庫
+
+    Args:
+        line_user_id: Line 用戶 ID（個人聊天時使用）
+        line_group_id: Line 群組的內部 UUID
+        days: 查詢最近幾天的附件，預設 7 天，可根據用戶描述調整
+        file_type: 檔案類型過濾（image, file, video, audio），不填則查詢全部
+        limit: 最大回傳數量，預設 20
+    """
+    await ensure_db_connection()
+
+    if not line_user_id and not line_group_id:
+        return "請提供 line_user_id 或 line_group_id"
+
+    async with get_connection() as conn:
+        # 計算時間範圍
+        since = datetime.now() - timedelta(days=days)
+
+        # 建立查詢條件
+        conditions = ["m.created_at >= $1"]
+        params: list = [since]
+        param_idx = 2
+
+        if line_group_id:
+            conditions.append(f"m.line_group_id = ${param_idx}")
+            params.append(UUID(line_group_id))
+            param_idx += 1
+        elif line_user_id:
+            # 個人聊天：查詢該用戶的訊息且不在群組中
+            conditions.append(f"u.line_user_id = ${param_idx}")
+            params.append(line_user_id)
+            param_idx += 1
+            conditions.append("m.line_group_id IS NULL")
+
+        if file_type:
+            conditions.append(f"f.file_type = ${param_idx}")
+            params.append(file_type)
+            param_idx += 1
+
+        where_clause = " AND ".join(conditions)
+
+        # 查詢附件
+        rows = await conn.fetch(
+            f"""
+            SELECT f.id, f.file_type, f.file_name, f.file_size, f.nas_path,
+                   f.created_at, u.display_name as user_name
+            FROM line_files f
+            JOIN line_messages m ON f.message_id = m.id
+            LEFT JOIN line_users u ON m.line_user_id = u.id
+            WHERE {where_clause}
+              AND f.nas_path IS NOT NULL
+            ORDER BY f.created_at DESC
+            LIMIT {limit}
+            """,
+            *params,
+        )
+
+        if not rows:
+            type_hint = f"（類型：{file_type}）" if file_type else ""
+            return f"最近 {days} 天內沒有找到附件{type_hint}"
+
+        # 格式化結果
+        type_names = {
+            "image": "圖片",
+            "file": "檔案",
+            "video": "影片",
+            "audio": "音訊",
+        }
+
+        output = [f"找到 {len(rows)} 個附件（最近 {days} 天）：\n"]
+        for i, row in enumerate(rows, 1):
+            type_name = type_names.get(row["file_type"], row["file_type"])
+            time_str = row["created_at"].strftime("%Y-%m-%d %H:%M")
+            user = row["user_name"] or "未知用戶"
+
+            output.append(f"{i}. [{type_name}] {time_str} - {user}")
+            output.append(f"   NAS 路徑：{row['nas_path']}")
+
+            if row["file_name"]:
+                output.append(f"   檔名：{row['file_name']}")
+            if row["file_size"]:
+                size_kb = row["file_size"] / 1024
+                if size_kb >= 1024:
+                    output.append(f"   大小：{size_kb / 1024:.1f} MB")
+                else:
+                    output.append(f"   大小：{size_kb:.1f} KB")
+            output.append("")
+
+        output.append("提示：使用 NAS 路徑作為 add_note_with_attachments 的 attachments 參數")
+
+        return "\n".join(output)
+
+
 # ============================================================
 # 工具存取介面（供 Line Bot 和其他服務使用）
 # ============================================================
@@ -579,6 +882,30 @@ async def get_mcp_tools() -> list[dict]:
         }
         for tool in tools
     ]
+
+
+async def get_mcp_tool_names(exclude_group_only: bool = False) -> list[str]:
+    """
+    取得 MCP 工具名稱列表，格式為 mcp__ching-tech-os__{tool_name}
+
+    Args:
+        exclude_group_only: 是否排除群組專用工具（如 summarize_chat）
+
+    Returns:
+        工具名稱列表，可用於 Claude API 的 tools 參數
+    """
+    # 群組專用工具
+    group_only_tools = {"summarize_chat"}
+
+    tools = await mcp.list_tools()
+    tool_names = []
+
+    for tool in tools:
+        if exclude_group_only and tool.name in group_only_tools:
+            continue
+        tool_names.append(f"mcp__ching-tech-os__{tool.name}")
+
+    return tool_names
 
 
 async def execute_tool(tool_name: str, arguments: dict) -> str:
