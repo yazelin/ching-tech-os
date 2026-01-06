@@ -479,12 +479,13 @@ async def add_note(
             commit=None,
         )
 
-        # 建立知識
+        # 建立知識（Line Bot 建立的筆記為全域可見）
         data = KnowledgeCreate(
             title=title,
             content=content,
             type="note",
             category=category,
+            scope="global",  # Line Bot 筆記設為全域可見
             tags=tags,
             source=source,
             related=[],
