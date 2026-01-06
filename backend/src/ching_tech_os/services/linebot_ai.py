@@ -124,7 +124,7 @@ async def process_message_with_ai(
             return error_msg
 
         # 建立系統提示（加入群組資訊和內建工具說明）
-        system_prompt = await build_system_prompt(line_group_id, base_prompt, agent_tools)
+        system_prompt = await build_system_prompt(line_group_id, line_user_id, base_prompt, agent_tools)
 
         # 取得對話歷史（20 則提供更好的上下文理解，包含圖片和檔案）
         # 排除當前訊息，避免重複（compose_prompt_with_history 會再加一次）
@@ -164,15 +164,7 @@ async def process_message_with_ai(
                     else:
                         logger.info(f"用戶回覆檔案類型不支援: {quoted_message_id} -> {file_name}")
 
-        # 確保對話歷史中的圖片暫存存在
-        for img in images:
-            await ensure_temp_image(img["line_message_id"], img["nas_path"])
-
-        # 確保對話歷史中的檔案暫存存在
-        for f in files:
-            await ensure_temp_file(
-                f["line_message_id"], f["nas_path"], f["file_name"], f.get("file_size")
-            )
+        # 註：對話歷史中的圖片/檔案暫存已在 get_conversation_context 中處理
 
         # 準備用戶訊息
         user_message = content
@@ -185,21 +177,9 @@ async def process_message_with_ai(
         elif quoted_file_path:
             user_message = f"[回覆檔案: {quoted_file_path}]\n{user_message}"
 
-        # MCP 工具列表
-        mcp_tools = [
-            "mcp__ching-tech-os__query_project",
-            "mcp__ching-tech-os__get_project_milestones",
-            "mcp__ching-tech-os__get_project_meetings",
-            "mcp__ching-tech-os__get_project_members",
-            "mcp__ching-tech-os__search_knowledge",
-            "mcp__ching-tech-os__get_knowledge_item",
-            "mcp__ching-tech-os__update_knowledge_item",
-            "mcp__ching-tech-os__delete_knowledge_item",
-            "mcp__ching-tech-os__add_note",
-        ]
-        # 群組專用工具
-        if is_group:
-            mcp_tools.append("mcp__ching-tech-os__summarize_chat")
+        # MCP 工具列表（動態取得）
+        from .mcp_server import get_mcp_tool_names
+        mcp_tools = await get_mcp_tool_names(exclude_group_only=not is_group)
 
         # 合併內建工具（從 Agent 設定）、MCP 工具和 Read（用於讀取圖片）
         all_tools = agent_tools + mcp_tools + ["Read"]
@@ -446,18 +426,24 @@ async def get_conversation_context(
             role = "assistant" if row["is_from_bot"] else "user"
 
             if row["message_type"] == "image" and row["nas_path"]:
-                # 圖片訊息：格式化為特殊標記
-                temp_path = get_temp_image_path(row["line_message_id"])
-                # 標記最新的圖片
-                if row["line_message_id"] == latest_image_id:
-                    content = f"[上傳圖片（最近）: {temp_path}]"
+                # 圖片訊息：確保暫存存在並格式化為特殊標記
+                temp_path = await ensure_temp_image(
+                    row["line_message_id"], row["nas_path"]
+                )
+                if temp_path:
+                    # 暫存成功，標記最新的圖片
+                    if row["line_message_id"] == latest_image_id:
+                        content = f"[上傳圖片（最近）: {temp_path}]"
+                    else:
+                        content = f"[上傳圖片: {temp_path}]"
+                    # 記錄圖片資訊（暫存成功才加入）
+                    images.append({
+                        "line_message_id": row["line_message_id"],
+                        "nas_path": row["nas_path"],
+                    })
                 else:
-                    content = f"[上傳圖片: {temp_path}]"
-                # 記錄圖片資訊供後續載入
-                images.append({
-                    "line_message_id": row["line_message_id"],
-                    "nas_path": row["nas_path"],
-                })
+                    # 暫存失敗，提示使用 MCP 工具
+                    content = "[圖片暫存已過期，若要加入知識庫請使用 get_message_attachments]"
             elif row["message_type"] == "file" and row["nas_path"]:
                 # 檔案訊息：根據是否可讀取決定顯示方式
                 file_name = row["file_name"] or "unknown"
@@ -468,19 +454,25 @@ async def get_conversation_context(
                         # 檔案過大
                         content = f"[上傳檔案: {file_name}（檔案過大）]"
                     else:
-                        # 可讀取的檔案
-                        temp_path = get_temp_file_path(row["line_message_id"], file_name)
-                        if row["line_message_id"] == latest_file_id:
-                            content = f"[上傳檔案（最近）: {temp_path}]"
+                        # 可讀取的檔案：確保暫存存在
+                        temp_path = await ensure_temp_file(
+                            row["line_message_id"], row["nas_path"], file_name, file_size
+                        )
+                        if temp_path:
+                            if row["line_message_id"] == latest_file_id:
+                                content = f"[上傳檔案（最近）: {temp_path}]"
+                            else:
+                                content = f"[上傳檔案: {temp_path}]"
+                            # 記錄檔案資訊（暫存成功才加入）
+                            files.append({
+                                "line_message_id": row["line_message_id"],
+                                "nas_path": row["nas_path"],
+                                "file_name": file_name,
+                                "file_size": file_size,
+                            })
                         else:
-                            content = f"[上傳檔案: {temp_path}]"
-                        # 記錄檔案資訊供後續載入
-                        files.append({
-                            "line_message_id": row["line_message_id"],
-                            "nas_path": row["nas_path"],
-                            "file_name": file_name,
-                            "file_size": file_size,
-                        })
+                            # 暫存失敗
+                            content = f"[檔案 {file_name} 暫存已過期，若要加入知識庫請使用 get_message_attachments]"
                 else:
                     # 不可讀取的檔案類型
                     content = f"[上傳檔案: {file_name}（無法讀取此類型）]"
@@ -498,6 +490,7 @@ async def get_conversation_context(
 
 async def build_system_prompt(
     line_group_id: UUID | None,
+    line_user_id: str | None,
     base_prompt: str,
     builtin_tools: list[str] | None = None,
 ) -> str:
@@ -505,7 +498,8 @@ async def build_system_prompt(
     建立系統提示
 
     Args:
-        line_group_id: 群組 UUID
+        line_group_id: 群組 UUID（群組對話用）
+        line_user_id: Line 用戶 ID（個人對話用）
         base_prompt: 從 Agent 取得的基礎 prompt
         builtin_tools: 內建工具列表（如 WebSearch, WebFetch）
 
@@ -538,15 +532,20 @@ async def build_system_prompt(
     if "Read" in all_tools:
         tool_sections.append("""【用戶上傳內容處理】
 對話歷史中可能包含用戶上傳的圖片或檔案：
-- [上傳圖片: /tmp/linebot-images/xxx.jpg] → 使用 Read 工具讀取圖片
-- [上傳檔案: /tmp/linebot-files/xxx_filename.txt] → 使用 Read 工具讀取檔案
+- [上傳圖片: /tmp/...] → 使用 Read 工具檢視圖片內容
+- [上傳檔案: /tmp/...] → 使用 Read 工具讀取檔案內容
+- [圖片暫存已過期...] 或 [檔案...暫存已過期...] → 暫存已清理，無法直接檢視
 - [上傳檔案: filename（無法讀取此類型）] → 告知用戶此類型不支援
-支援的檔案類型：txt, md, json, csv, log, xml, yaml, yml, pdf""")
+支援的檔案類型：txt, md, json, csv, log, xml, yaml, yml, pdf
+
+重要：Read 工具僅用於「檢視」圖片/檔案內容（例如「這張圖是什麼？」）。
+若要將圖片/檔案「加入知識庫」，請使用 get_message_attachments 查詢 NAS 路徑，
+再使用 add_note_with_attachments 或 add_attachments_to_knowledge。""")
 
     if tool_sections:
         base_prompt += "\n\n" + "\n\n".join(tool_sections)
 
-    # 如果是群組，加入群組資訊
+    # 加入對話識別資訊（供 get_message_attachments 使用）
     if line_group_id:
         async with get_connection() as conn:
             group = await conn.fetchrow(
@@ -563,6 +562,11 @@ async def build_system_prompt(
                 if group["project_name"]:
                     base_prompt += f"\n綁定專案：{group['project_name']}"
                     base_prompt += f"\n專案 ID（供工具查詢用）：{group['project_id']}"
+        # 加入群組 ID（供 get_message_attachments 使用）
+        base_prompt += f"\n\n【對話識別】\nline_group_id: {line_group_id}"
+    elif line_user_id:
+        # 個人對話：加入用戶 ID
+        base_prompt += f"\n\n【對話識別】\nline_user_id: {line_user_id}"
 
     return base_prompt
 
