@@ -51,6 +51,7 @@ from ching_tech_os.services.knowledge import (
 
 from ching_tech_os.services.mcp_server import (
     get_mcp_tools,
+    get_mcp_tool_names,
     execute_tool,
     mcp,  # FastMCP 實例
 )
@@ -135,6 +136,7 @@ __all__ = [
     "KnowledgeNotFoundError",
     # MCP Server
     "get_mcp_tools",
+    "get_mcp_tool_names",
     "execute_tool",
     "mcp",
     # Line Bot

@@ -913,6 +913,46 @@ def upload_attachment(
     return attachment
 
 
+def copy_linebot_attachment_to_knowledge(
+    kb_id: str, linebot_nas_path: str, description: str | None = None
+) -> KnowledgeAttachment:
+    """從 Line Bot NAS 複製附件到知識庫
+
+    Args:
+        kb_id: 知識 ID
+        linebot_nas_path: Line Bot NAS 相對路徑（如 groups/xxx/images/2026-01-05/abc.jpg）
+        description: 附件說明
+
+    Returns:
+        附件資訊
+
+    Raises:
+        KnowledgeError: 複製失敗
+    """
+    # 從路徑取得檔名
+    filename = Path(linebot_nas_path).name
+
+    # 從 Line Bot NAS 讀取檔案
+    linebot_full_path = f"{settings.line_files_nas_path}/{linebot_nas_path}"
+
+    try:
+        smb = SMBService(
+            host=settings.knowledge_nas_host,
+            username=settings.knowledge_nas_user,
+            password=settings.knowledge_nas_password,
+        )
+        with smb:
+            data = smb.read_file(
+                settings.knowledge_nas_share,
+                linebot_full_path,
+            )
+    except Exception as e:
+        raise KnowledgeError(f"讀取 Line Bot 附件失敗 ({linebot_nas_path})：{e}") from e
+
+    # 使用現有的 upload_attachment 函數處理儲存邏輯
+    return upload_attachment(kb_id, filename, data, description)
+
+
 def get_nas_attachment(path: str) -> bytes:
     """從 NAS 讀取附件
 
