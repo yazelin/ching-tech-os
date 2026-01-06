@@ -91,6 +91,7 @@ python3 -m http.server 8080
 - 純 HTML5 / CSS3 / JavaScript（Vanilla JS）
 - IIFE 模組化封裝
 - CSS Custom Properties 設計系統
+- CDN 套件：marked (Markdown)、socket.io、xterm.js (終端機)、highlight.js (語法高亮)
 
 ### 後端
 - Python FastAPI + Pydantic
@@ -103,9 +104,9 @@ python3 -m http.server 8080
 - MCP Server (AI 工具整合)
 
 ### 基礎設施
-- PostgreSQL (Docker 容器)
-- code-server (程式編輯器)
-- NAS 檔案儲存
+- PostgreSQL 16 (Docker: postgres:16-alpine)
+- code-server (Docker: codercom/code-server)
+- NAS 檔案儲存 (SMB/CIFS)
 
 ## 專案結構
 
