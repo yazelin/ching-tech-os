@@ -30,7 +30,7 @@ from ..models.project import (
     ProjectMilestoneUpdate,
     ProjectMilestoneResponse,
 )
-from .smb import SMBService, SMBError
+from .local_file import LocalFileService, LocalFileError, create_project_file_service
 
 
 class ProjectError(Exception):
@@ -474,20 +474,12 @@ def _get_file_type(filename: str) -> str:
 def _delete_attachment_file(storage_path: str) -> None:
     """刪除附件檔案"""
     if storage_path.startswith("nas://"):
-        # NAS 檔案
+        # NAS 檔案（透過掛載路徑存取）
         try:
             nas_path = storage_path.replace("nas://projects/", "")
-            smb = SMBService(
-                host=settings.project_nas_host,
-                username=settings.project_nas_user,
-                password=settings.project_nas_password,
-            )
-            with smb:
-                smb.delete_item(
-                    settings.project_nas_share,
-                    f"{settings.project_nas_path}/{nas_path}",
-                )
-        except SMBError:
+            file_service = create_project_file_service()
+            file_service.delete_file(nas_path)
+        except LocalFileError:
             pass  # 忽略刪除錯誤
     else:
         # 本機檔案
@@ -540,44 +532,13 @@ async def upload_attachment(
                 f.write(data)
 
             storage_path = f"{project_id}/{filename}"
-        else:  # >= 1MB 存 NAS
+        else:  # >= 1MB 存 NAS（透過掛載路徑）
             nas_path = f"attachments/{project_id}/{filename}"
             try:
-                smb = SMBService(
-                    host=settings.project_nas_host,
-                    username=settings.project_nas_user,
-                    password=settings.project_nas_password,
-                )
-                with smb:
-                    base_path = settings.project_nas_path
-                    share = settings.project_nas_share
-
-                    # 確保目錄存在（逐層建立）
-                    # 0. 確保基礎路徑存在（可能需要建立 ching-tech-os/projects）
-                    path_parts = base_path.split("/")
-                    current_path = ""
-                    for part in path_parts:
-                        current_path = f"{current_path}/{part}" if current_path else part
-                        try:
-                            smb.create_directory(share, current_path)
-                        except SMBError:
-                            pass  # 目錄可能已存在
-
-                    # 1. 建立 attachments 目錄
-                    try:
-                        smb.create_directory(share, f"{base_path}/attachments")
-                    except SMBError:
-                        pass  # 目錄可能已存在
-
-                    # 2. 建立專案專屬目錄
-                    try:
-                        smb.create_directory(share, f"{base_path}/attachments/{project_id}")
-                    except SMBError:
-                        pass  # 目錄可能已存在
-
-                    # 寫入檔案
-                    smb.write_file(share, f"{base_path}/{nas_path}", data)
-            except SMBError as e:
+                file_service = create_project_file_service()
+                # write_file 會自動建立目錄
+                file_service.write_file(nas_path, data)
+            except LocalFileError as e:
                 raise ProjectError(f"上傳至 NAS 失敗：{e}") from e
 
             storage_path = f"nas://projects/{nas_path}"
@@ -614,21 +575,13 @@ async def get_attachment_content(project_id: UUID, attachment_id: UUID) -> tuple
         filename = row["filename"]
 
         if storage_path.startswith("nas://"):
-            # NAS 檔案
+            # NAS 檔案（透過掛載路徑存取）
             nas_path = storage_path.replace("nas://projects/", "")
             try:
-                smb = SMBService(
-                    host=settings.project_nas_host,
-                    username=settings.project_nas_user,
-                    password=settings.project_nas_password,
-                )
-                with smb:
-                    content = smb.read_file(
-                        settings.project_nas_share,
-                        f"{settings.project_nas_path}/{nas_path}",
-                    )
+                file_service = create_project_file_service()
+                content = file_service.read_file(nas_path)
                 return content, filename
-            except SMBError as e:
+            except LocalFileError as e:
                 raise ProjectError(f"讀取 NAS 檔案失敗：{e}") from e
         else:
             # 本機檔案

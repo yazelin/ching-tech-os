@@ -27,7 +27,12 @@ from ching_tech_os.models.knowledge import (
     TagsResponse,
     VersionResponse,
 )
-from ching_tech_os.services.smb import SMBService, SMBError
+from ching_tech_os.services.local_file import (
+    LocalFileService,
+    LocalFileError,
+    create_knowledge_file_service,
+    create_linebot_file_service,
+)
 
 
 class KnowledgeError(Exception):
@@ -584,22 +589,14 @@ def delete_knowledge(kb_id: str) -> None:
         attachments = []
 
     # 刪除所有附件（忽略錯誤，確保知識可以被刪除）
+    file_service = create_knowledge_file_service()
     for attachment in attachments:
         attachment_path = attachment.get("path", "")
         try:
             if attachment_path.startswith("nas://knowledge/"):
-                # NAS 檔案
+                # NAS 檔案（透過掛載路徑存取）
                 nas_path = attachment_path.replace("nas://knowledge/", "")
-                smb = SMBService(
-                    host=settings.knowledge_nas_host,
-                    username=settings.knowledge_nas_user,
-                    password=settings.knowledge_nas_password,
-                )
-                with smb:
-                    smb.delete_item(
-                        settings.knowledge_nas_share,
-                        f"{settings.knowledge_nas_path}/{nas_path}",
-                    )
+                file_service.delete_file(nas_path)
             elif attachment_path.startswith("../assets/images/"):
                 # 本機檔案
                 filename = attachment_path.split("/")[-1]
@@ -612,16 +609,7 @@ def delete_knowledge(kb_id: str) -> None:
 
     # 嘗試刪除 NAS 上的 kb_id 目錄（如果為空）
     try:
-        smb = SMBService(
-            host=settings.knowledge_nas_host,
-            username=settings.knowledge_nas_user,
-            password=settings.knowledge_nas_password,
-        )
-        with smb:
-            smb.delete_item(
-                settings.knowledge_nas_share,
-                f"{settings.knowledge_nas_path}/attachments/{kb_id}",
-            )
+        file_service.delete_directory(f"attachments/{kb_id}")
     except Exception:
         pass  # 目錄可能不存在或不為空
 
@@ -850,31 +838,14 @@ def upload_attachment(
 
         attachment_path = f"../assets/images/{kb_id}-{filename}"
     else:
-        # 大於等於 1MB 存 NAS
+        # 大於等於 1MB 存 NAS（透過掛載路徑）
         nas_path = f"attachments/{kb_id}/{filename}"
 
         try:
-            smb = SMBService(
-                host=settings.knowledge_nas_host,
-                username=settings.knowledge_nas_user,
-                password=settings.knowledge_nas_password,
-            )
-            with smb:
-                # 確保目錄存在
-                try:
-                    smb.create_directory(
-                        settings.knowledge_nas_share,
-                        f"{settings.knowledge_nas_path}/attachments/{kb_id}",
-                    )
-                except SMBError:
-                    pass  # 目錄可能已存在
-
-                smb.write_file(
-                    settings.knowledge_nas_share,
-                    f"{settings.knowledge_nas_path}/{nas_path}",
-                    data,
-                )
-        except Exception as e:
+            file_service = create_knowledge_file_service()
+            # 確保目錄存在並寫入檔案
+            file_service.write_file(nas_path, data)
+        except LocalFileError as e:
             raise KnowledgeError(f"上傳附件到 NAS 失敗：{e}") from e
 
         attachment_path = f"nas://knowledge/{nas_path}"
@@ -932,21 +903,11 @@ def copy_linebot_attachment_to_knowledge(
     # 從路徑取得檔名
     filename = Path(linebot_nas_path).name
 
-    # 從 Line Bot NAS 讀取檔案
-    linebot_full_path = f"{settings.line_files_nas_path}/{linebot_nas_path}"
-
+    # 從 Line Bot NAS 讀取檔案（透過掛載路徑）
     try:
-        smb = SMBService(
-            host=settings.knowledge_nas_host,
-            username=settings.knowledge_nas_user,
-            password=settings.knowledge_nas_password,
-        )
-        with smb:
-            data = smb.read_file(
-                settings.knowledge_nas_share,
-                linebot_full_path,
-            )
-    except Exception as e:
+        linebot_file_service = create_linebot_file_service()
+        data = linebot_file_service.read_file(linebot_nas_path)
+    except LocalFileError as e:
         raise KnowledgeError(f"讀取 Line Bot 附件失敗 ({linebot_nas_path})：{e}") from e
 
     # 使用現有的 upload_attachment 函數處理儲存邏輯
@@ -963,17 +924,9 @@ def get_nas_attachment(path: str) -> bytes:
         檔案內容
     """
     try:
-        smb = SMBService(
-            host=settings.knowledge_nas_host,
-            username=settings.knowledge_nas_user,
-            password=settings.knowledge_nas_password,
-        )
-        with smb:
-            return smb.read_file(
-                settings.knowledge_nas_share,
-                f"{settings.knowledge_nas_path}/attachments/{path}",
-            )
-    except Exception as e:
+        file_service = create_knowledge_file_service()
+        return file_service.read_file(f"attachments/{path}")
+    except LocalFileError as e:
         raise KnowledgeError(f"讀取 NAS 附件失敗：{e}") from e
 
 
@@ -1064,19 +1017,11 @@ def delete_attachment(kb_id: str, attachment_idx: int) -> None:
 
         # 刪除實體檔案（檔案不存在也繼續刪除參考）
         if attachment_path.startswith("nas://knowledge/"):
-            # NAS 檔案
+            # NAS 檔案（透過掛載路徑存取）
             nas_path = attachment_path.replace("nas://knowledge/", "")
             try:
-                smb = SMBService(
-                    host=settings.knowledge_nas_host,
-                    username=settings.knowledge_nas_user,
-                    password=settings.knowledge_nas_password,
-                )
-                with smb:
-                    smb.delete_item(
-                        settings.knowledge_nas_share,
-                        f"{settings.knowledge_nas_path}/{nas_path}",
-                    )
+                file_service = create_knowledge_file_service()
+                file_service.delete_file(nas_path)
             except Exception:
                 # 檔案可能已不存在，忽略錯誤繼續刪除參考
                 pass

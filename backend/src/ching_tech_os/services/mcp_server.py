@@ -177,6 +177,126 @@ async def create_project(
 
 
 @mcp.tool()
+async def add_project_member(
+    project_id: str,
+    name: str,
+    role: str | None = None,
+    company: str | None = None,
+    email: str | None = None,
+    phone: str | None = None,
+    notes: str | None = None,
+    is_internal: bool = True,
+) -> str:
+    """
+    新增專案成員
+
+    Args:
+        project_id: 專案 UUID
+        name: 成員姓名（必填）
+        role: 角色/職稱
+        company: 公司名稱（外部聯絡人適用）
+        email: 電子郵件
+        phone: 電話
+        notes: 備註
+        is_internal: 是否為內部人員，預設 True（外部聯絡人如客戶、廠商設為 False）
+    """
+    from uuid import UUID as UUID_type
+    from ..models.project import ProjectMemberCreate
+    from .project import create_member as svc_create_member, ProjectNotFoundError
+
+    await ensure_db_connection()
+
+    try:
+        data = ProjectMemberCreate(
+            name=name,
+            role=role,
+            company=company,
+            email=email,
+            phone=phone,
+            notes=notes,
+            is_internal=is_internal,
+        )
+        result = await svc_create_member(UUID_type(project_id), data)
+
+        member_type = "內部人員" if result.is_internal else "外部聯絡人"
+        role_str = f"（{result.role}）" if result.role else ""
+        return f"✅ 已新增{member_type}：{result.name}{role_str}"
+
+    except ProjectNotFoundError:
+        return f"找不到專案 ID: {project_id}"
+    except Exception as e:
+        logger.error(f"新增專案成員失敗: {e}")
+        return f"新增專案成員失敗：{str(e)}"
+
+
+@mcp.tool()
+async def add_project_milestone(
+    project_id: str,
+    name: str,
+    milestone_type: str = "custom",
+    planned_date: str | None = None,
+    actual_date: str | None = None,
+    status: str = "pending",
+    notes: str | None = None,
+) -> str:
+    """
+    新增專案里程碑
+
+    Args:
+        project_id: 專案 UUID
+        name: 里程碑名稱（必填）
+        milestone_type: 類型，可選：design（設計）、manufacture（製造）、delivery（交貨）、field_test（現場測試）、acceptance（驗收）、custom（自訂），預設 custom
+        planned_date: 預計日期（格式：YYYY-MM-DD）
+        actual_date: 實際日期（格式：YYYY-MM-DD）
+        status: 狀態，可選：pending（待處理）、in_progress（進行中）、completed（已完成）、delayed（延遲），預設 pending
+        notes: 備註
+    """
+    from datetime import date as date_type
+    from uuid import UUID as UUID_type
+    from ..models.project import ProjectMilestoneCreate
+    from .project import create_milestone as svc_create_milestone, ProjectNotFoundError
+
+    await ensure_db_connection()
+
+    try:
+        # 解析日期
+        parsed_planned = None
+        parsed_actual = None
+        if planned_date:
+            parsed_planned = date_type.fromisoformat(planned_date)
+        if actual_date:
+            parsed_actual = date_type.fromisoformat(actual_date)
+
+        data = ProjectMilestoneCreate(
+            name=name,
+            milestone_type=milestone_type,
+            planned_date=parsed_planned,
+            actual_date=parsed_actual,
+            status=status,
+            notes=notes,
+        )
+        result = await svc_create_milestone(UUID_type(project_id), data)
+
+        status_emoji = {
+            "pending": "⏳",
+            "in_progress": "🔄",
+            "completed": "✅",
+            "delayed": "⚠️",
+        }.get(result.status, "❓")
+
+        date_str = f"，預計 {result.planned_date}" if result.planned_date else ""
+        return f"✅ 已新增里程碑：{status_emoji} {result.name}{date_str}"
+
+    except ProjectNotFoundError:
+        return f"找不到專案 ID: {project_id}"
+    except ValueError as e:
+        return f"日期格式錯誤，請使用 YYYY-MM-DD 格式：{str(e)}"
+    except Exception as e:
+        logger.error(f"新增專案里程碑失敗: {e}")
+        return f"新增專案里程碑失敗：{str(e)}"
+
+
+@mcp.tool()
 async def get_project_milestones(
     project_id: str,
     status: str | None = None,

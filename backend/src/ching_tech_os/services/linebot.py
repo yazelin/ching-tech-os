@@ -41,7 +41,7 @@ from linebot.v3.webhooks import (
 
 from ..config import settings
 from ..database import get_connection
-from .smb import SMBService
+from .local_file import LocalFileService, LocalFileError, create_linebot_file_service
 
 logger = logging.getLogger("linebot")
 
@@ -703,7 +703,7 @@ def guess_mime_type(content: bytes) -> str:
 
 
 async def save_to_nas(relative_path: str, content: bytes) -> bool:
-    """儲存檔案到 NAS
+    """儲存檔案到 NAS（透過掛載路徑）
 
     Args:
         relative_path: 相對路徑（不含共享資料夾和基本路徑）
@@ -712,60 +712,14 @@ async def save_to_nas(relative_path: str, content: bytes) -> bool:
     Returns:
         是否成功
     """
-    # 完整路徑：{base_path}/{relative_path}
-    full_path = f"{settings.line_files_nas_path}/{relative_path}"
-
     try:
-        with SMBService(
-            host=settings.knowledge_nas_host,
-            username=settings.knowledge_nas_user,
-            password=settings.knowledge_nas_password,
-        ) as smb:
-            # 確保目錄存在（建立父目錄）
-            await ensure_nas_directory(smb, full_path)
-
-            # 寫入檔案
-            smb.write_file(
-                share_name=settings.knowledge_nas_share,
-                path=full_path,
-                data=content,
-            )
-            return True
-
-    except Exception as e:
-        logger.error(f"儲存到 NAS 失敗 {full_path}: {e}")
+        file_service = create_linebot_file_service()
+        # write_file 會自動建立目錄
+        file_service.write_file(relative_path, content)
+        return True
+    except LocalFileError as e:
+        logger.error(f"儲存到 NAS 失敗 {relative_path}: {e}")
         return False
-
-
-async def ensure_nas_directory(smb: SMBService, file_path: str) -> None:
-    """確保 NAS 目錄存在
-
-    Args:
-        smb: SMB 服務實例
-        file_path: 檔案完整路徑
-    """
-    # 取得目錄路徑
-    dir_path = "/".join(file_path.split("/")[:-1])
-    if not dir_path:
-        return
-
-    # 逐層建立目錄
-    parts = dir_path.split("/")
-    current_path = ""
-
-    for part in parts:
-        if not part:
-            continue
-        current_path = f"{current_path}/{part}" if current_path else part
-
-        try:
-            smb.create_directory(
-                share_name=settings.knowledge_nas_share,
-                path=current_path,
-            )
-        except Exception:
-            # 目錄可能已存在，忽略錯誤
-            pass
 
 
 # ============================================================
@@ -1121,7 +1075,7 @@ async def get_file_by_id(file_id: UUID) -> dict | None:
 
 
 async def read_file_from_nas(nas_path: str) -> bytes | None:
-    """從 NAS 讀取檔案
+    """從 NAS 讀取檔案（透過掛載路徑）
 
     Args:
         nas_path: 相對於 linebot files 根目錄的路徑
@@ -1129,22 +1083,12 @@ async def read_file_from_nas(nas_path: str) -> bytes | None:
     Returns:
         檔案內容 bytes，失敗回傳 None
     """
-    full_path = f"{settings.line_files_nas_path}/{nas_path}"
-
     try:
-        with SMBService(
-            host=settings.knowledge_nas_host,
-            username=settings.knowledge_nas_user,
-            password=settings.knowledge_nas_password,
-        ) as smb:
-            content = smb.read_file(
-                share_name=settings.knowledge_nas_share,
-                path=full_path,
-            )
-            return content
-
-    except Exception as e:
-        logger.error(f"讀取 NAS 檔案失敗 {full_path}: {e}")
+        file_service = create_linebot_file_service()
+        content = file_service.read_file(nas_path)
+        return content
+    except LocalFileError as e:
+        logger.error(f"讀取 NAS 檔案失敗 {nas_path}: {e}")
         return None
 
 
@@ -1167,21 +1111,13 @@ async def delete_file(file_id: UUID) -> bool:
 
     # 從 NAS 刪除檔案
     if nas_path:
-        full_path = f"{settings.line_files_nas_path}/{nas_path}"
         try:
-            with SMBService(
-                host=settings.knowledge_nas_host,
-                username=settings.knowledge_nas_user,
-                password=settings.knowledge_nas_password,
-            ) as smb:
-                smb.delete_item(
-                    share_name=settings.knowledge_nas_share,
-                    path=full_path,
-                )
-                logger.info(f"已從 NAS 刪除檔案: {full_path}")
-        except Exception as e:
+            file_service = create_linebot_file_service()
+            file_service.delete_file(nas_path)
+            logger.info(f"已從 NAS 刪除檔案: {nas_path}")
+        except LocalFileError as e:
             # 如果 NAS 刪除失敗，記錄錯誤但繼續刪除資料庫記錄
-            logger.error(f"從 NAS 刪除檔案失敗 {full_path}: {e}")
+            logger.error(f"從 NAS 刪除檔案失敗 {nas_path}: {e}")
 
     # 從資料庫刪除記錄
     async with get_connection() as conn:

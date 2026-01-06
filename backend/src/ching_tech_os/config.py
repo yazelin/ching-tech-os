@@ -62,6 +62,9 @@ class Settings:
     nas_password: str = _get_env("NAS_PASSWORD", required=True)
     nas_share: str = _get_env("NAS_SHARE", "擎添開發")
 
+    # NAS 掛載路徑（系統功能透過此路徑存取 NAS）
+    nas_mount_path: str = _get_env("NAS_MOUNT_PATH", "/mnt/nas")
+
     # ===================
     # Session 設定
     # ===================
@@ -150,6 +153,24 @@ class Settings:
     @property
     def project_nas_password(self) -> str:
         return self.nas_password
+
+    # ===================
+    # 本機路徑（透過 NAS 掛載）
+    # ===================
+    @property
+    def knowledge_local_path(self) -> str:
+        """知識庫本機路徑（透過 NAS 掛載）"""
+        return f"{self.nas_mount_path}/{self.knowledge_nas_path}"
+
+    @property
+    def project_local_path(self) -> str:
+        """專案本機路徑（透過 NAS 掛載）"""
+        return f"{self.nas_mount_path}/{self.project_nas_path}"
+
+    @property
+    def linebot_local_path(self) -> str:
+        """Line Bot 檔案本機路徑（透過 NAS 掛載）"""
+        return f"{self.nas_mount_path}/{self.line_files_nas_path}"
 
     # ===================
     # 資料庫 URL

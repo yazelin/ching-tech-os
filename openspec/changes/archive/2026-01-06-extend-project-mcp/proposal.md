@@ -13,6 +13,16 @@
 
 這兩個工具將呼叫現有的 `project.create_member` 和 `project.create_milestone` service 函數。
 
+### 設計決策：is_internal 參數
+
+`add_project_member` 的 `is_internal` 參數預設為 `True`，但提供選項可設為 `False`。
+
+**理由**：
+- Line 群組中只有公司內部人員才會綁定 Line Bot
+- 因此透過 Line 建立專案和更新成員的操作者一定是內部人員
+- 但被加入的成員可能是外部人員（如客戶、廠商聯絡人）
+- 所以 MCP 工具需要提供 `is_internal` 參數讓 AI 可以根據情境設定
+
 ## Scope
 - 新增：`mcp_server.py` 中的 `add_project_member` 工具
 - 新增：`mcp_server.py` 中的 `add_project_milestone` 工具

@@ -7,6 +7,9 @@ set -e
 
 SERVICE_NAME="ching-tech-os"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+MOUNT_UNIT_FILE="/etc/systemd/system/mnt-nas.mount"
+NAS_CREDENTIALS_FILE="/etc/nas-credentials"
+NAS_MOUNT_PATH="/mnt/nas"
 
 # 檢查是否以 root 執行
 if [ "$EUID" -ne 0 ]; then
@@ -36,6 +39,40 @@ fi
 if [ -f "${SERVICE_FILE}" ]; then
     echo "刪除 service 檔案..."
     rm -f ${SERVICE_FILE}
+fi
+
+# ===================
+# 清理 NAS 掛載設定
+# ===================
+echo "清理 NAS 掛載設定..."
+
+# 停止並停用 NAS 掛載
+if systemctl is-active --quiet mnt-nas.mount; then
+    echo "停止 NAS 掛載..."
+    systemctl stop mnt-nas.mount
+fi
+
+if systemctl is-enabled --quiet mnt-nas.mount 2>/dev/null; then
+    echo "停用 NAS 掛載..."
+    systemctl disable mnt-nas.mount
+fi
+
+# 刪除 mount unit 檔案
+if [ -f "${MOUNT_UNIT_FILE}" ]; then
+    echo "刪除 mount unit 檔案..."
+    rm -f ${MOUNT_UNIT_FILE}
+fi
+
+# 刪除 NAS 憑證檔案
+if [ -f "${NAS_CREDENTIALS_FILE}" ]; then
+    echo "刪除 NAS 憑證檔案..."
+    rm -f ${NAS_CREDENTIALS_FILE}
+fi
+
+# 刪除掛載點目錄（如果為空）
+if [ -d "${NAS_MOUNT_PATH}" ] && [ -z "$(ls -A ${NAS_MOUNT_PATH})" ]; then
+    echo "刪除掛載點目錄..."
+    rmdir ${NAS_MOUNT_PATH}
 fi
 
 # 重新載入 systemd
