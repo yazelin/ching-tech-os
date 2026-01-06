@@ -22,7 +22,8 @@ Line Platform
 │  │ - 儲存訊息  │    │ - 專案：query/create/add_member/...     │ │
 │  │ - 用戶管理  │    │ - 知識庫：search/get/update/add_note/...│ │
 │  │ - 群組管理  │    │ - 附件：add/get/update_attachment       │ │
-│  │ - 檔案儲存  │    │ - 分享：create_share_link               │ │
+│  │ - 檔案儲存  │    │ - NAS：search_nas_files/prepare_file    │ │
+│  │ - 回覆訊息  │    │ - 分享：create_share_link               │ │
 │  └─────────────┘    └─────────────────────────────────────────┘ │
 │         │                                                        │
 │         ▼                                                        │
@@ -42,7 +43,8 @@ Line Platform
 | AI 對話 | 個人/群組對話支援 AI 助理 |
 | 專案管理 | 透過對話建立專案、新增成員和里程碑 |
 | 知識庫 | 透過對話新增筆記、搜尋知識、管理附件 |
-| 公開分享 | 建立知識庫/專案的公開連結分享給外部人員 |
+| NAS 檔案搜尋 | 搜尋並發送 NAS 共享檔案（圖片直接發送） |
+| 公開分享 | 建立知識庫/專案/檔案的公開連結分享給外部人員 |
 
 ## 資料表
 
@@ -176,8 +178,13 @@ AI 助理可使用的工具（完整列表見 [docs/mcp-server.md](mcp-server.md
 **群組專用**
 - `summarize_chat` - 取得群組聊天記錄摘要
 
+**NAS 檔案搜尋**
+- `search_nas_files` - 搜尋 NAS 共享檔案
+- `get_nas_file_info` - 取得檔案詳細資訊
+- `prepare_file_message` - 準備檔案訊息供回覆
+
 **分享功能**
-- `create_share_link` - 建立公開分享連結（可設定有效期限）
+- `create_share_link` - 建立公開分享連結（支援知識庫、專案、NAS 檔案）
 
 ### 使用情境範例
 
@@ -205,6 +212,24 @@ AI：（使用 create_share_link 建立連結）
 AI：分享連結已建立！
     連結：https://xxx/share/abc123
     有效至 2026-01-07 19:00
+```
+
+**搜尋並發送 NAS 檔案**
+```
+用戶：給我亦達的 layout 圖
+AI：（使用 search_nas_files 搜尋）
+AI：（找到多個檔案，列出供用戶選擇）
+用戶：第二個
+AI：（使用 prepare_file_message 準備檔案）
+AI：（直接發送圖片到 Line）
+```
+
+**發送多張圖片**
+```
+用戶：給我那個資料夾的圖
+AI：（搜尋找到 10 張圖片）
+AI：這個資料夾有 10 張圖，我先傳 4 張給你看，其他的附上連結：
+AI：（發送 4 張 ImageMessage + 文字訊息含 6 個連結）
 ```
 
 ## 設定

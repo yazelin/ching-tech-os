@@ -73,11 +73,19 @@ uv run python -m ching_tech_os.mcp_cli
 | `summarize_chat` | 取得群組聊天記錄 | `line_group_id`（必填）, `hours`, `max_messages` |
 | `get_message_attachments` | 查詢對話中的附件 | `line_user_id`, `line_group_id`, `days`, `file_type`, `limit` |
 
+### NAS 檔案
+
+| 工具名稱 | 說明 | 參數 |
+|----------|------|------|
+| `search_nas_files` | 搜尋 NAS 共享檔案 | `keywords`（必填，逗號分隔）, `file_types`（副檔名，如 pdf,xlsx）, `limit` |
+| `get_nas_file_info` | 取得 NAS 檔案詳細資訊 | `file_path`（必填，/mnt/nas/projects/... 路徑） |
+| `prepare_file_message` | 準備檔案訊息供 Line Bot 回覆 | `file_path`（必填） |
+
 ### 分享功能
 
 | 工具名稱 | 說明 | 參數 |
 |----------|------|------|
-| `create_share_link` | 建立公開分享連結 | `resource_type`（必填，knowledge 或 project）, `resource_id`（必填）, `expires_in`（1h/24h/7d/null） |
+| `create_share_link` | 建立公開分享連結 | `resource_type`（必填，knowledge/project/nas_file）, `resource_id`（必填）, `expires_in`（1h/24h/7d/null） |
 
 ## 使用範例
 
@@ -88,6 +96,7 @@ uv run python -m ching_tech_os.mcp_cli
 claude "查詢最近的專案"
 claude "建立一個新專案叫做「測試專案」"
 claude "幫我搜尋知識庫中關於水切爐的資料"
+claude "找一下亦達 layout 的 pdf"
 ```
 
 Claude 會自動使用對應的 MCP 工具執行操作。
