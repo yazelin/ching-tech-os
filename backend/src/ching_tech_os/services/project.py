@@ -265,7 +265,13 @@ async def list_members(project_id: UUID) -> list[ProjectMemberResponse]:
     """列出專案成員"""
     async with get_connection() as conn:
         rows = await conn.fetch(
-            "SELECT * FROM project_members WHERE project_id = $1 ORDER BY created_at",
+            """
+            SELECT pm.*, u.username as user_username, u.display_name as user_display_name
+            FROM project_members pm
+            LEFT JOIN users u ON pm.user_id = u.id
+            WHERE pm.project_id = $1
+            ORDER BY pm.created_at
+            """,
             project_id,
         )
         return [ProjectMemberResponse(**dict(r)) for r in rows]
@@ -283,8 +289,8 @@ async def create_member(project_id: UUID, data: ProjectMemberCreate) -> ProjectM
 
         row = await conn.fetchrow(
             """
-            INSERT INTO project_members (project_id, name, role, company, email, phone, notes, is_internal)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            INSERT INTO project_members (project_id, name, role, company, email, phone, notes, is_internal, user_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             RETURNING *
             """,
             project_id,
@@ -295,8 +301,19 @@ async def create_member(project_id: UUID, data: ProjectMemberCreate) -> ProjectM
             data.phone,
             data.notes,
             data.is_internal,
+            data.user_id,
         )
-        return ProjectMemberResponse(**dict(row))
+        # 如果有 user_id，查詢 user 資訊
+        result = dict(row)
+        if result.get("user_id"):
+            user = await conn.fetchrow(
+                "SELECT username, display_name FROM users WHERE id = $1",
+                result["user_id"],
+            )
+            if user:
+                result["user_username"] = user["username"]
+                result["user_display_name"] = user["display_name"]
+        return ProjectMemberResponse(**result)
 
 
 async def update_member(
@@ -317,7 +334,7 @@ async def update_member(
         params = []
         param_idx = 1
 
-        for field in ["name", "role", "company", "email", "phone", "notes", "is_internal"]:
+        for field in ["name", "role", "company", "email", "phone", "notes", "is_internal", "user_id"]:
             value = getattr(data, field)
             if value is not None:
                 updates.append(f"{field} = ${param_idx}")
@@ -325,15 +342,35 @@ async def update_member(
                 param_idx += 1
 
         if not updates:
+            # 沒有更新，返回現有資料（含用戶資訊）
             row = await conn.fetchrow(
-                "SELECT * FROM project_members WHERE id = $1", member_id
+                """
+                SELECT pm.*, u.username as user_username, u.display_name as user_display_name
+                FROM project_members pm
+                LEFT JOIN users u ON pm.user_id = u.id
+                WHERE pm.id = $1
+                """,
+                member_id,
             )
             return ProjectMemberResponse(**dict(row))
 
         params.append(member_id)
         sql = f"UPDATE project_members SET {', '.join(updates)} WHERE id = ${param_idx} RETURNING *"
         row = await conn.fetchrow(sql, *params)
-        return ProjectMemberResponse(**dict(row))
+
+        # 查詢關聯用戶資訊
+        result = dict(row)
+        result["user_username"] = None
+        result["user_display_name"] = None
+        if result.get("user_id"):
+            user = await conn.fetchrow(
+                "SELECT username, display_name FROM users WHERE id = $1",
+                result["user_id"],
+            )
+            if user:
+                result["user_username"] = user["username"]
+                result["user_display_name"] = user["display_name"]
+        return ProjectMemberResponse(**result)
 
 
 async def delete_member(project_id: UUID, member_id: UUID) -> None:

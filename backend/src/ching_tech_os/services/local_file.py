@@ -39,10 +39,27 @@ class LocalFileService:
         return self.base_path / clean_path
 
     def _ensure_mount(self) -> None:
-        """確保 NAS 已掛載"""
-        mount_path = Path(settings.nas_mount_path)
-        if not mount_path.exists() or not mount_path.is_mount():
-            raise LocalFileError(f"NAS 未掛載於 {settings.nas_mount_path}")
+        """確保 NAS 已掛載
+
+        檢查 base_path 是否在某個已掛載的 NAS 路徑下。
+        支援多個掛載點的架構（如 /mnt/nas/ctos 和 /mnt/nas/projects）。
+        """
+        # 檢查 base_path 或其父目錄是否為掛載點
+        path = self.base_path
+        while path != Path("/"):
+            if path.is_mount():
+                return  # 找到掛載點，確認已掛載
+            path = path.parent
+
+        # 沒有找到掛載點，檢查目錄是否存在且可存取
+        if not self.base_path.exists():
+            raise LocalFileError(f"NAS 路徑不存在：{self.base_path}")
+
+        # 嘗試列出目錄內容來確認可存取
+        try:
+            list(self.base_path.iterdir())
+        except PermissionError:
+            raise LocalFileError(f"無法存取 NAS 路徑：{self.base_path}")
 
     def read_file(self, path: str) -> bytes:
         """讀取檔案內容

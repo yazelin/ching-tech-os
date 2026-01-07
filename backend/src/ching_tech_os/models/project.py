@@ -21,6 +21,7 @@ class ProjectMemberBase(BaseModel):
     phone: str | None = None
     notes: str | None = None
     is_internal: bool = True
+    user_id: int | None = None  # 關聯的 CTOS 用戶 ID
 
 
 class ProjectMemberCreate(ProjectMemberBase):
@@ -39,6 +40,7 @@ class ProjectMemberUpdate(BaseModel):
     phone: str | None = None
     notes: str | None = None
     is_internal: bool | None = None
+    user_id: int | None = None  # 關聯的 CTOS 用戶 ID
 
 
 class ProjectMemberResponse(ProjectMemberBase):
@@ -47,6 +49,8 @@ class ProjectMemberResponse(ProjectMemberBase):
     id: UUID
     project_id: UUID
     created_at: datetime
+    user_username: str | None = None  # 關聯用戶的 username
+    user_display_name: str | None = None  # 關聯用戶的顯示名稱
 
 
 # ============================================

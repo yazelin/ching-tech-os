@@ -10,7 +10,7 @@
 
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from mcp.server.fastmcp import FastMCP
@@ -18,6 +18,19 @@ from mcp.server.fastmcp import FastMCP
 from ..database import get_connection, init_db_pool
 
 logger = logging.getLogger("mcp_server")
+
+# 台北時區 (UTC+8)
+TAIPEI_TZ = timezone(timedelta(hours=8))
+
+
+def to_taipei_time(dt: datetime) -> datetime:
+    """將 datetime 轉換為台北時區"""
+    if dt is None:
+        return None
+    # 如果是 naive datetime，假設為 UTC
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(TAIPEI_TZ)
 
 # 建立 FastMCP Server 實例
 mcp = FastMCP(
@@ -37,6 +50,36 @@ async def ensure_db_connection():
     if _pool is None:
         logger.info("初始化資料庫連線池...")
         await init_db_pool()
+
+
+# ============================================================
+# 權限檢查輔助函數
+# ============================================================
+
+
+async def check_project_member_permission(project_id: str, user_id: int) -> bool:
+    """
+    檢查用戶是否為專案成員
+
+    Args:
+        project_id: 專案 UUID 字串
+        user_id: CTOS 用戶 ID
+
+    Returns:
+        True 表示用戶是專案成員，可以操作
+    """
+    from uuid import UUID as UUID_type
+    await ensure_db_connection()
+    async with get_connection() as conn:
+        exists = await conn.fetchval(
+            """
+            SELECT 1 FROM project_members
+            WHERE project_id = $1 AND user_id = $2
+            """,
+            UUID_type(project_id),
+            user_id,
+        )
+        return exists is not None
 
 
 # ============================================================
@@ -83,12 +126,13 @@ async def query_project(project_id: str | None = None, keyword: str | None = Non
                 UUID(project_id),
             )
 
+            created_at_taipei = to_taipei_time(row['created_at'])
             return f"""專案：{row['name']}
 狀態：{row['status']}
 描述：{row['description'] or '無描述'}
 成員數：{member_count}
 里程碑：共 {milestone_stats['total']} 個，完成 {milestone_stats['completed']}，進行中 {milestone_stats['in_progress']}
-建立時間：{row['created_at'].strftime('%Y-%m-%d')}"""
+建立時間：{created_at_taipei.strftime('%Y-%m-%d')}"""
 
         elif keyword:
             # 搜尋專案
@@ -186,6 +230,7 @@ async def add_project_member(
     phone: str | None = None,
     notes: str | None = None,
     is_internal: bool = True,
+    ctos_user_id: int | None = None,
 ) -> str:
     """
     新增專案成員
@@ -199,6 +244,7 @@ async def add_project_member(
         phone: 電話
         notes: 備註
         is_internal: 是否為內部人員，預設 True（外部聯絡人如客戶、廠商設為 False）
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，內部人員自動綁定帳號）
     """
     from uuid import UUID as UUID_type
     from ..models.project import ProjectMemberCreate
@@ -207,6 +253,38 @@ async def add_project_member(
     await ensure_db_connection()
 
     try:
+        # 準備 user_id：內部人員且有 ctos_user_id 時自動綁定
+        user_id = ctos_user_id if is_internal and ctos_user_id else None
+
+        # 檢查是否已有同名成員（避免重複新增）
+        async with get_connection() as conn:
+            existing = await conn.fetchrow(
+                """
+                SELECT id, user_id FROM project_members
+                WHERE project_id = $1 AND name = $2
+                """,
+                UUID_type(project_id),
+                name,
+            )
+
+        if existing:
+            # 已有同名成員
+            if existing["user_id"]:
+                # 已經綁定，不需要重複新增
+                return f"ℹ️ 專案中已有成員「{name}」（已綁定帳號）"
+            elif user_id:
+                # 未綁定但有 ctos_user_id，更新綁定
+                async with get_connection() as conn:
+                    await conn.execute(
+                        "UPDATE project_members SET user_id = $1 WHERE id = $2",
+                        user_id,
+                        existing["id"],
+                    )
+                return f"✅ 已將「{name}」綁定到您的帳號"
+            else:
+                return f"ℹ️ 專案中已有成員「{name}」（尚未綁定帳號）"
+
+        # 新增成員
         data = ProjectMemberCreate(
             name=name,
             role=role,
@@ -215,12 +293,14 @@ async def add_project_member(
             phone=phone,
             notes=notes,
             is_internal=is_internal,
+            user_id=user_id,
         )
         result = await svc_create_member(UUID_type(project_id), data)
 
         member_type = "內部人員" if result.is_internal else "外部聯絡人"
         role_str = f"（{result.role}）" if result.role else ""
-        return f"✅ 已新增{member_type}：{result.name}{role_str}"
+        bound_str = "（已綁定帳號）" if user_id else ""
+        return f"✅ 已新增{member_type}：{result.name}{role_str}{bound_str}"
 
     except ProjectNotFoundError:
         return f"找不到專案 ID: {project_id}"
@@ -297,6 +377,406 @@ async def add_project_milestone(
 
 
 @mcp.tool()
+async def update_project(
+    project_id: str,
+    name: str | None = None,
+    description: str | None = None,
+    status: str | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    ctos_user_id: int | None = None,
+) -> str:
+    """
+    更新專案資訊
+
+    Args:
+        project_id: 專案 UUID
+        name: 專案名稱
+        description: 專案描述
+        status: 專案狀態，可選：active（進行中）、completed（已完成）、on_hold（暫停）、cancelled（已取消）
+        start_date: 開始日期（格式：YYYY-MM-DD）
+        end_date: 結束日期（格式：YYYY-MM-DD）
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+    """
+    from datetime import date as date_type
+    from uuid import UUID as UUID_type
+    from ..models.project import ProjectUpdate
+    from .project import update_project as svc_update_project, ProjectNotFoundError
+
+    await ensure_db_connection()
+
+    # 權限檢查：需要是專案成員才能更新
+    if ctos_user_id is None:
+        return "❌ 您的 Line 帳號尚未關聯 CTOS 用戶，無法進行專案更新操作。請聯繫管理員進行帳號關聯。"
+    if not await check_project_member_permission(project_id, ctos_user_id):
+        return "❌ 您不是此專案的成員，無法進行此操作。"
+
+    try:
+        # 解析日期
+        parsed_start = date_type.fromisoformat(start_date) if start_date else None
+        parsed_end = date_type.fromisoformat(end_date) if end_date else None
+
+        data = ProjectUpdate(
+            name=name,
+            description=description,
+            status=status,
+            start_date=parsed_start,
+            end_date=parsed_end,
+        )
+        result = await svc_update_project(UUID_type(project_id), data)
+
+        updates = []
+        if name:
+            updates.append(f"名稱: {result.name}")
+        if status:
+            updates.append(f"狀態: {result.status}")
+        if start_date:
+            updates.append(f"開始日期: {result.start_date}")
+        if end_date:
+            updates.append(f"結束日期: {result.end_date}")
+
+        update_str = "、".join(updates) if updates else "無變更"
+        return f"✅ 已更新專案「{result.name}」：{update_str}"
+
+    except ProjectNotFoundError:
+        return f"找不到專案 ID: {project_id}"
+    except ValueError as e:
+        return f"日期格式錯誤，請使用 YYYY-MM-DD 格式：{str(e)}"
+    except Exception as e:
+        logger.error(f"更新專案失敗: {e}")
+        return f"更新專案失敗：{str(e)}"
+
+
+@mcp.tool()
+async def update_milestone(
+    milestone_id: str,
+    project_id: str | None = None,
+    name: str | None = None,
+    milestone_type: str | None = None,
+    planned_date: str | None = None,
+    actual_date: str | None = None,
+    status: str | None = None,
+    notes: str | None = None,
+    ctos_user_id: int | None = None,
+) -> str:
+    """
+    更新專案里程碑
+
+    Args:
+        milestone_id: 里程碑 UUID
+        project_id: 專案 UUID（可選，如有提供會驗證里程碑是否屬於該專案）
+        name: 里程碑名稱
+        milestone_type: 類型，可選：design（設計）、manufacture（製造）、delivery（交貨）、field_test（現場測試）、acceptance（驗收）、custom（自訂）
+        planned_date: 預計日期（格式：YYYY-MM-DD）
+        actual_date: 實際日期（格式：YYYY-MM-DD）
+        status: 狀態，可選：pending（待處理）、in_progress（進行中）、completed（已完成）、delayed（延遲）
+        notes: 備註
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+    """
+    from datetime import date as date_type
+    from uuid import UUID as UUID_type
+    from ..models.project import ProjectMilestoneUpdate
+    from .project import update_milestone as svc_update_milestone, ProjectNotFoundError
+
+    await ensure_db_connection()
+
+    # 權限檢查前置：需要有 CTOS 用戶 ID
+    if ctos_user_id is None:
+        return "❌ 您的 Line 帳號尚未關聯 CTOS 用戶，無法進行專案更新操作。請聯繫管理員進行帳號關聯。"
+
+    try:
+        # 取得里程碑所屬專案
+        async with get_connection() as conn:
+            row = await conn.fetchrow(
+                "SELECT project_id FROM project_milestones WHERE id = $1",
+                UUID_type(milestone_id),
+            )
+            if not row:
+                return f"找不到里程碑 ID: {milestone_id}"
+            actual_project_id = row["project_id"]
+
+        # 權限檢查：需要是專案成員才能更新
+        if not await check_project_member_permission(str(actual_project_id), ctos_user_id):
+            return "❌ 您不是此專案的成員，無法進行此操作。"
+
+        # 如果有提供 project_id，驗證是否匹配
+        if project_id and UUID_type(project_id) != actual_project_id:
+            return f"里程碑不屬於專案 {project_id}"
+
+        # 解析日期
+        parsed_planned = date_type.fromisoformat(planned_date) if planned_date else None
+        parsed_actual = date_type.fromisoformat(actual_date) if actual_date else None
+
+        data = ProjectMilestoneUpdate(
+            name=name,
+            milestone_type=milestone_type,
+            planned_date=parsed_planned,
+            actual_date=parsed_actual,
+            status=status,
+            notes=notes,
+        )
+        result = await svc_update_milestone(actual_project_id, UUID_type(milestone_id), data)
+
+        status_emoji = {
+            "pending": "⏳",
+            "in_progress": "🔄",
+            "completed": "✅",
+            "delayed": "⚠️",
+        }.get(result.status, "❓")
+
+        return f"✅ 已更新里程碑：{status_emoji} {result.name}"
+
+    except ProjectNotFoundError:
+        return f"找不到里程碑 ID: {milestone_id}"
+    except ValueError as e:
+        return f"日期格式錯誤，請使用 YYYY-MM-DD 格式：{str(e)}"
+    except Exception as e:
+        logger.error(f"更新里程碑失敗: {e}")
+        return f"更新里程碑失敗：{str(e)}"
+
+
+@mcp.tool()
+async def update_project_member(
+    member_id: str,
+    project_id: str | None = None,
+    name: str | None = None,
+    role: str | None = None,
+    company: str | None = None,
+    email: str | None = None,
+    phone: str | None = None,
+    notes: str | None = None,
+    is_internal: bool | None = None,
+    ctos_user_id: int | None = None,
+    bind_to_caller: bool = False,
+) -> str:
+    """
+    更新專案成員資訊
+
+    Args:
+        member_id: 成員 UUID
+        project_id: 專案 UUID（可選，如有提供會驗證成員是否屬於該專案）
+        name: 成員姓名
+        role: 角色/職稱
+        company: 公司名稱
+        email: 電子郵件
+        phone: 電話
+        notes: 備註
+        is_internal: 是否為內部人員
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查和綁定）
+        bind_to_caller: 是否將此成員綁定到呼叫者的 CTOS 帳號（設為 True 以綁定）
+    """
+    from uuid import UUID as UUID_type
+    from ..models.project import ProjectMemberUpdate
+    from .project import update_member as svc_update_member, ProjectNotFoundError
+
+    await ensure_db_connection()
+
+    # 權限檢查前置：需要有 CTOS 用戶 ID
+    if ctos_user_id is None:
+        return "❌ 您的 Line 帳號尚未關聯 CTOS 用戶，無法進行專案更新操作。請聯繫管理員進行帳號關聯。"
+
+    try:
+        # 取得成員所屬專案
+        async with get_connection() as conn:
+            row = await conn.fetchrow(
+                "SELECT project_id FROM project_members WHERE id = $1",
+                UUID_type(member_id),
+            )
+            if not row:
+                return f"找不到成員 ID: {member_id}"
+            actual_project_id = row["project_id"]
+
+        # 權限檢查：需要是專案成員才能更新
+        if not await check_project_member_permission(str(actual_project_id), ctos_user_id):
+            return "❌ 您不是此專案的成員，無法進行此操作。"
+
+        # 如果有提供 project_id，驗證是否匹配
+        if project_id and UUID_type(project_id) != actual_project_id:
+            return f"成員不屬於專案 {project_id}"
+
+        # 準備 user_id：若 bind_to_caller=True 則綁定到呼叫者
+        user_id_to_set = ctos_user_id if bind_to_caller else None
+
+        data = ProjectMemberUpdate(
+            name=name,
+            role=role,
+            company=company,
+            email=email,
+            phone=phone,
+            notes=notes,
+            is_internal=is_internal,
+            user_id=user_id_to_set,
+        )
+        result = await svc_update_member(actual_project_id, UUID_type(member_id), data)
+
+        member_type = "內部人員" if result.is_internal else "外部聯絡人"
+        bound_str = "（已綁定帳號）" if bind_to_caller else ""
+        return f"✅ 已更新{member_type}：{result.name}{bound_str}"
+
+    except ProjectNotFoundError:
+        return f"找不到成員 ID: {member_id}"
+    except Exception as e:
+        logger.error(f"更新成員失敗: {e}")
+        return f"更新成員失敗：{str(e)}"
+
+
+@mcp.tool()
+async def add_project_meeting(
+    project_id: str,
+    title: str,
+    meeting_date: str | None = None,
+    location: str | None = None,
+    attendees: str | None = None,
+    content: str | None = None,
+    ctos_user_id: int | None = None,
+) -> str:
+    """
+    新增專案會議記錄
+
+    Args:
+        project_id: 專案 UUID
+        title: 會議標題（必填）
+        meeting_date: 會議日期時間（格式：YYYY-MM-DD 或 YYYY-MM-DD HH:MM），不填則使用當前時間
+        location: 地點
+        attendees: 參與者（逗號分隔）
+        content: 會議內容（Markdown 格式）
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+    """
+    from uuid import UUID as UUID_type
+    from ..models.project import ProjectMeetingCreate
+    from .project import create_meeting as svc_create_meeting, ProjectNotFoundError
+
+    await ensure_db_connection()
+
+    # 權限檢查：需要是專案成員才能新增會議
+    if ctos_user_id is None:
+        return "❌ 您的 Line 帳號尚未關聯 CTOS 用戶，無法進行專案更新操作。請聯繫管理員進行帳號關聯。"
+    if not await check_project_member_permission(project_id, ctos_user_id):
+        return "❌ 您不是此專案的成員，無法進行此操作。"
+
+    try:
+        # 解析日期時間
+        if meeting_date:
+            # 支援兩種格式
+            if " " in meeting_date or "T" in meeting_date:
+                parsed_date = datetime.fromisoformat(meeting_date.replace(" ", "T"))
+            else:
+                parsed_date = datetime.fromisoformat(f"{meeting_date}T00:00:00")
+        else:
+            parsed_date = datetime.now()
+
+        # 解析參與者
+        attendees_list = [a.strip() for a in attendees.split(",")] if attendees else []
+
+        data = ProjectMeetingCreate(
+            title=title,
+            meeting_date=parsed_date,
+            location=location,
+            attendees=attendees_list,
+            content=content,
+        )
+        result = await svc_create_meeting(UUID_type(project_id), data)
+
+        meeting_date_taipei = to_taipei_time(result.meeting_date)
+        date_str = meeting_date_taipei.strftime("%Y-%m-%d %H:%M")
+        return f"✅ 已新增會議：{result.title}（{date_str}）"
+
+    except ProjectNotFoundError:
+        return f"找不到專案 ID: {project_id}"
+    except ValueError as e:
+        return f"日期格式錯誤，請使用 YYYY-MM-DD 或 YYYY-MM-DD HH:MM 格式：{str(e)}"
+    except Exception as e:
+        logger.error(f"新增會議失敗: {e}")
+        return f"新增會議失敗：{str(e)}"
+
+
+@mcp.tool()
+async def update_project_meeting(
+    meeting_id: str,
+    project_id: str | None = None,
+    title: str | None = None,
+    meeting_date: str | None = None,
+    location: str | None = None,
+    attendees: str | None = None,
+    content: str | None = None,
+    ctos_user_id: int | None = None,
+) -> str:
+    """
+    更新專案會議記錄
+
+    Args:
+        meeting_id: 會議 UUID
+        project_id: 專案 UUID（可選，如有提供會驗證會議是否屬於該專案）
+        title: 會議標題
+        meeting_date: 會議日期時間（格式：YYYY-MM-DD 或 YYYY-MM-DD HH:MM）
+        location: 地點
+        attendees: 參與者（逗號分隔）
+        content: 會議內容（Markdown 格式）
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+    """
+    from uuid import UUID as UUID_type
+    from ..models.project import ProjectMeetingUpdate
+    from .project import update_meeting as svc_update_meeting, ProjectNotFoundError
+
+    await ensure_db_connection()
+
+    # 權限檢查前置：需要有 CTOS 用戶 ID
+    if ctos_user_id is None:
+        return "❌ 您的 Line 帳號尚未關聯 CTOS 用戶，無法進行專案更新操作。請聯繫管理員進行帳號關聯。"
+
+    try:
+        # 取得會議所屬專案
+        async with get_connection() as conn:
+            row = await conn.fetchrow(
+                "SELECT project_id FROM project_meetings WHERE id = $1",
+                UUID_type(meeting_id),
+            )
+            if not row:
+                return f"找不到會議 ID: {meeting_id}"
+            actual_project_id = row["project_id"]
+
+        # 權限檢查：需要是專案成員才能更新
+        if not await check_project_member_permission(str(actual_project_id), ctos_user_id):
+            return "❌ 您不是此專案的成員，無法進行此操作。"
+
+        # 如果有提供 project_id，驗證是否匹配
+        if project_id and UUID_type(project_id) != actual_project_id:
+            return f"會議不屬於專案 {project_id}"
+
+        # 解析日期時間
+        parsed_date = None
+        if meeting_date:
+            if " " in meeting_date or "T" in meeting_date:
+                parsed_date = datetime.fromisoformat(meeting_date.replace(" ", "T"))
+            else:
+                parsed_date = datetime.fromisoformat(f"{meeting_date}T00:00:00")
+
+        # 解析參與者
+        attendees_list = None
+        if attendees is not None:
+            attendees_list = [a.strip() for a in attendees.split(",")] if attendees else []
+
+        data = ProjectMeetingUpdate(
+            title=title,
+            meeting_date=parsed_date,
+            location=location,
+            attendees=attendees_list,
+            content=content,
+        )
+        result = await svc_update_meeting(actual_project_id, UUID_type(meeting_id), data)
+
+        return f"✅ 已更新會議：{result.title}"
+
+    except ProjectNotFoundError:
+        return f"找不到會議 ID: {meeting_id}"
+    except ValueError as e:
+        return f"日期格式錯誤，請使用 YYYY-MM-DD 或 YYYY-MM-DD HH:MM 格式：{str(e)}"
+    except Exception as e:
+        logger.error(f"更新會議失敗: {e}")
+        return f"更新會議失敗：{str(e)}"
+
+
+@mcp.tool()
 async def get_project_milestones(
     project_id: str,
     status: str | None = None,
@@ -313,7 +793,7 @@ async def get_project_milestones(
     await ensure_db_connection()
     async with get_connection() as conn:
         query = """
-            SELECT name, milestone_type, planned_date, actual_date, status, notes
+            SELECT id, name, milestone_type, planned_date, actual_date, status, notes
             FROM project_milestones
             WHERE project_id = $1
         """
@@ -348,7 +828,8 @@ async def get_project_milestones(
                 "delayed": "⚠️",
             }.get(row["status"], "❓")
             planned = row["planned_date"].strftime("%m/%d") if row["planned_date"] else "未排程"
-            milestones.append(f"{status_emoji} {row['name']} | 預計 {planned}")
+            milestone_id = str(row["id"])
+            milestones.append(f"{status_emoji} {row['name']} | 預計 {planned} | ID: {milestone_id}")
 
         return "\n".join(milestones)
 
@@ -369,7 +850,7 @@ async def get_project_meetings(
     async with get_connection() as conn:
         rows = await conn.fetch(
             """
-            SELECT title, meeting_date, location, attendees, content
+            SELECT id, title, meeting_date, location, attendees, content
             FROM project_meetings
             WHERE project_id = $1
             ORDER BY meeting_date DESC
@@ -392,17 +873,20 @@ async def get_project_meetings(
         # 格式化會議記錄
         meetings = [f"【{project_name}】最近會議：\n"]
         for row in rows:
-            date_str = row["meeting_date"].strftime("%Y-%m-%d %H:%M")
+            meeting_date_taipei = to_taipei_time(row["meeting_date"])
+            date_str = meeting_date_taipei.strftime("%Y-%m-%d %H:%M")
             attendees = ", ".join(row["attendees"]) if row["attendees"] else "無記錄"
             content_snippet = (row["content"] or "")[:100]
             if len(row["content"] or "") > 100:
                 content_snippet += "..."
+            meeting_id = str(row["id"])
 
             meetings.append(f"📅 {date_str} - {row['title']}")
             meetings.append(f"   地點：{row['location'] or '未指定'}")
             meetings.append(f"   參與者：{attendees}")
             if content_snippet:
                 meetings.append(f"   內容：{content_snippet}")
+            meetings.append(f"   ID: {meeting_id}")
             meetings.append("")
 
         return "\n".join(meetings)
@@ -423,7 +907,7 @@ async def get_project_members(
     await ensure_db_connection()
     async with get_connection() as conn:
         query = """
-            SELECT name, role, company, email, phone, is_internal
+            SELECT id, name, role, company, email, phone, is_internal
             FROM project_members
             WHERE project_id = $1
         """
@@ -456,16 +940,19 @@ async def get_project_members(
         if internal:
             members.append("內部人員：")
             for row in internal:
-                members.append(f"  👤 {row['name']} - {row['role'] or '未指定角色'}")
+                member_id = str(row["id"])
+                members.append(f"  👤 {row['name']} - {row['role'] or '未指定角色'} | ID: {member_id}")
 
         if external:
             members.append("\n外部聯絡人：")
             for row in external:
+                member_id = str(row["id"])
                 info = f"  👤 {row['name']}"
                 if row["company"]:
                     info += f" ({row['company']})"
                 if row["role"]:
                     info += f" - {row['role']}"
+                info += f" | ID: {member_id}"
                 members.append(info)
 
         return "\n".join(members)
@@ -976,7 +1463,8 @@ async def summarize_chat(
         # 格式化訊息
         messages = [f"【{group_name}】過去 {hours} 小時的聊天記錄（共 {len(rows)} 則）：\n"]
         for row in rows:
-            time_str = row["created_at"].strftime("%H:%M")
+            created_at_taipei = to_taipei_time(row["created_at"])
+            time_str = created_at_taipei.strftime("%H:%M")
             user = row["user_name"] or "未知用戶"
             messages.append(f"[{time_str}] {user}: {row['content']}")
 
@@ -1064,7 +1552,8 @@ async def get_message_attachments(
         output = [f"找到 {len(rows)} 個附件（最近 {days} 天）：\n"]
         for i, row in enumerate(rows, 1):
             type_name = type_names.get(row["file_type"], row["file_type"])
-            time_str = row["created_at"].strftime("%Y-%m-%d %H:%M")
+            created_at_taipei = to_taipei_time(row["created_at"])
+            time_str = created_at_taipei.strftime("%Y-%m-%d %H:%M")
             user = row["user_name"] or "未知用戶"
 
             output.append(f"{i}. [{type_name}] {time_str} - {user}")
@@ -1317,9 +1806,7 @@ async def create_share_link(
 
         # 轉換為台北時區顯示
         if result.expires_at:
-            from datetime import timezone, timedelta
-            taipei_tz = timezone(timedelta(hours=8))
-            expires_taipei = result.expires_at.astimezone(taipei_tz)
+            expires_taipei = to_taipei_time(result.expires_at)
             expires_text = f"有效至 {expires_taipei.strftime('%Y-%m-%d %H:%M')}"
         else:
             expires_text = "永久有效"

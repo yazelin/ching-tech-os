@@ -711,7 +711,18 @@ async def build_system_prompt(
     if tool_sections:
         base_prompt += "\n\n" + "\n\n".join(tool_sections)
 
-    # 加入對話識別資訊（供 get_message_attachments 使用）
+    # 加入對話識別資訊（供 MCP 工具使用）
+    # 查詢用戶的 CTOS user_id（用於權限檢查）
+    ctos_user_id = None
+    if line_user_id:
+        async with get_connection() as conn:
+            user_row = await conn.fetchrow(
+                "SELECT user_id FROM line_users WHERE line_user_id = $1",
+                line_user_id,
+            )
+            if user_row and user_row["user_id"]:
+                ctos_user_id = user_row["user_id"]
+
     if line_group_id:
         async with get_connection() as conn:
             group = await conn.fetchrow(
@@ -728,11 +739,19 @@ async def build_system_prompt(
                 if group["project_name"]:
                     base_prompt += f"\n綁定專案：{group['project_name']}"
                     base_prompt += f"\n專案 ID（供工具查詢用）：{group['project_id']}"
-        # 加入群組 ID（供 get_message_attachments 使用）
+        # 加入群組 ID 和用戶身份識別
         base_prompt += f"\n\n【對話識別】\nline_group_id: {line_group_id}"
+        if ctos_user_id:
+            base_prompt += f"\nctos_user_id: {ctos_user_id}"
+        else:
+            base_prompt += "\nctos_user_id: （未關聯）"
     elif line_user_id:
-        # 個人對話：加入用戶 ID
+        # 個人對話：加入用戶 ID 和身份識別
         base_prompt += f"\n\n【對話識別】\nline_user_id: {line_user_id}"
+        if ctos_user_id:
+            base_prompt += f"\nctos_user_id: {ctos_user_id}"
+        else:
+            base_prompt += "\nctos_user_id: （未關聯，無法進行專案更新操作）"
 
     return base_prompt
 

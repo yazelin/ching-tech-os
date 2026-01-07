@@ -58,6 +58,39 @@ class PreferencesUpdateResponse(BaseModel):
     preferences: PreferencesResponse
 
 
+class SimpleUserInfo(BaseModel):
+    """簡化的用戶資訊（供下拉選單使用）"""
+
+    id: int
+    username: str
+    display_name: str | None
+
+
+class SimpleUserListResponse(BaseModel):
+    """用戶列表回應"""
+
+    users: list[SimpleUserInfo]
+
+
+@router.get("/list", response_model=SimpleUserListResponse)
+async def list_users_simple(
+    session: SessionData = Depends(get_current_session),
+) -> SimpleUserListResponse:
+    """取得所有用戶列表（簡化版，供下拉選單使用）"""
+    users = await get_all_users()
+
+    result = [
+        SimpleUserInfo(
+            id=user["id"],
+            username=user["username"],
+            display_name=user["display_name"],
+        )
+        for user in users
+    ]
+
+    return SimpleUserListResponse(users=result)
+
+
 @router.get("/me", response_model=UserInfo)
 async def get_current_user(
     session: SessionData = Depends(get_current_session),

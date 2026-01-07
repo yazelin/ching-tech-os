@@ -52,10 +52,10 @@ async def my_tool(param: str) -> str:
     # ... 資料庫操作 ...
 ```
 
-**Prompt 更新**：新增 MCP 工具後，需要同步更新三個地方：
+**Prompt 更新**：新增 MCP 工具後，需要同步更新：
 1. `linebot_agents.py` - 程式碼中的 prompt 定義
-2. `migrations/versions/013_update_linebot_prompts.py` - migration 檔案
-3. 資料庫中的 prompt 資料 - 執行 migration 或直接 SQL 更新
+2. 建立新的 migration 檔案更新資料庫中的 prompt
+3. 執行 `uv run alembic upgrade head` 套用變更
 
 ## 前端開發
 - 使用原生 JavaScript（無框架）
@@ -200,11 +200,19 @@ TextViewerModule.open(`/api/knowledge/assets/${path}`, filename);
 ### docs/ 目錄結構
 ```
 docs/
-├── backend.md          # 後端開發指南、API 參考
-├── database-design.md  # 資料庫設計
-├── ai-agent-design.md  # AI Agent 架構設計
-├── smb-nas-architecture.md  # SMB/NAS 架構
-└── file-manager.md     # 檔案管理器設計
+├── ai-agent-design.md       # AI Agent 架構設計
+├── ai-management.md         # AI 管理系統
+├── backend.md               # 後端開發指南、API 參考
+├── database-design.md       # 資料庫設計
+├── design-system.md         # CSS 設計系統
+├── docker.md                # Docker 服務設定
+├── file-manager.md          # 檔案管理器設計
+├── frontend.md              # 前端開發指南
+├── linebot.md               # Line Bot 整合
+├── mcp-server.md            # MCP Server（AI 工具）
+├── realtime.md              # Socket.IO 即時通訊
+├── security.md              # 認證與安全
+└── smb-nas-architecture.md  # SMB/NAS 架構
 ```
 
 ### 文件更新時機

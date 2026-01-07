@@ -556,6 +556,7 @@ const ProjectManagementModule = (function() {
                 ${m.email ? `<span><span class="icon">${getIcon('email')}</span>${m.email}</span>` : ''}
                 ${m.phone ? `<span><span class="icon">${getIcon('phone')}</span>${m.phone}</span>` : ''}
               </div>
+              ${m.user_display_name || m.user_username ? `<div class="pm-member-ctos-user"><span class="icon">${getIcon('link')}</span>CTOS: ${m.user_display_name || m.user_username}</div>` : ''}
             </div>
             <div class="pm-member-badge ${m.is_internal ? 'internal' : 'external'}">
               ${m.is_internal ? '內部' : '外部'}
@@ -588,11 +589,35 @@ const ProjectManagementModule = (function() {
     });
   }
 
-  function showMemberModal(member = null) {
+  async function showMemberModal(member = null) {
     const windowEl = document.getElementById(windowId);
     if (!windowEl) return;
 
     const isEdit = !!member;
+    const isInternal = member?.is_internal !== false;
+
+    // 載入用戶列表（供下拉選單使用）
+    let userList = [];
+    try {
+      const token = getToken();
+      const response = await fetch('/api/user/list', {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` }),
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        userList = data.users || [];
+      }
+    } catch (e) {
+      console.warn('無法載入用戶列表:', e);
+    }
+
+    const userOptions = userList.map(u =>
+      `<option value="${u.id}" ${member?.user_id === u.id ? 'selected' : ''}>${u.display_name || u.username}</option>`
+    ).join('');
+
     const modal = document.createElement('div');
     modal.className = 'pm-modal';
     modal.innerHTML = `
@@ -630,9 +655,17 @@ const ProjectManagementModule = (function() {
           </div>
           <div class="pm-form-group">
             <label class="pm-checkbox">
-              <input type="checkbox" id="memberInternal" ${member?.is_internal !== false ? 'checked' : ''}>
+              <input type="checkbox" id="memberInternal" ${isInternal ? 'checked' : ''}>
               <span>內部人員</span>
             </label>
+          </div>
+          <div class="pm-form-group pm-user-select-group" id="memberUserGroup" style="${isInternal ? '' : 'display: none;'}">
+            <label>關聯 CTOS 用戶</label>
+            <select id="memberUserId" class="pm-select">
+              <option value="">-- 不關聯 --</option>
+              ${userOptions}
+            </select>
+            <small class="pm-form-hint">選擇後，該用戶可透過 AI 助理操作此專案</small>
           </div>
         </div>
         <div class="pm-modal-footer">
@@ -649,7 +682,23 @@ const ProjectManagementModule = (function() {
     modal.querySelector('#memberCancel').addEventListener('click', closeModal);
     modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
 
+    // 內部人員勾選變更時，顯示/隱藏用戶選擇器
+    const internalCheckbox = modal.querySelector('#memberInternal');
+    const userGroup = modal.querySelector('#memberUserGroup');
+    const userSelect = modal.querySelector('#memberUserId');
+    internalCheckbox.addEventListener('change', () => {
+      if (internalCheckbox.checked) {
+        userGroup.style.display = '';
+      } else {
+        userGroup.style.display = 'none';
+        userSelect.value = '';  // 取消勾選時清除選擇
+      }
+    });
+
     modal.querySelector('#memberSave').addEventListener('click', async () => {
+      const isInternalChecked = modal.querySelector('#memberInternal').checked;
+      const userIdValue = modal.querySelector('#memberUserId').value;
+
       const data = {
         name: modal.querySelector('#memberName').value.trim(),
         role: modal.querySelector('#memberRole').value.trim() || null,
@@ -657,7 +706,8 @@ const ProjectManagementModule = (function() {
         email: modal.querySelector('#memberEmail').value.trim() || null,
         phone: modal.querySelector('#memberPhone').value.trim() || null,
         notes: modal.querySelector('#memberNotes').value.trim() || null,
-        is_internal: modal.querySelector('#memberInternal').checked,
+        is_internal: isInternalChecked,
+        user_id: isInternalChecked && userIdValue ? parseInt(userIdValue, 10) : null,
       };
 
       if (!data.name) {

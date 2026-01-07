@@ -184,4 +184,4 @@ ching-tech-os/
 
 MIT License
 
-Copyright (c) 2024-2025 擎添工業 Ching Tech Industrial Co., Ltd.
+Copyright (c) 2024-2026 擎添工業 Ching Tech Industrial Co., Ltd.

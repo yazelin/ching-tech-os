@@ -41,11 +41,18 @@ uv run python -m ching_tech_os.mcp_cli
 |----------|------|------|
 | `query_project` | 查詢專案資訊 | `project_id`（UUID）, `keyword`（搜尋） |
 | `create_project` | 建立新專案 | `name`（必填）, `description`, `start_date`, `end_date` |
-| `add_project_member` | 新增專案成員 | `project_id`（必填）, `name`（必填）, `role`, `company`, `email`, `phone`, `notes`, `is_internal`（預設 True） |
+| `update_project` ⚠️ | 更新專案資訊 | `project_id`（必填）, `ctos_user_id`（必填）, `name`, `description`, `status`, `start_date`, `end_date` |
+| `add_project_member` | 新增專案成員 | `project_id`（必填）, `name`（必填）, `role`, `company`, `email`, `phone`, `notes`, `is_internal`（預設 True）, `ctos_user_id`（自動綁定） |
+| `update_project_member` ⚠️ | 更新成員資訊 | `member_id`（必填）, `ctos_user_id`（必填）, `project_id`, `name`, `role`, `company`, `email`, `phone`, `notes`, `is_internal`, `bind_to_caller` |
 | `add_project_milestone` | 新增專案里程碑 | `project_id`（必填）, `name`（必填）, `milestone_type`, `planned_date`, `actual_date`, `status`, `notes` |
+| `update_milestone` ⚠️ | 更新里程碑 | `milestone_id`（必填）, `ctos_user_id`（必填）, `project_id`, `name`, `milestone_type`, `planned_date`, `actual_date`, `status`, `notes` |
 | `get_project_milestones` | 取得專案里程碑 | `project_id`（必填）, `status`（過濾）, `limit` |
+| `add_project_meeting` ⚠️ | 新增會議記錄 | `project_id`（必填）, `title`（必填）, `ctos_user_id`（必填）, `meeting_date`, `location`, `attendees`, `content` |
+| `update_project_meeting` ⚠️ | 更新會議記錄 | `meeting_id`（必填）, `ctos_user_id`（必填）, `project_id`, `title`, `meeting_date`, `location`, `attendees`, `content` |
 | `get_project_meetings` | 取得專案會議記錄 | `project_id`（必填）, `limit` |
 | `get_project_members` | 取得專案成員 | `project_id`（必填）, `is_internal`（過濾） |
+
+> ⚠️ 標記的工具需要權限控制，必須傳入 `ctos_user_id` 參數，且只有專案成員才能操作。
 
 ### 知識庫
 
@@ -173,15 +180,48 @@ Schema 會自動從 type hints 和 docstring 生成。
 
 這讓 Line Bot AI 和其他服務可以直接呼叫工具，無需透過 MCP 協議。
 
+## 權限控制
+
+標記 ⚠️ 的工具需要權限控制：
+
+### 機制說明
+
+1. **用戶關聯**：Line 用戶透過 `line_users.user_id` 關聯到 CTOS 用戶
+2. **成員關聯**：專案成員透過 `project_members.user_id` 關聯到 CTOS 用戶
+3. **權限檢查**：呼叫工具時傳入 `ctos_user_id`，系統檢查該用戶是否為專案成員
+
+### 錯誤訊息
+
+- 未關聯 CTOS 帳號：「請聯繫管理員關聯帳號」
+- 非專案成員：「您不是此專案的成員，無法進行此操作」
+
+### 自動綁定
+
+`add_project_member` 支援自動綁定功能：
+
+```python
+# 新增成員並自動綁定到呼叫者的 CTOS 帳號
+result = await execute_tool("add_project_member", {
+    "project_id": "uuid-here",
+    "name": "張三",
+    "is_internal": True,
+    "ctos_user_id": 1  # 傳入 ctos_user_id 自動綁定
+})
+```
+
+- 若已存在同名成員但未綁定，會自動完成綁定
+- 綁定後該成員即可使用需要權限的工具
+
 ## 新增工具
 
 1. 在 `mcp_server.py` 中使用 `@mcp.tool()` 裝飾器定義函數
 2. 使用 type hints 定義參數類型
 3. 在 docstring 中描述工具和參數
 4. 如果需要資料庫連線，使用 `await ensure_db_connection()`
-5. 更新 `linebot_agents.py` 中的 prompt（讓 Line Bot AI 知道新工具）
-6. 更新 `013_update_linebot_prompts.py` migration
-7. 執行 SQL 更新資料庫中的 prompt
+5. 如果需要權限控制，加入 `ctos_user_id` 參數並呼叫 `check_project_member_permission()`
+6. 更新 `linebot_agents.py` 中的 prompt（讓 Line Bot AI 知道新工具）
+7. 建立新的 migration 更新資料庫中的 prompt
+8. 執行 `alembic upgrade head` 套用變更
 
 範例：
 
