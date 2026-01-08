@@ -7,6 +7,7 @@ const AILogApp = (function() {
   'use strict';
 
   const APP_ID = 'ai-log';
+  const MOBILE_BREAKPOINT = 768;
   let windowId = null;
   let logs = [];
   let agents = [];
@@ -117,6 +118,13 @@ const AILogApp = (function() {
   }
 
   /**
+   * 判斷是否為手機版
+   */
+  function isMobile() {
+    return window.innerWidth <= MOBILE_BREAKPOINT;
+  }
+
+  /**
    * 建立視窗內容
    */
   function buildWindowContent() {
@@ -125,39 +133,45 @@ const AILogApp = (function() {
     return `
       <div class="ai-log">
         <div class="ai-log-filters">
-          <div class="ai-log-filter-group">
-            <label class="ai-log-filter-label">Agent:</label>
-            <select class="ai-log-filter-select" data-filter="agent_id">
-              <option value="">全部 Agent</option>
-              ${agents.map(a => `<option value="${a.id}">${a.display_name || a.name}</option>`).join('')}
-            </select>
-          </div>
-          <div class="ai-log-filter-group">
-            <label class="ai-log-filter-label">類型:</label>
-            <select class="ai-log-filter-select" data-filter="context_type">
-              ${contextTypes.map(t => `<option value="${t.id || ''}">${t.name}</option>`).join('')}
-            </select>
-          </div>
-          <div class="ai-log-filter-group">
-            <label class="ai-log-filter-label">狀態:</label>
-            <select class="ai-log-filter-select" data-filter="success">
-              <option value="">全部</option>
-              <option value="true">成功</option>
-              <option value="false">失敗</option>
-            </select>
-          </div>
-          <div class="ai-log-filter-group">
-            <label class="ai-log-filter-label">開始:</label>
-            <input type="date" class="ai-log-filter-input" data-filter="start_date" value="${today}">
-          </div>
-          <div class="ai-log-filter-group">
-            <label class="ai-log-filter-label">結束:</label>
-            <input type="date" class="ai-log-filter-input" data-filter="end_date">
-          </div>
-          <button class="ai-log-refresh-btn btn btn-secondary">
-            <span class="icon">${getIcon('refresh')}</span>
-            重新整理
+          <button class="ai-log-filter-toggle">
+            <span>篩選條件</span>
+            <span class="icon">${getIcon('chevron-down')}</span>
           </button>
+          <div class="ai-log-filter-content">
+            <div class="ai-log-filter-group">
+              <label class="ai-log-filter-label">Agent:</label>
+              <select class="ai-log-filter-select" data-filter="agent_id">
+                <option value="">全部 Agent</option>
+                ${agents.map(a => `<option value="${a.id}">${a.display_name || a.name}</option>`).join('')}
+              </select>
+            </div>
+            <div class="ai-log-filter-group">
+              <label class="ai-log-filter-label">類型:</label>
+              <select class="ai-log-filter-select" data-filter="context_type">
+                ${contextTypes.map(t => `<option value="${t.id || ''}">${t.name}</option>`).join('')}
+              </select>
+            </div>
+            <div class="ai-log-filter-group">
+              <label class="ai-log-filter-label">狀態:</label>
+              <select class="ai-log-filter-select" data-filter="success">
+                <option value="">全部</option>
+                <option value="true">成功</option>
+                <option value="false">失敗</option>
+              </select>
+            </div>
+            <div class="ai-log-filter-group">
+              <label class="ai-log-filter-label">開始:</label>
+              <input type="date" class="ai-log-filter-input" data-filter="start_date" value="${today}">
+            </div>
+            <div class="ai-log-filter-group">
+              <label class="ai-log-filter-label">結束:</label>
+              <input type="date" class="ai-log-filter-input" data-filter="end_date">
+            </div>
+            <button class="ai-log-refresh-btn btn btn-secondary">
+              <span class="icon">${getIcon('refresh')}</span>
+              重新整理
+            </button>
+          </div>
         </div>
 
         <div class="ai-log-stats">
@@ -201,6 +215,9 @@ const AILogApp = (function() {
                 <!-- Log items will be rendered here -->
               </tbody>
             </table>
+            <div id="log-card-list" class="ai-log-card-list">
+              <!-- Card items will be rendered here (mobile) -->
+            </div>
           </div>
 
           <div class="ai-log-detail" id="log-detail" style="display: none;">
@@ -226,22 +243,23 @@ const AILogApp = (function() {
    */
   function renderLogList() {
     const tbody = document.querySelector(`#${windowId} #log-list-body`);
-    if (!tbody) return;
+    const cardList = document.querySelector(`#${windowId} #log-card-list`);
+    if (!tbody || !cardList) return;
 
+    // 空狀態
     if (logs.length === 0) {
-      tbody.innerHTML = `
-        <tr>
-          <td colspan="7">
-            <div class="ai-log-empty">
-              <span class="icon">${getIcon('file-document-outline')}</span>
-              <p>沒有符合條件的日誌</p>
-            </div>
-          </td>
-        </tr>
+      const emptyHtml = `
+        <div class="ai-log-empty">
+          <span class="icon">${getIcon('file-document-outline')}</span>
+          <p>沒有符合條件的日誌</p>
+        </div>
       `;
+      tbody.innerHTML = `<tr><td colspan="7">${emptyHtml}</td></tr>`;
+      cardList.innerHTML = emptyHtml;
       return;
     }
 
+    // 表格渲染（桌機版）
     tbody.innerHTML = logs.map(log => `
       <tr data-log-id="${log.id}" class="${log.id === currentLogId ? 'selected' : ''}">
         <td>
@@ -258,10 +276,40 @@ const AILogApp = (function() {
       </tr>
     `).join('');
 
-    // 綁定點擊事件
+    // 卡片渲染（手機版）
+    cardList.innerHTML = logs.map(log => `
+      <div class="ai-log-card ${log.id === currentLogId ? 'selected' : ''}" data-log-id="${log.id}">
+        <div class="ai-log-card-header">
+          <div class="ai-log-card-status">
+            <span class="ai-log-status ${log.success ? 'success' : 'error'}">
+              ${getIcon(log.success ? 'check-circle' : 'alert-circle')}
+            </span>
+            <span class="ai-log-card-agent">${log.agent_name || '-'}</span>
+          </div>
+          <span class="ai-log-card-time">${formatDateTime(log.created_at)}</span>
+        </div>
+        <div class="ai-log-card-body">
+          <span class="ai-log-card-type">${log.context_type || '-'}</span>
+          <div class="ai-log-card-tools">${renderToolsBadges(log.allowed_tools, log.used_tools)}</div>
+        </div>
+        <div class="ai-log-card-footer">
+          <span>耗時: ${formatDuration(log.duration_ms)}</span>
+          <span>Tokens: ${formatTokens(log.input_tokens, log.output_tokens)}</span>
+        </div>
+      </div>
+    `).join('');
+
+    // 綁定點擊事件（表格）
     tbody.querySelectorAll('tr[data-log-id]').forEach(row => {
       row.addEventListener('click', () => {
         selectLog(row.dataset.logId);
+      });
+    });
+
+    // 綁定點擊事件（卡片）
+    cardList.querySelectorAll('.ai-log-card[data-log-id]').forEach(card => {
+      card.addEventListener('click', () => {
+        selectLog(card.dataset.logId);
       });
     });
   }
@@ -304,9 +352,12 @@ const AILogApp = (function() {
   async function selectLog(logId) {
     currentLogId = logId;
 
-    // 更新列表選中狀態
+    // 更新列表選中狀態（表格和卡片）
     document.querySelectorAll(`#${windowId} #log-list-body tr`).forEach(row => {
       row.classList.toggle('selected', row.dataset.logId === logId);
+    });
+    document.querySelectorAll(`#${windowId} .ai-log-card`).forEach(card => {
+      card.classList.toggle('selected', card.dataset.logId === logId);
     });
 
     const detailPanel = document.querySelector(`#${windowId} #log-detail`);
@@ -325,7 +376,120 @@ const AILogApp = (function() {
     const hasFlow = log.parsed_response?.tool_calls?.length > 0;
 
     detailPanel.style.display = 'flex';
-    detailPanel.innerHTML = `
+
+    // 手機版使用 Tab 結構
+    if (isMobile()) {
+      detailPanel.innerHTML = renderMobileDetailPanel(log, hasFlow);
+      bindMobileDetailEvents(detailPanel, log);
+    } else {
+      // 桌機版使用原本結構
+      detailPanel.innerHTML = renderDesktopDetailPanel(log, hasFlow);
+      bindDesktopDetailEvents(detailPanel, log);
+    }
+  }
+
+  /**
+   * 渲染手機版詳情面板（Tab 結構）
+   */
+  function renderMobileDetailPanel(log, hasFlow) {
+    const tabs = [];
+    const panels = [];
+
+    // Tab 1: System Prompt（如果有）
+    if (log.system_prompt) {
+      tabs.push(`<button class="ai-log-detail-tab active" data-tab="system">System</button>`);
+      panels.push(`
+        <div class="ai-log-detail-panel active" data-panel="system">
+          <div class="ai-log-detail-section">
+            <div class="ai-log-detail-text system-prompt">${escapeHtml(log.system_prompt)}</div>
+          </div>
+        </div>
+      `);
+    }
+
+    // Tab 2: 使用者輸入
+    const isInputActive = !log.system_prompt;
+    tabs.push(`<button class="ai-log-detail-tab ${isInputActive ? 'active' : ''}" data-tab="input">輸入</button>`);
+    panels.push(`
+      <div class="ai-log-detail-panel ${isInputActive ? 'active' : ''}" data-panel="input">
+        <div class="ai-log-detail-section">
+          <div class="ai-log-detail-text">${escapeHtml(log.input_prompt)}</div>
+        </div>
+      </div>
+    `);
+
+    // Tab 3: AI 輸出 或 執行流程
+    tabs.push(`<button class="ai-log-detail-tab" data-tab="output">${hasFlow ? '流程' : '輸出'}</button>`);
+    panels.push(`
+      <div class="ai-log-detail-panel" data-panel="output">
+        ${hasFlow ? renderExecutionFlow(log) : `
+          <div class="ai-log-detail-section">
+            <div class="ai-log-detail-text ${log.error_message ? 'error' : ''}">
+              ${log.error_message ? escapeHtml(log.error_message) : escapeHtml(log.raw_response || '無回應')}
+            </div>
+          </div>
+        `}
+      </div>
+    `);
+
+    return `
+      <div class="ai-log-detail-header">
+        <span class="ai-log-detail-title">Log 詳情</span>
+        <button class="ai-log-detail-close">
+          <span class="icon">${getIcon('close')}</span>
+        </button>
+      </div>
+      <div class="ai-log-detail-tabs">
+        ${tabs.join('')}
+      </div>
+      <div class="ai-log-detail-content">
+        ${panels.join('')}
+      </div>
+      <div class="ai-log-detail-meta">
+        <span>Model: ${log.model || '-'}</span>
+        <span>Tokens: ${log.input_tokens || 0}/${log.output_tokens || 0}</span>
+        <span>耗時: ${formatDuration(log.duration_ms)}</span>
+      </div>
+    `;
+  }
+
+  /**
+   * 綁定手機版詳情面板事件
+   */
+  function bindMobileDetailEvents(detailPanel, log) {
+    // 關閉按鈕
+    detailPanel.querySelector('.ai-log-detail-close').addEventListener('click', () => {
+      currentLogId = null;
+      detailPanel.style.display = 'none';
+      document.querySelectorAll(`#${windowId} #log-list-body tr`).forEach(row => {
+        row.classList.remove('selected');
+      });
+      document.querySelectorAll(`#${windowId} .ai-log-card`).forEach(card => {
+        card.classList.remove('selected');
+      });
+    });
+
+    // Tab 切換
+    detailPanel.querySelectorAll('.ai-log-detail-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        const tabName = tab.dataset.tab;
+        // 更新 Tab 狀態
+        detailPanel.querySelectorAll('.ai-log-detail-tab').forEach(t => {
+          t.classList.toggle('active', t.dataset.tab === tabName);
+        });
+        // 更新 Panel 狀態
+        detailPanel.querySelectorAll('.ai-log-detail-panel').forEach(p => {
+          p.classList.toggle('active', p.dataset.panel === tabName);
+        });
+      });
+    });
+  }
+
+  /**
+   * 渲染桌機版詳情面板
+   */
+  function renderDesktopDetailPanel(log, hasFlow) {
+    return `
       <div class="ai-log-detail-resizer" title="拖曳調整高度"></div>
       <div class="ai-log-detail-header">
         <span class="ai-log-detail-title">Log 詳情</span>
@@ -371,6 +535,12 @@ const AILogApp = (function() {
         <span>耗時: ${formatDuration(log.duration_ms)}</span>
       </div>
     `;
+  }
+
+  /**
+   * 綁定桌機版詳情面板事件
+   */
+  function bindDesktopDetailEvents(detailPanel, log) {
 
     // 關閉按鈕
     detailPanel.querySelector('.ai-log-detail-close').addEventListener('click', () => {
@@ -674,6 +844,15 @@ const AILogApp = (function() {
    * 綁定事件
    */
   function bindEvents() {
+    // 篩選器切換按鈕（手機版）
+    const filterToggle = document.querySelector(`#${windowId} .ai-log-filter-toggle`);
+    const filtersContainer = document.querySelector(`#${windowId} .ai-log-filters`);
+    if (filterToggle && filtersContainer) {
+      filterToggle.addEventListener('click', () => {
+        filtersContainer.classList.toggle('expanded');
+      });
+    }
+
     // 過濾器變更
     document.querySelectorAll(`#${windowId} [data-filter]`).forEach(el => {
       el.addEventListener('change', () => {

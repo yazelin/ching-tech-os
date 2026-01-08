@@ -598,3 +598,341 @@
   color: #fff;
   border-color: var(--color-success);
 }
+
+/* ==========================================================================
+   Desktop Styles (桌面版)
+   ========================================================================== */
+
+/* 桌面版隱藏篩選器切換按鈕 */
+.ai-log-filter-toggle {
+  display: none;
+}
+
+/* 桌面版篩選器內容永遠顯示 */
+.ai-log-filter-content {
+  display: contents;
+}
+
+/* 桌面版隱藏卡片列表 */
+.ai-log-card-list {
+  display: none;
+}
+
+/* ==========================================================================
+   Mobile Responsive Styles (手機版響應式)
+   ========================================================================== */
+@media (max-width: 768px) {
+  /* ========================================
+     篩選器：收合面板
+     ======================================== */
+  .ai-log-filters {
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 12px;
+  }
+
+  /* 篩選器切換按鈕（手機版顯示） */
+  .ai-log-filter-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 8px 12px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  .ai-log-filter-toggle .icon {
+    transition: transform 0.2s ease;
+  }
+
+  .ai-log-filters.expanded .ai-log-filter-toggle .icon {
+    transform: rotate(180deg);
+  }
+
+  /* 篩選器內容（預設隱藏） */
+  .ai-log-filter-content {
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .ai-log-filters.expanded .ai-log-filter-content {
+    display: flex;
+  }
+
+  .ai-log-filter-group {
+    width: 100%;
+  }
+
+  .ai-log-filter-label {
+    min-width: 50px;
+  }
+
+  .ai-log-filter-select,
+  .ai-log-filter-input {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .ai-log-refresh-btn {
+    margin-left: 0;
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* ========================================
+     統計卡片：橫向滾動
+     ======================================== */
+  .ai-log-stats {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    gap: 8px;
+    padding: 8px 12px;
+    flex-wrap: nowrap;
+  }
+
+  .ai-log-stat-card {
+    flex-shrink: 0;
+    min-width: 80px;
+    padding: 6px 12px;
+  }
+
+  .ai-log-stat-value {
+    font-size: 16px;
+  }
+
+  .ai-log-stat-label {
+    font-size: 10px;
+    white-space: nowrap;
+  }
+
+  /* ========================================
+     表格：隱藏，改用卡片列表
+     ======================================== */
+  .ai-log-table {
+    display: none;
+  }
+
+  /* 卡片列表容器 */
+  .ai-log-card-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 12px;
+  }
+
+  /* 單一卡片 */
+  .ai-log-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .ai-log-card:active {
+    background: var(--hover-bg);
+  }
+
+  .ai-log-card.selected {
+    border-color: var(--color-accent);
+    background: var(--accent-bg-subtle);
+  }
+
+  /* 卡片頂部：狀態 + 時間 */
+  .ai-log-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .ai-log-card-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .ai-log-card-status .ai-log-status {
+    width: 18px;
+    height: 18px;
+  }
+
+  .ai-log-card-agent {
+    font-weight: 500;
+    color: var(--text-primary);
+    font-size: 13px;
+  }
+
+  .ai-log-card-time {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  /* 卡片內容：類型 + Tools */
+  .ai-log-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .ai-log-card-type {
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .ai-log-card-tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .ai-log-card-tools .ai-log-tool-badge {
+    max-width: none;
+  }
+
+  /* 卡片底部：耗時 + Tokens */
+  .ai-log-card-footer {
+    display: flex;
+    justify-content: space-between;
+    padding-top: 6px;
+    border-top: 1px solid var(--border-subtle);
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  /* ========================================
+     詳情面板：全螢幕 modal + Tab 分頁
+     ======================================== */
+  .ai-log-detail {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 100% !important;
+    max-height: none;
+    z-index: 1000;
+    background: var(--color-background);
+  }
+
+  .ai-log-detail-resizer {
+    display: none;
+  }
+
+  .ai-log-detail-header {
+    padding: 12px 16px;
+  }
+
+  .ai-log-detail-close {
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Tab 導航 */
+  .ai-log-detail-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--bg-secondary);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .ai-log-detail-tab {
+    flex: 1;
+    padding: 12px 16px;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    min-width: 80px;
+    transition: all 0.15s ease;
+  }
+
+  .ai-log-detail-tab.active {
+    color: var(--color-accent);
+    border-bottom-color: var(--color-accent);
+    background: var(--accent-bg-subtle);
+  }
+
+  /* Tab 內容 */
+  .ai-log-detail-content {
+    flex-direction: column;
+    gap: 0;
+    padding: 0;
+  }
+
+  .ai-log-detail-panel {
+    display: none;
+    flex: 1;
+    flex-direction: column;
+    padding: 12px 16px;
+    overflow: auto;
+  }
+
+  .ai-log-detail-panel.active {
+    display: flex;
+  }
+
+  .ai-log-detail-section {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .ai-log-detail-text {
+    font-size: 12px;
+    max-height: none;
+    flex: 1;
+  }
+
+  .ai-log-detail-meta {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--border-subtle);
+    flex-shrink: 0;
+  }
+
+  /* 複製按鈕隱藏（手機版不常用） */
+  .ai-log-copy-full-btn {
+    display: none;
+  }
+
+  /* 執行流程在 Tab 內的樣式 */
+  .ai-log-detail-panel .ai-log-flow {
+    flex: 1;
+  }
+
+  /* ========================================
+     分頁
+     ======================================== */
+  .ai-log-pagination {
+    padding: 8px 12px;
+  }
+
+  .ai-log-page-btn {
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
