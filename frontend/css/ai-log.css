@@ -699,8 +699,8 @@
 
   .ai-log-stat-card {
     flex-shrink: 0;
-    min-width: 80px;
-    padding: 6px 12px;
+    min-width: 65px;
+    padding: 6px 8px;
   }
 
   .ai-log-stat-value {
