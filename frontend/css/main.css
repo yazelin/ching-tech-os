@@ -214,10 +214,11 @@
 
   /* Layout */
   --header-height: 40px;
-  --taskbar-height: 64px;
-  --taskbar-icon-size: 48px;
   --desktop-icon-size: 64px;
   --desktop-icon-gap: 24px;
+
+  /* Responsive Breakpoints */
+  --breakpoint-mobile: 768px;
 
   /* Spacing */
   --spacing-xs: 4px;

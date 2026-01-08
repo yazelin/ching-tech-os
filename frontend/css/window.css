@@ -36,7 +36,7 @@
   left: 0 !important;
   top: 0 !important;
   width: 100% !important;
-  height: calc(100% - var(--taskbar-height) - var(--spacing-lg)) !important;
+  height: 100% !important;
   border-radius: 0;
   border: none;
 }
@@ -233,5 +233,59 @@
 }
 
 .window.snapped .window-resize {
+  display: none;
+}
+
+/* ==========================================================================
+   Mobile Styles (手機版樣式)
+   ========================================================================== */
+@media (max-width: 768px) {
+  /* 手機上視窗在 header 下方全螢幕 */
+  .window {
+    left: 0 !important;
+    top: var(--header-height) !important;
+    width: 100% !important;
+    height: calc(100% - var(--header-height)) !important;
+    border-radius: 0;
+    border: none;
+    min-width: unset;
+    min-height: unset;
+  }
+
+  /* 隱藏調整大小的控制項 */
+  .window .window-resize {
+    display: none;
+  }
+
+  /* 隱藏最大化按鈕（手機已經全螢幕） */
+  .window .window-btn-maximize {
+    display: none;
+  }
+
+  /* 隱藏最小化按鈕 */
+  .window .window-btn-minimize {
+    display: none;
+  }
+
+  /* 停用標題列拖曳 */
+  .window-titlebar {
+    cursor: default;
+  }
+
+  /* 確保關閉按鈕易於點擊（至少 44px） */
+  .window-btn-close {
+    width: 44px;
+    height: 44px;
+  }
+
+  .window-btn-close .icon {
+    font-size: 20px;
+  }
+}
+
+/* ==========================================================================
+   Desktop Styles - 移除最小化按鈕（桌機也不需要）
+   ========================================================================== */
+.window-btn-minimize {
   display: none;
 }

@@ -229,3 +229,64 @@
 .header-messages-btn .header-badge.hidden {
   display: none;
 }
+
+/* ==========================================================================
+   Mobile Styles (手機版樣式)
+   ========================================================================== */
+@media (max-width: 768px) {
+  .header-bar {
+    padding: 0 var(--spacing-sm);
+  }
+
+  /* 隱藏標題文字 */
+  .header-title {
+    display: none;
+  }
+
+  /* 隱藏時間 */
+  .header-time {
+    display: none;
+  }
+
+  /* 隱藏分隔線 */
+  .header-divider {
+    display: none;
+  }
+
+  /* 縮小右側區域間距 */
+  .header-right {
+    gap: var(--spacing-xs);
+  }
+
+  /* 隱藏使用者圖示，只保留名稱 */
+  .header-user .icon {
+    display: none;
+  }
+
+  .header-user {
+    padding: var(--spacing-xs);
+  }
+
+  .header-user-name {
+    max-width: 80px;
+    font-size: var(--font-size-xs);
+  }
+
+  /* 登出按鈕只顯示圖示 */
+  .header-logout span:not(.icon) {
+    display: none;
+  }
+
+  .header-logout {
+    padding: var(--spacing-xs);
+    width: 36px;
+    height: 36px;
+    justify-content: center;
+  }
+
+  /* 訊息按鈕調整 */
+  .header-messages-btn {
+    width: 36px;
+    height: 36px;
+  }
+}

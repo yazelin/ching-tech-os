@@ -22,8 +22,6 @@ const DesktopModule = (function() {
     { id: 'settings', name: '系統設定', icon: 'mdi-cog' }
   ];
 
-  let selectedIcon = null;
-
   /**
    * Create a desktop icon element
    * @param {Object} app - Application definition
@@ -70,21 +68,13 @@ const DesktopModule = (function() {
   }
 
   /**
-   * Handle icon click
+   * Handle icon click - directly open the app
    * @param {Event} event
    */
   function handleIconClick(event) {
     const iconElement = event.currentTarget;
     const appId = iconElement.dataset.appId;
-
-    // Deselect previous icon
-    if (selectedIcon) {
-      selectedIcon.classList.remove('selected');
-    }
-
-    // Select current icon
-    iconElement.classList.add('selected');
-    selectedIcon = iconElement;
+    openApp(appId);
   }
 
   /**
@@ -185,28 +175,6 @@ const DesktopModule = (function() {
     });
   }
 
-  /**
-   * Handle icon double-click (open app)
-   * @param {Event} event
-   */
-  function handleIconDoubleClick(event) {
-    const iconElement = event.currentTarget;
-    const appId = iconElement.dataset.appId;
-    openApp(appId);
-  }
-
-  /**
-   * Handle click on desktop area (deselect icons)
-   * @param {Event} event
-   */
-  function handleDesktopClick(event) {
-    if (event.target.classList.contains('desktop-area')) {
-      if (selectedIcon) {
-        selectedIcon.classList.remove('selected');
-        selectedIcon = null;
-      }
-    }
-  }
 
   /**
    * Render all desktop icons
@@ -223,12 +191,8 @@ const DesktopModule = (function() {
     visibleApps.forEach(app => {
       const iconElement = createIconElement(app);
       iconElement.addEventListener('click', handleIconClick);
-      iconElement.addEventListener('dblclick', handleIconDoubleClick);
       desktopArea.appendChild(iconElement);
     });
-
-    // Handle desktop area click
-    desktopArea.addEventListener('click', handleDesktopClick);
   }
 
   /**
