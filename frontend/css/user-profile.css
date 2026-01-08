@@ -182,3 +182,63 @@
   background-color: rgba(var(--color-error-rgb), 0.2);
   color: var(--color-error);
 }
+
+/* ==========================================================================
+   Mobile Responsive Styles (手機版響應式)
+   ========================================================================== */
+@media (max-width: 768px) {
+  /* 移除視窗固定寬度限制 */
+  .user-profile-window {
+    width: 100% !important;
+    min-width: unset !important;
+    min-height: unset !important;
+  }
+
+  .user-profile-content {
+    padding: var(--spacing-md);
+  }
+
+  /* 左右分割改為上下堆疊 */
+  .user-profile-main {
+    flex-direction: column;
+    gap: var(--spacing-md);
+  }
+
+  /* 頭像區置中 */
+  .user-profile-left {
+    min-width: unset;
+    padding: var(--spacing-sm);
+  }
+
+  .user-profile-left .avatar-icon {
+    width: 64px;
+    height: 64px;
+  }
+
+  .user-profile-left .avatar-icon .icon {
+    width: 36px;
+    height: 36px;
+  }
+
+  /* 表單全寬 */
+  .user-profile-right {
+    width: 100%;
+  }
+
+  .form-group input {
+    width: 100%;
+    min-height: 40px;
+  }
+
+  /* 操作按鈕 */
+  .user-profile-actions {
+    flex-direction: column;
+    gap: var(--spacing-sm);
+  }
+
+  .user-profile-actions .btn {
+    width: 100%;
+    min-height: 44px;
+    justify-content: center;
+  }
+}

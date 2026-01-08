@@ -273,13 +273,7 @@
   flex-shrink: 0;
 }
 
-.mc-item-source {
-  font-size: var(--font-size-xs);
-  padding: 2px 6px;
-  border-radius: var(--radius-xs);
-  background-color: var(--bg-surface-darker);
-  color: var(--text-muted);
-}
+/* .mc-item-source 已改用 .mc-tag.source */
 
 .mc-item-time {
   font-size: var(--font-size-xs);
@@ -349,24 +343,69 @@
 .mc-detail-info {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--spacing-md);
+  gap: var(--spacing-xs);
   margin-bottom: var(--spacing-md);
+  align-items: center;
 }
 
-.mc-detail-info-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.mc-detail-label {
+/* 通知詳情標籤 */
+.mc-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
   font-size: var(--font-size-xs);
-  color: var(--text-muted);
+  font-weight: 500;
 }
 
-.mc-detail-value {
-  font-size: var(--font-size-sm);
-  color: var(--text-primary);
+.mc-tag .icon svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* 嚴重程度標籤 */
+.mc-tag.severity-debug {
+  background-color: var(--tag-bg-gray);
+  color: var(--tag-color-gray);
+}
+
+.mc-tag.severity-info {
+  background-color: var(--tag-bg-blue);
+  color: var(--tag-color-blue);
+}
+
+.mc-tag.severity-warning {
+  background-color: var(--tag-bg-orange);
+  color: var(--tag-color-orange);
+}
+
+.mc-tag.severity-error {
+  background-color: var(--tag-bg-red);
+  color: var(--tag-color-red);
+}
+
+.mc-tag.severity-critical {
+  background-color: var(--priority-critical-bg);
+  color: var(--priority-critical-color);
+}
+
+/* 來源標籤 */
+.mc-tag.source {
+  background-color: var(--tag-bg-purple);
+  color: var(--tag-color-purple);
+}
+
+/* 分類標籤 */
+.mc-tag.category {
+  background-color: var(--tag-bg-green);
+  color: var(--tag-color-green);
+}
+
+/* 時間標籤 */
+.mc-tag.time {
+  background-color: var(--tag-bg-gray);
+  color: var(--tag-color-gray);
 }
 
 .mc-detail-content {
@@ -540,4 +579,98 @@
 
 .header-badge.hidden {
   display: none;
+}
+
+/* ==========================================================================
+   Mobile Responsive Styles (手機版響應式)
+   ========================================================================== */
+@media (max-width: 768px) {
+  /* 工具列：垂直排列 */
+  .mc-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-sm);
+  }
+
+  /* 搜尋框全寬 */
+  .mc-search-container {
+    max-width: none;
+    width: 100%;
+  }
+
+  /* 篩選器和按鈕橫向排列 */
+  .mc-filter-group {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .mc-filter-select {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .mc-toolbar-actions {
+    margin-left: 0;
+  }
+
+  /* 訊息列表間距 */
+  .mc-list {
+    padding: var(--spacing-xs);
+  }
+
+  .mc-item {
+    padding: var(--spacing-sm);
+  }
+
+  /* 訊息項目標題區 */
+  .mc-item-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-xs);
+  }
+
+  .mc-item-meta {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  /* 詳情面板 */
+  .mc-detail {
+    max-height: 50%;
+  }
+
+  .mc-detail-header {
+    padding: var(--spacing-sm);
+  }
+
+  .mc-detail-title {
+    font-size: var(--font-size-sm);
+  }
+
+  .mc-detail-body {
+    padding: var(--spacing-sm);
+  }
+
+  /* 分頁控制項 */
+  .mc-pagination {
+    flex-direction: column;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-sm);
+  }
+
+  .mc-pagination-info {
+    order: 2;
+  }
+
+  .mc-pagination-controls {
+    order: 1;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .mc-page-btn {
+    min-width: 36px;
+    min-height: 36px;
+  }
 }
