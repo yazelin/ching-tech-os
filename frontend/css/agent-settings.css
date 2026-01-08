@@ -401,3 +401,162 @@
   color: var(--text-secondary);
   margin-bottom: 8px;
 }
+
+/* ==========================================================================
+   Mobile Responsive (≤768px)
+   ========================================================================== */
+@media (max-width: 768px) {
+  .agent-settings {
+    position: relative;
+  }
+
+  /* 側邊欄全寬 */
+  .agent-sidebar {
+    width: 100%;
+    border-right: none;
+  }
+
+  .agent-sidebar-header {
+    padding: var(--spacing-sm);
+  }
+
+  .agent-new-btn {
+    height: 44px;
+  }
+
+  /* 列表項目觸控區域 */
+  .agent-list-item {
+    padding: var(--spacing-sm) var(--spacing-md);
+    min-height: 56px;
+  }
+
+  /* 主內容區堆疊 */
+  .agent-main {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--color-background);
+    transform: translateX(100%);
+    transition: transform 0.3s ease;
+    z-index: 10;
+  }
+
+  .agent-settings.showing-editor .agent-main {
+    transform: translateX(0);
+  }
+
+  .agent-settings.showing-editor .agent-sidebar {
+    visibility: hidden;
+  }
+
+  /* 手機版返回按鈕 */
+  .agent-mobile-back-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--bg-surface-dark);
+    border: none;
+    border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-primary);
+    font-size: var(--font-size-base);
+    cursor: pointer;
+    min-height: 44px;
+  }
+
+  .agent-mobile-back-btn:active {
+    background: var(--hover-bg);
+  }
+
+  .agent-mobile-back-btn .icon svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  /* 表單優化 */
+  .agent-form {
+    padding: var(--spacing-sm);
+  }
+
+  .agent-form-row {
+    flex-direction: column;
+    gap: var(--spacing-sm);
+  }
+
+  .agent-form-input,
+  .agent-form-select,
+  .agent-form-textarea {
+    font-size: 16px; /* 防止 iOS 縮放 */
+    padding: 12px;
+  }
+
+  .agent-form-label {
+    font-size: var(--font-size-sm);
+  }
+
+  /* 工具格子單欄 */
+  .agent-tools-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-tool-item {
+    padding: 12px;
+    min-height: 44px;
+  }
+
+  /* 開關觸控區域 */
+  .agent-toggle {
+    width: 52px;
+    height: 28px;
+  }
+
+  .agent-toggle::after {
+    width: 24px;
+    height: 24px;
+  }
+
+  .agent-toggle.active::after {
+    transform: translateX(24px);
+  }
+
+  /* 測試區 */
+  .agent-test-section {
+    padding: var(--spacing-sm);
+  }
+
+  .agent-test-input {
+    font-size: 16px;
+    padding: 12px;
+  }
+
+  /* 工具列 */
+  .agent-toolbar {
+    flex-direction: column;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm);
+  }
+
+  .agent-toolbar-left {
+    order: 2;
+    justify-content: center;
+  }
+
+  .agent-toolbar-right {
+    order: 1;
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .agent-toolbar-right .btn {
+    flex: 1;
+    justify-content: center;
+    min-height: 44px;
+  }
+
+  /* 空狀態 - 手機版隱藏 */
+  .agent-empty-state {
+    display: none;
+  }
+}

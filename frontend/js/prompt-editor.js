@@ -13,6 +13,37 @@ const PromptEditorApp = (function() {
   let currentCategory = null; // null 表示全部
   let isDirty = false;
 
+  /**
+   * Check if current view is mobile
+   */
+  function isMobileView() {
+    return window.innerWidth <= 768;
+  }
+
+  /**
+   * Show mobile editor (slide in)
+   */
+  function showMobileEditor() {
+    if (!isMobileView()) return;
+    const editor = document.querySelector(`#${windowId} .prompt-editor`);
+    if (editor) {
+      editor.classList.add('showing-editor');
+    }
+  }
+
+  /**
+   * Hide mobile editor (slide out)
+   */
+  function hideMobileEditor() {
+    const editor = document.querySelector(`#${windowId} .prompt-editor`);
+    if (editor) {
+      editor.classList.remove('showing-editor');
+    }
+    currentPromptId = null;
+    isDirty = false;
+    renderPromptList();
+  }
+
   const categories = [
     { id: null, name: '全部' },
     { id: 'system', name: 'System' },
@@ -141,6 +172,10 @@ const PromptEditorApp = (function() {
     const agents = prompt?.referencing_agents || [];
 
     return `
+      <button class="prompt-mobile-back-btn" id="promptMobileBackBtn" style="display: none;">
+        <span class="icon">${getIcon('chevron-left')}</span>
+        <span>返回列表</span>
+      </button>
       <form class="prompt-form" data-prompt-id="${prompt?.id || ''}">
         <div class="prompt-form-row">
           <div class="prompt-form-group flex-1">
@@ -281,6 +316,7 @@ const PromptEditorApp = (function() {
     main.innerHTML = buildEditForm(prompt);
     renderPromptList();
     bindFormEvents();
+    showMobileEditor();
   }
 
   /**
@@ -300,6 +336,7 @@ const PromptEditorApp = (function() {
     main.innerHTML = buildEditForm(null);
     renderPromptList();
     bindFormEvents();
+    showMobileEditor();
   }
 
   /**
@@ -308,6 +345,20 @@ const PromptEditorApp = (function() {
   function bindFormEvents() {
     const form = document.querySelector(`#${windowId} .prompt-form`);
     if (!form) return;
+
+    // 手機版返回按鈕
+    const backBtn = document.querySelector(`#${windowId} #promptMobileBackBtn`);
+    if (backBtn) {
+      if (isMobileView()) {
+        backBtn.style.display = 'flex';
+      }
+      backBtn.addEventListener('click', () => {
+        if (isDirty && !confirm('有未儲存的變更，確定要離開嗎？')) {
+          return;
+        }
+        hideMobileEditor();
+      });
+    }
 
     // 監聽變更
     form.querySelectorAll('input, textarea, select').forEach(el => {

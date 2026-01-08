@@ -1468,3 +1468,352 @@
   color: var(--text-muted);
   font-size: 13px;
 }
+
+/* ==========================================================================
+   Mobile Styles (< 768px)
+   ========================================================================== */
+@media (max-width: 768px) {
+  /* 主容器 */
+  .pm-container {
+    position: relative;
+  }
+
+  /* 工具列：精簡化 */
+  .pm-toolbar {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    gap: var(--spacing-xs);
+    flex-wrap: wrap;
+  }
+
+  /* 搜尋框：全寬 */
+  .pm-search-container {
+    flex: 1;
+    min-width: 0;
+    max-width: none;
+    order: 1;
+  }
+
+  .pm-search-input {
+    font-size: 16px; /* 防止 iOS 縮放 */
+  }
+
+  /* 篩選器：縮小 */
+  .pm-filters {
+    order: 3;
+  }
+
+  .pm-filter-select {
+    font-size: var(--font-size-xs);
+    padding: 6px 24px 6px 8px;
+  }
+
+  /* 工具列按鈕：隱藏文字 */
+  .pm-toolbar-actions {
+    order: 2;
+    margin-left: 0;
+    gap: 4px;
+  }
+
+  .pm-action-btn span:not(.icon) {
+    display: none;
+  }
+
+  .pm-action-btn {
+    padding: 6px 10px;
+  }
+
+  /* 主區域：堆疊式導航 */
+  .pm-main {
+    position: relative;
+  }
+
+  /* 隱藏 resizer */
+  .pm-resizer {
+    display: none;
+  }
+
+  /* 列表面板：手機版全寬 */
+  .pm-list-panel {
+    width: 100% !important;
+    max-width: none;
+    border-right: none;
+  }
+
+  /* 列表項目：增大觸控區域 */
+  .pm-list-item {
+    padding: var(--spacing-md);
+    min-height: 60px;
+  }
+
+  .pm-list-header {
+    padding: var(--spacing-sm) var(--spacing-md);
+  }
+
+  /* 詳情面板：手機版全螢幕覆蓋 */
+  .pm-content-panel {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    transform: translateX(100%);
+    transition: transform 0.3s ease;
+    z-index: 10;
+    background-color: var(--color-background);
+  }
+
+  /* 顯示詳情狀態 */
+  .pm-container.showing-detail .pm-list-panel {
+    visibility: hidden;
+  }
+
+  .pm-container.showing-detail .pm-content-panel {
+    transform: translateX(0);
+  }
+
+  /* 手機版返回按鈕 */
+  .pm-mobile-back-btn {
+    display: flex !important;
+    align-items: center;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    margin-right: auto;
+    background: transparent;
+    border: none;
+    color: var(--color-primary);
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+  }
+
+  .pm-mobile-back-btn .icon {
+    width: 20px;
+    height: 20px;
+  }
+
+  /* 內容標題區：手機版調整 */
+  .pm-content-header {
+    flex-wrap: wrap;
+    padding: var(--spacing-sm) var(--spacing-md);
+    gap: var(--spacing-sm);
+  }
+
+  .pm-content-title-section {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: var(--spacing-xs);
+  }
+
+  .pm-content-title {
+    font-size: var(--font-size-lg);
+  }
+
+  .pm-content-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  /* Tab 區：橫向滾動 */
+  .pm-tabs {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding: 0 var(--spacing-sm);
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .pm-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .pm-tab {
+    flex-shrink: 0;
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-size: var(--font-size-xs);
+  }
+
+  .pm-tab .icon {
+    font-size: 14px;
+  }
+
+  /* Tab 內容區 */
+  .pm-tab-content {
+    padding: var(--spacing-sm) var(--spacing-md);
+  }
+
+  .pm-tab-header {
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+  }
+
+  .pm-tab-header h3 {
+    font-size: var(--font-size-md);
+  }
+
+  /* 概覽頁 */
+  .pm-info-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* 成員卡片：手機版調整 */
+  .pm-member-card {
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+  }
+
+  .pm-member-info {
+    width: calc(100% - 52px - var(--spacing-sm));
+  }
+
+  .pm-member-contact {
+    flex-wrap: wrap;
+    gap: var(--spacing-xs);
+  }
+
+  .pm-member-badge {
+    order: -1;
+    margin-left: auto;
+  }
+
+  .pm-member-actions {
+    width: 100%;
+    justify-content: flex-end;
+    padding-top: var(--spacing-xs);
+    border-top: 1px solid var(--border-subtle);
+    margin-top: var(--spacing-xs);
+  }
+
+  /* 會議卡片：手機版調整 */
+  .pm-meeting-card {
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+  }
+
+  .pm-meeting-info {
+    width: calc(100% - 66px);
+  }
+
+  .pm-meeting-meta {
+    flex-wrap: wrap;
+    gap: var(--spacing-xs);
+  }
+
+  .pm-meeting-actions {
+    width: 100%;
+    justify-content: flex-end;
+    padding-top: var(--spacing-xs);
+    border-top: 1px solid var(--border-subtle);
+    margin-top: var(--spacing-xs);
+  }
+
+  /* 附件卡片：手機版調整 */
+  .pm-attachments-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pm-attachment-card {
+    flex-wrap: wrap;
+  }
+
+  .pm-attachment-actions {
+    width: 100%;
+    justify-content: flex-end;
+    padding-top: var(--spacing-xs);
+    border-top: 1px solid var(--border-subtle);
+    margin-top: var(--spacing-xs);
+  }
+
+  /* 連結卡片：手機版調整 */
+  .pm-link-card {
+    flex-wrap: wrap;
+  }
+
+  .pm-link-info {
+    width: calc(100% - 48px);
+  }
+
+  .pm-link-actions {
+    width: 100%;
+    justify-content: flex-end;
+    padding-top: var(--spacing-xs);
+    border-top: 1px solid var(--border-subtle);
+    margin-top: var(--spacing-xs);
+  }
+
+  /* 里程碑：手機版調整 */
+  .pm-milestones-timeline {
+    padding-left: 20px;
+  }
+
+  .pm-milestone-content {
+    flex-direction: column;
+    gap: var(--spacing-sm);
+  }
+
+  .pm-milestone-meta {
+    gap: var(--spacing-xs);
+  }
+
+  .pm-milestone-dates {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .pm-milestone-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  /* Modal：手機版全寬 */
+  .pm-modal-content {
+    width: 95%;
+    max-width: none;
+    max-height: 85vh;
+    margin: var(--spacing-md);
+  }
+
+  .pm-modal-content.large {
+    max-width: none;
+  }
+
+  .pm-form-row {
+    grid-template-columns: 1fr;
+  }
+
+  /* 表單輸入：防止 iOS 縮放 */
+  .pm-form-group input,
+  .pm-form-group select,
+  .pm-form-group textarea {
+    font-size: 16px;
+  }
+
+  /* 編輯器：手機版 */
+  .pm-editor-header {
+    padding: var(--spacing-sm) var(--spacing-md);
+  }
+
+  .pm-editor-header h2 {
+    font-size: var(--font-size-lg);
+  }
+
+  .pm-editor-body {
+    padding: var(--spacing-sm) var(--spacing-md);
+  }
+
+  .pm-editor-footer {
+    padding: var(--spacing-sm) var(--spacing-md);
+  }
+
+  /* 上傳區：手機版 */
+  .pm-upload-dropzone {
+    padding: var(--spacing-lg);
+  }
+
+  /* 空狀態 */
+  .pm-content-empty {
+    padding: var(--spacing-md);
+  }
+
+  .pm-content-empty .icon svg {
+    width: 48px;
+    height: 48px;
+  }
+}

@@ -22,6 +22,14 @@ const FileManagerModule = (function() {
   let searchQuery = '';
   let searchResults = [];
   let searchTimer = null;
+  let mobilePreviewOverlay = null;
+
+  /**
+   * Check if current view is mobile
+   */
+  function isMobileView() {
+    return window.innerWidth <= 768;
+  }
 
   // 可分享路徑前綴（對應系統掛載點 /mnt/nas/projects）
   const SHAREABLE_PATH_PREFIX = '/擎添共用區/在案資料分享';
@@ -138,6 +146,7 @@ const FileManagerModule = (function() {
     files = [];
     selectedFiles.clear();
     hideContextMenu();
+    closeMobilePreview();
   }
 
   /**
@@ -750,7 +759,24 @@ const FileManagerModule = (function() {
 
     renderFileList();
     updateStatusBar();
-    renderPreview();
+
+    // 手機版：單擊即可操作
+    if (isMobileView() && selectedFiles.size === 1) {
+      const selectedName = [...selectedFiles][0];
+      const file = files.find(f => f.name === selectedName);
+      if (file) {
+        if (file.type === 'directory') {
+          // 單擊資料夾 → 進入
+          const newPath = currentPath === '/' ? `/${file.name}` : `${currentPath}/${file.name}`;
+          navigateTo(newPath);
+        } else {
+          // 單擊檔案 → 顯示預覽
+          showMobilePreview(file);
+        }
+      }
+    } else {
+      renderPreview();
+    }
   }
 
   /**
@@ -1091,6 +1117,133 @@ const FileManagerModule = (function() {
         const previewText = windowEl.querySelector('#fmPreviewText');
         if (previewText) previewText.textContent = '無法載入預覽';
       }
+    }
+  }
+
+  /**
+   * Show mobile full-screen preview
+   */
+  async function showMobilePreview(file) {
+    if (mobilePreviewOverlay) {
+      closeMobilePreview();
+    }
+
+    const iconName = getFileIcon(file.type, file.name);
+    const ext = file.name.split('.').pop().toLowerCase();
+    const filePath = currentPath === '/' ? `/${file.name}` : `${currentPath}/${file.name}`;
+    const canShare = isShareablePath(currentPath);
+
+    // Build preview content
+    let previewMainHTML = '';
+
+    if (FileUtils.isImageFile(file.name)) {
+      previewMainHTML = `
+        <div class="fm-mobile-preview-image">
+          <img src="${window.API_BASE || ''}/api/nas/file?path=${encodeURIComponent(filePath)}&token=${encodeURIComponent(getToken())}" alt="${file.name}">
+        </div>
+      `;
+    } else if (FileUtils.isTextFile(file.name)) {
+      previewMainHTML = `<div class="fm-mobile-preview-text" id="fmMobilePreviewText">載入中...</div>`;
+    } else {
+      previewMainHTML = `
+        <div class="fm-mobile-preview-icon-large">
+          <span class="icon">${getIcon(iconName)}</span>
+          <span class="fm-preview-type">${ext}</span>
+        </div>
+      `;
+    }
+
+    mobilePreviewOverlay = document.createElement('div');
+    mobilePreviewOverlay.className = 'fm-mobile-preview-overlay';
+    mobilePreviewOverlay.innerHTML = `
+      <div class="fm-mobile-preview-header">
+        <button class="fm-mobile-preview-back" id="fmMobilePreviewBack">
+          <span class="icon">${getIcon('chevron-left')}</span>
+        </button>
+        <span class="fm-mobile-preview-title">${file.name}</span>
+        <div class="fm-mobile-preview-actions">
+          <button class="fm-mobile-preview-action-btn" id="fmMobilePreviewDownload" title="下載">
+            <span class="icon">${getIcon('download')}</span>
+          </button>
+          ${canShare ? `
+          <button class="fm-mobile-preview-action-btn" id="fmMobilePreviewShare" title="分享">
+            <span class="icon">${getIcon('share-variant')}</span>
+          </button>
+          ` : ''}
+        </div>
+      </div>
+      <div class="fm-mobile-preview-content">
+        <div class="fm-mobile-preview-main">
+          ${previewMainHTML}
+        </div>
+        <div class="fm-mobile-preview-info">
+          <div class="fm-preview-meta">
+            <div class="fm-preview-meta-item">
+              <span class="fm-preview-meta-label">類型</span>
+              <span class="fm-preview-meta-value">${ext.toUpperCase()}</span>
+            </div>
+            ${file.size !== null ? `
+            <div class="fm-preview-meta-item">
+              <span class="fm-preview-meta-label">大小</span>
+              <span class="fm-preview-meta-value">${formatSize(file.size)}</span>
+            </div>
+            ` : ''}
+            ${file.modified ? `
+            <div class="fm-preview-meta-item">
+              <span class="fm-preview-meta-label">修改日期</span>
+              <span class="fm-preview-meta-value">${formatDate(file.modified)}</span>
+            </div>
+            ` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(mobilePreviewOverlay);
+
+    // Bind events
+    mobilePreviewOverlay.querySelector('#fmMobilePreviewBack').addEventListener('click', closeMobilePreview);
+    mobilePreviewOverlay.querySelector('#fmMobilePreviewDownload').addEventListener('click', () => {
+      downloadSelected();
+      closeMobilePreview();
+    });
+
+    const shareBtn = mobilePreviewOverlay.querySelector('#fmMobilePreviewShare');
+    if (shareBtn) {
+      shareBtn.addEventListener('click', () => {
+        closeMobilePreview();
+        showShareDialog();
+      });
+    }
+
+    // Load text content async
+    if (FileUtils.isTextFile(file.name)) {
+      try {
+        const response = await fetch(`/api/nas/file?path=${encodeURIComponent(filePath)}`, {
+          headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+        if (response.ok) {
+          const text = await response.text();
+          const previewText = mobilePreviewOverlay.querySelector('#fmMobilePreviewText');
+          if (previewText) {
+            const lines = text.split('\n').slice(0, 100);
+            previewText.textContent = lines.join('\n') + (text.split('\n').length > 100 ? '\n...' : '');
+          }
+        }
+      } catch (e) {
+        const previewText = mobilePreviewOverlay.querySelector('#fmMobilePreviewText');
+        if (previewText) previewText.textContent = '無法載入預覽';
+      }
+    }
+  }
+
+  /**
+   * Close mobile preview
+   */
+  function closeMobilePreview() {
+    if (mobilePreviewOverlay) {
+      mobilePreviewOverlay.remove();
+      mobilePreviewOverlay = null;
     }
   }
 

@@ -22,6 +22,33 @@ const ProjectManagementModule = (function() {
   let filterStatus = '';
 
   /**
+   * Check if current view is mobile
+   */
+  function isMobileView() {
+    return window.innerWidth <= 768;
+  }
+
+  /**
+   * Show mobile detail view
+   */
+  function showMobileDetail() {
+    const windowEl = document.getElementById(windowId);
+    if (windowEl && isMobileView()) {
+      windowEl.querySelector('.pm-container')?.classList.add('showing-detail');
+    }
+  }
+
+  /**
+   * Hide mobile detail view (back to list)
+   */
+  function hideMobileDetail() {
+    const windowEl = document.getElementById(windowId);
+    if (windowEl) {
+      windowEl.querySelector('.pm-container')?.classList.remove('showing-detail');
+    }
+  }
+
+  /**
    * Get authentication token
    */
   function getToken() {
@@ -375,6 +402,9 @@ const ProjectManagementModule = (function() {
       currentTab = 'overview';
       renderContentView(windowEl);
 
+      // 手機版：顯示詳情
+      showMobileDetail();
+
       // Update list selection
       windowEl.querySelectorAll('.pm-list-item').forEach(el => {
         el.classList.toggle('selected', el.dataset.id === id);
@@ -400,6 +430,10 @@ const ProjectManagementModule = (function() {
     const p = selectedProject;
     viewEl.innerHTML = `
       <div class="pm-content-header">
+        <button class="pm-mobile-back-btn" id="pmMobileBackBtn" style="display: none;">
+          <span class="icon">${getIcon('chevron-left')}</span>
+          返回
+        </button>
         <div class="pm-content-title-section">
           <h2 class="pm-content-title">${p.name}</h2>
           <span class="pm-status-badge large ${p.status}">${getStatusText(p.status)}</span>
@@ -442,6 +476,14 @@ const ProjectManagementModule = (function() {
 
       <div class="pm-tab-content" id="pmTabContent"></div>
     `;
+
+    // 手機版返回按鈕
+    const mobileBackBtn = viewEl.querySelector('#pmMobileBackBtn');
+    if (mobileBackBtn) {
+      mobileBackBtn.addEventListener('click', () => {
+        hideMobileDetail();
+      });
+    }
 
     // Bind events
     viewEl.querySelector('#pmBtnShare').addEventListener('click', () => {

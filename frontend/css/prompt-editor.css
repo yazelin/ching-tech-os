@@ -307,3 +307,144 @@
   color: var(--text-muted);
   font-size: 11px;
 }
+
+/* ==========================================================================
+   Mobile Responsive (≤768px)
+   ========================================================================== */
+@media (max-width: 768px) {
+  .prompt-editor {
+    position: relative;
+  }
+
+  /* 側邊欄全寬 */
+  .prompt-sidebar {
+    width: 100%;
+    border-right: none;
+  }
+
+  .prompt-sidebar-header {
+    padding: var(--spacing-sm);
+  }
+
+  .prompt-new-btn {
+    height: 44px;
+  }
+
+  /* 分類標籤橫向滾動 */
+  .prompt-category-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .prompt-category-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .prompt-category-tab {
+    padding: 10px 16px;
+    min-height: 44px;
+  }
+
+  /* 列表項目觸控區域 */
+  .prompt-list-item {
+    padding: var(--spacing-sm) var(--spacing-md);
+    min-height: 56px;
+  }
+
+  /* 主內容區堆疊 */
+  .prompt-main {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--color-background);
+    transform: translateX(100%);
+    transition: transform 0.3s ease;
+    z-index: 10;
+  }
+
+  .prompt-editor.showing-editor .prompt-main {
+    transform: translateX(0);
+  }
+
+  .prompt-editor.showing-editor .prompt-sidebar {
+    visibility: hidden;
+  }
+
+  /* 手機版返回按鈕 */
+  .prompt-mobile-back-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--bg-surface-dark);
+    border: none;
+    border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-primary);
+    font-size: var(--font-size-base);
+    cursor: pointer;
+    min-height: 44px;
+  }
+
+  .prompt-mobile-back-btn:active {
+    background: var(--hover-bg);
+  }
+
+  .prompt-mobile-back-btn .icon svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  /* 表單優化 */
+  .prompt-form {
+    padding: var(--spacing-sm);
+  }
+
+  .prompt-form-row {
+    flex-direction: column;
+    gap: var(--spacing-sm);
+  }
+
+  .prompt-form-input,
+  .prompt-form-select,
+  .prompt-content-textarea {
+    font-size: 16px; /* 防止 iOS 縮放 */
+    padding: 12px;
+  }
+
+  .prompt-form-label {
+    font-size: var(--font-size-sm);
+  }
+
+  /* 工具列 */
+  .prompt-toolbar {
+    flex-direction: column;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm);
+  }
+
+  .prompt-toolbar-left {
+    order: 2;
+    justify-content: center;
+  }
+
+  .prompt-toolbar-right {
+    order: 1;
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .prompt-toolbar-right .btn {
+    flex: 1;
+    justify-content: center;
+    min-height: 44px;
+  }
+
+  /* 空狀態 - 手機版隱藏 */
+  .prompt-empty-state {
+    display: none;
+  }
+}
