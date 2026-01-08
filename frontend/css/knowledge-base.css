@@ -305,6 +305,11 @@
   color: var(--tag-color-pink);
 }
 
+.kb-tag.category {
+  background-color: var(--tag-bg-blue);
+  color: var(--tag-color-blue);
+}
+
 /* Loading & Empty States */
 .kb-loading,
 .kb-empty {
@@ -618,6 +623,11 @@
 .kb-tag-large.topic {
   background-color: var(--tag-bg-purple);
   color: var(--tag-color-purple);
+}
+
+.kb-tag-large.category {
+  background-color: var(--tag-bg-blue);
+  color: var(--tag-color-blue);
 }
 
 /* ==========================================================================
@@ -1547,4 +1557,230 @@
 
 .kb-content-title .kb-scope-badge {
   margin-left: 0;
+}
+
+/* ==========================================================================
+   Mobile Styles (< 768px)
+   ========================================================================== */
+@media (max-width: 768px) {
+  /* 主容器 */
+  .knowledge-base {
+    position: relative;
+  }
+
+  /* 工具列：精簡化 */
+  .kb-toolbar {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    gap: var(--spacing-xs);
+  }
+
+  /* 搜尋框：全寬 */
+  .kb-search-container {
+    flex: 1;
+    min-width: 0;
+    max-width: none;
+    order: 1;
+  }
+
+  .kb-search-input {
+    font-size: 16px; /* 防止 iOS 縮放 */
+  }
+
+  /* 篩選器：隱藏或收合 */
+  .kb-filters {
+    display: none;
+    order: 3;
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .knowledge-base.filters-open .kb-filters {
+    display: flex;
+  }
+
+  .kb-filter-select {
+    flex: 1;
+    min-width: 80px;
+    font-size: var(--font-size-xs);
+  }
+
+  /* 工具列按鈕 */
+  .kb-toolbar-actions {
+    order: 2;
+    margin-left: 0;
+    gap: 2px;
+  }
+
+  .kb-action-btn span:not(.icon) {
+    display: none;
+  }
+
+  /* 新增篩選切換按鈕 */
+  .kb-filter-toggle {
+    display: flex !important;
+  }
+
+  /* 主區域：堆疊式導航 */
+  .kb-main {
+    position: relative;
+  }
+
+  /* 隱藏 resizer */
+  .kb-resizer {
+    display: none;
+  }
+
+  /* 列表面板：手機版全寬 */
+  .kb-list-panel {
+    width: 100% !important;
+    max-width: none;
+    border-right: none;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+  }
+
+  /* 詳情面板：手機版全螢幕覆蓋 */
+  .kb-content-panel {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    transform: translateX(100%);
+    transition: transform 0.3s ease;
+    z-index: 10;
+    background-color: var(--color-background); /* 實心背景 */
+  }
+
+  /* 顯示詳情狀態 - 列表直接隱藏 */
+  .knowledge-base.showing-detail .kb-list-panel {
+    visibility: hidden;
+  }
+
+  .knowledge-base.showing-detail .kb-content-panel {
+    transform: translateX(0);
+  }
+
+  /* 列表項目：增大觸控區域 */
+  .kb-list-item {
+    padding: var(--spacing-md);
+    min-height: 60px;
+  }
+
+  .kb-list-header {
+    padding: var(--spacing-sm) var(--spacing-md);
+  }
+
+  /* 手機版返回按鈕 */
+  .kb-mobile-back-btn {
+    display: flex !important;
+    align-items: center;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    margin-right: auto;
+    background: transparent;
+    border: none;
+    color: var(--color-primary);
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+  }
+
+  .kb-mobile-back-btn .icon {
+    width: 20px;
+    height: 20px;
+  }
+
+  /* 內容標題區：手機版調整 */
+  .kb-content-header {
+    flex-wrap: wrap;
+    padding: var(--spacing-sm) var(--spacing-md);
+    gap: var(--spacing-sm);
+  }
+
+  .kb-content-title-section {
+    width: 100%;
+  }
+
+  .kb-content-title {
+    font-size: var(--font-size-md);
+  }
+
+  .kb-content-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  /* 標籤區：橫向滾動 */
+  .kb-tags-section {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding: var(--spacing-sm) var(--spacing-md);
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .kb-tags-section::-webkit-scrollbar {
+    display: none;
+  }
+
+  .kb-tag-large {
+    flex-shrink: 0;
+  }
+
+  /* 內容主體 */
+  .kb-content-body {
+    padding: var(--spacing-sm) var(--spacing-md);
+  }
+
+  .kb-markdown {
+    font-size: var(--font-size-sm);
+  }
+
+  /* 附件區：手機版調整 */
+  .kb-attachments {
+    height: 150px;
+  }
+
+  .kb-attachment-item {
+    padding: var(--spacing-sm);
+  }
+
+  .kb-attachment-actions {
+    opacity: 1; /* 手機版始終顯示 */
+  }
+
+  .kb-attachment-action {
+    width: 36px;
+    height: 36px;
+  }
+
+  /* 編輯器：手機版 */
+  .kb-editor-meta {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .kb-editor-textarea {
+    font-size: 16px; /* 防止 iOS 縮放 */
+  }
+
+  /* 對話框：手機版全寬 */
+  .kb-dialog {
+    min-width: auto;
+    width: 95%;
+    max-width: none;
+    margin: var(--spacing-md);
+  }
+
+  /* 版本歷史面板：手機版全寬 */
+  .kb-history-panel {
+    width: 100%;
+  }
+
+  /* 空狀態 */
+  .kb-content-empty {
+    padding: var(--spacing-md);
+  }
+
+  .kb-content-empty .icon svg {
+    width: 48px;
+    height: 48px;
+  }
 }
