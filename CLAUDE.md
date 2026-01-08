@@ -63,6 +63,20 @@ async def my_tool(param: str) -> str:
 - CSS/JS 檔案需在 `index.html` **和** `login.html` 引入（兩個頁面都需要）
 - 桌面應用程式需在 `desktop.js` 的 `applications` 和 `openApp` 中註冊
 
+### 圖示使用規則（重要）
+**`getIcon()` 必須包在 `<span class="icon">` 裡面**，否則 SVG 大小和對齊會錯誤。
+
+```javascript
+// ❌ 錯誤：直接使用 getIcon()
+`${getIcon('shield-edit')} 設定權限`
+
+// ✅ 正確：包在 span.icon 裡面
+`<span class="icon">${getIcon('shield-edit')}</span> 設定權限`
+```
+
+如果需要添加新圖示，在 `frontend/js/icons.js` 的 `Icons` 物件中新增 SVG。
+圖示來源：[Material Design Icons](https://pictogrammers.com/library/mdi/)
+
 ## 子路徑部署（/ctos）注意事項
 
 本專案支援部署在子路徑下（如 `https://ching-tech.ddns.net/ctos/`），由 `js/config.js` 統一處理。

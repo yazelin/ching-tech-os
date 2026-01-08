@@ -244,8 +244,9 @@
   .window {
     left: 0 !important;
     top: var(--header-height) !important;
-    width: 100% !important;
-    height: calc(100% - var(--header-height)) !important;
+    width: 100vw !important;
+    height: calc(100vh - var(--header-height)) !important;
+    height: calc(100dvh - var(--header-height)) !important; /* dvh 更準確處理手機瀏覽器工具列 */
     border-radius: 0;
     border: none;
     min-width: unset;
@@ -280,6 +281,12 @@
 
   .window-btn-close .icon {
     font-size: 20px;
+  }
+
+  /* 手機版不需要 focused 外框（一次只操作一個 app） */
+  .window.focused {
+    border: none;
+    box-shadow: none;
   }
 }
 

@@ -469,3 +469,95 @@
 .sm-retry-btn:hover {
   background: var(--hover-bg);
 }
+
+/* ==========================================================================
+   Mobile Responsive Styles (手機版響應式)
+   ========================================================================== */
+@media (max-width: 768px) {
+  /* 工具列：允許換行，精簡間距 */
+  .sm-toolbar {
+    gap: var(--spacing-xs);
+    padding: var(--spacing-xs) var(--spacing-sm);
+  }
+
+  /* 隱藏工具列標題文字，只保留圖示 */
+  .sm-toolbar-title span:not(.icon) {
+    display: none;
+  }
+
+  /* 視圖切換按鈕縮小 */
+  .sm-view-btn {
+    padding: var(--spacing-xs);
+    font-size: var(--font-size-xs);
+  }
+
+  /* 篩選下拉選單 */
+  .sm-filter-select {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* 重整按鈕只顯示圖示 */
+  .sm-refresh-btn span:not(.icon) {
+    display: none;
+  }
+
+  /* 統計資訊：平均分配 */
+  .sm-stats {
+    justify-content: space-between;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-sm);
+  }
+
+  .sm-stat-item {
+    flex: 1;
+    justify-content: center;
+    font-size: var(--font-size-xs);
+  }
+
+  /* 內容區間距調整 */
+  .sm-content {
+    padding: var(--spacing-sm);
+  }
+
+  /* 連結卡片間距調整 */
+  .sm-link-card {
+    padding: var(--spacing-sm);
+  }
+
+  /* 連結標題換行處理 */
+  .sm-link-title {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-xs);
+  }
+
+  /* URL 區塊：垂直排列 */
+  .sm-link-url-section {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--spacing-xs);
+  }
+
+  .sm-link-url {
+    white-space: normal;
+    word-break: break-all;
+    font-size: var(--font-size-xs);
+  }
+
+  .sm-link-copy-btn {
+    align-self: flex-end;
+  }
+
+  /* 操作按鈕：確保觸控區域足夠 */
+  .sm-link-action-btn {
+    min-height: 36px;
+    min-width: 36px;
+    padding: var(--spacing-xs) var(--spacing-sm);
+  }
+
+  /* 連結狀態標籤 */
+  .sm-link-status {
+    align-self: flex-start;
+  }
+}

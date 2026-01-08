@@ -504,6 +504,14 @@ body {
   overflow: hidden;
 }
 
+/* 手機版：允許 body 滾動以啟用瀏覽器原生 pull-to-refresh */
+@media (max-width: 768px) {
+  body {
+    overflow: auto;
+    overscroll-behavior-y: auto;
+  }
+}
+
 a {
   color: var(--color-accent);
   text-decoration: none;
@@ -847,4 +855,311 @@ input {
 .formatted-data .fd-comment {
   color: var(--fd-comment-color);
   font-style: italic;
+}
+
+/* ==========================================================================
+   Mobile App Layout Utilities (手機版 App 佈局工具)
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   底部 Tab Bar (適用於側邊欄導航型 App)
+   -------------------------------------------------------------------------- */
+.mobile-tab-bar {
+  display: none;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 56px;
+  background: var(--bg-surface-dark);
+  border-top: 1px solid var(--border-subtle);
+  z-index: 100;
+}
+
+.mobile-tab-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 8px 12px;
+  min-width: 64px;
+  min-height: 44px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  transition: color var(--transition-fast);
+}
+
+.mobile-tab-item:hover {
+  color: var(--text-primary);
+}
+
+.mobile-tab-item.active {
+  color: var(--color-primary);
+}
+
+.mobile-tab-item .icon {
+  font-size: 20px;
+}
+
+.mobile-tab-item .mobile-tab-label {
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   堆疊式導航 (適用於列表+詳情型 App)
+   -------------------------------------------------------------------------- */
+.mobile-stack-container {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+}
+
+.mobile-stack-page {
+  position: absolute;
+  inset: 0;
+  background: var(--color-background);
+  overflow-y: auto;
+  transition: transform 0.25s ease-out, opacity 0.25s ease-out;
+}
+
+.mobile-stack-page.list-page {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.mobile-stack-page.detail-page {
+  transform: translateX(100%);
+  opacity: 1;
+}
+
+/* 顯示詳情頁時 */
+.mobile-stack-container.showing-detail .list-page {
+  transform: translateX(-30%);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.mobile-stack-container.showing-detail .detail-page {
+  transform: translateX(0);
+}
+
+/* --------------------------------------------------------------------------
+   手機版返回按鈕
+   -------------------------------------------------------------------------- */
+.mobile-back-header {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: var(--bg-surface-dark);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.mobile-back-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px;
+  min-width: 44px;
+  min-height: 44px;
+  background: transparent;
+  border: none;
+  color: var(--color-primary);
+  font-size: 14px;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  transition: background-color var(--transition-fast);
+}
+
+.mobile-back-btn:hover {
+  background: var(--hover-bg);
+}
+
+.mobile-back-btn .icon {
+  font-size: 18px;
+}
+
+.mobile-back-title {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --------------------------------------------------------------------------
+   可收合篩選器面板 (適用於工具列+表格型 App)
+   -------------------------------------------------------------------------- */
+.mobile-filter-toggle {
+  display: none;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--bg-surface-dark);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.mobile-filter-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  min-height: 44px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.mobile-filter-btn .icon {
+  font-size: 16px;
+}
+
+.mobile-filter-panel {
+  display: none;
+  padding: 16px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.mobile-filter-panel.expanded {
+  display: block;
+}
+
+.mobile-filter-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.mobile-filter-row:last-child {
+  margin-bottom: 0;
+}
+
+.mobile-filter-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.mobile-filter-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+/* --------------------------------------------------------------------------
+   卡片式列表 (取代表格)
+   -------------------------------------------------------------------------- */
+.mobile-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+}
+
+.mobile-card {
+  padding: 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.mobile-card:hover {
+  border-color: var(--border-light);
+  background: var(--bg-surface-dark);
+}
+
+.mobile-card:active {
+  background: var(--bg-surface-darker);
+}
+
+.mobile-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.mobile-card-title {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.mobile-card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.mobile-card-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.mobile-card-label {
+  color: var(--text-secondary);
+}
+
+.mobile-card-value {
+  color: var(--text-primary);
+}
+
+/* --------------------------------------------------------------------------
+   手機版響應式工具類別
+   -------------------------------------------------------------------------- */
+@media (max-width: 768px) {
+  /* 顯示/隱藏 */
+  .hide-on-mobile { display: none !important; }
+  .show-on-mobile { display: block !important; }
+  .flex-on-mobile { display: flex !important; }
+
+  /* 底部 Tab Bar 顯示 */
+  .mobile-tab-bar {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+  }
+
+  /* 返回按鈕 header 顯示 */
+  .mobile-back-header {
+    display: flex;
+  }
+
+  /* 篩選器切換按鈕顯示 */
+  .mobile-filter-toggle {
+    display: flex;
+  }
+
+  /* 觸控友善的按鈕尺寸 */
+  .btn {
+    min-height: 44px;
+    padding: var(--spacing-sm) var(--spacing-md);
+  }
+
+  /* 列表項目最小高度 */
+  .mobile-list-item {
+    min-height: 48px;
+  }
+}
+
+@media (min-width: 769px) {
+  .hide-on-desktop { display: none !important; }
+  .show-on-desktop { display: block !important; }
+  .flex-on-desktop { display: flex !important; }
 }
