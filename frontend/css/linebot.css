@@ -500,6 +500,7 @@
     overflow-y: auto;
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    align-content: start;
     gap: 12px;
     padding: 4px;
 }
@@ -520,6 +521,17 @@
 .linebot-file-card:hover {
     border-color: var(--color-primary);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* 過期檔案卡片 - 淡化效果 */
+.linebot-file-card.expired {
+    opacity: 0.6;
+    border-color: var(--border-subtle);
+}
+
+.linebot-file-card.expired:hover {
+    opacity: 0.8;
+    border-color: var(--text-muted);
 }
 
 /* 檔案圖示 */
@@ -590,6 +602,13 @@
 .linebot-storage-badge.none {
     background: var(--tag-bg-gray);
     color: var(--tag-color-gray);
+}
+
+/* 過期檔案標籤（通用 .storage-badge 和 linebot 專用） */
+.storage-badge.expired,
+.linebot-storage-badge.expired {
+    background: var(--tag-bg-red);
+    color: var(--tag-color-red);
 }
 
 .linebot-file-source {
@@ -943,27 +962,216 @@
     color: var(--text-muted);
 }
 
-/* 響應式 */
+/* ==========================================================================
+   Mobile Responsive Styles (手機版響應式)
+   ========================================================================== */
 @media (max-width: 768px) {
+    .linebot-container {
+        padding: 12px;
+        gap: 12px;
+    }
+
+    /* ========================================
+       Tab 橫向滾動
+       ======================================== */
+    .linebot-tabs {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        flex-wrap: nowrap;
+        padding-bottom: 12px;
+        margin: 0 -12px;
+        padding-left: 12px;
+        padding-right: 12px;
+    }
+
+    .linebot-tab {
+        flex-shrink: 0;
+        padding: 10px 14px;
+        font-size: 13px;
+    }
+
+    /* ========================================
+       群組面板：堆疊導航
+       ======================================== */
     .linebot-split-layout {
+        position: relative;
         flex-direction: column;
     }
 
     .linebot-split-left {
         width: 100%;
-        max-height: 200px;
+        max-height: none;
+        flex: 1;
+    }
+
+    /* 詳情預設隱藏 */
+    .linebot-split-right {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 100;
+        background: var(--color-background);
+        padding: 16px;
+        overflow: auto;
+    }
+
+    .linebot-split-right.visible {
+        display: flex;
+    }
+
+    /* 返回按鈕 */
+    .linebot-back-btn {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 16px;
+        margin-bottom: 16px;
+        background: var(--bg-surface);
+        border: 1px solid var(--border-light);
+        border-radius: 8px;
+        color: var(--text-primary);
+        font-size: 14px;
+        cursor: pointer;
+    }
+
+    .linebot-back-btn:active {
+        background: var(--bg-surface-dark);
+    }
+
+    .linebot-back-btn .icon {
+        width: 16px;
+        height: 16px;
+    }
+
+    /* ========================================
+       群組卡片觸控優化
+       ======================================== */
+    .linebot-group-card {
+        padding: 14px;
+    }
+
+    .linebot-group-card:active {
+        background: var(--bg-surface-dark);
+    }
+
+    /* ========================================
+       用戶卡片
+       ======================================== */
+    .linebot-user-card {
+        padding: 14px;
+    }
+
+    /* ========================================
+       訊息篩選器
+       ======================================== */
+    .linebot-messages-filters {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .linebot-filter-select {
+        width: 100%;
+    }
+
+    /* ========================================
+       檔案列表
+       ======================================== */
+    .linebot-files-filters {
+        flex-direction: column;
+        gap: 8px;
     }
 
     .linebot-files-grid {
         grid-template-columns: 1fr;
     }
 
+    /* 手機版檔案卡片 - 防止操作按鈕被隱藏 */
+    .linebot-file-card {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .linebot-file-info {
+        /* 佔滿扣除圖示後的剩餘空間 */
+        flex: 1 1 calc(100% - 60px);
+        min-width: 0;
+    }
+
+    .linebot-file-actions {
+        /* 操作按鈕移到下一行，靠右對齊 */
+        flex: 0 0 auto;
+        margin-left: auto;
+    }
+
+    /* ========================================
+       綁定狀態
+       ======================================== */
+    .linebot-binding-content {
+        padding: 16px;
+        max-width: none;
+    }
+
     .linebot-binding-status {
         flex-direction: column;
+        align-items: center;
         text-align: center;
+        padding: 20px;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    .linebot-binding-icon {
+        margin-bottom: 12px;
+    }
+
+    .linebot-binding-info {
+        width: 100%;
+        margin-bottom: 16px;
     }
 
     .linebot-binding-detail {
         justify-content: center;
+        flex-wrap: wrap;
     }
+
+    .linebot-binding-status .linebot-unbind-btn,
+    .linebot-binding-status .linebot-btn {
+        width: 100%;
+        max-width: 200px;
+    }
+
+    .linebot-binding-instruction ol {
+        text-align: left;
+    }
+
+    /* ========================================
+       分頁按鈕
+       ======================================== */
+    .linebot-pagination button {
+        min-width: 44px;
+        min-height: 44px;
+        padding: 8px 16px;
+    }
+
+    /* ========================================
+       Modal 優化
+       ======================================== */
+    .linebot-modal {
+        margin: 16px;
+        max-width: calc(100% - 32px);
+    }
+
+    .linebot-binding-code-display {
+        font-size: 36px;
+        letter-spacing: 6px;
+        padding: 16px 24px;
+    }
+}
+
+/* 桌面版隱藏返回按鈕 */
+.linebot-back-btn {
+    display: none;
 }

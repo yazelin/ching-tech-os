@@ -11,6 +11,13 @@
 const LineBotApp = (function () {
     'use strict';
 
+    const MOBILE_BREAKPOINT = 768;
+
+    // 判斷是否為手機版
+    function isMobile() {
+        return window.innerWidth <= MOBILE_BREAKPOINT;
+    }
+
     // 狀態
     let state = {
         currentTab: 'binding',  // 預設顯示綁定分頁
@@ -391,6 +398,25 @@ const LineBotApp = (function () {
         state.selectedGroup = group;
         renderGroups();
         renderGroupDetail();
+
+        // 手機版：顯示詳情面板
+        if (isMobile()) {
+            const detailPanel = document.querySelector('.linebot-split-right');
+            if (detailPanel) {
+                detailPanel.classList.add('visible');
+            }
+        }
+    }
+
+    // 關閉群組詳情（手機版返回）
+    function closeGroupDetail() {
+        state.selectedGroup = null;
+        renderGroups();
+
+        const detailPanel = document.querySelector('.linebot-split-right');
+        if (detailPanel) {
+            detailPanel.classList.remove('visible');
+        }
     }
 
     // 渲染群組列表
@@ -479,6 +505,10 @@ const LineBotApp = (function () {
         const group = state.selectedGroup;
 
         container.innerHTML = `
+            <button class="linebot-back-btn" onclick="LineBotApp.closeGroupDetail && LineBotApp.closeGroupDetail()">
+                <span class="icon">${typeof getIcon !== 'undefined' ? getIcon('arrow-left') : '←'}</span>
+                返回群組列表
+            </button>
             <div class="linebot-detail-header">
                 <div class="linebot-detail-avatar">
                     ${group.picture_url
@@ -689,7 +719,7 @@ const LineBotApp = (function () {
             const hasNas = !!file.nas_path;
 
             return `
-                <div class="linebot-file-card" data-id="${file.id}">
+                <div class="linebot-file-card ${hasNas ? '' : 'expired'}" data-id="${file.id}">
                     <div class="file-icon-wrapper ${typeClass}">
                         <span class="icon">${getIcon(iconName)}</span>
                     </div>
@@ -697,7 +727,10 @@ const LineBotApp = (function () {
                         <div class="linebot-file-name" title="${escapeHtml(fileName)}">${escapeHtml(fileName)}</div>
                         <div class="linebot-file-meta">
                             ${fileSize !== '-' ? `<span>${fileSize}</span>` : ''}
-                            ${hasNas ? `<span class="storage-badge nas">NAS</span>` : ''}
+                            ${hasNas
+                                ? `<span class="storage-badge nas">NAS</span>`
+                                : `<span class="storage-badge expired">已過期</span>`
+                            }
                         </div>
                         <div class="linebot-file-source">
                             <span class="icon">${getIcon(file.group_name ? 'account-group' : 'account')}</span>
@@ -1109,6 +1142,7 @@ const LineBotApp = (function () {
         loadMessages,
         loadFiles,
         setupFileDeleteEvents,
+        closeGroupDetail,
     };
 })();
 
