@@ -123,6 +123,33 @@ const HeaderModule = (function() {
   }
 
   /**
+   * Handle logo click - close current window and return to desktop
+   */
+  function handleLogoClick() {
+    if (typeof WindowModule === 'undefined') return;
+
+    // 取得最上層的視窗並關閉
+    const windows = WindowModule.getWindows();
+    const windowIds = Object.keys(windows);
+
+    if (windowIds.length > 0) {
+      // 找到最上層的視窗（z-index 最大）
+      let topWindowId = windowIds[0];
+      let topZIndex = 0;
+
+      windowIds.forEach(id => {
+        const zIndex = parseInt(windows[id].element.style.zIndex) || 0;
+        if (zIndex > topZIndex) {
+          topZIndex = zIndex;
+          topWindowId = id;
+        }
+      });
+
+      WindowModule.closeWindow(topWindowId);
+    }
+  }
+
+  /**
    * Initialize header module
    */
   function init() {
@@ -156,6 +183,13 @@ const HeaderModule = (function() {
       setTimeout(() => {
         SocketClient.updateMessageBadge();
       }, 1000);
+    }
+
+    // Attach logo click handler
+    const logoElement = document.querySelector('.header-logo');
+    if (logoElement) {
+      logoElement.style.cursor = 'pointer';
+      logoElement.addEventListener('click', handleLogoClick);
     }
   }
 

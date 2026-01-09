@@ -48,6 +48,17 @@ const WindowModule = (function() {
   const SNAP_EDGE_THRESHOLD = 20;
   const SNAP_CORNER_SIZE = 50;
 
+  // Mobile breakpoint
+  const MOBILE_BREAKPOINT = 768;
+
+  /**
+   * Check if current device is mobile
+   * @returns {boolean}
+   */
+  function isMobile() {
+    return window.innerWidth <= MOBILE_BREAKPOINT;
+  }
+
   /**
    * Generate unique window ID
    * @returns {string}
@@ -161,6 +172,9 @@ const WindowModule = (function() {
     // Notify state change
     notifyStateChange('open', appId);
 
+    // 加入瀏覽器歷史記錄（支援返回鍵關閉視窗）
+    history.pushState({ windowId: windowId, appId: appId }, '', '');
+
     return windowId;
   }
 
@@ -225,6 +239,9 @@ const WindowModule = (function() {
    * @param {MouseEvent} e
    */
   function startDrag(windowId, e) {
+    // 手機上停用拖曳
+    if (isMobile()) return;
+
     const windowInfo = windows[windowId];
     if (!windowInfo) return;
 
@@ -353,6 +370,9 @@ const WindowModule = (function() {
    * @param {string} direction - 'n', 's', 'e', 'w', 'nw', 'ne', 'sw', 'se'
    */
   function startResize(windowId, e, direction) {
+    // 手機上停用調整大小
+    if (isMobile()) return;
+
     const windowInfo = windows[windowId];
     if (!windowInfo) return;
 
@@ -857,12 +877,56 @@ const WindowModule = (function() {
   }
 
   /**
+   * Handle browser back button (popstate event)
+   * @param {PopStateEvent} e
+   */
+  function handlePopState(e) {
+    // 如果有視窗開啟，關閉最上層的視窗
+    const windowIds = Object.keys(windows);
+    if (windowIds.length > 0) {
+      // 找到最上層的視窗（z-index 最大）
+      let topWindowId = windowIds[0];
+      let topZIndex = 0;
+
+      windowIds.forEach(id => {
+        const zIndex = parseInt(windows[id].element.style.zIndex) || 0;
+        if (zIndex > topZIndex) {
+          topZIndex = zIndex;
+          topWindowId = id;
+        }
+      });
+
+      // 關閉視窗但不觸發 history.back()（因為已經是從 popstate 來的）
+      const windowInfo = windows[topWindowId];
+      if (windowInfo) {
+        const appId = windowInfo.appId;
+        if (windowInfo.onClose) {
+          windowInfo.onClose(topWindowId);
+        }
+        windowInfo.element.remove();
+        delete windows[topWindowId];
+        const index = windowOrder.indexOf(topWindowId);
+        if (index > -1) {
+          windowOrder.splice(index, 1);
+        }
+        notifyStateChange('close', appId);
+      }
+    }
+  }
+
+  /**
    * Initialize window module
    */
   function init() {
     // Global mouse events for dragging
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
+
+    // 監聽瀏覽器返回鍵
+    window.addEventListener('popstate', handlePopState);
+
+    // 初始化時加入一個基礎歷史記錄（桌面狀態）
+    history.replaceState({ desktop: true }, '', '');
   }
 
   // Public API

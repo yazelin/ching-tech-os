@@ -521,3 +521,205 @@
 .ai-messages::-webkit-scrollbar-thumb:hover {
   background-color: var(--border-strong);
 }
+
+/* ==========================================================================
+   Mobile Styles (< 768px)
+   ========================================================================== */
+@media (max-width: 768px) {
+  /* 主容器：改為垂直堆疊 */
+  .ai-assistant {
+    flex-direction: column;
+    position: relative;
+  }
+
+  /* 側邊欄：改為全螢幕 Drawer */
+  .ai-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 85%;
+    max-width: 320px;
+    height: 100%;
+    z-index: 1000;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+    border-right: 1px solid var(--border-subtle);
+  }
+
+  /* Drawer 開啟狀態 */
+  .ai-assistant.mobile-sidebar-open .ai-sidebar {
+    transform: translateX(0);
+  }
+
+  /* 遮罩層 */
+  .ai-sidebar-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--bg-overlay-dark);
+    z-index: 999;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .ai-assistant.mobile-sidebar-open .ai-sidebar-overlay {
+    display: block;
+    opacity: 1;
+  }
+
+  /* 隱藏桌面版的收合按鈕 */
+  .ai-sidebar-toggle {
+    display: none;
+  }
+
+  /* 新對話按鈕：手機版全寬 */
+  .ai-sidebar-header {
+    padding: var(--spacing-md);
+  }
+
+  .ai-new-chat-btn {
+    width: 100%;
+  }
+
+  /* 聊天列表項目：增大觸控區域 */
+  .ai-chat-item {
+    padding: var(--spacing-md);
+    min-height: 48px;
+  }
+
+  /* 刪除按鈕：手機版始終顯示 */
+  .ai-chat-item-delete {
+    opacity: 1;
+    width: 36px;
+    height: 36px;
+  }
+
+  /* 主區域 */
+  .ai-main {
+    width: 100%;
+    height: 100%;
+  }
+
+  /* 工具列：手機版兩行排列 */
+  .ai-toolbar {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    grid-template-rows: auto auto;
+    gap: var(--spacing-xs) var(--spacing-sm);
+    padding: var(--spacing-sm);
+    align-items: center;
+  }
+
+  /* 第一行：選單按鈕 + Agent 選擇器 + Token */
+  .ai-sidebar-expand {
+    display: flex !important;
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .ai-agent-selector {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .ai-agent-selector label {
+    display: none;
+  }
+
+  .ai-agent-select {
+    width: 100%;
+    max-width: 150px;
+    font-size: var(--font-size-xs);
+  }
+
+  .ai-token-info {
+    grid-column: 3;
+    grid-row: 1;
+    font-size: 10px;
+  }
+
+  /* 第二行：模型資訊（全寬） */
+  .ai-model-info {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    font-size: var(--font-size-xs);
+    justify-content: flex-start;
+  }
+
+  .ai-model-label {
+    display: inline;
+  }
+
+  /* Token 警告條：手機版換行 */
+  .ai-token-warning {
+    flex-direction: column;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm);
+  }
+
+  .ai-warning-text {
+    font-size: var(--font-size-xs);
+  }
+
+  /* 訊息區域：手機版滿版 */
+  .ai-messages {
+    padding: var(--spacing-sm);
+  }
+
+  .ai-messages-container {
+    max-width: 100%;
+  }
+
+  /* 訊息項目：手機版緊湊 */
+  .ai-message {
+    padding: var(--spacing-sm);
+    gap: var(--spacing-sm);
+  }
+
+  .ai-message-avatar {
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
+  }
+
+  .ai-message-text {
+    font-size: var(--font-size-sm);
+  }
+
+  /* 歡迎頁：手機版調整 */
+  .ai-welcome {
+    padding: var(--spacing-lg) var(--spacing-sm);
+    min-height: 200px;
+  }
+
+  .ai-welcome-icon {
+    font-size: 48px;
+  }
+
+  .ai-welcome h2 {
+    font-size: var(--font-size-xl);
+  }
+
+  /* 輸入區：手機版固定底部 */
+  .ai-input-area {
+    padding: var(--spacing-sm);
+    background: var(--color-background);
+  }
+
+  .ai-input-wrapper {
+    max-width: 100%;
+    padding: var(--spacing-xs);
+  }
+
+  .ai-input {
+    font-size: 16px; /* 防止 iOS 自動縮放 */
+  }
+
+  .ai-send-btn {
+    width: 44px;
+    height: 44px;
+  }
+}

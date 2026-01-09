@@ -13,6 +13,37 @@ const AgentSettingsApp = (function() {
   let currentAgentId = null;
   let isDirty = false;
 
+  /**
+   * Check if current view is mobile
+   */
+  function isMobileView() {
+    return window.innerWidth <= 768;
+  }
+
+  /**
+   * Show mobile editor (slide in)
+   */
+  function showMobileEditor() {
+    if (!isMobileView()) return;
+    const settings = document.querySelector(`#${windowId} .agent-settings`);
+    if (settings) {
+      settings.classList.add('showing-editor');
+    }
+  }
+
+  /**
+   * Hide mobile editor (slide out)
+   */
+  function hideMobileEditor() {
+    const settings = document.querySelector(`#${windowId} .agent-settings`);
+    if (settings) {
+      settings.classList.remove('showing-editor');
+    }
+    currentAgentId = null;
+    isDirty = false;
+    renderAgentList();
+  }
+
   const availableModels = [
     { id: 'claude-opus', name: 'Claude Opus' },
     { id: 'claude-sonnet', name: 'Claude Sonnet' },
@@ -181,6 +212,10 @@ const AgentSettingsApp = (function() {
     const isNew = !agent || !agent.id;
 
     return `
+      <button class="agent-mobile-back-btn" id="agentMobileBackBtn" style="display: none;">
+        <span class="icon">${getIcon('chevron-left')}</span>
+        <span>返回列表</span>
+      </button>
       <div class="agent-form" data-agent-id="${agent?.id || ''}">
         <div class="agent-form-section">
           <div class="agent-form-section-title">基本資訊</div>
@@ -379,6 +414,7 @@ const AgentSettingsApp = (function() {
     main.innerHTML = buildEditForm(agent);
     renderAgentList();
     bindFormEvents();
+    showMobileEditor();
   }
 
   /**
@@ -398,6 +434,7 @@ const AgentSettingsApp = (function() {
     main.innerHTML = buildEditForm(null);
     renderAgentList();
     bindFormEvents();
+    showMobileEditor();
   }
 
   /**
@@ -406,6 +443,20 @@ const AgentSettingsApp = (function() {
   function bindFormEvents() {
     const form = document.querySelector(`#${windowId} .agent-form`);
     if (!form) return;
+
+    // 手機版返回按鈕
+    const backBtn = document.querySelector(`#${windowId} #agentMobileBackBtn`);
+    if (backBtn) {
+      if (isMobileView()) {
+        backBtn.style.display = 'flex';
+      }
+      backBtn.addEventListener('click', () => {
+        if (isDirty && !confirm('有未儲存的變更，確定要離開嗎？')) {
+          return;
+        }
+        hideMobileEditor();
+      });
+    }
 
     // 監聽變更
     form.querySelectorAll('input, textarea, select').forEach(el => {

@@ -171,6 +171,7 @@ const AIAssistantApp = (function() {
   function buildWindowContent() {
     return `
       <div class="ai-assistant">
+        <div class="ai-sidebar-overlay"></div>
         <aside class="ai-sidebar">
           <div class="ai-sidebar-header">
             <button class="ai-sidebar-toggle btn btn-ghost" title="收合側邊欄">
@@ -394,6 +395,11 @@ const AIAssistantApp = (function() {
    */
   async function switchChat(chatId) {
     currentChatId = chatId;
+
+    // 手機版：切換對話後自動關閉 Drawer
+    if (isMobileView()) {
+      closeMobileSidebar();
+    }
 
     // Load full chat details from API if messages not loaded
     const chat = getChatById(chatId);
@@ -632,18 +638,42 @@ const AIAssistantApp = (function() {
   }
 
   /**
+   * Check if current view is mobile
+   * @returns {boolean}
+   */
+  function isMobileView() {
+    return window.innerWidth <= 768;
+  }
+
+  /**
    * Toggle sidebar collapsed state
    */
   function toggleSidebar() {
-    sidebarCollapsed = !sidebarCollapsed;
     const app = document.querySelector(`#${windowId} .ai-assistant`);
-    const expandBtn = document.querySelector(`#${windowId} .ai-sidebar-expand`);
+    if (!app) return;
 
-    if (app) {
+    if (isMobileView()) {
+      // 手機版：切換 Drawer
+      app.classList.toggle('mobile-sidebar-open');
+    } else {
+      // 桌面版：收合側邊欄
+      sidebarCollapsed = !sidebarCollapsed;
       app.classList.toggle('sidebar-collapsed', sidebarCollapsed);
+
+      const expandBtn = document.querySelector(`#${windowId} .ai-sidebar-expand`);
+      if (expandBtn) {
+        expandBtn.style.display = sidebarCollapsed ? 'flex' : 'none';
+      }
     }
-    if (expandBtn) {
-      expandBtn.style.display = sidebarCollapsed ? 'flex' : 'none';
+  }
+
+  /**
+   * Close mobile sidebar drawer
+   */
+  function closeMobileSidebar() {
+    const app = document.querySelector(`#${windowId} .ai-assistant`);
+    if (app) {
+      app.classList.remove('mobile-sidebar-open');
     }
   }
 
@@ -716,6 +746,12 @@ const AIAssistantApp = (function() {
     const sidebarExpand = document.querySelector(`#${windowId} .ai-sidebar-expand`);
     if (sidebarExpand) {
       sidebarExpand.addEventListener('click', toggleSidebar);
+    }
+
+    // Mobile sidebar overlay (點擊遮罩關閉 Drawer)
+    const sidebarOverlay = document.querySelector(`#${windowId} .ai-sidebar-overlay`);
+    if (sidebarOverlay) {
+      sidebarOverlay.addEventListener('click', closeMobileSidebar);
     }
 
     // Agent selector

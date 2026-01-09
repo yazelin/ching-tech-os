@@ -200,7 +200,7 @@ const MessageCenterApp = (function () {
           <div class="mc-item-header">
             <div class="mc-item-title">${escapeHtml(msg.title)}</div>
             <div class="mc-item-meta">
-              <span class="mc-item-source">${sourceLabel}</span>
+              <span class="mc-tag source">${sourceLabel}</span>
               <span class="mc-item-time">${time}</span>
             </div>
           </div>
@@ -263,24 +263,10 @@ const MessageCenterApp = (function () {
       </div>
       <div class="mc-detail-body">
         <div class="mc-detail-info">
-          <div class="mc-detail-info-item">
-            <span class="mc-detail-label">嚴重程度</span>
-            <span class="mc-detail-value">${severityLabel}</span>
-          </div>
-          <div class="mc-detail-info-item">
-            <span class="mc-detail-label">來源</span>
-            <span class="mc-detail-value">${sourceLabel}</span>
-          </div>
-          ${msg.category ? `
-          <div class="mc-detail-info-item">
-            <span class="mc-detail-label">分類</span>
-            <span class="mc-detail-value">${msg.category}</span>
-          </div>
-          ` : ''}
-          <div class="mc-detail-info-item">
-            <span class="mc-detail-label">時間</span>
-            <span class="mc-detail-value">${time}</span>
-          </div>
+          <span class="mc-tag severity-${msg.severity}">${severityLabel}</span>
+          <span class="mc-tag source">${sourceLabel}</span>
+          ${msg.category ? `<span class="mc-tag category">${msg.category}</span>` : ''}
+          <span class="mc-tag time">${time}</span>
         </div>
         ${msg.content ? `
         <div class="mc-detail-content">${escapeHtml(msg.content)}</div>

@@ -26,6 +26,33 @@ const KnowledgeBaseModule = (function() {
   let filterLevel = '';
 
   /**
+   * Check if current view is mobile
+   */
+  function isMobileView() {
+    return window.innerWidth <= 768;
+  }
+
+  /**
+   * Show mobile detail view
+   */
+  function showMobileDetail() {
+    const windowEl = document.getElementById(windowId);
+    if (windowEl && isMobileView()) {
+      windowEl.querySelector('.knowledge-base')?.classList.add('showing-detail');
+    }
+  }
+
+  /**
+   * Hide mobile detail view (back to list)
+   */
+  function hideMobileDetail() {
+    const windowEl = document.getElementById(windowId);
+    if (windowEl) {
+      windowEl.querySelector('.knowledge-base')?.classList.remove('showing-detail');
+    }
+  }
+
+  /**
    * Get authentication token
    */
   function getToken() {
@@ -425,6 +452,9 @@ const KnowledgeBaseModule = (function() {
       isEditing = false;
       renderContentView(windowEl);
 
+      // 手機版：顯示詳情
+      showMobileDetail();
+
       // Update list selection
       windowEl.querySelectorAll('.kb-list-item').forEach(el => {
         el.classList.toggle('selected', el.dataset.id === id);
@@ -489,6 +519,10 @@ const KnowledgeBaseModule = (function() {
 
     viewEl.innerHTML = `
       <div class="kb-content-header">
+        <button class="kb-mobile-back-btn" id="kbMobileBackBtn" style="display: none;">
+          <span class="icon">${getIcon('chevron-left')}</span>
+          返回
+        </button>
         <div class="kb-content-title-section">
           <h2 class="kb-content-title">
             ${kb.title}
@@ -533,7 +567,7 @@ const KnowledgeBaseModule = (function() {
       <div class="kb-tags-section">
         ${kb.tags.projects.map(p => `<span class="kb-tag-large project">${p}</span>`).join('')}
         <span class="kb-tag-large type">${kb.type}</span>
-        <span class="kb-tag-large">${kb.category}</span>
+        <span class="kb-tag-large category">${kb.category}</span>
         ${kb.tags.level ? `<span class="kb-tag-large level">${kb.tags.level}</span>` : ''}
         ${kb.tags.roles.map(r => `<span class="kb-tag-large role">${r}</span>`).join('')}
         ${kb.tags.topics.map(t => `<span class="kb-tag-large topic">${t}</span>`).join('')}
@@ -554,6 +588,14 @@ const KnowledgeBaseModule = (function() {
 
     // Render attachments
     renderAttachments(viewEl, kb);
+
+    // 手機版返回按鈕
+    const mobileBackBtn = viewEl.querySelector('#kbMobileBackBtn');
+    if (mobileBackBtn) {
+      mobileBackBtn.addEventListener('click', () => {
+        hideMobileDetail();
+      });
+    }
 
     // Bind action buttons
     const editBtn = viewEl.querySelector('#kbBtnEdit');

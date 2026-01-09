@@ -48,7 +48,6 @@
   gap: var(--desktop-icon-gap);
   padding: var(--spacing-lg);
   padding-top: calc(var(--header-height) + var(--spacing-lg));
-  padding-bottom: calc(var(--taskbar-height) + var(--spacing-lg));
   align-content: start;
   overflow-y: auto;
   user-select: none;
@@ -80,11 +79,6 @@
 .desktop-icon:active {
   background-color: var(--interactive-active);
   transform: scale(0.98);
-}
-
-.desktop-icon.selected {
-  background-color: var(--accent-bg-light);
-  outline: 1px solid var(--accent-border);
 }
 
 .desktop-icon-image {
@@ -120,7 +114,7 @@
    ========================================================================== */
 .toast-container {
   position: fixed;
-  bottom: calc(var(--taskbar-height) + var(--spacing-lg));
+  bottom: var(--spacing-lg);
   left: 50%;
   transform: translateX(-50%);
   z-index: 1000;
@@ -172,5 +166,54 @@
   to {
     opacity: 0;
     transform: translateY(-20px);
+  }
+}
+
+/* ==========================================================================
+   Mobile Styles (手機版樣式)
+   ========================================================================== */
+@media (max-width: 768px) {
+  /* 調整桌面圖示排列 */
+  .desktop-area {
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    grid-auto-rows: 100px;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md);
+    padding-top: calc(var(--header-height) + var(--spacing-md));
+  }
+
+  /* 調整圖示大小確保觸控區域至少 44px */
+  .desktop-icon {
+    min-width: 72px;
+    min-height: 80px;
+    padding: var(--spacing-xs);
+  }
+
+  .desktop-icon-image {
+    width: 52px;
+    height: 52px;
+  }
+
+  .desktop-icon-image .icon svg {
+    width: 32px;
+    height: 32px;
+  }
+
+  .desktop-icon-label {
+    font-size: 11px;
+    max-width: 70px;
+  }
+
+  /* Toast 調整 */
+  .toast-container {
+    left: var(--spacing-md);
+    right: var(--spacing-md);
+    transform: none;
+    width: auto;
+  }
+
+  .toast {
+    width: 100%;
+    justify-content: center;
   }
 }

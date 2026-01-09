@@ -138,6 +138,20 @@ const SettingsApp = (function () {
           </section>
           ` : ''}
         </main>
+
+        <!-- 手機版底部 Tab Bar -->
+        <nav class="mobile-tab-bar settings-mobile-tabs">
+          <button class="mobile-tab-item active" data-section="appearance">
+            <span class="icon">${getIcon('palette')}</span>
+            <span class="mobile-tab-label">外觀</span>
+          </button>
+          ${isAdmin ? `
+          <button class="mobile-tab-item" data-section="users">
+            <span class="icon">${getIcon('account-group')}</span>
+            <span class="mobile-tab-label">使用者</span>
+          </button>
+          ` : ''}
+        </nav>
       </div>
     `;
   }
@@ -161,6 +175,15 @@ const SettingsApp = (function () {
     navItems.forEach(item => {
       item.addEventListener('click', () => {
         const section = item.dataset.section;
+        switchSection(windowEl, section);
+      });
+    });
+
+    // 綁定手機版底部 Tab Bar
+    const mobileTabs = windowEl.querySelectorAll('.settings-mobile-tabs .mobile-tab-item');
+    mobileTabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const section = tab.dataset.section;
         switchSection(windowEl, section);
       });
     });
@@ -188,10 +211,16 @@ const SettingsApp = (function () {
    * @param {string} sectionId
    */
   function switchSection(windowEl, sectionId) {
-    // 更新導航狀態
+    // 更新側邊欄導航狀態
     const navItems = windowEl.querySelectorAll('.settings-nav-item');
     navItems.forEach(item => {
       item.classList.toggle('active', item.dataset.section === sectionId);
+    });
+
+    // 更新手機版 Tab 狀態
+    const mobileTabs = windowEl.querySelectorAll('.settings-mobile-tabs .mobile-tab-item');
+    mobileTabs.forEach(tab => {
+      tab.classList.toggle('active', tab.dataset.section === sectionId);
     });
 
     // 切換顯示區段
@@ -256,7 +285,7 @@ const SettingsApp = (function () {
           ${users.map(user => `
             <tr data-user-id="${user.id}">
               <td>
-                ${user.is_admin ? `<span class="user-admin-badge" title="管理員">${getIcon('shield-crown')}</span>` : ''}
+                ${user.is_admin ? `<span class="user-admin-badge icon" title="管理員">${getIcon('shield-crown')}</span>` : ''}
                 ${user.username}
               </td>
               <td>${user.display_name || '-'}</td>
@@ -265,7 +294,7 @@ const SettingsApp = (function () {
                 ${user.is_admin
                   ? `<span class="user-admin-label">管理員</span>`
                   : `<button class="btn btn-ghost btn-sm user-permissions-btn" data-user-id="${user.id}" data-username="${user.username}">
-                      ${getIcon('shield-edit')} 設定權限
+                      <span class="icon">${getIcon('shield-edit')}</span> 設定權限
                      </button>`
                 }
               </td>

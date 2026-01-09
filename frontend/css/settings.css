@@ -524,3 +524,134 @@
   padding: var(--spacing-md) var(--spacing-lg);
   border-top: 1px solid var(--border-light);
 }
+
+/* ==========================================================================
+   Mobile Responsive Styles (手機版響應式)
+   ========================================================================== */
+
+@media (max-width: 768px) {
+  /* 容器改為垂直 flex 佈局，限制高度 */
+  .settings-container {
+    flex-direction: column;
+    height: 100%;
+    min-height: 0; /* 重要：讓 flex 子元素可以縮小 */
+    overflow: hidden;
+  }
+
+  /* 隱藏側邊欄 */
+  .settings-sidebar {
+    display: none;
+  }
+
+  /* 主內容區 - flex: 1 填滿，min-height: 0 允許縮小，overflow-y 允許捲動 */
+  .settings-content {
+    flex: 1 1 0;
+    min-height: 0; /* 重要：讓內容可以縮小並出現捲軸 */
+    padding: var(--spacing-md);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch; /* iOS 平滑捲動 */
+  }
+
+  /* 底部 Tab Bar - 不用 absolute，用 flex 固定 */
+  .settings-mobile-tabs {
+    position: static !important;
+    flex-shrink: 0;
+    display: flex !important;
+    justify-content: space-around !important;
+    align-items: center !important;
+  }
+
+  /* Tab 項目樣式 */
+  .settings-mobile-tabs .mobile-tab-item {
+    flex-direction: column;
+    min-width: 80px;
+  }
+
+  /* Section 標題調整 */
+  .settings-section-title {
+    font-size: var(--font-size-lg);
+    margin-bottom: var(--spacing-md);
+  }
+
+  /* 主題卡片：改為垂直排列 */
+  .theme-cards {
+    flex-direction: column;
+    gap: var(--spacing-md);
+  }
+
+  .theme-card {
+    max-width: 100%;
+  }
+
+  /* 預覽面板調整 */
+  .preview-panel {
+    padding: var(--spacing-md);
+  }
+
+  .preview-elements {
+    gap: var(--spacing-sm);
+  }
+
+  .preview-element {
+    width: 100%;
+  }
+
+  .preview-badges {
+    flex-wrap: wrap;
+  }
+
+  .preview-input {
+    width: 100%;
+  }
+
+  /* 使用者表格：改為卡片式 */
+  .users-table {
+    display: block;
+  }
+
+  .users-table thead {
+    display: none;
+  }
+
+  .users-table tbody {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+  }
+
+  .users-table tr {
+    display: flex;
+    flex-direction: column;
+    padding: var(--spacing-md);
+    background: var(--bg-surface);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-subtle);
+  }
+
+  .users-table td {
+    padding: var(--spacing-xs) 0;
+    border-bottom: none;
+  }
+
+  .users-table td:first-child {
+    font-weight: 600;
+    font-size: var(--font-size-base);
+  }
+
+  .users-table td:last-child {
+    margin-top: var(--spacing-sm);
+  }
+
+  /* 權限按鈕：防止文字換行 */
+  .user-permissions-btn {
+    white-space: nowrap;
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* 權限對話框調整 */
+  .permissions-dialog {
+    width: 95vw;
+    max-height: 85vh;
+  }
+}
