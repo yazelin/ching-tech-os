@@ -760,18 +760,21 @@ const FileManagerModule = (function() {
     renderFileList();
     updateStatusBar();
 
-    // 手機版：單擊即可操作
-    if (isMobileView() && selectedFiles.size === 1) {
+    // 單擊操作
+    if (selectedFiles.size === 1) {
       const selectedName = [...selectedFiles][0];
       const file = files.find(f => f.name === selectedName);
       if (file) {
         if (file.type === 'directory') {
-          // 單擊資料夾 → 進入
+          // 單擊資料夾 → 進入（統一桌面版和手機版）
           const newPath = currentPath === '/' ? `/${file.name}` : `${currentPath}/${file.name}`;
           navigateTo(newPath);
-        } else {
-          // 單擊檔案 → 顯示預覽
+        } else if (isMobileView()) {
+          // 手機版單擊檔案 → 全螢幕預覽
           showMobilePreview(file);
+        } else {
+          // 桌面版單擊檔案 → 側邊預覽
+          renderPreview();
         }
       }
     } else {
