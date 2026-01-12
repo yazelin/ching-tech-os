@@ -54,6 +54,32 @@ uv run python -m ching_tech_os.mcp_cli
 
 > ⚠️ 標記的工具需要權限控制，必須傳入 `ctos_user_id` 參數，且只有專案成員才能操作。
 
+### 專案連結
+
+| 工具名稱 | 說明 | 參數 |
+|----------|------|------|
+| `add_project_link` | 新增專案連結 | `project_id`（必填）, `title`（必填）, `url`（必填）, `description` |
+| `get_project_links` | 取得專案連結列表 | `project_id`（必填）, `limit` |
+| `update_project_link` | 更新專案連結 | `link_id`（必填）, `project_id`, `title`, `url`, `description` |
+| `delete_project_link` | 刪除專案連結 | `link_id`（必填）, `project_id` |
+
+### 專案附件
+
+| 工具名稱 | 說明 | 參數 |
+|----------|------|------|
+| `add_project_attachment` | 從 NAS 路徑添加附件到專案 | `project_id`（必填）, `nas_path`（必填，從 get_message_attachments 或 search_nas_files 取得）, `description` |
+| `get_project_attachments` | 取得專案附件列表 | `project_id`（必填）, `limit` |
+| `update_project_attachment` | 更新專案附件描述 | `attachment_id`（必填）, `project_id`, `description` |
+| `delete_project_attachment` | 刪除專案附件 | `attachment_id`（必填）, `project_id` |
+
+### 發包期程
+
+| 工具名稱 | 說明 | 參數 |
+|----------|------|------|
+| `add_delivery_schedule` | 新增發包記錄 | `project_id`（必填）, `vendor`（必填，廠商名稱）, `item`（必填，料件名稱）, `quantity`, `order_date`, `expected_delivery_date`, `status`（pending/ordered/delivered/completed）, `notes` |
+| `update_delivery_schedule` | 更新發包記錄 | `delivery_id` 或 `project_id` + `vendor` + `item`（模糊匹配）, `status`, `actual_delivery_date`, `expected_delivery_date`, `quantity`, `notes` |
+| `get_delivery_schedules` | 查詢發包列表 | `project_id`（必填）, `status`（過濾）, `vendor`（過濾）, `limit` |
+
 ### 知識庫
 
 | 工具名稱 | 說明 | 參數 |
@@ -92,7 +118,7 @@ uv run python -m ching_tech_os.mcp_cli
 
 | 工具名稱 | 說明 | 參數 |
 |----------|------|------|
-| `create_share_link` | 建立公開分享連結 | `resource_type`（必填，knowledge/project/nas_file）, `resource_id`（必填）, `expires_in`（1h/24h/7d/null） |
+| `create_share_link` | 建立公開分享連結 | `resource_type`（必填，knowledge/project/nas_file/project_attachment）, `resource_id`（必填）, `expires_in`（1h/24h/7d/null） |
 
 ## 使用範例
 
