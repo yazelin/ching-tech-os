@@ -35,7 +35,7 @@ from ching_tech_os.services.knowledge import (
     KnowledgeError,
     KnowledgeNotFoundError,
 )
-from ching_tech_os.services.permissions import check_knowledge_permission
+from ching_tech_os.services.permissions import check_knowledge_permission_async
 from ching_tech_os.services.user import get_user_preferences, _parse_preferences
 from ching_tech_os.api.auth import get_current_session
 from ching_tech_os.models.auth import SessionData
@@ -229,8 +229,9 @@ async def create_new_knowledge(
     # 權限檢查：建立全域知識需要權限
     if data.scope == "global":
         preferences = await get_user_preferences(session.user_id) if session.user_id else None
-        if not check_knowledge_permission(
-            session.username, preferences, None, "global", "write"
+        if not await check_knowledge_permission_async(
+            session.username, preferences, None, "global", "write",
+            user_id=session.user_id, project_id=data.project_id,
         ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -288,8 +289,9 @@ async def update_existing_knowledge(
 
     # 權限檢查
     preferences = await get_user_preferences(session.user_id) if session.user_id else None
-    if not check_knowledge_permission(
-        session.username, preferences, knowledge.owner, knowledge.scope, "write"
+    if not await check_knowledge_permission_async(
+        session.username, preferences, knowledge.owner, knowledge.scope, "write",
+        user_id=session.user_id, project_id=knowledge.project_id,
     ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -345,8 +347,9 @@ async def delete_existing_knowledge(
 
     # 權限檢查
     preferences = await get_user_preferences(session.user_id) if session.user_id else None
-    if not check_knowledge_permission(
-        session.username, preferences, knowledge.owner, knowledge.scope, "delete"
+    if not await check_knowledge_permission_async(
+        session.username, preferences, knowledge.owner, knowledge.scope, "delete",
+        user_id=session.user_id, project_id=knowledge.project_id,
     ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

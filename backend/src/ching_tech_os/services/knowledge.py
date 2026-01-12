@@ -177,6 +177,7 @@ def _metadata_to_response(
         category=metadata.get("category", "technical"),
         scope=metadata.get("scope", "global"),
         owner=metadata.get("owner"),
+        project_id=metadata.get("project_id"),
         tags=tags,
         source=source,
         related=metadata.get("related", []),
@@ -356,6 +357,7 @@ def search_knowledge(
         if isinstance(updated_at, str):
             updated_at = date.fromisoformat(updated_at)
 
+        entry_project_id = getattr(entry, "project_id", None)
         results.append(
             KnowledgeListItem(
                 id=entry.id,
@@ -364,6 +366,7 @@ def search_knowledge(
                 category=entry.category,
                 scope=entry_scope,
                 owner=entry_owner,
+                project_id=entry_project_id,
                 tags=entry.tags,
                 author=entry.author,
                 updated_at=updated_at,
@@ -377,12 +380,13 @@ def search_knowledge(
     return KnowledgeListResponse(items=results, total=len(results), query=query)
 
 
-def create_knowledge(data: KnowledgeCreate, owner: str | None = None) -> KnowledgeResponse:
+def create_knowledge(data: KnowledgeCreate, owner: str | None = None, project_id: str | None = None) -> KnowledgeResponse:
     """建立新知識
 
     Args:
         data: 知識資料
         owner: 擁有者帳號（建立個人知識時設定）
+        project_id: 關聯專案 UUID（建立專案知識時設定，會覆蓋 data.project_id）
 
     Returns:
         建立的知識
@@ -413,10 +417,10 @@ def create_knowledge(data: KnowledgeCreate, owner: str | None = None) -> Knowled
     # 準備元資料
     today = date.today()
 
-    # 設定 scope 和 owner
-    # 如果是個人知識且有 owner，設定 scope 為 personal
+    # 設定 scope、owner 和 project_id
     knowledge_scope = data.scope
     knowledge_owner = owner if knowledge_scope == "personal" else None
+    knowledge_project_id = project_id or data.project_id if knowledge_scope == "project" else None
 
     metadata = {
         "id": kb_id,
@@ -425,6 +429,7 @@ def create_knowledge(data: KnowledgeCreate, owner: str | None = None) -> Knowled
         "category": data.category,
         "scope": knowledge_scope,
         "owner": knowledge_owner,
+        "project_id": knowledge_project_id,
         "tags": {
             "projects": data.tags.projects,
             "roles": data.tags.roles,
@@ -464,6 +469,7 @@ def create_knowledge(data: KnowledgeCreate, owner: str | None = None) -> Knowled
         category=data.category,
         scope=knowledge_scope,
         owner=knowledge_owner,
+        project_id=knowledge_project_id,
         tags=data.tags,
         author=data.author,
         created_at=today.isoformat(),
@@ -696,6 +702,9 @@ def rebuild_index() -> dict[str, Any]:
                 filename=file_path.name,
                 type=metadata.get("type", "knowledge"),
                 category=metadata.get("category", "technical"),
+                scope=metadata.get("scope", "global"),
+                owner=metadata.get("owner"),
+                project_id=metadata.get("project_id"),
                 tags=tags,
                 author=metadata.get("author", "system"),
                 created_at=str(metadata.get("created_at", date.today().isoformat())),

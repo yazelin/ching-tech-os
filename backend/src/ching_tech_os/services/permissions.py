@@ -9,6 +9,7 @@
 from typing import Any
 
 from ..config import settings
+from ..database import get_connection
 
 
 # ============================================================
@@ -152,7 +153,7 @@ def check_knowledge_permission(
     knowledge_scope: str,
     action: str,
 ) -> bool:
-    """檢查知識庫權限
+    """檢查知識庫權限（同步版本，不支援專案知識）
 
     Args:
         username: 使用者帳號
@@ -163,9 +164,20 @@ def check_knowledge_permission(
 
     Returns:
         是否有權限執行該操作
+
+    注意：專案知識（scope=project）請使用 check_knowledge_permission_async
     """
     # 管理員擁有所有權限
     if is_admin(username):
+        return True
+
+    # 擁有全域權限的使用者可以編輯/刪除任何知識（用於管理目的）
+    perms = get_user_permissions(preferences)
+    knowledge_perms = perms.get("knowledge", {})
+
+    if action == "write" and knowledge_perms.get("global_write", False):
+        return True
+    if action == "delete" and knowledge_perms.get("global_delete", False):
         return True
 
     # 個人知識：擁有者完全控制
@@ -176,16 +188,108 @@ def check_knowledge_permission(
     if knowledge_scope == "global":
         if action == "read":
             return True  # 全域知識所有人可讀
+        # write/delete 已在上方全域權限檢查處理
+        return False
 
-        perms = get_user_permissions(preferences)
-        knowledge_perms = perms.get("knowledge", {})
+    # 專案知識：同步版本不支援，需使用 async 版本
+    if knowledge_scope == "project":
+        if action == "read":
+            return True  # 專案知識所有人可讀
+        # write/delete 需要 async 檢查專案成員，這裡拒絕
+        return False
 
-        if action == "write":
-            return knowledge_perms.get("global_write", False)
-        elif action == "delete":
-            return knowledge_perms.get("global_delete", False)
+    # 其他情況：拒絕
+    return False
 
-    # 其他情況（如個人知識但非擁有者）：拒絕
+
+async def is_project_member(user_id: int | None, project_id: str | None) -> bool:
+    """檢查使用者是否為專案成員
+
+    Args:
+        user_id: CTOS 使用者 ID
+        project_id: 專案 UUID
+
+    Returns:
+        是否為該專案的成員
+    """
+    if not user_id or not project_id:
+        return False
+
+    try:
+        from uuid import UUID as UUID_type
+        async with get_connection() as conn:
+            result = await conn.fetchval(
+                """
+                SELECT 1 FROM project_members
+                WHERE project_id = $1 AND user_id = $2
+                LIMIT 1
+                """,
+                UUID_type(project_id),
+                user_id,
+            )
+            return result is not None
+    except Exception:
+        return False
+
+
+async def check_knowledge_permission_async(
+    username: str,
+    preferences: dict | None,
+    knowledge_owner: str | None,
+    knowledge_scope: str,
+    action: str,
+    user_id: int | None = None,
+    project_id: str | None = None,
+) -> bool:
+    """檢查知識庫權限（async 版本，支援專案知識）
+
+    Args:
+        username: 使用者帳號
+        preferences: 使用者的 preferences JSONB 欄位
+        knowledge_owner: 知識的擁有者（None 表示全域知識）
+        knowledge_scope: 知識的範圍（global、personal 或 project）
+        action: 操作類型（read、write、delete）
+        user_id: CTOS 使用者 ID（檢查專案成員時需要）
+        project_id: 專案 UUID（專案知識時需要）
+
+    Returns:
+        是否有權限執行該操作
+    """
+    # 管理員擁有所有權限
+    if is_admin(username):
+        return True
+
+    # 擁有全域權限的使用者可以編輯/刪除任何知識（用於管理目的）
+    perms = get_user_permissions(preferences)
+    knowledge_perms = perms.get("knowledge", {})
+
+    if action == "write" and knowledge_perms.get("global_write", False):
+        return True
+    if action == "delete" and knowledge_perms.get("global_delete", False):
+        return True
+
+    # 個人知識：擁有者完全控制
+    if knowledge_scope == "personal" and knowledge_owner == username:
+        return True
+
+    # 全域知識：依權限設定
+    if knowledge_scope == "global":
+        if action == "read":
+            return True  # 全域知識所有人可讀
+        # write/delete 已在上方全域權限檢查處理
+        return False
+
+    # 專案知識：專案成員可以編輯/刪除
+    if knowledge_scope == "project":
+        if action == "read":
+            return True  # 專案知識所有人可讀
+
+        # 檢查是否為專案成員
+        if await is_project_member(user_id, project_id):
+            return True
+        return False
+
+    # 其他情況：拒絕
     return False
 
 

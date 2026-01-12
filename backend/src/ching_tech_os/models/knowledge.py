@@ -44,8 +44,9 @@ class KnowledgeMetadata(BaseModel):
     title: str
     type: str = "knowledge"  # context, knowledge, operations, reference
     category: str = "technical"  # technical, business, management
-    scope: str = "global"  # global（全域）或 personal（個人）
-    owner: str | None = None  # 擁有者帳號（None 表示全域知識）
+    scope: str = "global"  # global（全域）、personal（個人）或 project（專案）
+    owner: str | None = None  # 擁有者帳號（個人知識用）
+    project_id: str | None = None  # 關聯專案 UUID（專案知識用）
     tags: KnowledgeTags = Field(default_factory=KnowledgeTags)
     source: KnowledgeSource = Field(default_factory=KnowledgeSource)
     related: list[str] = Field(default_factory=list)
@@ -63,7 +64,8 @@ class KnowledgeCreate(BaseModel):
     content: str
     type: str = "knowledge"
     category: str = "technical"
-    scope: str = "personal"  # 預設為個人知識
+    scope: str = "personal"  # 預設為個人知識（global、personal 或 project）
+    project_id: str | None = None  # 關聯專案 UUID（scope=project 時使用）
     tags: KnowledgeTags = Field(default_factory=KnowledgeTags)
     source: KnowledgeSource | None = None
     related: list[str] = Field(default_factory=list)
@@ -89,8 +91,9 @@ class KnowledgeResponse(BaseModel):
     title: str
     type: str
     category: str
-    scope: str = "global"  # global 或 personal
-    owner: str | None = None  # 擁有者帳號
+    scope: str = "global"  # global、personal 或 project
+    owner: str | None = None  # 擁有者帳號（個人知識用）
+    project_id: str | None = None  # 關聯專案 UUID（專案知識用）
     tags: KnowledgeTags
     source: KnowledgeSource
     related: list[str]
@@ -108,8 +111,9 @@ class KnowledgeListItem(BaseModel):
     title: str
     type: str
     category: str
-    scope: str = "global"  # global 或 personal
-    owner: str | None = None  # 擁有者帳號
+    scope: str = "global"  # global、personal 或 project
+    owner: str | None = None  # 擁有者帳號（個人知識用）
+    project_id: str | None = None  # 關聯專案 UUID（專案知識用）
     tags: KnowledgeTags
     author: str
     updated_at: date
@@ -167,8 +171,9 @@ class IndexEntry(BaseModel):
     filename: str
     type: str
     category: str
-    scope: str = "global"  # global 或 personal
-    owner: str | None = None  # 擁有者帳號
+    scope: str = "global"  # global、personal 或 project
+    owner: str | None = None  # 擁有者帳號（個人知識用）
+    project_id: str | None = None  # 關聯專案 UUID（專案知識用）
     tags: KnowledgeTags
     author: str
     created_at: str
