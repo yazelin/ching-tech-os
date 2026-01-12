@@ -161,7 +161,7 @@ async def get_project_attachment_info(attachment_id: str) -> dict:
     """取得專案附件資訊"""
     async with get_connection() as conn:
         row = await conn.fetchrow(
-            "SELECT id, filename, storage_path, file_type FROM project_attachments WHERE id = $1",
+            "SELECT id, filename, storage_path, file_type, project_id, file_size FROM project_attachments WHERE id = $1",
             UUID(attachment_id),
         )
         if not row:
@@ -465,17 +465,10 @@ async def get_public_resource(token: str) -> PublicResourceResponse:
 
         elif resource_type == "project_attachment":
             try:
-                # 取得附件資訊
+                # 取得附件資訊（已包含 file_size）
                 attachment = await get_project_attachment_info(resource_id)
                 filename = attachment["filename"]
-
-                # 格式化大小（從資料庫取得，若無則顯示未知）
-                # 需要從 project_attachments 取得 file_size
-                size_row = await conn.fetchrow(
-                    "SELECT file_size FROM project_attachments WHERE id = $1",
-                    UUID(resource_id),
-                )
-                size = size_row["file_size"] if size_row and size_row["file_size"] else 0
+                size = attachment.get("file_size") or 0
 
                 if size >= 1024 * 1024:
                     size_str = f"{size / 1024 / 1024:.2f} MB"

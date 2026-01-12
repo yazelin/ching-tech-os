@@ -259,5 +259,15 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # 回滾到 027 版本的 prompt
+    """回滾到 027 版本的 prompt
+
+    若需要完整回滾，請參考 027_update_delivery_schedule_params.py 中的
+    LINEBOT_PERSONAL_PROMPT 和 LINEBOT_GROUP_PROMPT 內容，
+    或使用以下 SQL 從備份還原：
+
+    UPDATE ai_prompts SET content = '<舊版 prompt>' WHERE name = 'linebot-personal';
+    UPDATE ai_prompts SET content = '<舊版 prompt>' WHERE name = 'linebot-group';
+    """
+    # 移除專案附件/連結 MCP 工具相關的 prompt 內容
+    # 由於 prompt 內容較長，建議參考上一版 migration 手動還原
     pass
