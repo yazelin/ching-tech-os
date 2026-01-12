@@ -1267,6 +1267,63 @@ async def update_knowledge_attachment(
         return f"更新失敗：{str(e)}"
 
 
+async def _determine_knowledge_scope(
+    line_group_id: str | None,
+    line_user_id: str | None,
+    ctos_user_id: int | None,
+) -> tuple[str, str | None, str | None]:
+    """判斷知識庫的 scope 和相關屬性
+
+    Args:
+        line_group_id: Line 群組的內部 UUID
+        line_user_id: Line 用戶 ID
+        ctos_user_id: CTOS 用戶 ID
+
+    Returns:
+        tuple[scope, owner_username, project_id]
+        - scope: "global", "personal", 或 "project"
+        - owner_username: 擁有者帳號（scope=personal 時使用）
+        - project_id: 專案 UUID（scope=project 時使用）
+    """
+    from uuid import UUID as UUID_type
+
+    scope = "global"
+    owner_username: str | None = None
+    project_id: str | None = None
+
+    # 1. 取得 CTOS 使用者名稱（如果有綁定）
+    if ctos_user_id:
+        async with get_connection() as conn:
+            user_row = await conn.fetchrow(
+                "SELECT username FROM users WHERE id = $1",
+                ctos_user_id,
+            )
+            if user_row:
+                owner_username = user_row["username"]
+
+    # 2. 判斷對話來源並設定 scope
+    if line_group_id:
+        # 群組聊天：檢查群組是否綁定專案
+        async with get_connection() as conn:
+            group_row = await conn.fetchrow(
+                "SELECT project_id FROM line_groups WHERE id = $1",
+                UUID_type(line_group_id),
+            )
+            if group_row and group_row["project_id"]:
+                # 群組已綁定專案 → scope=project
+                scope = "project"
+                project_id = str(group_row["project_id"])
+            else:
+                # 群組未綁定專案 → scope=global
+                scope = "global"
+    elif line_user_id and owner_username:
+        # 個人聊天且已綁定帳號 → scope=personal
+        scope = "personal"
+    # 其他情況（未綁定帳號）→ scope=global（預設值）
+
+    return scope, owner_username, project_id
+
+
 @mcp.tool()
 async def add_note(
     title: str,
@@ -1274,6 +1331,9 @@ async def add_note(
     category: str = "note",
     topics: list[str] | None = None,
     project: str | None = None,
+    line_group_id: str | None = None,
+    line_user_id: str | None = None,
+    ctos_user_id: int | None = None,
 ) -> str:
     """
     新增筆記到知識庫
@@ -1284,11 +1344,21 @@ async def add_note(
         category: 分類，預設 note（可選：technical, process, tool, note）
         topics: 主題標籤列表
         project: 關聯的專案名稱
+        line_group_id: Line 群組的內部 UUID（從對話識別取得，群組對話時使用）
+        line_user_id: Line 用戶 ID（從對話識別取得，個人對話時使用）
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於判斷帳號綁定）
     """
     from ..models.knowledge import KnowledgeCreate, KnowledgeTags, KnowledgeSource
     from . import knowledge as kb_service
 
     try:
+        await ensure_db_connection()
+
+        # 自動判斷 scope 和相關屬性
+        scope, owner_username, project_id = await _determine_knowledge_scope(
+            line_group_id, line_user_id, ctos_user_id
+        )
+
         # 建立標籤
         tags = KnowledgeTags(
             projects=[project] if project else [],
@@ -1304,21 +1374,25 @@ async def add_note(
             commit=None,
         )
 
-        # 建立知識（Line Bot 建立的筆記為全域可見）
+        # 建立知識
         data = KnowledgeCreate(
             title=title,
             content=content,
             type="note",
             category=category,
-            scope="global",  # Line Bot 筆記設為全域可見
+            scope=scope,
+            project_id=project_id,
             tags=tags,
             source=source,
             related=[],
-            author="linebot",
+            author=owner_username or "linebot",
         )
 
-        result = kb_service.create_knowledge(data)
-        return f"✅ 筆記已新增！\nID：{result.id}\n標題：{result.title}"
+        result = kb_service.create_knowledge(data, owner=owner_username, project_id=project_id)
+
+        # 組裝回應訊息
+        scope_text = {"global": "全域", "personal": "個人", "project": "專案"}.get(scope, scope)
+        return f"✅ 筆記已新增！\nID：{result.id}\n標題：{result.title}\n範圍：{scope_text}知識"
 
     except Exception as e:
         logger.error(f"新增筆記失敗: {e}")
@@ -1333,6 +1407,9 @@ async def add_note_with_attachments(
     category: str = "note",
     topics: list[str] | None = None,
     project: str | None = None,
+    line_group_id: str | None = None,
+    line_user_id: str | None = None,
+    ctos_user_id: int | None = None,
 ) -> str:
     """
     新增筆記到知識庫並加入附件
@@ -1344,6 +1421,9 @@ async def add_note_with_attachments(
         category: 分類，預設 note（可選：technical, process, tool, note）
         topics: 主題標籤列表
         project: 關聯的專案名稱
+        line_group_id: Line 群組的內部 UUID（從對話識別取得，群組對話時使用）
+        line_user_id: Line 用戶 ID（從對話識別取得，個人對話時使用）
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於判斷帳號綁定）
     """
     from ..models.knowledge import KnowledgeCreate, KnowledgeTags, KnowledgeSource
     from . import knowledge as kb_service
@@ -1353,7 +1433,14 @@ async def add_note_with_attachments(
         return "附件數量不能超過 10 個"
 
     try:
-        # 1. 建立知識庫筆記
+        await ensure_db_connection()
+
+        # 自動判斷 scope 和相關屬性
+        scope, owner_username, knowledge_project_id = await _determine_knowledge_scope(
+            line_group_id, line_user_id, ctos_user_id
+        )
+
+        # 建立知識庫筆記
         tags = KnowledgeTags(
             projects=[project] if project else [],
             roles=[],
@@ -1372,14 +1459,15 @@ async def add_note_with_attachments(
             content=content,
             type="note",
             category=category,
-            scope="global",
+            scope=scope,
+            project_id=knowledge_project_id,
             tags=tags,
             source=source,
             related=[],
-            author="linebot",
+            author=owner_username or "linebot",
         )
 
-        result = kb_service.create_knowledge(data)
+        result = kb_service.create_knowledge(data, owner=owner_username, project_id=knowledge_project_id)
         kb_id = result.id
 
         # 2. 處理附件
@@ -1395,7 +1483,8 @@ async def add_note_with_attachments(
                 failed_attachments.append(nas_path)
 
         # 3. 回傳結果
-        output = [f"✅ 筆記已新增！", f"ID：{kb_id}", f"標題：{title}"]
+        scope_text = {"global": "全域", "personal": "個人", "project": "專案"}.get(scope, scope)
+        output = [f"✅ 筆記已新增！", f"ID：{kb_id}", f"標題：{title}", f"範圍：{scope_text}知識"]
 
         if success_count > 0:
             output.append(f"附件：已加入 {success_count} 個")

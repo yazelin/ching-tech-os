@@ -546,12 +546,27 @@ const LineBotApp = (function () {
                 <h4>最近訊息</h4>
                 <div class="linebot-group-messages-list"></div>
             </div>
+
+            <div class="linebot-group-actions">
+                <h4>群組管理</h4>
+                <button class="linebot-btn linebot-btn-danger linebot-delete-group-btn" data-group-id="${group.id}">
+                    <span class="icon">${typeof getIcon !== 'undefined' ? getIcon('delete') : '🗑'}</span>
+                    刪除群組
+                </button>
+                <p class="linebot-action-hint">刪除群組將同時刪除所有訊息記錄</p>
+            </div>
         `;
 
         // 綁定專案選擇事件
         const select = container.querySelector('.linebot-project-select');
         select.addEventListener('change', () => {
             bindProject(select.dataset.groupId, select.value || null);
+        });
+
+        // 綁定刪除按鈕事件
+        const deleteBtn = container.querySelector('.linebot-delete-group-btn');
+        deleteBtn.addEventListener('click', () => {
+            confirmDeleteGroup(group.id, group.name || '未命名群組');
         });
 
         // 載入該群組的訊息
@@ -1054,6 +1069,69 @@ const LineBotApp = (function () {
         const confirmed = confirm(`確定要刪除檔案「${fileName}」嗎？\n此操作無法復原。`);
         if (confirmed) {
             deleteFile(fileId);
+        }
+    }
+
+    // 刪除群組
+    async function deleteGroup(groupId) {
+        try {
+            const response = await fetch(`/api/linebot/groups/${groupId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${getToken()}`,
+                },
+            });
+
+            if (!response.ok) {
+                throw new Error('刪除失敗');
+            }
+
+            const result = await response.json();
+
+            // 清除選擇狀態
+            state.selectedGroup = null;
+
+            // 重新載入群組列表
+            await loadGroups(state.pagination.groups.page);
+
+            // 更新詳情面板
+            renderGroupDetail();
+
+            // 手機版：關閉詳情面板
+            closeGroupDetail();
+
+            // 顯示成功訊息
+            if (typeof NotificationModule !== 'undefined') {
+                NotificationModule.show({
+                    title: '刪除成功',
+                    message: result.message,
+                    icon: 'check',
+                });
+            } else {
+                alert(result.message);
+            }
+
+            return true;
+        } catch (error) {
+            console.error('刪除群組失敗:', error);
+            alert('刪除群組失敗：' + error.message);
+            return false;
+        }
+    }
+
+    // 確認刪除群組對話框
+    function confirmDeleteGroup(groupId, groupName) {
+        const confirmed = confirm(
+            `確定要刪除群組「${groupName}」嗎？\n\n` +
+            `此操作將刪除：\n` +
+            `• 群組記錄\n` +
+            `• 所有訊息記錄\n` +
+            `• 所有檔案記錄\n\n` +
+            `（NAS 上的實體檔案會保留）\n\n` +
+            `此操作無法復原！`
+        );
+        if (confirmed) {
+            deleteGroup(groupId);
         }
     }
 

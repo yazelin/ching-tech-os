@@ -1,6 +1,7 @@
 """知識庫服務"""
 
 import json
+import logging
 import os
 import re
 import subprocess
@@ -9,6 +10,8 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+
+logger = logging.getLogger(__name__)
 
 from ching_tech_os.config import settings
 from ching_tech_os.models.knowledge import (
@@ -33,6 +36,7 @@ from ching_tech_os.services.local_file import (
     create_knowledge_file_service,
     create_linebot_file_service,
 )
+from ching_tech_os.database import get_connection
 
 
 class KnowledgeError(Exception):
@@ -176,6 +180,7 @@ def _metadata_to_response(
         category=metadata.get("category", "technical"),
         scope=metadata.get("scope", "global"),
         owner=metadata.get("owner"),
+        project_id=metadata.get("project_id"),
         tags=tags,
         source=source,
         related=metadata.get("related", []),
@@ -355,6 +360,7 @@ def search_knowledge(
         if isinstance(updated_at, str):
             updated_at = date.fromisoformat(updated_at)
 
+        entry_project_id = getattr(entry, "project_id", None)
         results.append(
             KnowledgeListItem(
                 id=entry.id,
@@ -363,6 +369,7 @@ def search_knowledge(
                 category=entry.category,
                 scope=entry_scope,
                 owner=entry_owner,
+                project_id=entry_project_id,
                 tags=entry.tags,
                 author=entry.author,
                 updated_at=updated_at,
@@ -376,12 +383,13 @@ def search_knowledge(
     return KnowledgeListResponse(items=results, total=len(results), query=query)
 
 
-def create_knowledge(data: KnowledgeCreate, owner: str | None = None) -> KnowledgeResponse:
+def create_knowledge(data: KnowledgeCreate, owner: str | None = None, project_id: str | None = None) -> KnowledgeResponse:
     """建立新知識
 
     Args:
         data: 知識資料
         owner: 擁有者帳號（建立個人知識時設定）
+        project_id: 關聯專案 UUID（建立專案知識時設定，會覆蓋 data.project_id）
 
     Returns:
         建立的知識
@@ -412,10 +420,10 @@ def create_knowledge(data: KnowledgeCreate, owner: str | None = None) -> Knowled
     # 準備元資料
     today = date.today()
 
-    # 設定 scope 和 owner
-    # 如果是個人知識且有 owner，設定 scope 為 personal
+    # 設定 scope、owner 和 project_id
     knowledge_scope = data.scope
     knowledge_owner = owner if knowledge_scope == "personal" else None
+    knowledge_project_id = project_id or data.project_id if knowledge_scope == "project" else None
 
     metadata = {
         "id": kb_id,
@@ -424,6 +432,7 @@ def create_knowledge(data: KnowledgeCreate, owner: str | None = None) -> Knowled
         "category": data.category,
         "scope": knowledge_scope,
         "owner": knowledge_owner,
+        "project_id": knowledge_project_id,
         "tags": {
             "projects": data.tags.projects,
             "roles": data.tags.roles,
@@ -463,6 +472,7 @@ def create_knowledge(data: KnowledgeCreate, owner: str | None = None) -> Knowled
         category=data.category,
         scope=knowledge_scope,
         owner=knowledge_owner,
+        project_id=knowledge_project_id,
         tags=data.tags,
         author=data.author,
         created_at=today.isoformat(),
@@ -625,10 +635,35 @@ def delete_knowledge(kb_id: str) -> None:
     _save_index(index)
 
 
-def get_all_tags() -> TagsResponse:
-    """取得所有標籤"""
+async def get_all_tags() -> TagsResponse:
+    """取得所有標籤（專案從資料庫動態載入）"""
     index = _load_index()
-    return index.tags
+
+    # 從資料庫取得專案列表
+    try:
+        async with get_connection() as conn:
+            rows = await conn.fetch(
+                "SELECT name FROM projects WHERE status = 'active' ORDER BY name"
+            )
+            db_projects = [row["name"] for row in rows]
+    except Exception as e:
+        logger.error(f"從資料庫取得專案列表失敗: {e}")
+        # 資料庫查詢失敗時使用索引中的專案
+        db_projects = []
+
+    # 合併資料庫專案和索引中的主題
+    # 保留 "common" 作為通用專案選項
+    all_projects = list(set(db_projects + ["common"]))
+    all_projects.sort()
+
+    return TagsResponse(
+        projects=all_projects,
+        types=index.tags.types,
+        categories=index.tags.categories,
+        roles=index.tags.roles,
+        levels=index.tags.levels,
+        topics=index.tags.topics,
+    )
 
 
 def rebuild_index() -> dict[str, Any]:
@@ -671,6 +706,9 @@ def rebuild_index() -> dict[str, Any]:
                 filename=file_path.name,
                 type=metadata.get("type", "knowledge"),
                 category=metadata.get("category", "technical"),
+                scope=metadata.get("scope", "global"),
+                owner=metadata.get("owner"),
+                project_id=metadata.get("project_id"),
                 tags=tags,
                 author=metadata.get("author", "system"),
                 created_at=str(metadata.get("created_at", date.today().isoformat())),

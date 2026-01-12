@@ -60,6 +60,7 @@ from ..services.linebot import (
     delete_file,
     bind_group_to_project,
     unbind_group_from_project,
+    delete_group,
     get_or_create_group,
     get_or_create_user,
     update_user_friend_status,
@@ -436,6 +437,23 @@ async def api_unbind_project(group_id: UUID):
     if not success:
         raise HTTPException(status_code=404, detail="Group not found")
     return {"status": "ok", "message": "已解除專案綁定"}
+
+
+@router.delete("/groups/{group_id}")
+async def api_delete_group(group_id: UUID):
+    """刪除群組及其相關資料
+
+    刪除群組記錄，同時級聯刪除相關的訊息和檔案記錄。
+    注意：NAS 上的實體檔案不會被刪除。
+    """
+    result = await delete_group(group_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Group not found")
+    return {
+        "status": "ok",
+        "message": f"已刪除群組「{result['group_name']}」及 {result['deleted_messages']} 則訊息",
+        "deleted_messages": result["deleted_messages"],
+    }
 
 
 # ============================================================
