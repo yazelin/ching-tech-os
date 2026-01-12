@@ -1267,6 +1267,63 @@ async def update_knowledge_attachment(
         return f"更新失敗：{str(e)}"
 
 
+async def _determine_knowledge_scope(
+    line_group_id: str | None,
+    line_user_id: str | None,
+    ctos_user_id: int | None,
+) -> tuple[str, str | None, str | None]:
+    """判斷知識庫的 scope 和相關屬性
+
+    Args:
+        line_group_id: Line 群組的內部 UUID
+        line_user_id: Line 用戶 ID
+        ctos_user_id: CTOS 用戶 ID
+
+    Returns:
+        tuple[scope, owner_username, project_id]
+        - scope: "global", "personal", 或 "project"
+        - owner_username: 擁有者帳號（scope=personal 時使用）
+        - project_id: 專案 UUID（scope=project 時使用）
+    """
+    from uuid import UUID as UUID_type
+
+    scope = "global"
+    owner_username: str | None = None
+    project_id: str | None = None
+
+    # 1. 取得 CTOS 使用者名稱（如果有綁定）
+    if ctos_user_id:
+        async with get_connection() as conn:
+            user_row = await conn.fetchrow(
+                "SELECT username FROM users WHERE id = $1",
+                ctos_user_id,
+            )
+            if user_row:
+                owner_username = user_row["username"]
+
+    # 2. 判斷對話來源並設定 scope
+    if line_group_id:
+        # 群組聊天：檢查群組是否綁定專案
+        async with get_connection() as conn:
+            group_row = await conn.fetchrow(
+                "SELECT project_id FROM line_groups WHERE id = $1",
+                UUID_type(line_group_id),
+            )
+            if group_row and group_row["project_id"]:
+                # 群組已綁定專案 → scope=project
+                scope = "project"
+                project_id = str(group_row["project_id"])
+            else:
+                # 群組未綁定專案 → scope=global
+                scope = "global"
+    elif line_user_id and owner_username:
+        # 個人聊天且已綁定帳號 → scope=personal
+        scope = "personal"
+    # 其他情況（未綁定帳號）→ scope=global（預設值）
+
+    return scope, owner_username, project_id
+
+
 @mcp.tool()
 async def add_note(
     title: str,
@@ -1291,7 +1348,6 @@ async def add_note(
         line_user_id: Line 用戶 ID（從對話識別取得，個人對話時使用）
         ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於判斷帳號綁定）
     """
-    from uuid import UUID as UUID_type
     from ..models.knowledge import KnowledgeCreate, KnowledgeTags, KnowledgeSource
     from . import knowledge as kb_service
 
@@ -1299,39 +1355,9 @@ async def add_note(
         await ensure_db_connection()
 
         # 自動判斷 scope 和相關屬性
-        scope = "global"
-        owner_username: str | None = None
-        project_id: str | None = None
-
-        # 1. 取得 CTOS 使用者名稱（如果有綁定）
-        if ctos_user_id:
-            async with get_connection() as conn:
-                user_row = await conn.fetchrow(
-                    "SELECT username FROM users WHERE id = $1",
-                    ctos_user_id,
-                )
-                if user_row:
-                    owner_username = user_row["username"]
-
-        # 2. 判斷對話來源並設定 scope
-        if line_group_id:
-            # 群組聊天：檢查群組是否綁定專案
-            async with get_connection() as conn:
-                group_row = await conn.fetchrow(
-                    "SELECT project_id FROM line_groups WHERE id = $1",
-                    UUID_type(line_group_id),
-                )
-                if group_row and group_row["project_id"]:
-                    # 群組已綁定專案 → scope=project
-                    scope = "project"
-                    project_id = str(group_row["project_id"])
-                else:
-                    # 群組未綁定專案 → scope=global
-                    scope = "global"
-        elif line_user_id and owner_username:
-            # 個人聊天且已綁定帳號 → scope=personal
-            scope = "personal"
-        # 其他情況（未綁定帳號）→ scope=global（預設值）
+        scope, owner_username, project_id = await _determine_knowledge_scope(
+            line_group_id, line_user_id, ctos_user_id
+        )
 
         # 建立標籤
         tags = KnowledgeTags(
@@ -1399,7 +1425,6 @@ async def add_note_with_attachments(
         line_user_id: Line 用戶 ID（從對話識別取得，個人對話時使用）
         ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於判斷帳號綁定）
     """
-    from uuid import UUID as UUID_type
     from ..models.knowledge import KnowledgeCreate, KnowledgeTags, KnowledgeSource
     from . import knowledge as kb_service
 
@@ -1411,41 +1436,11 @@ async def add_note_with_attachments(
         await ensure_db_connection()
 
         # 自動判斷 scope 和相關屬性
-        scope = "global"
-        owner_username: str | None = None
-        knowledge_project_id: str | None = None
+        scope, owner_username, knowledge_project_id = await _determine_knowledge_scope(
+            line_group_id, line_user_id, ctos_user_id
+        )
 
-        # 1. 取得 CTOS 使用者名稱（如果有綁定）
-        if ctos_user_id:
-            async with get_connection() as conn:
-                user_row = await conn.fetchrow(
-                    "SELECT username FROM users WHERE id = $1",
-                    ctos_user_id,
-                )
-                if user_row:
-                    owner_username = user_row["username"]
-
-        # 2. 判斷對話來源並設定 scope
-        if line_group_id:
-            # 群組聊天：檢查群組是否綁定專案
-            async with get_connection() as conn:
-                group_row = await conn.fetchrow(
-                    "SELECT project_id FROM line_groups WHERE id = $1",
-                    UUID_type(line_group_id),
-                )
-                if group_row and group_row["project_id"]:
-                    # 群組已綁定專案 → scope=project
-                    scope = "project"
-                    knowledge_project_id = str(group_row["project_id"])
-                else:
-                    # 群組未綁定專案 → scope=global
-                    scope = "global"
-        elif line_user_id and owner_username:
-            # 個人聊天且已綁定帳號 → scope=personal
-            scope = "personal"
-        # 其他情況（未綁定帳號）→ scope=global（預設值）
-
-        # 1. 建立知識庫筆記
+        # 建立知識庫筆記
         tags = KnowledgeTags(
             projects=[project] if project else [],
             roles=[],

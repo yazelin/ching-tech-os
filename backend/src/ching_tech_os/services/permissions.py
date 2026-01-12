@@ -6,10 +6,13 @@
 - 權限合併邏輯
 """
 
+import logging
 from typing import Any
 
 from ..config import settings
 from ..database import get_connection
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================
@@ -228,7 +231,8 @@ async def is_project_member(user_id: int | None, project_id: str | None) -> bool
                 user_id,
             )
             return result is not None
-    except Exception:
+    except Exception as e:
+        logger.error(f"檢查專案成員權限時發生錯誤: {e}")
         return False
 
 

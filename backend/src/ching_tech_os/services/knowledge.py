@@ -1,6 +1,7 @@
 """知識庫服務"""
 
 import json
+import logging
 import os
 import re
 import subprocess
@@ -9,6 +10,8 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+
+logger = logging.getLogger(__name__)
 
 from ching_tech_os.config import settings
 from ching_tech_os.models.knowledge import (
@@ -643,7 +646,8 @@ async def get_all_tags() -> TagsResponse:
                 "SELECT name FROM projects WHERE status = 'active' ORDER BY name"
             )
             db_projects = [row["name"] for row in rows]
-    except Exception:
+    except Exception as e:
+        logger.error(f"從資料庫取得專案列表失敗: {e}")
         # 資料庫查詢失敗時使用索引中的專案
         db_projects = []
 
