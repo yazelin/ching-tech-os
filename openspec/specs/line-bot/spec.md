@@ -143,25 +143,15 @@ Line Bot SHALL 在個人對話中提供助理功能。
 ---
 
 ### Requirement: Line 群組管理 API
-Line Bot SHALL 提供群組管理 RESTful API。
+Line Bot SHALL 提供群組管理 RESTful API，包含刪除功能。
 
-#### Scenario: 取得群組列表
-- **WHEN** 使用者請求 `GET /api/linebot/groups`
-- **THEN** 系統回傳所有群組列表
-- **AND** 每個群組包含 id、名稱、狀態、綁定專案、訊息數量
-
-#### Scenario: 取得群組詳情
-- **WHEN** 使用者請求 `GET /api/linebot/groups/{id}`
-- **THEN** 系統回傳群組完整資訊
-
-#### Scenario: 更新群組資訊
-- **WHEN** 使用者請求 `PUT /api/linebot/groups/{id}`
-- **THEN** 系統更新群組名稱、狀態等欄位
-
-#### Scenario: 停用群組
+#### Scenario: 刪除群組
 - **WHEN** 使用者請求 `DELETE /api/linebot/groups/{id}`
-- **THEN** 系統將群組狀態設為 inactive
-- **AND** 不再處理該群組訊息
+- **THEN** 系統刪除群組記錄
+- **AND** 級聯刪除該群組的所有訊息記錄
+- **AND** 級聯刪除該群組的所有檔案記錄
+- **AND** 返回刪除結果（含已刪除的訊息數量）
+- **AND** NAS 實體檔案不自動刪除
 
 ---
 
@@ -203,42 +193,16 @@ Line Bot SHALL 記錄並管理 Line 使用者資訊，包含綁定狀態與好�
 - **AND** 支援分頁與日期範圍過濾
 
 ### Requirement: Line Bot 前端管理介面
-Line Bot SHALL 提供桌面應用程式管理介面。
+Line Bot SHALL 提供桌面應用程式管理介面，包含群組刪除功能。
 
-#### Scenario: 開啟 Line Bot 管理
-- **WHEN** 使用者點擊 Taskbar 的 Line Bot 圖示
-- **THEN** 開啟 Line Bot 管理視窗
-- **AND** 顯示群組列表標籤頁
-
-#### Scenario: 群組列表頁面
-- **WHEN** 使用者在群組列表標籤頁
-- **THEN** 顯示所有群組卡片
-- **AND** 每個卡片顯示群組名稱、狀態、綁定專案、訊息數量
-
-#### Scenario: 群組詳情頁面
-- **WHEN** 使用者點擊群組卡片
-- **THEN** 切換到群組詳情頁面
-- **AND** 顯示群組資訊與專案綁定設定
-- **AND** 顯示最近訊息列表
-
-#### Scenario: 專案綁定操作
-- **WHEN** 使用者在群組詳情選擇專案下拉選單
-- **THEN** 顯示所有可用專案列表
-- **WHEN** 使用者選擇專案並確認
-- **THEN** 系統更新群組綁定
-
-#### Scenario: 對話歷史頁面
-- **WHEN** 使用者切換到對話歷史標籤頁
-- **THEN** 顯示群組/使用者選擇器
-- **AND** 顯示對話訊息列表
-
-#### Scenario: 檔案庫覽頁面
-- **WHEN** 使用者切換到檔案庫覽標籤頁
-- **THEN** 顯示群組檔案列表
-- **AND** 圖片顯示縮圖，可點擊預覽
-- **AND** 檔案可點擊下載
-
----
+#### Scenario: 刪除群組操作
+- **WHEN** 使用者在群組詳情頁面點擊「刪除群組」按鈕
+- **THEN** 系統顯示確認對話框
+- **AND** 對話框顯示群組名稱與將刪除的訊息數量
+- **WHEN** 使用者確認刪除
+- **THEN** 系統呼叫 DELETE API 刪除群組
+- **AND** 刪除成功後重新載入群組列表
+- **AND** 顯示刪除成功通知
 
 ### Requirement: 資料庫儲存
 Line Bot SHALL 使用 PostgreSQL 資料庫儲存資料。

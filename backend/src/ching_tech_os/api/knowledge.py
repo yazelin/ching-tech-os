@@ -89,9 +89,9 @@ async def list_knowledge(
     summary="取得標籤列表",
 )
 async def get_tags() -> TagsResponse:
-    """取得所有可用標籤（按類型分組）"""
+    """取得所有可用標籤（按類型分組，專案從資料庫動態載入）"""
     try:
-        return get_all_tags()
+        return await get_all_tags()
     except KnowledgeError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

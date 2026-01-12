@@ -33,6 +33,7 @@ from ching_tech_os.services.local_file import (
     create_knowledge_file_service,
     create_linebot_file_service,
 )
+from ching_tech_os.database import get_connection
 
 
 class KnowledgeError(Exception):
@@ -625,10 +626,34 @@ def delete_knowledge(kb_id: str) -> None:
     _save_index(index)
 
 
-def get_all_tags() -> TagsResponse:
-    """取得所有標籤"""
+async def get_all_tags() -> TagsResponse:
+    """取得所有標籤（專案從資料庫動態載入）"""
     index = _load_index()
-    return index.tags
+
+    # 從資料庫取得專案列表
+    try:
+        async with get_connection() as conn:
+            rows = await conn.fetch(
+                "SELECT name FROM projects WHERE status = 'active' ORDER BY name"
+            )
+            db_projects = [row["name"] for row in rows]
+    except Exception:
+        # 資料庫查詢失敗時使用索引中的專案
+        db_projects = []
+
+    # 合併資料庫專案和索引中的主題
+    # 保留 "common" 作為通用專案選項
+    all_projects = list(set(db_projects + ["common"]))
+    all_projects.sort()
+
+    return TagsResponse(
+        projects=all_projects,
+        types=index.tags.types,
+        categories=index.tags.categories,
+        roles=index.tags.roles,
+        levels=index.tags.levels,
+        topics=index.tags.topics,
+    )
 
 
 def rebuild_index() -> dict[str, Any]:

@@ -184,7 +184,7 @@ class KnowledgeIndex(BaseModel):
     entries: list[IndexEntry] = Field(default_factory=list)
     tags: TagsResponse = Field(
         default_factory=lambda: TagsResponse(
-            projects=["rosagv", "ching-tech-os", "jaba", "jaba-line-bot", "fish-cv", "common"],
+            projects=["common"],  # 專案從資料庫動態載入，這裡只保留通用選項
             types=["context", "knowledge", "operations", "reference"],
             categories=["technical", "business", "management"],
             roles=["engineer", "pm", "manager", "all"],
