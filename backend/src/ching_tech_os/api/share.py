@@ -26,6 +26,7 @@ from ching_tech_os.services.share import (
     NasFileAccessDenied,
 )
 from ching_tech_os.config import settings
+from ching_tech_os.database import get_connection
 from ching_tech_os.services.knowledge import get_nas_attachment, KnowledgeError
 from ching_tech_os.services.permissions import check_knowledge_permission
 from ching_tech_os.services.user import get_user_preferences
@@ -314,34 +315,54 @@ async def get_public_attachment(token: str, path: str) -> Response:
 
 @public_router.get(
     "/{token}/download",
-    summary="下載 NAS 檔案",
+    summary="下載檔案",
 )
-async def download_nas_file(token: str) -> Response:
-    """透過分享連結下載 NAS 檔案
+async def download_shared_file(token: str) -> Response:
+    """透過分享連結下載檔案
 
-    僅限 nas_file 類型的分享連結，無需登入。
+    支援 nas_file 和 project_attachment 類型的分享連結，無需登入。
     """
     from urllib.parse import quote
+    from ..services.share import get_project_attachment_info
+    from ..services.project import get_attachment_content
 
     try:
         # 驗證 token 有效
         link_info = await get_link_info(token)
+        resource_type = link_info["resource_type"]
 
-        # 只支援 NAS 檔案
-        if link_info["resource_type"] != "nas_file":
+        # 支援 NAS 檔案和專案附件
+        if resource_type == "nas_file":
+            file_path = link_info["resource_id"]
+            # 驗證並取得檔案路徑
+            full_path = validate_nas_file_path(file_path)
+            # 讀取檔案內容
+            content = full_path.read_bytes()
+            filename = full_path.name
+        elif resource_type == "project_attachment":
+            attachment_id = link_info["resource_id"]
+            # 取得附件資訊
+            attachment_info = await get_project_attachment_info(attachment_id)
+            # 使用專案服務讀取附件內容
+            from uuid import UUID
+            # 需要 project_id，從附件資訊取得
+            async with get_connection() as conn:
+                row = await conn.fetchrow(
+                    "SELECT project_id FROM project_attachments WHERE id = $1",
+                    UUID(attachment_id),
+                )
+                if not row:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail="附件不存在",
+                    )
+                project_id = row["project_id"]
+            content, filename = await get_attachment_content(project_id, UUID(attachment_id))
+        else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="此連結不是檔案下載連結",
             )
-
-        file_path = link_info["resource_id"]
-
-        # 驗證並取得檔案路徑
-        full_path = validate_nas_file_path(file_path)
-
-        # 讀取檔案內容
-        content = full_path.read_bytes()
-        filename = full_path.name
 
         # 取得 MIME 類型
         mime_type, _ = mimetypes.guess_type(filename)
@@ -379,6 +400,11 @@ async def download_nas_file(token: str) -> Response:
     except NasFileAccessDenied as e:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
+    except ResourceNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         )
     except Exception as e:

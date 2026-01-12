@@ -1,18 +1,23 @@
-"""Line Bot Agent 初始化與管理
+"""add project attachments and links mcp tools to prompts
 
-在應用程式啟動時確保預設的 Line Bot Agent 存在。
+Revision ID: 028
+Revises: 027
+Create Date: 2026-01-12
+
+新增專案附件和連結管理 MCP 工具說明：
+- add_project_link / get_project_links / update_project_link / delete_project_link
+- add_project_attachment / get_project_attachments / update_project_attachment / delete_project_attachment
 """
 
-import logging
+from collections.abc import Sequence
 
-from . import ai_manager
-from ..models.ai import AiPromptCreate, AiAgentCreate
+from alembic import op
 
-logger = logging.getLogger("linebot_agents")
-
-# Agent 名稱常數
-AGENT_LINEBOT_PERSONAL = "linebot-personal"
-AGENT_LINEBOT_GROUP = "linebot-group"
+# revision identifiers, used by Alembic.
+revision: str = "028"
+down_revision: str | None = "027"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 # 完整的 linebot-personal prompt
 LINEBOT_PERSONAL_PROMPT = """你是擎添工業的 AI 助理，透過 Line 與用戶進行個人對話。
@@ -88,9 +93,9 @@ LINEBOT_PERSONAL_PROMPT = """你是擎添工業的 AI 助理，透過 Line 與�
   · 其他檔案會以連結形式顯示
   · 重要：工具返回的 [FILE_MESSAGE:...] 標記必須原封不動包含在回應中，系統會自動處理
   · 注意：圖片/檔案會顯示在文字下方，請用 👇 而非 👆
-- create_share_link: 產生公開分享連結（不顯示在回覆中，只給連結）
-  · resource_type: "nas_file"、"knowledge"、"project" 或 "project_attachment"
-  · resource_id: 檔案路徑、知識ID、專案UUID 或 附件UUID
+- create_share_link: 只產生連結（不顯示在回覆中）
+  · resource_type="nas_file"
+  · resource_id="檔案完整路徑"
   · expires_in: 1h/24h/7d（預設 24h）
 
 【知識庫】
@@ -103,6 +108,9 @@ LINEBOT_PERSONAL_PROMPT = """你是擎添工業的 AI 助理，透過 Line 與�
   · roles（適用角色列表）、level（層級：beginner/intermediate/advanced）
 - delete_knowledge_item: 刪除知識庫文件
 - add_note: 新增純文字筆記到知識庫
+- create_share_link: 產生知識庫或專案分享連結
+  · resource_type="knowledge" 或 "project"
+  · resource_id=知識ID 或 專案UUID
 
 【知識庫附件】
 - get_message_attachments: 查詢對話中的附件（圖片、檔案），可指定 days 天數範圍
@@ -184,7 +192,7 @@ LINEBOT_GROUP_PROMPT = """你是擎添工業的 AI 助理，在 Line 群組中�
 - search_nas_files: 搜尋 NAS 專案檔案（keywords 用逗號分隔，file_types 過濾類型）
 - get_nas_file_info: 取得 NAS 檔案資訊
 - prepare_file_message: 準備發送檔案（[FILE_MESSAGE:...] 標記需原封不動包含，圖片顯示在下方用 👇）
-- create_share_link: 產生分享連結（支援 nas_file/knowledge/project/project_attachment）
+- create_share_link: 只產生連結不顯示
 - search_knowledge / get_knowledge_item: 知識庫查詢
 - update_knowledge_item / add_note: 更新或新增知識
 - get_message_attachments: 查詢附件
@@ -227,96 +235,29 @@ LINEBOT_GROUP_PROMPT = """你是擎添工業的 AI 助理，在 Line 群組中�
 - 列表用「・」或數字
 - 不要用分隔線（━、─、＝等），用空行分隔"""
 
-# 預設 Agent 設定
-DEFAULT_LINEBOT_AGENTS = [
-    {
-        "name": AGENT_LINEBOT_PERSONAL,
-        "display_name": "Line 個人助理",
-        "description": "Line Bot 個人對話 Agent",
-        "model": "claude-sonnet",
-        "prompt": {
-            "name": AGENT_LINEBOT_PERSONAL,
-            "display_name": "Line 個人助理 Prompt",
-            "category": "linebot",
-            "content": LINEBOT_PERSONAL_PROMPT,
-            "description": "Line Bot 個人對話使用，包含完整 MCP 工具說明",
-        },
-    },
-    {
-        "name": AGENT_LINEBOT_GROUP,
-        "display_name": "Line 群組助理",
-        "description": "Line Bot 群組對話 Agent",
-        "model": "claude-haiku",
-        "prompt": {
-            "name": AGENT_LINEBOT_GROUP,
-            "display_name": "Line 群組助理 Prompt",
-            "category": "linebot",
-            "content": LINEBOT_GROUP_PROMPT,
-            "description": "Line Bot 群組對話使用，精簡版包含 MCP 工具說明",
-        },
-    },
-]
+
+def upgrade() -> None:
+    # 更新 linebot-personal prompt
+    op.execute(
+        f"""
+        UPDATE ai_prompts
+        SET content = $prompt${LINEBOT_PERSONAL_PROMPT}$prompt$,
+            updated_at = NOW()
+        WHERE name = 'linebot-personal'
+        """
+    )
+
+    # 更新 linebot-group prompt
+    op.execute(
+        f"""
+        UPDATE ai_prompts
+        SET content = $prompt${LINEBOT_GROUP_PROMPT}$prompt$,
+            updated_at = NOW()
+        WHERE name = 'linebot-group'
+        """
+    )
 
 
-async def ensure_default_linebot_agents() -> None:
-    """
-    確保預設的 Line Bot Agent 存在。
-
-    如果 Agent 已存在則跳過（保留使用者修改）。
-    如果不存在則建立 Agent 和對應的 Prompt。
-    """
-    for agent_config in DEFAULT_LINEBOT_AGENTS:
-        agent_name = agent_config["name"]
-
-        # 檢查 Agent 是否存在
-        existing_agent = await ai_manager.get_agent_by_name(agent_name)
-        if existing_agent:
-            logger.debug(f"Agent '{agent_name}' 已存在，跳過建立")
-            continue
-
-        # 檢查 Prompt 是否存在
-        prompt_config = agent_config["prompt"]
-        existing_prompt = await ai_manager.get_prompt_by_name(prompt_config["name"])
-
-        if existing_prompt:
-            prompt_id = existing_prompt["id"]
-            logger.debug(f"Prompt '{prompt_config['name']}' 已存在，使用現有 Prompt")
-        else:
-            # 建立 Prompt
-            prompt_data = AiPromptCreate(
-                name=prompt_config["name"],
-                display_name=prompt_config["display_name"],
-                category=prompt_config["category"],
-                content=prompt_config["content"],
-                description=prompt_config["description"],
-            )
-            new_prompt = await ai_manager.create_prompt(prompt_data)
-            prompt_id = new_prompt["id"]
-            logger.info(f"已建立 Prompt: {prompt_config['name']}")
-
-        # 建立 Agent
-        agent_data = AiAgentCreate(
-            name=agent_config["name"],
-            display_name=agent_config["display_name"],
-            description=agent_config["description"],
-            model=agent_config["model"],
-            system_prompt_id=prompt_id,
-            is_active=True,
-        )
-        await ai_manager.create_agent(agent_data)
-        logger.info(f"已建立 Agent: {agent_name}")
-
-
-async def get_linebot_agent(is_group: bool) -> dict | None:
-    """
-    取得 Line Bot Agent 設定。
-
-    Args:
-        is_group: 是否為群組對話
-
-    Returns:
-        Agent 設定字典，包含 model 和 system_prompt
-        如果找不到則回傳 None
-    """
-    agent_name = AGENT_LINEBOT_GROUP if is_group else AGENT_LINEBOT_PERSONAL
-    return await ai_manager.get_agent_by_name(agent_name)
+def downgrade() -> None:
+    # 回滾到 027 版本的 prompt
+    pass

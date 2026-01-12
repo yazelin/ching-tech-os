@@ -1770,11 +1770,15 @@ async def create_share_link(
     expires_in: str | None = "24h",
 ) -> str:
     """
-    建立公開分享連結，讓沒有帳號的人也能查看知識庫、專案或下載 NAS 檔案
+    建立公開分享連結，讓沒有帳號的人也能查看知識庫、專案或下載檔案
 
     Args:
-        resource_type: 資源類型，knowledge（知識庫）、project（專案）或 nas_file（NAS 檔案）
-        resource_id: 資源 ID（如 kb-001、專案 UUID 或 NAS 檔案路徑）
+        resource_type: 資源類型，可選：
+            - knowledge: 知識庫
+            - project: 專案
+            - nas_file: NAS 檔案（路徑）
+            - project_attachment: 專案附件（附件 UUID）
+        resource_id: 資源 ID（如 kb-001、專案 UUID、NAS 路徑或附件 UUID）
         expires_in: 有效期限，可選 1h、24h、7d、null（永久），預設 24h
     """
     await ensure_db_connection()
@@ -1787,8 +1791,9 @@ async def create_share_link(
     from ..models.share import ShareLinkCreate
 
     # 驗證資源類型
-    if resource_type not in ("knowledge", "project", "nas_file"):
-        return f"錯誤：資源類型必須是 knowledge、project 或 nas_file，收到：{resource_type}"
+    valid_types = ("knowledge", "project", "nas_file", "project_attachment")
+    if resource_type not in valid_types:
+        return f"錯誤：資源類型必須是 {', '.join(valid_types)}，收到：{resource_type}"
 
     # 驗證有效期限
     valid_expires = {"1h", "24h", "7d", "null", None}
@@ -2035,6 +2040,801 @@ async def prepare_file_message(
     marker = f"[FILE_MESSAGE:{json.dumps(file_info, ensure_ascii=False)}]"
 
     return f"{hint}\n{marker}"
+
+
+# ============================================
+# 專案發包/交貨期程管理
+# ============================================
+
+
+@mcp.tool()
+async def add_delivery_schedule(
+    project_id: str,
+    vendor: str,
+    item: str,
+    quantity: str | None = None,
+    order_date: str | None = None,
+    expected_delivery_date: str | None = None,
+    status: str = "pending",
+    notes: str | None = None,
+) -> str:
+    """
+    新增專案發包/交貨記錄
+
+    Args:
+        project_id: 專案 UUID
+        vendor: 廠商名稱（必填）
+        item: 料件名稱（必填）
+        quantity: 數量（含單位，如「2 台」）
+        order_date: 發包日期（格式:YYYY-MM-DD）
+        expected_delivery_date: 預計交貨日期（格式:YYYY-MM-DD）
+        status: 狀態，可選:pending(待發包)、ordered(已發包)、delivered(已到貨)、completed(已完成)，預設 pending
+        notes: 備註
+    """
+    await ensure_db_connection()
+    from datetime import date
+
+    # 驗證專案存在
+    async with get_connection() as conn:
+        project = await conn.fetchrow(
+            "SELECT id, name FROM projects WHERE id = $1",
+            project_id,
+        )
+        if not project:
+            return f"錯誤：找不到專案 {project_id}"
+
+        # 解析日期
+        parsed_order_date = None
+        parsed_expected_date = None
+
+        if order_date:
+            try:
+                parsed_order_date = date.fromisoformat(order_date)
+            except ValueError:
+                return f"錯誤：發包日期格式錯誤，請使用 YYYY-MM-DD 格式"
+
+        if expected_delivery_date:
+            try:
+                parsed_expected_date = date.fromisoformat(expected_delivery_date)
+            except ValueError:
+                return f"錯誤：預計交貨日期格式錯誤，請使用 YYYY-MM-DD 格式"
+
+        # 驗證狀態
+        valid_statuses = ["pending", "ordered", "delivered", "completed"]
+        if status not in valid_statuses:
+            return f"錯誤：狀態必須是 {', '.join(valid_statuses)} 其中之一"
+
+        # 新增記錄
+        row = await conn.fetchrow(
+            """
+            INSERT INTO project_delivery_schedules
+                (project_id, vendor, item, quantity, order_date, expected_delivery_date, status, notes, created_by)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'AI')
+            RETURNING id, vendor, item
+            """,
+            project_id,
+            vendor,
+            item,
+            quantity,
+            parsed_order_date,
+            parsed_expected_date,
+            status,
+            notes,
+        )
+
+        status_names = {
+            "pending": "待發包",
+            "ordered": "已發包",
+            "delivered": "已到貨",
+            "completed": "已完成",
+        }
+        status_display = status_names.get(status, status)
+
+        result = f"✅ 已新增發包記錄\n"
+        result += f"- 專案：{project['name']}\n"
+        result += f"- 廠商：{vendor}\n"
+        result += f"- 料件：{item}\n"
+        if quantity:
+            result += f"- 數量：{quantity}\n"
+        if parsed_order_date:
+            result += f"- 發包日：{parsed_order_date}\n"
+        if parsed_expected_date:
+            result += f"- 預計交貨：{parsed_expected_date}\n"
+        result += f"- 狀態：{status_display}"
+
+        return result
+
+
+@mcp.tool()
+async def update_delivery_schedule(
+    project_id: str,
+    delivery_id: str | None = None,
+    vendor: str | None = None,
+    item: str | None = None,
+    new_vendor: str | None = None,
+    new_item: str | None = None,
+    new_quantity: str | None = None,
+    new_status: str | None = None,
+    order_date: str | None = None,
+    actual_delivery_date: str | None = None,
+    expected_delivery_date: str | None = None,
+    new_notes: str | None = None,
+) -> str:
+    """
+    更新專案發包/交貨記錄
+
+    Args:
+        project_id: 專案 UUID
+        delivery_id: 發包記錄 UUID（直接指定）
+        vendor: 廠商名稱（用於匹配記錄）
+        item: 料件名稱（用於匹配記錄）
+        new_vendor: 更新廠商名稱
+        new_item: 更新料件名稱
+        new_quantity: 更新數量（如「2 台」）
+        new_status: 新狀態，可選:pending(待發包)、ordered(已發包)、delivered(已到貨)、completed(已完成)
+        order_date: 更新發包日期（格式:YYYY-MM-DD）
+        actual_delivery_date: 實際到貨日期（格式:YYYY-MM-DD）
+        expected_delivery_date: 更新預計交貨日期（格式:YYYY-MM-DD）
+        new_notes: 更新備註
+    """
+    await ensure_db_connection()
+    from datetime import date
+
+    async with get_connection() as conn:
+        # 驗證專案存在
+        project = await conn.fetchrow(
+            "SELECT id, name FROM projects WHERE id = $1",
+            project_id,
+        )
+        if not project:
+            return f"錯誤：找不到專案 {project_id}"
+
+        # 找到目標記錄
+        if delivery_id:
+            # 直接用 ID
+            row = await conn.fetchrow(
+                "SELECT * FROM project_delivery_schedules WHERE id = $1 AND project_id = $2",
+                delivery_id, project_id,
+            )
+            if not row:
+                return f"錯誤：找不到發包記錄 {delivery_id}"
+            matches = [row]
+        elif vendor and item:
+            # 用廠商 + 料件匹配
+            matches = await conn.fetch(
+                """
+                SELECT * FROM project_delivery_schedules
+                WHERE project_id = $1 AND vendor ILIKE $2 AND item ILIKE $3
+                """,
+                project_id, f"%{vendor}%", f"%{item}%",
+            )
+            if not matches:
+                return f"錯誤：找不到匹配的發包記錄（廠商：{vendor}，料件：{item}）"
+            if len(matches) > 1:
+                result = f"找到 {len(matches)} 筆匹配記錄，請更精確指定：\n"
+                for m in matches:
+                    result += f"- {m['vendor']} - {m['item']}（ID: {m['id']}）\n"
+                return result
+        elif vendor:
+            # 只有廠商
+            matches = await conn.fetch(
+                "SELECT * FROM project_delivery_schedules WHERE project_id = $1 AND vendor ILIKE $2",
+                project_id, f"%{vendor}%",
+            )
+            if not matches:
+                return f"錯誤：找不到廠商「{vendor}」的發包記錄"
+            if len(matches) > 1:
+                result = f"找到 {len(matches)} 筆匹配記錄，請指定料件名稱：\n"
+                for m in matches:
+                    result += f"- {m['vendor']} - {m['item']}\n"
+                return result
+        else:
+            return "錯誤：請提供 delivery_id，或同時提供 vendor 和 item 來匹配記錄"
+
+        target = matches[0]
+
+        # 建立更新
+        updates = []
+        params = []
+        param_idx = 1
+
+        if new_vendor:
+            updates.append(f"vendor = ${param_idx}")
+            params.append(new_vendor)
+            param_idx += 1
+
+        if new_item:
+            updates.append(f"item = ${param_idx}")
+            params.append(new_item)
+            param_idx += 1
+
+        if new_quantity:
+            updates.append(f"quantity = ${param_idx}")
+            params.append(new_quantity)
+            param_idx += 1
+
+        if order_date:
+            try:
+                parsed_date = date.fromisoformat(order_date)
+                updates.append(f"order_date = ${param_idx}")
+                params.append(parsed_date)
+                param_idx += 1
+            except ValueError:
+                return "錯誤：發包日期格式錯誤，請使用 YYYY-MM-DD 格式"
+
+        if new_status:
+            valid_statuses = ["pending", "ordered", "delivered", "completed"]
+            if new_status not in valid_statuses:
+                return f"錯誤：狀態必須是 {', '.join(valid_statuses)} 其中之一"
+            updates.append(f"status = ${param_idx}")
+            params.append(new_status)
+            param_idx += 1
+
+        if actual_delivery_date:
+            try:
+                parsed_date = date.fromisoformat(actual_delivery_date)
+                updates.append(f"actual_delivery_date = ${param_idx}")
+                params.append(parsed_date)
+                param_idx += 1
+            except ValueError:
+                return "錯誤：實際到貨日期格式錯誤，請使用 YYYY-MM-DD 格式"
+
+        if expected_delivery_date:
+            try:
+                parsed_date = date.fromisoformat(expected_delivery_date)
+                updates.append(f"expected_delivery_date = ${param_idx}")
+                params.append(parsed_date)
+                param_idx += 1
+            except ValueError:
+                return "錯誤：預計交貨日期格式錯誤，請使用 YYYY-MM-DD 格式"
+
+        if new_notes:
+            updates.append(f"notes = ${param_idx}")
+            params.append(new_notes)
+            param_idx += 1
+
+        if not updates:
+            return "錯誤：沒有要更新的欄位"
+
+        updates.append("updated_at = NOW()")
+        params.append(target["id"])
+
+        sql = f"UPDATE project_delivery_schedules SET {', '.join(updates)} WHERE id = ${param_idx} RETURNING *"
+        updated = await conn.fetchrow(sql, *params)
+
+        status_names = {
+            "pending": "待發包",
+            "ordered": "已發包",
+            "delivered": "已到貨",
+            "completed": "已完成",
+        }
+
+        result = f"✅ 已更新發包記錄\n"
+        result += f"- 廠商：{updated['vendor']}\n"
+        result += f"- 料件：{updated['item']}\n"
+        if updated["quantity"]:
+            result += f"- 數量：{updated['quantity']}\n"
+        result += f"- 狀態：{status_names.get(updated['status'], updated['status'])}"
+        if updated["order_date"]:
+            result += f"\n- 發包日：{updated['order_date']}"
+        if updated["expected_delivery_date"]:
+            result += f"\n- 預計交貨：{updated['expected_delivery_date']}"
+        if updated["actual_delivery_date"]:
+            result += f"\n- 實際到貨：{updated['actual_delivery_date']}"
+
+        return result
+
+
+@mcp.tool()
+async def get_delivery_schedules(
+    project_id: str,
+    status: str | None = None,
+    vendor: str | None = None,
+    limit: int = 20,
+) -> str:
+    """
+    取得專案的發包/交貨記錄
+
+    Args:
+        project_id: 專案 UUID
+        status: 狀態過濾，可選值:pending(待發包), ordered(已發包), delivered(已到貨), completed(已完成)
+        vendor: 廠商過濾
+        limit: 最大數量，預設 20
+    """
+    await ensure_db_connection()
+
+    async with get_connection() as conn:
+        # 驗證專案存在
+        project = await conn.fetchrow(
+            "SELECT id, name FROM projects WHERE id = $1",
+            project_id,
+        )
+        if not project:
+            return f"錯誤：找不到專案 {project_id}"
+
+        # 建立查詢
+        sql = "SELECT * FROM project_delivery_schedules WHERE project_id = $1"
+        params = [project_id]
+        param_idx = 2
+
+        if status:
+            sql += f" AND status = ${param_idx}"
+            params.append(status)
+            param_idx += 1
+
+        if vendor:
+            sql += f" AND vendor ILIKE ${param_idx}"
+            params.append(f"%{vendor}%")
+            param_idx += 1
+
+        sql += f" ORDER BY COALESCE(expected_delivery_date, '9999-12-31'), created_at LIMIT ${param_idx}"
+        params.append(limit)
+
+        rows = await conn.fetch(sql, *params)
+
+        if not rows:
+            return f"專案「{project['name']}」目前沒有發包記錄"
+
+        status_names = {
+            "pending": "待發包",
+            "ordered": "已發包",
+            "delivered": "已到貨",
+            "completed": "已完成",
+        }
+
+        result = f"📦 {project['name']} 的發包記錄（共 {len(rows)} 筆）：\n\n"
+
+        for r in rows:
+            status_display = status_names.get(r["status"], r["status"])
+            result += f"【{r['vendor']}】{r['item']}\n"
+            if r["quantity"]:
+                result += f"  數量：{r['quantity']}\n"
+            if r["order_date"]:
+                result += f"  發包日：{r['order_date']}\n"
+            if r["expected_delivery_date"]:
+                result += f"  預計交貨：{r['expected_delivery_date']}\n"
+            if r["actual_delivery_date"]:
+                result += f"  實際到貨：{r['actual_delivery_date']}\n"
+            result += f"  狀態：{status_display}\n"
+            if r["notes"]:
+                result += f"  備註：{r['notes']}\n"
+            result += "\n"
+
+        return result.strip()
+
+
+# ============================================================
+# 專案連結管理
+# ============================================================
+
+
+@mcp.tool()
+async def add_project_link(
+    project_id: str,
+    title: str,
+    url: str,
+    description: str | None = None,
+) -> str:
+    """
+    新增專案連結
+
+    Args:
+        project_id: 專案 UUID
+        title: 連結標題（必填）
+        url: URL（必填）
+        description: 描述
+    """
+    await ensure_db_connection()
+
+    async with get_connection() as conn:
+        # 驗證專案存在
+        project = await conn.fetchrow(
+            "SELECT id, name FROM projects WHERE id = $1",
+            project_id,
+        )
+        if not project:
+            return f"錯誤：找不到專案 {project_id}"
+
+        # 新增連結
+        await conn.execute(
+            """
+            INSERT INTO project_links (project_id, title, url, description)
+            VALUES ($1, $2, $3, $4)
+            """,
+            project_id,
+            title,
+            url,
+            description,
+        )
+
+        return f"✅ 已為專案「{project['name']}」新增連結「{title}」"
+
+
+@mcp.tool()
+async def get_project_links(
+    project_id: str,
+    limit: int = 20,
+) -> str:
+    """
+    查詢專案連結列表
+
+    Args:
+        project_id: 專案 UUID
+        limit: 最大數量，預設 20
+    """
+    await ensure_db_connection()
+
+    async with get_connection() as conn:
+        # 驗證專案存在
+        project = await conn.fetchrow(
+            "SELECT id, name FROM projects WHERE id = $1",
+            project_id,
+        )
+        if not project:
+            return f"錯誤：找不到專案 {project_id}"
+
+        # 查詢連結
+        rows = await conn.fetch(
+            """
+            SELECT id, title, url, description, created_at
+            FROM project_links
+            WHERE project_id = $1
+            ORDER BY created_at DESC
+            LIMIT $2
+            """,
+            project_id,
+            limit,
+        )
+
+        if not rows:
+            return f"專案「{project['name']}」目前沒有連結"
+
+        result = f"🔗 {project['name']} 的連結（共 {len(rows)} 筆）：\n\n"
+
+        for r in rows:
+            result += f"【{r['title']}】\n"
+            result += f"  URL：{r['url']}\n"
+            if r["description"]:
+                result += f"  說明：{r['description']}\n"
+            result += f"  ID：{r['id']}\n\n"
+
+        return result.strip()
+
+
+@mcp.tool()
+async def update_project_link(
+    link_id: str,
+    project_id: str | None = None,
+    title: str | None = None,
+    url: str | None = None,
+    description: str | None = None,
+) -> str:
+    """
+    更新專案連結
+
+    Args:
+        link_id: 連結 UUID
+        project_id: 專案 UUID（可選，用於驗證）
+        title: 新標題
+        url: 新 URL
+        description: 新描述
+    """
+    await ensure_db_connection()
+
+    if not any([title, url, description is not None]):
+        return "錯誤：請提供要更新的欄位（title、url 或 description）"
+
+    async with get_connection() as conn:
+        # 查詢連結
+        sql = "SELECT * FROM project_links WHERE id = $1"
+        params = [link_id]
+
+        if project_id:
+            sql += " AND project_id = $2"
+            params.append(project_id)
+
+        link = await conn.fetchrow(sql, *params)
+        if not link:
+            return f"錯誤：找不到連結 {link_id}"
+
+        # 建立更新語句
+        updates = []
+        update_params = []
+        param_idx = 1
+
+        if title:
+            updates.append(f"title = ${param_idx}")
+            update_params.append(title)
+            param_idx += 1
+
+        if url:
+            updates.append(f"url = ${param_idx}")
+            update_params.append(url)
+            param_idx += 1
+
+        if description is not None:
+            updates.append(f"description = ${param_idx}")
+            update_params.append(description)
+            param_idx += 1
+
+        update_params.append(link_id)
+
+        await conn.execute(
+            f"UPDATE project_links SET {', '.join(updates)} WHERE id = ${param_idx}",
+            *update_params,
+        )
+
+        return f"✅ 已更新連結「{title or link['title']}」"
+
+
+@mcp.tool()
+async def delete_project_link(
+    link_id: str,
+    project_id: str | None = None,
+) -> str:
+    """
+    刪除專案連結
+
+    Args:
+        link_id: 連結 UUID
+        project_id: 專案 UUID（可選，用於驗證）
+    """
+    await ensure_db_connection()
+
+    async with get_connection() as conn:
+        # 查詢連結
+        sql = "SELECT * FROM project_links WHERE id = $1"
+        params = [link_id]
+
+        if project_id:
+            sql += " AND project_id = $2"
+            params.append(project_id)
+
+        link = await conn.fetchrow(sql, *params)
+        if not link:
+            return f"錯誤：找不到連結 {link_id}"
+
+        # 刪除連結
+        await conn.execute("DELETE FROM project_links WHERE id = $1", link_id)
+
+        return f"✅ 已刪除連結「{link['title']}」"
+
+
+# ============================================================
+# 專案附件管理
+# ============================================================
+
+
+@mcp.tool()
+async def add_project_attachment(
+    project_id: str,
+    nas_path: str,
+    description: str | None = None,
+) -> str:
+    """
+    從 NAS 路徑添加附件到專案
+
+    Args:
+        project_id: 專案 UUID
+        nas_path: NAS 檔案路徑（從 get_message_attachments 或 search_nas_files 取得）
+        description: 描述
+    """
+    import mimetypes
+    from pathlib import Path as FilePath
+    from ..config import settings
+
+    await ensure_db_connection()
+
+    # 取得 NAS 路徑設定
+    ctos_mount = settings.ctos_mount_path  # /mnt/nas/ctos
+    linebot_files_path = settings.linebot_local_path  # /mnt/nas/ctos/ching-tech-os/linebot/files
+    line_files_nas_path = settings.line_files_nas_path  # ching-tech-os/linebot/files
+
+    async with get_connection() as conn:
+        # 驗證專案存在
+        project = await conn.fetchrow(
+            "SELECT id, name FROM projects WHERE id = $1",
+            project_id,
+        )
+        if not project:
+            return f"錯誤：找不到專案 {project_id}"
+
+        # 處理 NAS 路徑 - 支援多種格式
+        # 1. nas://... - 完整 NAS 格式
+        # 2. /mnt/nas/ctos/... - 完整掛載路徑
+        # 3. users/... 或 groups/... - Line Bot 附件相對路徑
+        # 4. projects/... - NAS 專案檔案相對路徑
+
+        if nas_path.startswith("nas://"):
+            # nas:// 格式
+            relative_path = nas_path.replace("nas://", "")
+            actual_path = FilePath(ctos_mount) / relative_path
+            storage_path = nas_path
+        elif nas_path.startswith(ctos_mount):
+            # 完整掛載路徑
+            actual_path = FilePath(nas_path)
+            relative_path = nas_path.replace(f"{ctos_mount}/", "")
+            storage_path = f"nas://{relative_path}"
+        elif nas_path.startswith("users/") or nas_path.startswith("groups/"):
+            # Line Bot 附件相對路徑（來自 get_message_attachments）
+            # 實際路徑在 linebot_files_path（如 /mnt/nas/ctos/linebot/files/）
+            actual_path = FilePath(linebot_files_path) / nas_path
+            storage_path = f"nas://{line_files_nas_path}/{nas_path}"
+        elif nas_path.startswith("projects/"):
+            # NAS 專案檔案相對路徑（來自 search_nas_files）
+            actual_path = FilePath(ctos_mount) / nas_path
+            storage_path = f"nas://{nas_path}"
+        else:
+            # 嘗試作為 linebot/files 下的相對路徑
+            actual_path = FilePath(linebot_files_path) / nas_path
+            if actual_path.exists():
+                storage_path = f"nas://{line_files_nas_path}/{nas_path}"
+            else:
+                # 嘗試作為 ctos_mount 下的相對路徑
+                actual_path = FilePath(ctos_mount) / nas_path
+                storage_path = f"nas://{nas_path}"
+
+        # 檢查檔案存在
+        if not actual_path.exists():
+            return f"錯誤：找不到檔案 {nas_path}（嘗試路徑：{actual_path}）"
+
+        # 取得檔案資訊
+        filename = actual_path.name
+        file_size = actual_path.stat().st_size
+        file_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+
+        # 新增附件記錄
+        await conn.execute(
+            """
+            INSERT INTO project_attachments
+            (project_id, filename, file_type, file_size, storage_path, description, uploaded_by)
+            VALUES ($1, $2, $3, $4, $5, $6, 'AI 助手')
+            """,
+            project_id,
+            filename,
+            file_type,
+            file_size,
+            storage_path,
+            description,
+        )
+
+        return f"✅ 已為專案「{project['name']}」新增附件「{filename}」"
+
+
+@mcp.tool()
+async def get_project_attachments(
+    project_id: str,
+    limit: int = 20,
+) -> str:
+    """
+    查詢專案附件列表
+
+    Args:
+        project_id: 專案 UUID
+        limit: 最大數量，預設 20
+    """
+    await ensure_db_connection()
+
+    async with get_connection() as conn:
+        # 驗證專案存在
+        project = await conn.fetchrow(
+            "SELECT id, name FROM projects WHERE id = $1",
+            project_id,
+        )
+        if not project:
+            return f"錯誤：找不到專案 {project_id}"
+
+        # 查詢附件
+        rows = await conn.fetch(
+            """
+            SELECT id, filename, file_type, file_size, description, uploaded_at, uploaded_by
+            FROM project_attachments
+            WHERE project_id = $1
+            ORDER BY uploaded_at DESC
+            LIMIT $2
+            """,
+            project_id,
+            limit,
+        )
+
+        if not rows:
+            return f"專案「{project['name']}」目前沒有附件"
+
+        result = f"📎 {project['name']} 的附件（共 {len(rows)} 筆）：\n\n"
+
+        for r in rows:
+            # 格式化檔案大小
+            size = r["file_size"] or 0
+            if size < 1024:
+                size_str = f"{size} B"
+            elif size < 1024 * 1024:
+                size_str = f"{size / 1024:.1f} KB"
+            else:
+                size_str = f"{size / 1024 / 1024:.1f} MB"
+
+            result += f"【{r['filename']}】\n"
+            result += f"  類型：{r['file_type'] or '未知'}\n"
+            result += f"  大小：{size_str}\n"
+            if r["description"]:
+                result += f"  說明：{r['description']}\n"
+            result += f"  ID：{r['id']}\n\n"
+
+        return result.strip()
+
+
+@mcp.tool()
+async def update_project_attachment(
+    attachment_id: str,
+    project_id: str | None = None,
+    description: str | None = None,
+) -> str:
+    """
+    更新專案附件描述
+
+    Args:
+        attachment_id: 附件 UUID
+        project_id: 專案 UUID（可選，用於驗證）
+        description: 新描述
+    """
+    await ensure_db_connection()
+
+    if description is None:
+        return "錯誤：請提供要更新的描述（description）"
+
+    async with get_connection() as conn:
+        # 查詢附件
+        sql = "SELECT * FROM project_attachments WHERE id = $1"
+        params = [attachment_id]
+
+        if project_id:
+            sql += " AND project_id = $2"
+            params.append(project_id)
+
+        attachment = await conn.fetchrow(sql, *params)
+        if not attachment:
+            return f"錯誤：找不到附件 {attachment_id}"
+
+        # 更新描述
+        await conn.execute(
+            "UPDATE project_attachments SET description = $1 WHERE id = $2",
+            description,
+            attachment_id,
+        )
+
+        return f"✅ 已更新附件「{attachment['filename']}」的描述"
+
+
+@mcp.tool()
+async def delete_project_attachment(
+    attachment_id: str,
+    project_id: str | None = None,
+) -> str:
+    """
+    刪除專案附件
+
+    Args:
+        attachment_id: 附件 UUID
+        project_id: 專案 UUID（可選，用於驗證）
+    """
+    await ensure_db_connection()
+
+    async with get_connection() as conn:
+        # 查詢附件
+        sql = "SELECT * FROM project_attachments WHERE id = $1"
+        params = [attachment_id]
+
+        if project_id:
+            sql += " AND project_id = $2"
+            params.append(project_id)
+
+        attachment = await conn.fetchrow(sql, *params)
+        if not attachment:
+            return f"錯誤：找不到附件 {attachment_id}"
+
+        # 刪除附件記錄（不刪除實際檔案，因為是 NAS 引用）
+        await conn.execute("DELETE FROM project_attachments WHERE id = $1", attachment_id)
+
+        return f"✅ 已刪除附件「{attachment['filename']}」"
 
 
 # ============================================================

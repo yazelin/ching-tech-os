@@ -28,6 +28,9 @@ from ching_tech_os.models.project import (
     ProjectMilestoneCreate,
     ProjectMilestoneUpdate,
     ProjectMilestoneResponse,
+    DeliveryScheduleCreate,
+    DeliveryScheduleUpdate,
+    DeliveryScheduleResponse,
 )
 from ching_tech_os.services.project import (
     # 專案
@@ -63,6 +66,11 @@ from ching_tech_os.services.project import (
     create_milestone,
     update_milestone,
     delete_milestone,
+    # 發包/交貨
+    list_deliveries,
+    create_delivery,
+    update_delivery,
+    delete_delivery,
     # 例外
     ProjectError,
     ProjectNotFoundError,
@@ -693,6 +701,95 @@ async def api_delete_milestone(project_id: UUID, milestone_id: UUID) -> None:
     """刪除專案里程碑"""
     try:
         await delete_milestone(project_id, milestone_id)
+    except ProjectNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except ProjectError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+
+# ============================================
+# 專案發包/交貨期程
+# ============================================
+
+
+@router.get(
+    "/{project_id}/deliveries",
+    response_model=list[DeliveryScheduleResponse],
+    summary="列出專案發包記錄",
+)
+async def api_list_deliveries(project_id: UUID) -> list[DeliveryScheduleResponse]:
+    """列出專案發包記錄"""
+    try:
+        return await list_deliveries(project_id)
+    except ProjectError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+
+@router.post(
+    "/{project_id}/deliveries",
+    response_model=DeliveryScheduleResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="新增專案發包記錄",
+)
+async def api_create_delivery(
+    project_id: UUID, data: DeliveryScheduleCreate
+) -> DeliveryScheduleResponse:
+    """新增專案發包記錄"""
+    try:
+        return await create_delivery(project_id, data)
+    except ProjectNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"專案 {project_id} 不存在",
+        )
+    except ProjectError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+
+@router.put(
+    "/{project_id}/deliveries/{delivery_id}",
+    response_model=DeliveryScheduleResponse,
+    summary="更新專案發包記錄",
+)
+async def api_update_delivery(
+    project_id: UUID, delivery_id: UUID, data: DeliveryScheduleUpdate
+) -> DeliveryScheduleResponse:
+    """更新專案發包記錄"""
+    try:
+        return await update_delivery(project_id, delivery_id, data)
+    except ProjectNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except ProjectError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+
+@router.delete(
+    "/{project_id}/deliveries/{delivery_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="刪除專案發包記錄",
+)
+async def api_delete_delivery(project_id: UUID, delivery_id: UUID) -> None:
+    """刪除專案發包記錄"""
+    try:
+        await delete_delivery(project_id, delivery_id)
     except ProjectNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

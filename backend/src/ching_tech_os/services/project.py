@@ -29,8 +29,11 @@ from ..models.project import (
     ProjectMilestoneCreate,
     ProjectMilestoneUpdate,
     ProjectMilestoneResponse,
+    DeliveryScheduleCreate,
+    DeliveryScheduleUpdate,
+    DeliveryScheduleResponse,
 )
-from .local_file import LocalFileService, LocalFileError, create_project_file_service
+from .local_file import LocalFileService, LocalFileError, create_project_file_service, create_linebot_file_service
 
 
 class ProjectError(Exception):
@@ -144,6 +147,13 @@ async def get_project(project_id: UUID) -> ProjectDetailResponse:
         )
         milestones = [ProjectMilestoneResponse(**dict(r)) for r in milestones_rows]
 
+        # 取得發包/交貨記錄
+        deliveries_rows = await conn.fetch(
+            "SELECT * FROM project_delivery_schedules WHERE project_id = $1 ORDER BY COALESCE(expected_delivery_date, '9999-12-31'), created_at",
+            project_id,
+        )
+        deliveries = [DeliveryScheduleResponse(**dict(r)) for r in deliveries_rows]
+
         return ProjectDetailResponse(
             id=row["id"],
             name=row["name"],
@@ -159,6 +169,7 @@ async def get_project(project_id: UUID) -> ProjectDetailResponse:
             attachments=attachments,
             links=links,
             milestones=milestones,
+            deliveries=deliveries,
         )
 
 
@@ -613,9 +624,26 @@ async def get_attachment_content(project_id: UUID, attachment_id: UUID) -> tuple
 
         if storage_path.startswith("nas://"):
             # NAS 檔案（透過掛載路徑存取）
-            nas_path = storage_path.replace("nas://projects/", "")
+            # 支援不同的 NAS 路徑格式：
+            # - nas://projects/... - 專案檔案
+            # - nas://ching-tech-os/linebot/files/... - Line Bot 附件
             try:
-                file_service = create_project_file_service()
+                if storage_path.startswith("nas://projects/"):
+                    nas_path = storage_path.replace("nas://projects/", "")
+                    file_service = create_project_file_service()
+                elif storage_path.startswith(f"nas://{settings.line_files_nas_path}/"):
+                    # Line Bot 附件（從 MCP 工具新增的）
+                    nas_path = storage_path.replace(f"nas://{settings.line_files_nas_path}/", "")
+                    file_service = create_linebot_file_service()
+                else:
+                    # 通用 NAS 路徑（相對於 ctos_mount_path）
+                    nas_path = storage_path.replace("nas://", "")
+                    from pathlib import Path
+                    full_path = Path(settings.ctos_mount_path) / nas_path
+                    if not full_path.exists():
+                        raise ProjectError(f"檔案不存在：{storage_path}")
+                    with open(full_path, "rb") as f:
+                        return f.read(), filename
                 content = file_service.read_file(nas_path)
                 return content, filename
             except LocalFileError as e:
@@ -853,3 +881,98 @@ async def delete_milestone(project_id: UUID, milestone_id: UUID) -> None:
         )
         if result == "DELETE 0":
             raise ProjectNotFoundError(f"里程碑 {milestone_id} 不存在")
+
+
+# ============================================
+# 專案發包/交貨期程
+# ============================================
+
+
+async def list_deliveries(project_id: UUID) -> list[DeliveryScheduleResponse]:
+    """列出專案發包記錄"""
+    async with get_connection() as conn:
+        rows = await conn.fetch(
+            "SELECT * FROM project_delivery_schedules WHERE project_id = $1 ORDER BY COALESCE(expected_delivery_date, '9999-12-31'), created_at",
+            project_id,
+        )
+        return [DeliveryScheduleResponse(**dict(r)) for r in rows]
+
+
+async def create_delivery(
+    project_id: UUID, data: DeliveryScheduleCreate, created_by: str | None = None
+) -> DeliveryScheduleResponse:
+    """新增專案發包記錄"""
+    async with get_connection() as conn:
+        # 檢查專案是否存在
+        exists = await conn.fetchval(
+            "SELECT 1 FROM projects WHERE id = $1", project_id
+        )
+        if not exists:
+            raise ProjectNotFoundError(f"專案 {project_id} 不存在")
+
+        row = await conn.fetchrow(
+            """
+            INSERT INTO project_delivery_schedules (project_id, vendor, item, quantity, order_date, expected_delivery_date, status, notes, created_by)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            RETURNING *
+            """,
+            project_id,
+            data.vendor,
+            data.item,
+            data.quantity,
+            data.order_date,
+            data.expected_delivery_date,
+            data.status,
+            data.notes,
+            created_by,
+        )
+        return DeliveryScheduleResponse(**dict(row))
+
+
+async def update_delivery(
+    project_id: UUID, delivery_id: UUID, data: DeliveryScheduleUpdate
+) -> DeliveryScheduleResponse:
+    """更新專案發包記錄"""
+    async with get_connection() as conn:
+        # 檢查發包記錄是否存在
+        exists = await conn.fetchval(
+            "SELECT 1 FROM project_delivery_schedules WHERE id = $1 AND project_id = $2",
+            delivery_id, project_id,
+        )
+        if not exists:
+            raise ProjectNotFoundError(f"發包記錄 {delivery_id} 不存在")
+
+        # 動態建立更新語句
+        updates = []
+        params = []
+        param_idx = 1
+
+        for field in ["vendor", "item", "quantity", "order_date", "expected_delivery_date", "actual_delivery_date", "status", "notes"]:
+            value = getattr(data, field)
+            if value is not None:
+                updates.append(f"{field} = ${param_idx}")
+                params.append(value)
+                param_idx += 1
+
+        if not updates:
+            row = await conn.fetchrow(
+                "SELECT * FROM project_delivery_schedules WHERE id = $1", delivery_id
+            )
+            return DeliveryScheduleResponse(**dict(row))
+
+        updates.append("updated_at = NOW()")
+        params.append(delivery_id)
+        sql = f"UPDATE project_delivery_schedules SET {', '.join(updates)} WHERE id = ${param_idx} RETURNING *"
+        row = await conn.fetchrow(sql, *params)
+        return DeliveryScheduleResponse(**dict(row))
+
+
+async def delete_delivery(project_id: UUID, delivery_id: UUID) -> None:
+    """刪除專案發包記錄"""
+    async with get_connection() as conn:
+        result = await conn.execute(
+            "DELETE FROM project_delivery_schedules WHERE id = $1 AND project_id = $2",
+            delivery_id, project_id,
+        )
+        if result == "DELETE 0":
+            raise ProjectNotFoundError(f"發包記錄 {delivery_id} 不存在")

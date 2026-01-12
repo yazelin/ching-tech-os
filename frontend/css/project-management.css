@@ -1235,6 +1235,150 @@
 }
 
 /* ==========================================================================
+   Deliveries (發包/交貨管理)
+   ========================================================================== */
+
+.pm-deliveries-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pm-delivery-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg-surface-dark);
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  transition: all 0.15s;
+}
+
+.pm-delivery-card:hover {
+  border-color: var(--border-light);
+}
+
+/* 狀態指示條 */
+.pm-delivery-status-indicator {
+  width: 4px;
+  height: 100%;
+  min-height: 60px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  align-self: stretch;
+}
+
+.pm-delivery-status-indicator.pending {
+  background: var(--status-pending-color);
+}
+
+.pm-delivery-status-indicator.ordered {
+  background: var(--color-primary);
+}
+
+.pm-delivery-status-indicator.delivered {
+  background: var(--color-warning);
+}
+
+.pm-delivery-status-indicator.completed {
+  background: var(--color-success);
+}
+
+.pm-delivery-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.pm-delivery-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.pm-delivery-vendor {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.pm-delivery-status-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.pm-delivery-status-badge.pending {
+  background: var(--status-pending-bg);
+  color: var(--status-pending-color);
+}
+
+.pm-delivery-status-badge.ordered {
+  background: var(--tag-bg-blue);
+  color: var(--tag-color-blue);
+}
+
+.pm-delivery-status-badge.delivered {
+  background: var(--tag-bg-orange);
+  color: var(--tag-color-orange);
+}
+
+.pm-delivery-status-badge.completed {
+  background: var(--status-completed-bg);
+  color: var(--status-completed-color);
+}
+
+.pm-delivery-item {
+  font-size: 14px;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.pm-delivery-quantity {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.pm-delivery-dates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.pm-delivery-dates span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pm-delivery-dates .icon {
+  font-size: 14px;
+}
+
+.pm-delivery-dates .actual {
+  color: var(--color-success);
+}
+
+.pm-delivery-notes {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.pm-delivery-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* ==========================================================================
    Milestones (里程碑)
    ========================================================================== */
 
@@ -1731,6 +1875,39 @@
   }
 
   .pm-link-actions {
+    width: 100%;
+    justify-content: flex-end;
+    padding-top: var(--spacing-xs);
+    border-top: 1px solid var(--border-subtle);
+    margin-top: var(--spacing-xs);
+  }
+
+  /* 發包/交貨卡片：手機版調整 */
+  .pm-delivery-card {
+    flex-wrap: wrap;
+  }
+
+  .pm-delivery-status-indicator {
+    min-height: auto;
+    height: 4px;
+    width: 100%;
+    border-radius: 4px 4px 0 0;
+    margin: -12px -12px 8px -12px;
+    padding: 0 12px;
+    width: calc(100% + 24px);
+  }
+
+  .pm-delivery-header {
+    flex-wrap: wrap;
+    gap: var(--spacing-xs);
+  }
+
+  .pm-delivery-dates {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .pm-delivery-actions {
     width: 100%;
     justify-content: flex-end;
     padding-top: var(--spacing-xs);

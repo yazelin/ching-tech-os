@@ -232,6 +232,59 @@ class ProjectMilestoneResponse(ProjectMilestoneBase):
 
 
 # ============================================
+# 專案發包/交貨期程
+# ============================================
+
+
+class DeliveryScheduleBase(BaseModel):
+    """發包/交貨期程基礎欄位"""
+
+    vendor: str  # 廠商名稱
+    item: str  # 料件名稱
+    quantity: str | None = None  # 數量（含單位，如「2 台」）
+    order_date: date | None = None  # 發包日期
+    expected_delivery_date: date | None = None  # 預計交貨日期
+    actual_delivery_date: date | None = None  # 實際到貨日期
+    status: str = "pending"  # pending, ordered, delivered, completed
+    notes: str | None = None
+
+
+class DeliveryScheduleCreate(BaseModel):
+    """建立發包記錄請求"""
+
+    vendor: str
+    item: str
+    quantity: str | None = None
+    order_date: date | None = None
+    expected_delivery_date: date | None = None
+    status: str = "pending"
+    notes: str | None = None
+
+
+class DeliveryScheduleUpdate(BaseModel):
+    """更新發包記錄請求"""
+
+    vendor: str | None = None
+    item: str | None = None
+    quantity: str | None = None
+    order_date: date | None = None
+    expected_delivery_date: date | None = None
+    actual_delivery_date: date | None = None
+    status: str | None = None
+    notes: str | None = None
+
+
+class DeliveryScheduleResponse(DeliveryScheduleBase):
+    """發包記錄回應"""
+
+    id: UUID
+    project_id: UUID
+    created_at: datetime
+    updated_at: datetime
+    created_by: str | None = None
+
+
+# ============================================
 # 專案
 # ============================================
 
@@ -279,6 +332,7 @@ class ProjectDetailResponse(ProjectResponse):
     attachments: list[ProjectAttachmentResponse] = Field(default_factory=list)
     links: list[ProjectLinkResponse] = Field(default_factory=list)
     milestones: list[ProjectMilestoneResponse] = Field(default_factory=list)
+    deliveries: list[DeliveryScheduleResponse] = Field(default_factory=list)
 
 
 class ProjectListItem(BaseModel):
