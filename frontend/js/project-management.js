@@ -285,6 +285,11 @@ const ProjectManagementModule = (function() {
       const result = await apiRequest(`?${params.toString()}`);
       projectList = result.items;
       renderProjectList(windowEl);
+
+      // 如果有選中的專案，也重新載入其詳情
+      if (selectedProject?.id) {
+        await refreshSelectedProject();
+      }
     } catch (error) {
       console.error('Failed to load projects:', error);
       listEl.innerHTML = `
@@ -293,6 +298,26 @@ const ProjectManagementModule = (function() {
           <span>載入失敗: ${error.message}</span>
         </div>
       `;
+    }
+  }
+
+  /**
+   * Refresh selected project details
+   */
+  async function refreshSelectedProject() {
+    if (!selectedProject?.id) return;
+
+    const windowEl = document.getElementById(windowId);
+    if (!windowEl) return;
+
+    try {
+      selectedProject = await apiRequest(`/${selectedProject.id}`);
+      const viewEl = windowEl.querySelector('#pmContentView');
+      if (viewEl && viewEl.style.display !== 'none') {
+        renderTabContent(viewEl);
+      }
+    } catch (error) {
+      console.error('Failed to refresh project:', error);
     }
   }
 
@@ -381,6 +406,19 @@ const ProjectManagementModule = (function() {
   }
 
   /**
+   * Get delivery status text
+   */
+  function getDeliveryStatusText(status) {
+    const map = {
+      pending: '待發包',
+      ordered: '已發包',
+      delivered: '已到貨',
+      completed: '已完成',
+    };
+    return map[status] || status;
+  }
+
+  /**
    * Format date
    */
   function formatDate(dateStr) {
@@ -463,6 +501,10 @@ const ProjectManagementModule = (function() {
         <button class="pm-tab ${currentTab === 'meetings' ? 'active' : ''}" data-tab="meetings">
           <span class="icon">${getIcon('calendar')}</span>
           會議 (${p.meetings.length})
+        </button>
+        <button class="pm-tab ${currentTab === 'deliveries' ? 'active' : ''}" data-tab="deliveries">
+          <span class="icon">${getIcon('truck-delivery')}</span>
+          發包 (${p.deliveries?.length || 0})
         </button>
         <button class="pm-tab ${currentTab === 'attachments' ? 'active' : ''}" data-tab="attachments">
           <span class="icon">${getIcon('attachment')}</span>
@@ -557,6 +599,10 @@ const ProjectManagementModule = (function() {
 
       case 'meetings':
         renderMeetingsTab(contentEl);
+        break;
+
+      case 'deliveries':
+        renderDeliveriesTab(contentEl);
         break;
 
       case 'attachments':
@@ -1396,6 +1442,191 @@ const ProjectManagementModule = (function() {
       await apiRequest(`/${selectedProject.id}/links/${linkId}`, { method: 'DELETE' });
       await selectProject(selectedProject.id);
       NotificationModule.show({ title: '成功', message: '連結已刪除', icon: 'check-circle' });
+    } catch (error) {
+      NotificationModule.show({ title: '失敗', message: error.message, icon: 'alert-circle' });
+    }
+  }
+
+  // ============================================
+  // Deliveries Tab (發包/交貨管理)
+  // ============================================
+
+  function renderDeliveriesTab(contentEl) {
+    const deliveries = selectedProject.deliveries || [];
+
+    contentEl.innerHTML = `
+      <div class="pm-tab-header">
+        <h3>發包/交貨管理</h3>
+        <button class="pm-action-btn primary" id="pmBtnAddDelivery">
+          <span class="icon">${getIcon('plus')}</span>
+          新增發包
+        </button>
+      </div>
+      <div class="pm-deliveries-list">
+        ${deliveries.length === 0 ? '<div class="pm-empty-tab">尚無發包記錄</div>' : deliveries.map(d => `
+          <div class="pm-delivery-card" data-id="${d.id}">
+            <div class="pm-delivery-status-indicator ${d.status}"></div>
+            <div class="pm-delivery-info">
+              <div class="pm-delivery-header">
+                <span class="pm-delivery-vendor">${d.vendor}</span>
+                <span class="pm-delivery-status-badge ${d.status}">${getDeliveryStatusText(d.status)}</span>
+              </div>
+              <div class="pm-delivery-item">${d.item}</div>
+              ${d.quantity ? `<div class="pm-delivery-quantity">數量：${d.quantity}</div>` : ''}
+              <div class="pm-delivery-dates">
+                ${d.order_date ? `<span><span class="icon">${getIcon('calendar-arrow-right')}</span>發包：${d.order_date}</span>` : ''}
+                ${d.expected_delivery_date ? `<span><span class="icon">${getIcon('calendar-clock')}</span>預計：${d.expected_delivery_date}</span>` : ''}
+                ${d.actual_delivery_date ? `<span class="actual"><span class="icon">${getIcon('check-circle')}</span>到貨：${d.actual_delivery_date}</span>` : ''}
+              </div>
+              ${d.notes ? `<div class="pm-delivery-notes">${d.notes}</div>` : ''}
+            </div>
+            <div class="pm-delivery-actions">
+              <button class="pm-icon-btn" data-action="edit" title="編輯">
+                <span class="icon">${getIcon('edit')}</span>
+              </button>
+              <button class="pm-icon-btn danger" data-action="delete" title="刪除">
+                <span class="icon">${getIcon('delete')}</span>
+              </button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+
+    // Bind events
+    contentEl.querySelector('#pmBtnAddDelivery')?.addEventListener('click', () => showDeliveryModal());
+    contentEl.querySelectorAll('.pm-delivery-card').forEach(card => {
+      card.querySelectorAll('.pm-icon-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const deliveryId = card.dataset.id;
+          const delivery = selectedProject.deliveries.find(d => d.id === deliveryId);
+          if (btn.dataset.action === 'edit') showDeliveryModal(delivery);
+          else if (btn.dataset.action === 'delete') confirmDeleteDelivery(deliveryId);
+        });
+      });
+    });
+  }
+
+  function showDeliveryModal(delivery = null) {
+    const windowEl = document.getElementById(windowId);
+    if (!windowEl) return;
+
+    const isEdit = !!delivery;
+    const modal = document.createElement('div');
+    modal.className = 'pm-modal';
+    modal.innerHTML = `
+      <div class="pm-modal-content">
+        <div class="pm-modal-header">
+          <h3>${isEdit ? '編輯發包記錄' : '新增發包記錄'}</h3>
+          <button class="pm-modal-close"><span class="icon">${getIcon('close')}</span></button>
+        </div>
+        <div class="pm-modal-body">
+          <div class="pm-form-row">
+            <div class="pm-form-group">
+              <label>廠商 *</label>
+              <input type="text" id="deliveryVendor" value="${delivery?.vendor || ''}" placeholder="廠商名稱" required>
+            </div>
+            <div class="pm-form-group">
+              <label>料件 *</label>
+              <input type="text" id="deliveryItem" value="${delivery?.item || ''}" placeholder="料件名稱" required>
+            </div>
+          </div>
+          <div class="pm-form-row">
+            <div class="pm-form-group">
+              <label>數量</label>
+              <input type="text" id="deliveryQuantity" value="${delivery?.quantity || ''}" placeholder="例如：2 台">
+            </div>
+            <div class="pm-form-group">
+              <label>狀態</label>
+              <select id="deliveryStatus">
+                <option value="pending" ${delivery?.status === 'pending' || !delivery ? 'selected' : ''}>待發包</option>
+                <option value="ordered" ${delivery?.status === 'ordered' ? 'selected' : ''}>已發包</option>
+                <option value="delivered" ${delivery?.status === 'delivered' ? 'selected' : ''}>已到貨</option>
+                <option value="completed" ${delivery?.status === 'completed' ? 'selected' : ''}>已完成</option>
+              </select>
+            </div>
+          </div>
+          <div class="pm-form-row">
+            <div class="pm-form-group">
+              <label>發包日</label>
+              <input type="date" id="deliveryOrderDate" value="${delivery?.order_date || ''}">
+            </div>
+            <div class="pm-form-group">
+              <label>預計交貨日</label>
+              <input type="date" id="deliveryExpectedDate" value="${delivery?.expected_delivery_date || ''}">
+            </div>
+          </div>
+          <div class="pm-form-group">
+            <label>實際到貨日</label>
+            <input type="date" id="deliveryActualDate" value="${delivery?.actual_delivery_date || ''}">
+          </div>
+          <div class="pm-form-group">
+            <label>備註</label>
+            <textarea id="deliveryNotes" rows="2" placeholder="其他說明...">${delivery?.notes || ''}</textarea>
+          </div>
+        </div>
+        <div class="pm-modal-footer">
+          <button class="pm-btn" id="deliveryCancel">取消</button>
+          <button class="pm-btn primary" id="deliverySave">${isEdit ? '儲存' : '新增'}</button>
+        </div>
+      </div>
+    `;
+
+    windowEl.appendChild(modal);
+
+    const closeModal = () => modal.remove();
+    modal.querySelector('.pm-modal-close').addEventListener('click', closeModal);
+    modal.querySelector('#deliveryCancel').addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+
+    modal.querySelector('#deliverySave').addEventListener('click', async () => {
+      const vendor = modal.querySelector('#deliveryVendor').value.trim();
+      const item = modal.querySelector('#deliveryItem').value.trim();
+
+      if (!vendor || !item) {
+        NotificationModule.show({ title: '提醒', message: '請填寫廠商和料件', icon: 'alert' });
+        return;
+      }
+
+      const data = {
+        vendor,
+        item,
+        quantity: modal.querySelector('#deliveryQuantity').value.trim() || null,
+        status: modal.querySelector('#deliveryStatus').value,
+        order_date: modal.querySelector('#deliveryOrderDate').value || null,
+        expected_delivery_date: modal.querySelector('#deliveryExpectedDate').value || null,
+        actual_delivery_date: modal.querySelector('#deliveryActualDate').value || null,
+        notes: modal.querySelector('#deliveryNotes').value.trim() || null,
+      };
+
+      try {
+        if (isEdit) {
+          await apiRequest(`/${selectedProject.id}/deliveries/${delivery.id}`, {
+            method: 'PUT',
+            body: JSON.stringify(data),
+          });
+        } else {
+          await apiRequest(`/${selectedProject.id}/deliveries`, {
+            method: 'POST',
+            body: JSON.stringify(data),
+          });
+        }
+        closeModal();
+        await selectProject(selectedProject.id);
+        NotificationModule.show({ title: '成功', message: isEdit ? '發包記錄已更新' : '發包記錄已新增', icon: 'check-circle' });
+      } catch (error) {
+        NotificationModule.show({ title: '失敗', message: error.message, icon: 'alert-circle' });
+      }
+    });
+  }
+
+  async function confirmDeleteDelivery(deliveryId) {
+    if (!confirm('確定要刪除此發包記錄嗎？')) return;
+    try {
+      await apiRequest(`/${selectedProject.id}/deliveries/${deliveryId}`, { method: 'DELETE' });
+      await selectProject(selectedProject.id);
+      NotificationModule.show({ title: '成功', message: '發包記錄已刪除', icon: 'check-circle' });
     } catch (error) {
       NotificationModule.show({ title: '失敗', message: error.message, icon: 'alert-circle' });
     }

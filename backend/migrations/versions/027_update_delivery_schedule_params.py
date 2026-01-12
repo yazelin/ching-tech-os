@@ -1,18 +1,25 @@
-"""Line Bot Agent 初始化與管理
+"""update delivery schedule tool parameters documentation
 
-在應用程式啟動時確保預設的 Line Bot Agent 存在。
+Revision ID: 027
+Revises: 026
+Create Date: 2026-01-12
+
+更新 update_delivery_schedule 工具的參數說明：
+- new_vendor: 更新廠商名稱
+- new_item: 更新料件名稱
+- new_quantity: 更新數量
+- order_date: 更新發包日
 """
 
-import logging
+from collections.abc import Sequence
 
-from . import ai_manager
-from ..models.ai import AiPromptCreate, AiAgentCreate
+from alembic import op
 
-logger = logging.getLogger("linebot_agents")
-
-# Agent 名稱常數
-AGENT_LINEBOT_PERSONAL = "linebot-personal"
-AGENT_LINEBOT_GROUP = "linebot-group"
+# revision identifiers, used by Alembic.
+revision: str = "027"
+down_revision: str | None = "026"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 # 完整的 linebot-personal prompt
 LINEBOT_PERSONAL_PROMPT = """你是擎添工業的 AI 助理，透過 Line 與用戶進行個人對話。
@@ -48,21 +55,6 @@ LINEBOT_PERSONAL_PROMPT = """你是擎添工業的 AI 助理，透過 Line 與�
 - get_delivery_schedules: 查詢專案發包記錄（可依狀態或廠商過濾）
 - 狀態值：pending(待發包)、ordered(已發包)、delivered(已到貨)、completed(已完成)
 
-【專案連結管理】
-- add_project_link: 新增專案連結（title 標題、url 網址必填，description 描述可選）
-- get_project_links: 查詢專案連結列表
-- update_project_link: 更新連結（可更新 title、url、description）
-- delete_project_link: 刪除連結
-
-【專案附件管理】
-- add_project_attachment: 從 NAS 添加附件到專案
-  · nas_path: 直接使用 get_message_attachments 返回的路徑（如 users/.../images/...）
-  · 也支援 search_nas_files 返回的路徑或完整 nas:// 格式
-  · description: 描述（可選）
-- get_project_attachments: 查詢專案附件列表
-- update_project_attachment: 更新附件描述
-- delete_project_attachment: 刪除附件
-
 【專案權限控制】（重要）
 標記「⚠️需權限」的工具需要傳入 ctos_user_id 參數：
 - 從【對話識別】區塊取得 ctos_user_id 值
@@ -88,9 +80,9 @@ LINEBOT_PERSONAL_PROMPT = """你是擎添工業的 AI 助理，透過 Line 與�
   · 其他檔案會以連結形式顯示
   · 重要：工具返回的 [FILE_MESSAGE:...] 標記必須原封不動包含在回應中，系統會自動處理
   · 注意：圖片/檔案會顯示在文字下方，請用 👇 而非 👆
-- create_share_link: 產生公開分享連結（不顯示在回覆中，只給連結）
-  · resource_type: "nas_file"、"knowledge"、"project" 或 "project_attachment"
-  · resource_id: 檔案路徑、知識ID、專案UUID 或 附件UUID
+- create_share_link: 只產生連結（不顯示在回覆中）
+  · resource_type="nas_file"
+  · resource_id="檔案完整路徑"
   · expires_in: 1h/24h/7d（預設 24h）
 
 【知識庫】
@@ -103,6 +95,9 @@ LINEBOT_PERSONAL_PROMPT = """你是擎添工業的 AI 助理，透過 Line 與�
   · roles（適用角色列表）、level（層級：beginner/intermediate/advanced）
 - delete_knowledge_item: 刪除知識庫文件
 - add_note: 新增純文字筆記到知識庫
+- create_share_link: 產生知識庫或專案分享連結
+  · resource_type="knowledge" 或 "project"
+  · resource_id=知識ID 或 專案UUID
 
 【知識庫附件】
 - get_message_attachments: 查詢對話中的附件（圖片、檔案），可指定 days 天數範圍
@@ -135,13 +130,6 @@ LINEBOT_PERSONAL_PROMPT = """你是擎添工業的 AI 助理，透過 Line 與�
     - 若找到多個檔案，列出選項讓用戶選擇
     - 用戶確認後，用 prepare_file_message 準備發送（圖片會顯示、其他發連結）
     - 若只想給連結不顯示，才用 create_share_link
-12. 用戶要求新增專案連結時：
-    - 用 add_project_link(project_id, title, url, description?) 新增連結
-13. 用戶要求把圖片/檔案加入專案附件時：
-    - 先用 get_message_attachments 查詢 Line 對話中的附件
-    - 取得 NAS 路徑後，用 add_project_attachment(project_id, nas_path, description?) 新增
-14. 用戶要求查詢專案附件或連結時：
-    - 用 get_project_attachments 或 get_project_links 查詢
 
 對話管理：
 - 用戶可以發送 /新對話 或 /reset 來清除對話歷史，開始新對話
@@ -178,13 +166,10 @@ LINEBOT_GROUP_PROMPT = """你是擎添工業的 AI 助理，在 Line 群組中�
 - add_delivery_schedule / update_delivery_schedule / get_delivery_schedules: 發包/交貨管理
   · update_delivery_schedule 可更新：new_vendor、new_item、new_quantity、new_status、order_date、expected_delivery_date、actual_delivery_date、new_notes
   · 狀態：pending(待發包)、ordered(已發包)、delivered(已到貨)、completed(已完成)
-- add_project_link / get_project_links / update_project_link / delete_project_link: 專案連結管理
-- add_project_attachment / get_project_attachments / update_project_attachment / delete_project_attachment: 專案附件管理
-  · add_project_attachment: 直接使用 get_message_attachments 返回的路徑即可
 - search_nas_files: 搜尋 NAS 專案檔案（keywords 用逗號分隔，file_types 過濾類型）
 - get_nas_file_info: 取得 NAS 檔案資訊
 - prepare_file_message: 準備發送檔案（[FILE_MESSAGE:...] 標記需原封不動包含，圖片顯示在下方用 👇）
-- create_share_link: 產生分享連結（支援 nas_file/knowledge/project/project_attachment）
+- create_share_link: 只產生連結不顯示
 - search_knowledge / get_knowledge_item: 知識庫查詢
 - update_knowledge_item / add_note: 更新或新增知識
 - get_message_attachments: 查詢附件
@@ -227,96 +212,39 @@ LINEBOT_GROUP_PROMPT = """你是擎添工業的 AI 助理，在 Line 群組中�
 - 列表用「・」或數字
 - 不要用分隔線（━、─、＝等），用空行分隔"""
 
-# 預設 Agent 設定
-DEFAULT_LINEBOT_AGENTS = [
-    {
-        "name": AGENT_LINEBOT_PERSONAL,
-        "display_name": "Line 個人助理",
-        "description": "Line Bot 個人對話 Agent",
-        "model": "claude-sonnet",
-        "prompt": {
-            "name": AGENT_LINEBOT_PERSONAL,
-            "display_name": "Line 個人助理 Prompt",
-            "category": "linebot",
-            "content": LINEBOT_PERSONAL_PROMPT,
-            "description": "Line Bot 個人對話使用，包含完整 MCP 工具說明",
-        },
-    },
-    {
-        "name": AGENT_LINEBOT_GROUP,
-        "display_name": "Line 群組助理",
-        "description": "Line Bot 群組對話 Agent",
-        "model": "claude-haiku",
-        "prompt": {
-            "name": AGENT_LINEBOT_GROUP,
-            "display_name": "Line 群組助理 Prompt",
-            "category": "linebot",
-            "content": LINEBOT_GROUP_PROMPT,
-            "description": "Line Bot 群組對話使用，精簡版包含 MCP 工具說明",
-        },
-    },
-]
+
+def upgrade() -> None:
+    # 更新 linebot-personal prompt
+    op.execute(
+        f"""
+        UPDATE ai_prompts
+        SET content = $prompt${LINEBOT_PERSONAL_PROMPT}$prompt$,
+            updated_at = NOW()
+        WHERE name = 'linebot-personal'
+        """
+    )
+
+    # 更新 linebot-group prompt
+    op.execute(
+        f"""
+        UPDATE ai_prompts
+        SET content = $prompt${LINEBOT_GROUP_PROMPT}$prompt$,
+            updated_at = NOW()
+        WHERE name = 'linebot-group'
+        """
+    )
 
 
-async def ensure_default_linebot_agents() -> None:
+def downgrade() -> None:
+    """回滾到 026 版本的 prompt
+
+    若需要完整回滾，請參考 026_update_linebot_prompts_delivery.py 中的
+    LINEBOT_PERSONAL_PROMPT 和 LINEBOT_GROUP_PROMPT 內容，
+    或使用以下 SQL 從備份還原：
+
+    UPDATE ai_prompts SET content = '<舊版 prompt>' WHERE name = 'linebot-personal';
+    UPDATE ai_prompts SET content = '<舊版 prompt>' WHERE name = 'linebot-group';
     """
-    確保預設的 Line Bot Agent 存在。
-
-    如果 Agent 已存在則跳過（保留使用者修改）。
-    如果不存在則建立 Agent 和對應的 Prompt。
-    """
-    for agent_config in DEFAULT_LINEBOT_AGENTS:
-        agent_name = agent_config["name"]
-
-        # 檢查 Agent 是否存在
-        existing_agent = await ai_manager.get_agent_by_name(agent_name)
-        if existing_agent:
-            logger.debug(f"Agent '{agent_name}' 已存在，跳過建立")
-            continue
-
-        # 檢查 Prompt 是否存在
-        prompt_config = agent_config["prompt"]
-        existing_prompt = await ai_manager.get_prompt_by_name(prompt_config["name"])
-
-        if existing_prompt:
-            prompt_id = existing_prompt["id"]
-            logger.debug(f"Prompt '{prompt_config['name']}' 已存在，使用現有 Prompt")
-        else:
-            # 建立 Prompt
-            prompt_data = AiPromptCreate(
-                name=prompt_config["name"],
-                display_name=prompt_config["display_name"],
-                category=prompt_config["category"],
-                content=prompt_config["content"],
-                description=prompt_config["description"],
-            )
-            new_prompt = await ai_manager.create_prompt(prompt_data)
-            prompt_id = new_prompt["id"]
-            logger.info(f"已建立 Prompt: {prompt_config['name']}")
-
-        # 建立 Agent
-        agent_data = AiAgentCreate(
-            name=agent_config["name"],
-            display_name=agent_config["display_name"],
-            description=agent_config["description"],
-            model=agent_config["model"],
-            system_prompt_id=prompt_id,
-            is_active=True,
-        )
-        await ai_manager.create_agent(agent_data)
-        logger.info(f"已建立 Agent: {agent_name}")
-
-
-async def get_linebot_agent(is_group: bool) -> dict | None:
-    """
-    取得 Line Bot Agent 設定。
-
-    Args:
-        is_group: 是否為群組對話
-
-    Returns:
-        Agent 設定字典，包含 model 和 system_prompt
-        如果找不到則回傳 None
-    """
-    agent_name = AGENT_LINEBOT_GROUP if is_group else AGENT_LINEBOT_PERSONAL
-    return await ai_manager.get_agent_by_name(agent_name)
+    # 移除更新後的參數說明
+    # 由於 prompt 內容較長，建議參考上一版 migration 手動還原
+    pass

@@ -143,6 +143,10 @@ async def get_resource_title(resource_type: str, resource_id: str) -> str:
             # 驗證路徑並回傳檔名
             full_path = validate_nas_file_path(resource_id)
             return full_path.name
+        elif resource_type == "project_attachment":
+            # 取得專案附件資訊
+            attachment = await get_project_attachment_info(resource_id)
+            return attachment["filename"]
         else:
             return "未知資源"
     except (KnowledgeNotFoundError, ProjectNotFoundError):
@@ -151,6 +155,18 @@ async def get_resource_title(resource_type: str, resource_id: str) -> str:
         raise ResourceNotFoundError(str(e))
     except NasFileAccessDenied as e:
         raise ResourceNotFoundError(str(e))
+
+
+async def get_project_attachment_info(attachment_id: str) -> dict:
+    """取得專案附件資訊"""
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            "SELECT id, filename, storage_path, file_type, project_id, file_size FROM project_attachments WHERE id = $1",
+            UUID(attachment_id),
+        )
+        if not row:
+            raise ResourceNotFoundError(f"附件 {attachment_id} 不存在")
+        return dict(row)
 
 
 async def create_share_link(
@@ -446,6 +462,35 @@ async def get_public_resource(token: str) -> PublicResourceResponse:
                 raise ResourceNotFoundError(str(e))
             except Exception as e:
                 raise ResourceNotFoundError(f"無法存取檔案：{e}")
+
+        elif resource_type == "project_attachment":
+            try:
+                # 取得附件資訊（已包含 file_size）
+                attachment = await get_project_attachment_info(resource_id)
+                filename = attachment["filename"]
+                size = attachment.get("file_size") or 0
+
+                if size >= 1024 * 1024:
+                    size_str = f"{size / 1024 / 1024:.2f} MB"
+                elif size >= 1024:
+                    size_str = f"{size / 1024:.2f} KB"
+                elif size > 0:
+                    size_str = f"{size} bytes"
+                else:
+                    size_str = "未知"
+
+                # 回傳檔案資訊（實際下載透過 /download 端點）
+                data = {
+                    "file_name": filename,
+                    "file_type": attachment.get("file_type", ""),
+                    "file_size": size,
+                    "file_size_str": size_str,
+                    "download_url": f"/api/public/{token}/download",
+                }
+            except ResourceNotFoundError:
+                raise
+            except Exception as e:
+                raise ResourceNotFoundError(f"無法存取附件：{e}")
 
         else:
             raise ShareError(f"不支援的資源類型：{resource_type}")

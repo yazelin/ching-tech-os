@@ -509,7 +509,8 @@
                 renderKnowledge(result.data, result.shared_by, result.shared_at, result.expires_at);
             } else if (result.type === 'project') {
                 renderProject(result.data, result.shared_by, result.shared_at, result.expires_at);
-            } else if (result.type === 'nas_file') {
+            } else if (result.type === 'nas_file' || result.type === 'project_attachment') {
+                // NAS 檔案和專案附件使用相同的渲染方式
                 renderNasFile(result.data, result.shared_by, result.shared_at, result.expires_at);
             } else {
                 showError('不支援的類型', `無法顯示此類型的內容：${result.type}`);
