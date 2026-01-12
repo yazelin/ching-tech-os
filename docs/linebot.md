@@ -111,7 +111,10 @@ GET /api/linebot/groups
 GET /api/linebot/groups/{group_id}
 POST /api/linebot/groups/{group_id}/bind-project
 DELETE /api/linebot/groups/{group_id}/bind-project
+DELETE /api/linebot/groups/{group_id}
 ```
+
+> **刪除群組**：刪除群組會級聯刪除相關訊息（`line_messages`）和檔案記錄（`line_files`），但 NAS 實體檔案不會被刪除。
 
 ### 用戶管理
 
@@ -166,8 +169,13 @@ AI 助理可使用的工具（完整列表見 [docs/mcp-server.md](mcp-server.md
 - `get_knowledge_item` - 取得完整內容
 - `update_knowledge_item` - 更新知識（可更新標題、內容、標籤、類型、層級等）
 - `delete_knowledge_item` - 刪除知識
-- `add_note` - 新增純文字筆記
-- `add_note_with_attachments` - 新增筆記並加入附件
+- `add_note` - 新增純文字筆記（自動判定 scope）
+- `add_note_with_attachments` - 新增筆記並加入附件（自動判定 scope）
+
+> **知識庫 Scope 自動判定**：透過 Line Bot 建立的知識會根據對話來源自動設定 scope：
+> - **個人對話 + 已綁定 CTOS 帳號** → `personal`（僅建立者可編輯）
+> - **群組對話 + 群組已綁定專案** → `project`（專案成員可編輯）
+> - **其他情況** → `global`（全域，僅 global_write 權限可編輯）
 
 **知識庫附件**
 - `get_message_attachments` - 查詢對話中的附件（圖片、檔案）

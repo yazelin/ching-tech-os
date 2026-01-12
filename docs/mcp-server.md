@@ -88,8 +88,13 @@ uv run python -m ching_tech_os.mcp_cli
 | `get_knowledge_item` | 取得知識庫文件完整內容 | `kb_id`（必填，如 kb-001） |
 | `update_knowledge_item` | 更新知識庫文件 | `kb_id`（必填）, `title`, `content`, `category`, `topics`, `projects`, `roles`, `level`, `type` |
 | `delete_knowledge_item` | 刪除知識庫文件 | `kb_id`（必填） |
-| `add_note` | 新增筆記到知識庫 | `title`（必填）, `content`（必填）, `category`, `topics`, `project` |
-| `add_note_with_attachments` | 新增筆記並加入附件 | `title`（必填）, `content`（必填）, `attachments`（必填，NAS 路徑列表）, `category`, `topics`, `project` |
+| `add_note` | 新增筆記到知識庫 | `title`（必填）, `content`（必填）, `category`, `topics`, `project`, `line_group_id`, `line_user_id`, `ctos_user_id` |
+| `add_note_with_attachments` | 新增筆記並加入附件 | `title`（必填）, `content`（必填）, `attachments`（必填，NAS 路徑列表）, `category`, `topics`, `project`, `line_group_id`, `line_user_id`, `ctos_user_id` |
+
+> **知識庫 Scope 自動判定**：`add_note` 和 `add_note_with_attachments` 會根據對話來源參數自動設定 scope：
+> - `line_user_id` + `ctos_user_id`（已綁定）→ `personal`（個人知識）
+> - `line_group_id` + 群組已綁定專案 → `project`（專案知識）
+> - 其他情況 → `global`（全域知識）
 
 ### 知識庫附件
 
