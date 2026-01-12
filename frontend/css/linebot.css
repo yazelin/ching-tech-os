@@ -224,6 +224,33 @@
     color: var(--text-primary);
 }
 
+/* 群組管理 */
+.linebot-group-actions {
+    margin-top: 16px;
+    padding: 16px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+}
+
+.linebot-group-actions h4 {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.linebot-delete-group-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.linebot-action-hint {
+    margin: 8px 0 0 0;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
 /* 訊息列表 */
 .linebot-messages-container {
     flex: 1;

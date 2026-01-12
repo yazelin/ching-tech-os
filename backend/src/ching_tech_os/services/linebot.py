@@ -1092,6 +1092,46 @@ async def unbind_group_from_project(group_id: UUID) -> bool:
         return result == "UPDATE 1"
 
 
+async def delete_group(group_id: UUID) -> dict | None:
+    """刪除群組及其相關資料
+
+    Args:
+        group_id: 群組 UUID
+
+    Returns:
+        刪除結果（含訊息數量）或 None（群組不存在）
+    """
+    async with get_connection() as conn:
+        # 先查詢群組是否存在及訊息數量
+        row = await conn.fetchrow(
+            """
+            SELECT g.id, g.name,
+                   (SELECT COUNT(*) FROM line_messages WHERE line_group_id = g.id) as message_count
+            FROM line_groups g
+            WHERE g.id = $1
+            """,
+            group_id,
+        )
+
+        if not row:
+            return None
+
+        group_name = row["name"] or "未命名群組"
+        message_count = row["message_count"]
+
+        # 刪除群組（訊息和檔案記錄會級聯刪除）
+        await conn.execute(
+            "DELETE FROM line_groups WHERE id = $1",
+            group_id,
+        )
+
+        return {
+            "group_id": str(group_id),
+            "group_name": group_name,
+            "deleted_messages": message_count,
+        }
+
+
 # ============================================================
 # 檔案查詢
 # ============================================================
