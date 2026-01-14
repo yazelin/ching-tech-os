@@ -2106,6 +2106,18 @@ async def prepare_file_message(
     # 下載連結需要加上 /download
     download_url = result.full_url.replace("/s/", "/api/public/") + "/download"
 
+    # 計算相對於 linebot_local_path 的路徑（用於存 line_files）
+    # full_path: /mnt/nas/ctos/linebot/files/ai-images/xxx.jpg
+    # linebot_local_path: /mnt/nas/ctos/linebot/files
+    # relative_nas_path: ai-images/xxx.jpg
+    from ..config import settings
+    linebot_base = settings.linebot_local_path
+    full_path_str = str(full_path)
+    if full_path_str.startswith(linebot_base):
+        relative_nas_path = full_path_str[len(linebot_base):].lstrip("/")
+    else:
+        relative_nas_path = full_path_str  # 其他路徑保持原樣
+
     # 組合檔案訊息標記
     if is_image and file_size <= max_image_size:
         # 小圖片：標記為 image 類型
@@ -2113,6 +2125,7 @@ async def prepare_file_message(
             "type": "image",
             "url": download_url,
             "name": file_name,
+            "nas_path": relative_nas_path,  # 相對路徑，用於 line_files 存儲
         }
         hint = f"已準備好圖片 {file_name}，會顯示在回覆中"
     else:
@@ -2122,6 +2135,7 @@ async def prepare_file_message(
             "url": result.full_url,
             "name": file_name,
             "size": size_str,
+            "nas_path": relative_nas_path,  # 相對路徑，用於 line_files 存儲
         }
         hint = f"已準備好檔案 {file_name}（{size_str}），會以連結形式顯示"
 

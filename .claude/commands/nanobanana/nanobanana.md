@@ -1,0 +1,24 @@
+---
+description: Generate and manipulate images with Nano Banana using natural language prompts
+argument-hint: <natural language request>
+---
+
+Please use the nanobanana MCP server tools to help with image generation and manipulation tasks based on the user's natural language request.
+
+Analyze the user request and determine the most appropriate tool:
+
+- For single/multiple image generation: use generate_image tool
+- For editing existing images: use edit_image tool
+- For restoring/enhancing images: use restore_image tool
+- For app icons, favicons, UI elements: use generate_icon tool
+- For seamless patterns, textures, backgrounds: use generate_pattern tool
+- For visual stories, sequences, tutorials: use generate_story tool
+- For technical diagrams, flowcharts, architecture: use generate_diagram tool
+
+Be intelligent about interpreting the user's intent from their natural language description and select the most specialized tool available.
+
+If the user includes an explicit --filename option, pass it through to the selected tool as the filename parameter.
+If the user includes an explicit --files option, parse the comma-separated list into an array (1-14 paths) and pass it as the files parameter to generate_image, generate_icon, generate_pattern, generate_story, or generate_diagram. Files can be absolute paths or relative filenames that will be searched in: current directory, ./images/, ./input/, ./nanobanana-output/, ~/Downloads/, ~/Desktop/. If the request is for edit_image or restore_image, instruct the user to use --file instead of --files.
+If the user includes an explicit --parallel option, pass it through to the selected tool as the parallel parameter (1-8, default: 2).
+
+User request: $ARGUMENTS

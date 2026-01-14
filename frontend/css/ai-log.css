@@ -462,6 +462,12 @@
   display: flex;
   align-items: center;
   color: var(--text-muted);
+  font-size: 14px;
+}
+
+.ai-log-flow-icon svg {
+  width: 1em;
+  height: 1em;
 }
 
 .ai-log-flow-name {
@@ -472,6 +478,17 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.ai-log-flow-duration {
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-muted);
+  background: var(--bg-surface-dark);
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 8px;
+  flex-shrink: 0;
 }
 
 .ai-log-flow-toggle {

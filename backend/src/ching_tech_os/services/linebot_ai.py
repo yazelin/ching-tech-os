@@ -4,7 +4,9 @@
 整合 AI Log 記錄功能
 """
 
+import json
 import logging
+import re
 import time
 from uuid import UUID
 
@@ -16,6 +18,7 @@ from .linebot import (
     should_trigger_ai,
     is_bot_message,
     save_bot_response,
+    save_file_record,
     reset_conversation,
     is_reset_command,
     ensure_temp_image,
@@ -37,6 +40,140 @@ logger = logging.getLogger("linebot_ai")
 
 
 # ============================================================
+# AI 生成圖片自動處理
+# ============================================================
+
+
+def extract_generated_images_from_tool_calls(tool_calls: list) -> list[str]:
+    """
+    從 tool_calls 中提取 nanobanana 生成的圖片路徑
+
+    Args:
+        tool_calls: Claude response 的 tool_calls 列表
+
+    Returns:
+        生成的圖片檔案路徑列表
+    """
+    generated_files = []
+
+    if not tool_calls:
+        return generated_files
+
+    # 支援 generate_image 和 edit_image
+    nanobanana_tools = {
+        "mcp__nanobanana__generate_image",
+        "mcp__nanobanana__edit_image",
+    }
+
+    for tc in tool_calls:
+        if tc.name not in nanobanana_tools:
+            continue
+
+        # tool_call output 格式: [{"text": "{...json...}", "type": "text"}]
+        try:
+            output = tc.output
+            if isinstance(output, str):
+                output_data = json.loads(output)
+            else:
+                output_data = output
+
+            # 解析外層陣列
+            if isinstance(output_data, list) and len(output_data) > 0:
+                inner_text = output_data[0].get("text", "")
+                if inner_text:
+                    inner_data = json.loads(inner_text)
+                    if inner_data.get("success") and inner_data.get("generatedFiles"):
+                        generated_files.extend(inner_data["generatedFiles"])
+        except (json.JSONDecodeError, KeyError, TypeError) as e:
+            logger.warning(f"解析 generate_image 輸出失敗: {e}")
+
+    return generated_files
+
+
+async def auto_prepare_generated_images(
+    ai_response: str,
+    tool_calls: list,
+) -> str:
+    """
+    自動處理 AI 生成的圖片，確保用戶能收到圖片
+
+    如果 AI 呼叫了 generate_image 但沒有呼叫 prepare_file_message，
+    自動補上 FILE_MESSAGE 標記。
+
+    Args:
+        ai_response: AI 回應文字
+        tool_calls: Claude response 的 tool_calls 列表
+
+    Returns:
+        處理後的 AI 回應（可能包含新增的 FILE_MESSAGE 標記）
+    """
+    # 提取生成的圖片
+    generated_files = extract_generated_images_from_tool_calls(tool_calls)
+
+    if not generated_files:
+        return ai_response
+
+    logger.info(f"偵測到 AI 生成圖片: {generated_files}")
+
+    # 檢查 AI 回應是否已包含這些圖片的 FILE_MESSAGE
+    # 如果已有 FILE_MESSAGE 標記，跳過
+    existing_file_messages = re.findall(r'\[FILE_MESSAGE:(\{.*?\})\]', ai_response)
+
+    # 找出尚未處理的圖片
+    unprocessed_files = []
+    for file_path in generated_files:
+        # 取得檔名（不含路徑）
+        file_name = file_path.split("/")[-1]
+        # 檢查是否已在 FILE_MESSAGE 中
+        already_processed = any(file_name in msg for msg in existing_file_messages)
+        if not already_processed:
+            unprocessed_files.append(file_path)
+
+    if not unprocessed_files:
+        logger.debug("所有生成圖片已由 AI 處理")
+        return ai_response
+
+    logger.info(f"自動處理未發送的生成圖片: {unprocessed_files}")
+
+    # 呼叫 prepare_file_message 處理未發送的圖片
+    from .mcp_server import prepare_file_message
+
+    file_messages = []
+    for file_path in unprocessed_files:
+        try:
+            # nanobanana 輸出的路徑是完整路徑，需要轉換為相對路徑
+            # /tmp/ching-tech-os-cli/nanobanana-output/xxx.jpg -> nanobanana-output/xxx.jpg
+            if "nanobanana-output/" in file_path:
+                relative_path = "nanobanana-output/" + file_path.split("nanobanana-output/")[-1]
+            else:
+                relative_path = file_path
+
+            result = await prepare_file_message(relative_path)
+            if "[FILE_MESSAGE:" in result:
+                file_messages.append(result)
+                logger.info(f"自動準備圖片訊息: {relative_path}")
+            else:
+                logger.warning(f"prepare_file_message 失敗: {result}")
+        except Exception as e:
+            logger.error(f"自動處理圖片失敗 {file_path}: {e}")
+
+    # 將 FILE_MESSAGE 標記加到回應中
+    if file_messages:
+        ai_response = ai_response.rstrip() + "\n\n" + "\n".join(file_messages)
+
+    # 移除格式錯誤的 FILE_MESSAGE 標記（AI 有時會自己寫錯誤格式）
+    # 正確格式：[FILE_MESSAGE:{...json...}]
+    # 錯誤格式：[FILE_MESSAGE:/tmp/...] 或 [FILE_MESSAGE:path/to/file]
+    malformed_pattern = r'\[FILE_MESSAGE:[^\{][^\]]*\]'
+    ai_response = re.sub(malformed_pattern, '', ai_response)
+
+    # 清理多餘的空行
+    ai_response = re.sub(r'\n{3,}', '\n\n', ai_response)
+
+    return ai_response
+
+
+# ============================================================
 # AI 回應解析與發送
 # ============================================================
 
@@ -51,9 +188,6 @@ def parse_ai_response(response: str) -> tuple[str, list[dict]]:
     Returns:
         (text, files): 純文字回覆和檔案訊息列表
     """
-    import re
-    import json
-
     if not response:
         return "", []
 
@@ -307,7 +441,12 @@ async def process_message_with_ai(
         mcp_tools = await get_mcp_tool_names(exclude_group_only=not is_group)
 
         # 合併內建工具（從 Agent 設定）、MCP 工具和 Read（用於讀取圖片）
-        all_tools = agent_tools + mcp_tools + ["Read"]
+        # 加入 nanobanana 圖片生成/編輯工具
+        nanobanana_tools = [
+            "mcp__nanobanana__generate_image",
+            "mcp__nanobanana__edit_image",
+        ]
+        all_tools = agent_tools + mcp_tools + nanobanana_tools + ["Read"]
 
         # 計時開始
         start_time = time.time()
@@ -318,7 +457,7 @@ async def process_message_with_ai(
             model=model,
             history=history,
             system_prompt=system_prompt,
-            timeout=180,  # MCP 工具可能需要較長時間（延長至 3 分鐘）
+            timeout=300,  # MCP 工具可能需要較長時間（延長至 5 分鐘，圖片生成可能較慢）
             tools=all_tools,
         )
 
@@ -341,9 +480,30 @@ async def process_message_with_ai(
 
         if not response.success:
             logger.error(f"Claude CLI 失敗: {response.error}")
-            return None
 
-        ai_response = response.message
+            # 即使失敗（如 timeout），檢查是否有已完成的圖片生成
+            # streaming 讀取讓我們能在 timeout 時保留已完成的 tool_calls
+            if response.tool_calls:
+                generated_images = extract_generated_images_from_tool_calls(response.tool_calls)
+                if generated_images:
+                    logger.info(f"Timeout 但有已生成的圖片: {generated_images}")
+                    # 嘗試發送已生成的圖片
+                    ai_response = f"抱歉，處理時間較長導致超時，但圖片已經生成好了："
+                    ai_response = await auto_prepare_generated_images(
+                        ai_response, response.tool_calls
+                    )
+                    # 繼續後續的發送流程（不 return）
+                else:
+                    return None
+            else:
+                return None
+        else:
+            ai_response = response.message
+
+            # 自動處理 AI 生成的圖片（如果 AI 沒有呼叫 prepare_file_message）
+            ai_response = await auto_prepare_generated_images(
+                ai_response, response.tool_calls
+            )
 
         # 標記訊息已處理
         await mark_message_ai_processed(message_uuid)
@@ -381,13 +541,27 @@ async def process_message_with_ai(
             else:
                 # 圖片訊息
                 img_idx = i - text_msg_count
-                file_name = image_messages[img_idx].get("name", "附件") if img_idx < len(image_messages) else "附件"
-                await save_bot_response(
+                img_info = image_messages[img_idx] if img_idx < len(image_messages) else {}
+                file_name = img_info.get("name", "附件")
+                nas_path = img_info.get("nas_path")
+
+                # 儲存訊息記錄
+                message_uuid = await save_bot_response(
                     group_uuid=line_group_id,
                     content=f"[Bot 發送的圖片: {file_name}]",
                     responding_to_line_user_id=line_user_id if not is_group else None,
                     line_message_id=msg_id,
                 )
+
+                # 儲存圖片檔案記錄（讓用戶可以回覆 Bot 的圖片進行編輯）
+                if nas_path:
+                    await save_file_record(
+                        message_uuid=message_uuid,
+                        file_type="image",
+                        file_name=file_name,
+                        nas_path=nas_path,
+                    )
+                    logger.debug(f"已儲存 Bot 圖片記錄: {file_name} -> {nas_path}")
 
         return text_response
 
@@ -430,11 +604,12 @@ async def log_linebot_ai_call(
         agent_id = agent["id"] if agent else None
         prompt_id = agent.get("system_prompt", {}).get("id") if agent else None
 
-        # 將 tool_calls 轉換為可序列化的格式
+        # 將 tool_calls 和 tool_timings 轉換為可序列化的格式
         parsed_response = None
-        if response.tool_calls:
-            parsed_response = {
-                "tool_calls": [
+        if response.tool_calls or response.tool_timings:
+            parsed_response = {}
+            if response.tool_calls:
+                parsed_response["tool_calls"] = [
                     {
                         "id": tc.id,
                         "name": tc.name,
@@ -443,7 +618,8 @@ async def log_linebot_ai_call(
                     }
                     for tc in response.tool_calls
                 ]
-            }
+            if response.tool_timings:
+                parsed_response["tool_timings"] = response.tool_timings
 
         # 組合完整輸入（含歷史對話）
         if history:

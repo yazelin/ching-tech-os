@@ -754,14 +754,23 @@ const AILogApp = (function() {
       return '';
     }
 
+    // 建立 tool timing 查詢表（依照順序對應）
+    const toolTimings = log.parsed_response?.tool_timings || [];
+
     const toolItems = toolCalls.map((tc, index) => {
-      
+      // 從 timings 陣列中取得對應的時間（按順序對應）
+      const timing = toolTimings[index];
+      const durationText = timing?.duration_ms
+        ? `<span class="ai-log-flow-duration">${formatDuration(timing.duration_ms)}</span>`
+        : '';
+
       return `
         <div class="ai-log-flow-item" data-expanded="false">
           <div class="ai-log-flow-header" onclick="this.parentElement.dataset.expanded = this.parentElement.dataset.expanded === 'true' ? 'false' : 'true'">
             <span class="ai-log-flow-number">${index + 1}</span>
             <span class="ai-log-flow-icon">${getIcon('wrench')}</span>
             <span class="ai-log-flow-name">${escapeHtml(tc.name)}</span>
+            ${durationText}
             <span class="ai-log-flow-toggle">${getIcon('chevron-down')}</span>
           </div>
           <div class="ai-log-flow-body">

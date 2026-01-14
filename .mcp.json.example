@@ -6,12 +6,11 @@
     },
     "nanobanana": {
       "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@willh/nano-banana-mcp"],
-      "env": {
-        "NANOBANANA_GEMINI_API_KEY": "your-gemini-api-key-here",
-        "NANOBANANA_MODEL": "gemini-3-pro-image-preview"
-      }
+      "command": "bash",
+      "args": [
+        "-c",
+        "source /path/to/your/project/.env && npx -y @willh/nano-banana-mcp"
+      ]
     }
   }
 }
