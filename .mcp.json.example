@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "ching-tech-os": {
+      "command": "bash",
+      "args": ["-c", "cd /home/ct/SDD/ching-tech-os/backend && uv run python -m ching_tech_os.mcp_cli"]
+    },
+    "nanobanana": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@willh/nano-banana-mcp"],
+      "env": {
+        "NANOBANANA_GEMINI_API_KEY": "your-gemini-api-key-here",
+        "NANOBANANA_MODEL": "gemini-3-pro-image-preview"
+      }
+    }
+  }
+}
