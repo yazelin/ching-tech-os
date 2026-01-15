@@ -14,6 +14,8 @@ from .claude_agent import call_claude, compose_prompt_with_history
 from .linebot import (
     reply_text,
     reply_messages,
+    create_text_message_with_mention,
+    MENTION_PLACEHOLDER,
     mark_message_ai_processed,
     should_trigger_ai,
     is_bot_message,
@@ -212,10 +214,44 @@ def parse_ai_response(response: str) -> tuple[str, list[dict]]:
     return text, files
 
 
+def _append_text_to_first_message(
+    messages: list,
+    append_text: str,
+    mention_line_user_id: str | None = None,
+) -> None:
+    """將文字附加到訊息列表的第一則文字訊息
+
+    如果第一則訊息帶有 mention，會保留 mention 並附加文字。
+    如果沒有現有文字訊息，會建立新的文字訊息。
+
+    Args:
+        messages: 訊息列表（會被修改）
+        append_text: 要附加的文字
+        mention_line_user_id: mention 的 Line 用戶 ID
+    """
+    from linebot.v3.messaging import TextMessage, TextMessageV2
+
+    if messages and isinstance(messages[0], (TextMessage, TextMessageV2)):
+        # 追加到現有文字訊息
+        original_text = messages[0].text
+        # 處理帶 mention 的情況：移除佔位符前綴，重新建立訊息
+        if mention_line_user_id and original_text.startswith(MENTION_PLACEHOLDER):
+            base_text = original_text[len(MENTION_PLACEHOLDER):]
+            new_text = base_text + "\n\n" + append_text
+            messages[0] = create_text_message_with_mention(new_text, mention_line_user_id)
+        else:
+            new_text = original_text + "\n\n" + append_text
+            messages[0] = TextMessage(text=new_text)
+    else:
+        # 沒有現有文字訊息，建立新的（保留 mention）
+        messages.append(create_text_message_with_mention(append_text, mention_line_user_id))
+
+
 async def send_ai_response(
     reply_token: str,
     text: str,
     file_messages: list[dict],
+    mention_line_user_id: str | None = None,
 ) -> list[str]:
     """
     發送 AI 回應（文字 + 檔案訊息）
@@ -224,17 +260,19 @@ async def send_ai_response(
         reply_token: Line 回覆 token
         text: 文字回覆
         file_messages: 檔案訊息列表
+        mention_line_user_id: 要 mention 的 Line 用戶 ID（群組對話時使用）
 
     Returns:
         發送成功的訊息 ID 列表
     """
-    from linebot.v3.messaging import TextMessage, ImageMessage
+    from linebot.v3.messaging import ImageMessage
 
     messages = []
 
     # 先加入文字訊息（顯示在上方）
+    # 如果有提供 mention_line_user_id，使用 TextMessageV2 帶 mention
     if text:
-        messages.append(TextMessage(text=text))
+        messages.append(create_text_message_with_mention(text, mention_line_user_id))
 
     # 再處理檔案訊息
     for file_info in file_messages:
@@ -255,12 +293,7 @@ async def send_ai_response(
             if size:
                 link_text += f"（{size}）"
             link_text += f"\n{url}\n⏰ 連結 24 小時內有效"
-
-            if messages and isinstance(messages[0], TextMessage):
-                # 追加到現有文字訊息
-                messages[0] = TextMessage(text=messages[0].text + "\n\n" + link_text)
-            else:
-                messages.append(TextMessage(text=link_text))
+            _append_text_to_first_message(messages, link_text, mention_line_user_id)
 
     # Line 限制每次最多 5 則訊息
     # 如果檔案太多，只發送前 4 張圖片（預留 1 則給文字）
@@ -275,10 +308,9 @@ async def send_ai_response(
             if isinstance(msg, ImageMessage):
                 extra_links.append(msg.original_content_url)
 
-        if extra_links and messages and isinstance(messages[0], TextMessage):
-            messages[0] = TextMessage(
-                text=messages[0].text + "\n\n其他圖片連結：\n" + "\n".join(extra_links)
-            )
+        if extra_links:
+            extra_text = "其他圖片連結：\n" + "\n".join(extra_links)
+            _append_text_to_first_message(messages, extra_text, mention_line_user_id)
 
     if not messages:
         return []
@@ -513,6 +545,7 @@ async def process_message_with_ai(
         text_response, file_messages = parse_ai_response(ai_response)
 
         # 回覆訊息並取得 Line 訊息 ID（用於回覆觸發功能）
+        # 群組對話時，mention 發問的用戶
         line_message_ids = []
         if reply_token and (text_response or file_messages):
             try:
@@ -520,6 +553,7 @@ async def process_message_with_ai(
                     reply_token=reply_token,
                     text=text_response,
                     file_messages=file_messages,
+                    mention_line_user_id=line_user_id if is_group else None,
                 )
             except Exception as e:
                 logger.warning(f"回覆訊息失敗（token 可能已過期）: {e}")

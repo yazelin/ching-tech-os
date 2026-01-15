@@ -47,6 +47,7 @@ Line Platform
 | 知識庫 | 透過對話新增筆記、搜尋知識、管理附件 |
 | NAS 檔案搜尋 | 搜尋並發送 NAS 共享檔案（圖片直接發送） |
 | 公開分享 | 建立知識庫/專案/檔案的公開連結分享給外部人員 |
+| 群組 Mention | 群組對話回覆時 @ 提及發問用戶，讓用戶收到通知 |
 
 ## 資料表
 
@@ -137,6 +138,13 @@ GET /api/linebot/messages?group_id=xxx&page=1&page_size=50
 
 - **個人對話**：所有訊息都觸發 AI 處理
 - **群組對話**：Bot 被 @ 提及、或回覆 Bot 訊息時觸發
+
+### 群組回覆 Mention
+
+在群組對話中，Bot 回覆時會自動 @ 提及發問的用戶：
+- 使用 Line Messaging API 的 `TextMessageV2` + `MentionSubstitutionObject` 實現
+- 被 mention 的用戶會收到 Line 的提及通知
+- 個人對話不使用 mention（一對一不需要）
 
 ### Agent 設定
 
