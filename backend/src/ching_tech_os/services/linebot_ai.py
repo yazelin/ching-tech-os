@@ -14,6 +14,7 @@ from .claude_agent import call_claude, compose_prompt_with_history
 from .linebot import (
     reply_text,
     reply_messages,
+    create_text_message_with_mention,
     mark_message_ai_processed,
     should_trigger_ai,
     is_bot_message,
@@ -216,6 +217,7 @@ async def send_ai_response(
     reply_token: str,
     text: str,
     file_messages: list[dict],
+    mention_line_user_id: str | None = None,
 ) -> list[str]:
     """
     發送 AI 回應（文字 + 檔案訊息）
@@ -224,6 +226,7 @@ async def send_ai_response(
         reply_token: Line 回覆 token
         text: 文字回覆
         file_messages: 檔案訊息列表
+        mention_line_user_id: 要 mention 的 Line 用戶 ID（群組對話時使用）
 
     Returns:
         發送成功的訊息 ID 列表
@@ -233,8 +236,9 @@ async def send_ai_response(
     messages = []
 
     # 先加入文字訊息（顯示在上方）
+    # 如果有提供 mention_line_user_id，使用 TextMessageV2 帶 mention
     if text:
-        messages.append(TextMessage(text=text))
+        messages.append(create_text_message_with_mention(text, mention_line_user_id))
 
     # 再處理檔案訊息
     for file_info in file_messages:
@@ -256,9 +260,16 @@ async def send_ai_response(
                 link_text += f"（{size}）"
             link_text += f"\n{url}\n⏰ 連結 24 小時內有效"
 
-            if messages and isinstance(messages[0], TextMessage):
+            # 檢查第一則訊息是否為文字訊息（TextMessage 或 TextMessageV2）
+            if messages and hasattr(messages[0], 'text'):
                 # 追加到現有文字訊息
-                messages[0] = TextMessage(text=messages[0].text + "\n\n" + link_text)
+                original_text = messages[0].text
+                # 移除 {user} 佔位符前綴（如果有的話），重新建立訊息
+                if original_text.startswith("{user} "):
+                    new_text = original_text[7:] + "\n\n" + link_text
+                    messages[0] = create_text_message_with_mention(new_text, mention_line_user_id)
+                else:
+                    messages[0] = TextMessage(text=original_text + "\n\n" + link_text)
             else:
                 messages.append(TextMessage(text=link_text))
 
@@ -275,10 +286,15 @@ async def send_ai_response(
             if isinstance(msg, ImageMessage):
                 extra_links.append(msg.original_content_url)
 
-        if extra_links and messages and isinstance(messages[0], TextMessage):
-            messages[0] = TextMessage(
-                text=messages[0].text + "\n\n其他圖片連結：\n" + "\n".join(extra_links)
-            )
+        if extra_links and messages and hasattr(messages[0], 'text'):
+            original_text = messages[0].text
+            extra_text = "\n\n其他圖片連結：\n" + "\n".join(extra_links)
+            # 處理帶 mention 的情況
+            if original_text.startswith("{user} "):
+                new_text = original_text[7:] + extra_text
+                messages[0] = create_text_message_with_mention(new_text, mention_line_user_id)
+            else:
+                messages[0] = TextMessage(text=original_text + extra_text)
 
     if not messages:
         return []
@@ -513,6 +529,7 @@ async def process_message_with_ai(
         text_response, file_messages = parse_ai_response(ai_response)
 
         # 回覆訊息並取得 Line 訊息 ID（用於回覆觸發功能）
+        # 群組對話時，mention 發問的用戶
         line_message_ids = []
         if reply_token and (text_response or file_messages):
             try:
@@ -520,6 +537,7 @@ async def process_message_with_ai(
                     reply_token=reply_token,
                     text=text_response,
                     file_messages=file_messages,
+                    mention_line_user_id=line_user_id if is_group else None,
                 )
             except Exception as e:
                 logger.warning(f"回覆訊息失敗（token 可能已過期）: {e}")

@@ -27,7 +27,10 @@ from linebot.v3.messaging import (
     ReplyMessageRequest,
     PushMessageRequest,
     TextMessage,
+    TextMessageV2,
     ImageMessage,
+    MentionSubstitutionObject,
+    UserMentionTarget,
 )
 from linebot.v3.webhooks import (
     MessageEvent,
@@ -754,9 +757,38 @@ async def reply_text(reply_token: str, text: str) -> str | None:
         return None
 
 
+def create_text_message_with_mention(
+    text: str,
+    mention_user_id: str | None = None,
+) -> TextMessage | TextMessageV2:
+    """建立文字訊息，可選擇 mention 特定用戶
+
+    Args:
+        text: 訊息文字
+        mention_user_id: 要 mention 的 Line 用戶 ID（如 U1234567890abcdef）
+
+    Returns:
+        TextMessage 或 TextMessageV2（帶 mention）
+    """
+    if mention_user_id:
+        # 使用 TextMessageV2 + mention
+        # {user} 是佔位符，會被替換為 @用戶名稱
+        return TextMessageV2(
+            text="{user} " + text,
+            substitution={
+                "user": MentionSubstitutionObject(
+                    mentionee=UserMentionTarget(userId=mention_user_id)
+                )
+            },
+        )
+    else:
+        # 一般的 TextMessage
+        return TextMessage(text=text)
+
+
 async def reply_messages(
     reply_token: str,
-    messages: list[TextMessage | ImageMessage],
+    messages: list[TextMessage | TextMessageV2 | ImageMessage],
 ) -> list[str]:
     """回覆多則訊息（文字 + 圖片混合）
 
