@@ -229,9 +229,9 @@ def _append_text_to_first_message(
         append_text: 要附加的文字
         mention_line_user_id: mention 的 Line 用戶 ID
     """
-    from linebot.v3.messaging import TextMessage
+    from linebot.v3.messaging import TextMessage, TextMessageV2
 
-    if messages and hasattr(messages[0], 'text'):
+    if messages and isinstance(messages[0], (TextMessage, TextMessageV2)):
         # 追加到現有文字訊息
         original_text = messages[0].text
         # 處理帶 mention 的情況：移除佔位符前綴，重新建立訊息
