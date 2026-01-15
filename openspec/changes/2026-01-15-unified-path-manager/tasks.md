@@ -77,13 +77,16 @@
   - [x] 加入 zone 安全檢查（允許 CTOS/SHARED/TEMP）
 - [x] 移除 `resolve_nas_path()` 函數
 
-### 待遷移
+### 其他模組
 
-- [ ] `share.py` - `validate_nas_file_path()`
-- [ ] `linebot.py` - `generate_nas_path()`
-- [ ] `knowledge.py` - 附件路徑處理
-- [ ] `project.py` - 專案附件路徑
-- [ ] 前端 `file-manager.js` - `toSystemMountPath()`
+- [x] `share.py` - `validate_nas_file_path()` 改用 `path_manager`
+  - [x] 使用 `path_manager.parse()` 解析路徑
+  - [x] 使用 `path_manager.to_filesystem()` 轉換路徑
+  - [x] 加入 zone 安全檢查（只允許 CTOS/SHARED）
+- [x] `linebot.py` - `generate_nas_path()` - 不需修改（生成路徑，非解析）
+- [x] `knowledge.py` - 附件路徑處理 - 不需修改（PathManager 支援舊格式）
+- [x] `project.py` - 專案附件路徑 - 不需修改（PathManager 支援舊格式）
+- [x] 前端 `file-manager.js` - `toSystemMountPath()` - 不需修改（產生的路徑 PathManager 可解析）
 
 ---
 
@@ -92,3 +95,68 @@
 ### Phase 3
 1. 現有 MCP 工具正常運作
 2. 路徑解析邏輯統一使用 PathManager
+
+---
+
+## 測試清單
+
+### 1. PathManager 路徑解析（後端）
+
+測試 `path_manager.parse()` 支援的格式：
+
+| 輸入格式 | 預期 Zone | 預期路徑 |
+|---------|----------|---------|
+| `ctos://linebot/files/xxx.pdf` | CTOS | `linebot/files/xxx.pdf` |
+| `shared://亦達光學/doc.pdf` | SHARED | `亦達光學/doc.pdf` |
+| `temp://abc123/page1.png` | TEMP | `abc123/page1.png` |
+| `local://knowledge/assets/x.jpg` | LOCAL | `knowledge/assets/x.jpg` |
+| `nas://亦達光學/xxx.pdf`（舊格式） | SHARED | `亦達光學/xxx.pdf` |
+| `/mnt/nas/projects/xxx.pdf`（舊格式） | SHARED | `xxx.pdf` |
+| `/mnt/nas/ctos/xxx.pdf`（舊格式） | CTOS | `xxx.pdf` |
+| `/tmp/ctos/xxx.pdf`（舊格式） | TEMP | `xxx.pdf` |
+| `../assets/xxx.jpg`（舊格式） | LOCAL | `knowledge/assets/xxx.jpg` |
+
+### 2. 統一檔案 API（Phase 2）
+
+測試 `/api/files/{zone}/{path}` 端點：
+
+- [ ] `GET /api/files/shared/test.txt` - 讀取 shared 區檔案
+- [ ] `GET /api/files/ctos/linebot/files/test.jpg` - 讀取 ctos 區檔案
+- [ ] `GET /api/files/temp/xxx/page.png` - 讀取 temp 區檔案
+- [ ] `GET /api/files/shared/test.txt/download` - 下載檔案
+- [ ] `GET /api/files/invalid/test.txt` - 應回傳 400 錯誤
+- [ ] `GET /api/files/shared/../etc/passwd` - 路徑穿越應被阻擋
+- [ ] 未授權請求應回傳 401
+
+### 3. MCP 工具測試
+
+- [ ] `read_document` - 讀取 shared:// 區文件
+- [ ] `read_document` - 讀取 ctos:// 區文件
+- [ ] `read_document` - 讀取舊格式路徑（應自動轉換）
+- [ ] `read_document` - 嘗試讀取 temp:// 區應被拒絕
+- [ ] `convert_pdf_to_images` - 轉換 shared:// 區 PDF
+- [ ] `convert_pdf_to_images` - 輸出到 temp:// 區
+
+### 4. 分享功能測試
+
+- [ ] 從檔案管理器建立 NAS 檔案分享連結
+- [ ] 透過分享連結下載檔案
+- [ ] 分享連結過期後應無法存取
+
+### 5. 前端 PathUtils 測試
+
+在瀏覽器 Console 測試：
+
+```javascript
+// 解析測試
+PathUtils.parse('shared://test/doc.pdf')
+// 應回傳 { zone: 'shared', path: 'test/doc.pdf', raw: '...' }
+
+// API URL 生成
+PathUtils.toApiUrl('shared://test/doc.pdf')
+// 應回傳 '/api/files/shared/test/doc.pdf'
+
+// 檔案類型判斷
+PathUtils.isImage('shared://test/photo.jpg')  // true
+PathUtils.isPdf('shared://test/doc.pdf')      // true
+```

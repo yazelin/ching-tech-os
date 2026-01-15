@@ -101,44 +101,37 @@ def validate_nas_file_path(file_path: str) -> Path:
         NasFileAccessDenied: 路徑不在允許範圍內
         NasFileNotFoundError: 檔案不存在
     """
-    projects_path = Path(settings.projects_mount_path)
+    from .path_manager import path_manager, StorageZone
+
     ctos_path = Path(settings.ctos_mount_path)
 
-    # 正規化路徑
-    if file_path.startswith(settings.projects_mount_path):
-        full_path = Path(file_path)
-        allowed_base = projects_path
-    elif file_path.startswith(settings.ctos_mount_path):
-        full_path = Path(file_path)
-        allowed_base = ctos_path
-    elif "/nanobanana-output/" in file_path or (file_path.startswith("/tmp/") and "nanobanana-output" in file_path):
-        # 處理 nanobanana 完整路徑（如 /tmp/ching-tech-os-cli/nanobanana-output/xxx.jpg）
-        # 轉換為實際 NAS 路徑
+    # 特殊處理：nanobanana 輸出路徑（/tmp/.../nanobanana-output/xxx.jpg）
+    # 這些檔案已被複製到 NAS，需要映射到實際位置
+    if "/nanobanana-output/" in file_path or file_path.startswith("nanobanana-output/"):
         filename = file_path.split("nanobanana-output/")[-1]
         full_path = ctos_path / "linebot" / "files" / "ai-images" / filename
-        allowed_base = ctos_path
-    elif file_path.startswith("linebot/") or file_path.startswith("ai-images/") or file_path.startswith("nanobanana-output/"):
-        # Line Bot 檔案（包含 AI 生成圖片）使用 ctos 路徑
-        rel_path = file_path.lstrip("/")
-        # ai-images/ 和 nanobanana-output/ 都是在 linebot/files/ 下
-        # nanobanana-output 是 symlink 指向 ai-images
-        if file_path.startswith("ai-images/") or file_path.startswith("nanobanana-output/"):
-            # 統一使用 ai-images 路徑（nanobanana-output 是 symlink）
-            filename = file_path.split("/", 1)[1] if "/" in file_path else file_path
-            full_path = ctos_path / "linebot" / "files" / "ai-images" / filename
-        else:
-            full_path = ctos_path / rel_path
-        allowed_base = ctos_path
+    elif file_path.startswith("ai-images/"):
+        # ai-images/ 相對路徑
+        filename = file_path.split("/", 1)[1] if "/" in file_path else file_path
+        full_path = ctos_path / "linebot" / "files" / "ai-images" / filename
     else:
-        # 預設使用 projects 路徑（相對路徑）
-        rel_path = file_path.lstrip("/")
-        full_path = projects_path / rel_path
-        allowed_base = projects_path
+        # 使用 PathManager 解析其他路徑格式
+        try:
+            parsed = path_manager.parse(file_path)
+        except ValueError as e:
+            raise NasFileAccessDenied(f"無效的路徑：{e}")
 
-    # 安全檢查：確保路徑在允許範圍內
+        # 安全檢查：只允許 CTOS 和 SHARED 區域
+        if parsed.zone not in (StorageZone.CTOS, StorageZone.SHARED):
+            raise NasFileAccessDenied(f"不允許存取 {parsed.zone.value}:// 區域的檔案")
+
+        full_path = Path(path_manager.to_filesystem(file_path))
+
+    # 安全檢查：確保路徑在 /mnt/nas/ 下
+    nas_path = Path(settings.nas_mount_path)
     try:
         full_path = full_path.resolve()
-        if not str(full_path).startswith(str(allowed_base.resolve())):
+        if not str(full_path).startswith(str(nas_path.resolve())):
             raise NasFileAccessDenied(f"不允許存取此路徑：{file_path}")
     except NasFileAccessDenied:
         raise
