@@ -1646,8 +1646,14 @@ async def get_message_attachments(
             time_str = created_at_taipei.strftime("%Y-%m-%d %H:%M")
             user = row["user_name"] or "未知用戶"
 
+            # 將相對路徑轉換為完整 URI 格式
+            nas_path = row["nas_path"]
+            if nas_path and not nas_path.startswith(("/", "ctos://", "shared://", "temp://")):
+                # 相對路徑：加上 ctos://linebot/files/ 前綴
+                nas_path = f"ctos://linebot/files/{nas_path}"
+
             output.append(f"{i}. [{type_name}] {time_str} - {user}")
-            output.append(f"   NAS 路徑：{row['nas_path']}")
+            output.append(f"   NAS 路徑：{nas_path}")
 
             if row["file_name"]:
                 output.append(f"   檔名：{row['file_name']}")

@@ -224,6 +224,16 @@ class TestToFilesystem:
         with pytest.raises(ValueError, match="NAS zone 路徑無法轉換"):
             path_manager.to_filesystem("/home/photos/image.jpg")
 
+    def test_linebot_temp_to_filesystem(self, path_manager):
+        """linebot 暫存路徑應正確還原為 /tmp/linebot-files/"""
+        # /tmp/linebot-files/xxx.pdf → temp://linebot/xxx.pdf → /tmp/linebot-files/xxx.pdf
+        result = path_manager.to_filesystem("/tmp/linebot-files/msg123.pdf")
+        assert result == "/tmp/linebot-files/msg123.pdf"
+
+        # 直接使用 temp://linebot/... 格式也應正確
+        result2 = path_manager.to_filesystem("temp://linebot/msg456.pdf")
+        assert result2 == "/tmp/linebot-files/msg456.pdf"
+
 
 # ============================================================
 # to_api() 測試

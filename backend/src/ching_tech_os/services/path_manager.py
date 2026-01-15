@@ -234,6 +234,10 @@ class PathManager:
         if mount_path is None:
             raise ValueError(f"NAS zone 路徑無法轉換為本地檔案系統路徑: {path}")
 
+        # 特殊處理 linebot 暫存檔案：temp://linebot/xxx → /tmp/linebot-files/xxx
+        if parsed.zone == StorageZone.TEMP and parsed.path.startswith("linebot/"):
+            return f"/tmp/linebot-files/{parsed.path[8:]}"
+
         return f"{mount_path}/{parsed.path}"
 
     def to_api(self, path: str) -> str:
