@@ -191,4 +191,6 @@ def convert_pdf_to_images(
 
 ## Open Questions
 1. 轉換後的圖片保留多久？是否需要定期清理機制？
-2. 是否需要支援指定轉換特定頁面（如只轉換第 1-3 頁）？
+
+## Resolved Questions
+1. ~~是否需要支援指定轉換特定頁面？~~ → 已實作 `pages` 參數，支援 "1"、"1-3"、"1,3,5"、"all" 等格式

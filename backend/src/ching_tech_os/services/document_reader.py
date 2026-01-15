@@ -367,6 +367,9 @@ def _parse_pages_param(pages: str, total_pages: int) -> list[int]:
 
     Returns:
         頁面索引列表（0-based）
+
+    Raises:
+        ValueError: 頁碼格式無效
     """
     if pages == "0":
         # 只查詢頁數，不轉換
@@ -378,19 +381,24 @@ def _parse_pages_param(pages: str, total_pages: int) -> list[int]:
     parts = pages.split(",")
     for part in parts:
         part = part.strip()
-        if "-" in part:
-            # 範圍格式：1-3
-            start, end = part.split("-", 1)
-            start_idx = int(start) - 1  # 轉成 0-based
-            end_idx = int(end) - 1
-            for i in range(start_idx, end_idx + 1):
-                if 0 <= i < total_pages and i not in result:
-                    result.append(i)
-        else:
-            # 單頁格式：1
-            idx = int(part) - 1  # 轉成 0-based
-            if 0 <= idx < total_pages and idx not in result:
-                result.append(idx)
+        if not part:
+            continue
+        try:
+            if "-" in part:
+                # 範圍格式：1-3
+                start, end = part.split("-", 1)
+                start_idx = int(start) - 1  # 轉成 0-based
+                end_idx = int(end) - 1
+                for i in range(start_idx, end_idx + 1):
+                    if 0 <= i < total_pages and i not in result:
+                        result.append(i)
+            else:
+                # 單頁格式：1
+                idx = int(part) - 1  # 轉成 0-based
+                if 0 <= idx < total_pages and idx not in result:
+                    result.append(idx)
+        except ValueError:
+            raise ValueError(f"無效的頁碼格式: {part}，請使用數字（如 1, 1-3, 1,3,5）")
 
     return sorted(result)
 
@@ -499,6 +507,9 @@ def convert_pdf_to_images(
     except UnsupportedFormatError:
         raise
     except FileNotFoundError:
+        raise
+    except ValueError:
+        # 頁碼格式錯誤，直接傳遞
         raise
     except Exception as e:
         raise CorruptedFileError(f"無法轉換 PDF 檔案: {e}")

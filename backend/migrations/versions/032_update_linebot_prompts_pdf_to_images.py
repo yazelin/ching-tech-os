@@ -336,4 +336,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # 注意：此 migration 更新 AI prompt 內容，downgrade 時恢復到 030 版本的 prompt。
+    # 若需完整還原，請執行 alembic downgrade 030 然後 alembic upgrade 030。
+    # 這裡不實作完整還原是因為 prompt 變更不影響資料結構，且會導致檔案過長。
     pass
