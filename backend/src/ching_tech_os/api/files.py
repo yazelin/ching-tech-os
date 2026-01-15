@@ -21,7 +21,13 @@ from fastapi.responses import Response
 
 from ..models.auth import ErrorResponse, SessionData
 from ..services.path_manager import path_manager, StorageZone
-from ..services.smb import create_smb_service, SMBError, SMBConnectionError
+from ..services.smb import (
+    create_smb_service,
+    SMBError,
+    SMBConnectionError,
+    SMBFileNotFoundError,
+    SMBPermissionError,
+)
 from .auth import get_session_from_token_or_query
 
 router = APIRouter(prefix="/api/files", tags=["files"])
@@ -107,22 +113,103 @@ def _read_nas_file(path: str, session: SessionData) -> bytes:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="無法連線至檔案伺服器",
         )
+    except SMBFileNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="檔案不存在",
+        )
+    except SMBPermissionError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="無權限讀取此檔案",
+        )
     except SMBError as e:
-        error_msg = str(e)
-        if "不存在" in error_msg:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="檔案不存在",
-            )
-        if "權限" in error_msg:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="無權限讀取此檔案",
-            )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e),
         )
+
+
+def _read_local_file(file_path: Path) -> bytes:
+    """讀取本地檔案系統的檔案
+
+    Args:
+        file_path: 檔案路徑
+
+    Returns:
+        檔案內容
+
+    Raises:
+        HTTPException: 檔案不存在、無權限等
+    """
+    # 檢查檔案是否存在
+    if not file_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="檔案不存在",
+        )
+
+    # 檢查是否為檔案（非目錄）
+    if not file_path.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="指定的路徑不是檔案",
+        )
+
+    # 讀取檔案
+    try:
+        return file_path.read_bytes()
+    except PermissionError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="無權限讀取此檔案",
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"讀取檔案失敗: {e}",
+        )
+
+
+def _read_file_content(
+    zone: str, path: str, session: SessionData
+) -> tuple[bytes, str, str]:
+    """讀取檔案內容（統一入口）
+
+    Args:
+        zone: 儲存區域字串
+        path: 檔案相對路徑
+        session: 使用者 session
+
+    Returns:
+        (content, filename, mime_type) 元組
+
+    Raises:
+        HTTPException: 各種錯誤情況
+    """
+    # 驗證參數
+    storage_zone = _validate_zone(zone)
+    _check_path_traversal(path)
+
+    if not path:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="請指定檔案路徑",
+        )
+
+    # NAS zone：透過 SMB 讀取
+    if storage_zone == StorageZone.NAS:
+        content = _read_nas_file(path, session)
+        filename = path.split("/")[-1]
+        mime_type = _get_mime_type(filename)
+        return content, filename, mime_type
+
+    # 其他 zone：透過本地檔案系統讀取
+    file_path = _get_file_path(storage_zone, path)
+    content = _read_local_file(file_path)
+    filename = file_path.name
+    mime_type = _get_mime_type(filename)
+    return content, filename, mime_type
 
 
 # 注意：/download 路由必須放在 /{path:path} 之前，
@@ -151,66 +238,7 @@ async def download_file(
     Returns:
         檔案內容，附帶 Content-Disposition header
     """
-    # 驗證參數
-    storage_zone = _validate_zone(zone)
-    _check_path_traversal(path)
-
-    if not path:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="請指定檔案路徑",
-        )
-
-    # NAS zone：透過 SMB 讀取
-    if storage_zone == StorageZone.NAS:
-        content = _read_nas_file(path, session)
-        filename = path.split("/")[-1]
-        mime_type = _get_mime_type(filename)
-        encoded_filename = quote(filename)
-        return Response(
-            content=content,
-            media_type=mime_type,
-            headers={
-                "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
-            },
-        )
-
-    # 其他 zone：透過本地檔案系統讀取
-    file_path = _get_file_path(storage_zone, path)
-
-    # 檢查檔案是否存在
-    if not file_path.exists():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="檔案不存在",
-        )
-
-    # 檢查是否為檔案（非目錄）
-    if not file_path.is_file():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="指定的路徑不是檔案",
-        )
-
-    # 讀取檔案
-    try:
-        content = file_path.read_bytes()
-    except PermissionError:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="無權限讀取此檔案",
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"讀取檔案失敗: {e}",
-        )
-
-    # 取得 MIME type 和檔名
-    filename = file_path.name
-    mime_type = _get_mime_type(filename)
-
-    # 處理檔名編碼（支援中文）
+    content, filename, mime_type = _read_file_content(zone, path, session)
     encoded_filename = quote(filename)
 
     return Response(
@@ -249,55 +277,5 @@ async def read_file(
     Returns:
         檔案內容，使用適當的 MIME type
     """
-    # 驗證參數
-    storage_zone = _validate_zone(zone)
-    _check_path_traversal(path)
-
-    if not path:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="請指定檔案路徑",
-        )
-
-    # NAS zone：透過 SMB 讀取
-    if storage_zone == StorageZone.NAS:
-        content = _read_nas_file(path, session)
-        filename = path.split("/")[-1]
-        mime_type = _get_mime_type(filename)
-        return Response(content=content, media_type=mime_type)
-
-    # 其他 zone：透過本地檔案系統讀取
-    file_path = _get_file_path(storage_zone, path)
-
-    # 檢查檔案是否存在
-    if not file_path.exists():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="檔案不存在",
-        )
-
-    # 檢查是否為檔案（非目錄）
-    if not file_path.is_file():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="指定的路徑不是檔案",
-        )
-
-    # 讀取檔案
-    try:
-        content = file_path.read_bytes()
-    except PermissionError:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="無權限讀取此檔案",
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"讀取檔案失敗: {e}",
-        )
-
-    # 取得 MIME type
-    mime_type = _get_mime_type(file_path.name)
-
+    content, _, mime_type = _read_file_content(zone, path, session)
     return Response(content=content, media_type=mime_type)

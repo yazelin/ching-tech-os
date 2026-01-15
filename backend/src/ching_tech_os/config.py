@@ -58,6 +58,7 @@ class Settings:
     # ===================
     nas_host: str = _get_env("NAS_HOST", "192.168.11.50")
     nas_port: int = _get_env_int("NAS_PORT", 445)
+    smb_connect_timeout: int = _get_env_int("SMB_CONNECT_TIMEOUT", 10)  # SMB 連線逾時（秒）
     nas_user: str = _get_env("NAS_USER", required=True)
     nas_password: str = _get_env("NAS_PASSWORD", required=True)
     nas_share: str = _get_env("NAS_SHARE", "擎添開發")
