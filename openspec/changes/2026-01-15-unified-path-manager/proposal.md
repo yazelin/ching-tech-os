@@ -200,12 +200,12 @@ const PathUtils = {
 
 ---
 
-## 待討論
+## 已確定事項
 
-1. ~~路徑協議命名~~ → 已確定：`ctos://`、`shared://`、`temp://`、`local://`
-2. 是否需要將 `ctos://linebot/` 再細分（如 `ctos://linebot-files/`）？
-3. 前端統一檔案 API endpoint 設計（`/api/files/{zone}/{path}`）？
-4. 遷移優先順序
+1. ✅ 路徑協議命名：`ctos://`、`shared://`、`temp://`、`local://`
+2. ✅ `ctos://linebot/` 保持現狀，不再細分
+3. ✅ 前端統一 API endpoint：`/api/files/{zone}/{path}`
+4. ✅ 遷移策略：先建立 PathManager，再依序整合其他部份
 
 ---
 
