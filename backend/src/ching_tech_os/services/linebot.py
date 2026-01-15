@@ -1892,15 +1892,27 @@ async def ensure_temp_file(
     # 確保暫存目錄存在
     os.makedirs(TEMP_FILE_DIR, exist_ok=True)
 
+    # 判斷是否為 PDF（需要同時保留原始檔和文字版）
+    ext = os.path.splitext(filename)[1].lower()
+    is_pdf = ext == ".pdf"
+
     # 對於需要解析的文件，暫存檔使用 .txt 副檔名
     if needs_parsing:
         base_name = os.path.splitext(filename)[0]
         temp_path = f"{TEMP_FILE_DIR}/{line_message_id}_{base_name}.txt"
+        # PDF 同時需要原始檔副本（供 convert_pdf_to_images 使用）
+        if is_pdf:
+            pdf_temp_path = f"{TEMP_FILE_DIR}/{line_message_id}_{filename}"
     else:
         temp_path = get_temp_file_path(line_message_id, filename)
 
     # 如果暫存檔已存在，直接回傳
-    if os.path.exists(temp_path):
+    # 對於 PDF，回傳特殊格式包含兩個路徑
+    if is_pdf:
+        if os.path.exists(pdf_temp_path) and os.path.exists(temp_path):
+            # 回傳 "PDF:xxx.pdf|TXT:xxx.txt" 格式
+            return f"PDF:{pdf_temp_path}|TXT:{temp_path}"
+    elif os.path.exists(temp_path):
         return temp_path
 
     # 從 NAS 讀取檔案
@@ -1913,7 +1925,6 @@ async def ensure_temp_file(
     if needs_parsing:
         try:
             # 將二進位內容寫入臨時檔案供 document_reader 解析
-            ext = os.path.splitext(filename)[1].lower()
             with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
                 tmp.write(content)
                 tmp_path = tmp.name
@@ -1932,6 +1943,15 @@ async def ensure_temp_file(
                     f.write(text_content)
 
                 logger.debug(f"已建立文件暫存（已解析）: {temp_path}")
+
+                # PDF 同時保存原始檔副本（供 convert_pdf_to_images 使用）
+                if is_pdf:
+                    with open(pdf_temp_path, "wb") as f:
+                        f.write(content)
+                    logger.debug(f"已建立 PDF 原始檔暫存: {pdf_temp_path}")
+                    # 回傳特殊格式包含兩個路徑
+                    return f"PDF:{pdf_temp_path}|TXT:{temp_path}"
+
                 return temp_path
 
             except document_reader.FileTooLargeError as e:
@@ -1942,9 +1962,21 @@ async def ensure_temp_file(
                 # 寫入錯誤訊息到暫存檔，讓 AI 知道
                 with open(temp_path, "w", encoding="utf-8") as f:
                     f.write(f"[錯誤] 此文件有密碼保護，無法讀取。")
+                # PDF 也保存原始檔（即使有密碼保護，仍可能需要轉圖片）
+                if is_pdf:
+                    with open(pdf_temp_path, "wb") as f:
+                        f.write(content)
+                    return f"PDF:{pdf_temp_path}|TXT:{temp_path}"
                 return temp_path
             except document_reader.DocumentReadError as e:
                 logger.warning(f"文件解析失敗: {filename} - {e}")
+                # PDF 解析失敗（如純圖片 PDF）仍保存原始檔供轉圖片使用
+                if is_pdf:
+                    with open(pdf_temp_path, "wb") as f:
+                        f.write(content)
+                    logger.debug(f"PDF 解析失敗但已保存原始檔: {pdf_temp_path}")
+                    # 純圖片 PDF 沒有文字版，只回傳 PDF 路徑
+                    return f"PDF:{pdf_temp_path}|TXT:"
                 return None
             finally:
                 # 清理臨時檔案

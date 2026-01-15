@@ -344,3 +344,172 @@ def _extract_pdf(file_path: str) -> DocumentContent:
         raise
     except Exception as e:
         raise CorruptedFileError(f"無法解析 PDF 檔案: {e}")
+
+
+@dataclass
+class PdfConversionResult:
+    """PDF 轉圖片結果"""
+    success: bool
+    total_pages: int               # PDF 總頁數
+    converted_pages: int           # 實際轉換的頁數
+    images: list[str]              # 轉換後的圖片路徑列表
+    message: str                   # 人類可讀的結果描述
+    error: Optional[str] = None    # 錯誤訊息（如有）
+
+
+def _parse_pages_param(pages: str, total_pages: int) -> list[int]:
+    """
+    解析 pages 參數，回傳要轉換的頁面索引列表（0-based）
+
+    Args:
+        pages: 頁面參數，如 "0"、"1"、"1-3"、"1,3,5"、"all"
+        total_pages: PDF 總頁數
+
+    Returns:
+        頁面索引列表（0-based）
+
+    Raises:
+        ValueError: 頁碼格式無效
+    """
+    if pages == "0":
+        # 只查詢頁數，不轉換
+        return []
+    if pages == "all":
+        return list(range(total_pages))
+
+    result = []
+    parts = pages.split(",")
+    for part in parts:
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            if "-" in part:
+                # 範圍格式：1-3
+                start, end = part.split("-", 1)
+                start_idx = int(start) - 1  # 轉成 0-based
+                end_idx = int(end) - 1
+                for i in range(start_idx, end_idx + 1):
+                    if 0 <= i < total_pages and i not in result:
+                        result.append(i)
+            else:
+                # 單頁格式：1
+                idx = int(part) - 1  # 轉成 0-based
+                if 0 <= idx < total_pages and idx not in result:
+                    result.append(idx)
+        except ValueError:
+            raise ValueError(f"無效的頁碼格式: {part}，請使用數字（如 1, 1-3, 1,3,5）")
+
+    return sorted(result)
+
+
+def convert_pdf_to_images(
+    file_path: str,
+    output_dir: str,
+    pages: str = "all",
+    dpi: int = 150,
+    output_format: str = "png",
+    max_pages: int = 20
+) -> PdfConversionResult:
+    """
+    將 PDF 轉換為圖片
+
+    Args:
+        file_path: PDF 檔案路徑
+        output_dir: 輸出目錄路徑
+        pages: 要轉換的頁面，"0" 只查詢頁數、"1"、"1-3"、"1,3,5"、"all"
+        dpi: 解析度，預設 150
+        output_format: 輸出格式，png 或 jpg
+        max_pages: 最大頁數限制，預設 20
+
+    Returns:
+        PdfConversionResult 包含轉換結果
+
+    Raises:
+        FileNotFoundError: 檔案不存在
+        UnsupportedFormatError: 不是 PDF 格式
+        PasswordProtectedError: 文件有密碼保護
+        CorruptedFileError: 文件損壞
+    """
+    path = Path(file_path)
+
+    # 檢查檔案存在
+    if not path.exists():
+        raise FileNotFoundError(f"PDF 檔案不存在: {file_path}")
+
+    # 檢查是否為 PDF
+    if path.suffix.lower() != ".pdf":
+        raise UnsupportedFormatError(f"檔案不是 PDF 格式: {path.suffix}")
+
+    try:
+        with fitz.open(file_path) as doc:
+            # 檢查是否需要密碼
+            if doc.needs_pass:
+                raise PasswordProtectedError("此 PDF 有密碼保護，無法轉換")
+
+            total_pages = len(doc)
+
+            # 解析要轉換的頁面
+            page_indices = _parse_pages_param(pages, total_pages)
+
+            # 如果 pages="0"，只回傳頁數資訊
+            if not page_indices:
+                return PdfConversionResult(
+                    success=True,
+                    total_pages=total_pages,
+                    converted_pages=0,
+                    images=[],
+                    message=f"此 PDF 共有 {total_pages} 頁"
+                )
+
+            # 限制最大頁數
+            if len(page_indices) > max_pages:
+                page_indices = page_indices[:max_pages]
+
+            # 確保輸出目錄存在
+            output_path = Path(output_dir)
+            output_path.mkdir(parents=True, exist_ok=True)
+
+            # 轉換設定
+            zoom = dpi / 72
+            mat = fitz.Matrix(zoom, zoom)
+            images = []
+
+            for idx in page_indices:
+                page = doc[idx]
+                pix = page.get_pixmap(matrix=mat)
+
+                # 輸出檔名（使用 1-based 頁碼）
+                img_path = output_path / f"page-{idx + 1}.{output_format}"
+                pix.save(str(img_path))
+                images.append(str(img_path))
+
+            # 組合結果訊息
+            converted_count = len(images)
+            if converted_count == total_pages:
+                message = f"已將全部 {total_pages} 頁轉換為圖片"
+            elif converted_count == 1:
+                message = f"已將第 {page_indices[0] + 1} 頁轉換為圖片（共 {total_pages} 頁）"
+            else:
+                page_desc = ", ".join(str(i + 1) for i in page_indices)
+                message = f"已將第 {page_desc} 頁轉換為圖片（共 {total_pages} 頁）"
+
+            return PdfConversionResult(
+                success=True,
+                total_pages=total_pages,
+                converted_pages=converted_count,
+                images=images,
+                message=message
+            )
+
+    except PasswordProtectedError:
+        raise
+    except UnsupportedFormatError:
+        raise
+    except FileNotFoundError:
+        raise
+    except ValueError:
+        # 頁碼格式錯誤，直接傳遞
+        raise
+    except Exception as e:
+        raise CorruptedFileError(f"無法轉換 PDF 檔案: {e}")

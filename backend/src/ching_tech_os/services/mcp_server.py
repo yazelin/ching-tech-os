@@ -10,6 +10,7 @@
 
 import asyncio
 import logging
+import uuid as uuid_module
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -50,6 +51,59 @@ async def ensure_db_connection():
     if _pool is None:
         logger.info("初始化資料庫連線池...")
         await init_db_pool()
+
+
+# ============================================================
+# 路徑處理輔助函數
+# ============================================================
+
+
+def resolve_nas_path(path: str, default_base: str = None, try_projects: bool = False) -> str:
+    """
+    將 nas:// 或相對路徑轉換為實際檔案系統路徑
+
+    Args:
+        path: 輸入路徑（nas:// 格式、絕對路徑或相對路徑）
+        default_base: 相對路徑的預設基礎目錄
+        try_projects: 若為 True，當檔案不存在時也會嘗試 projects_mount_path
+
+    Returns:
+        實際檔案系統路徑
+
+    範例:
+        - nas://linebot/files/... → /mnt/nas/ctos/linebot/files/...
+        - nas://projects/attachments/... → /mnt/nas/ctos/projects/attachments/...
+        - /tmp/xxx.pdf → /tmp/xxx.pdf（系統絕對路徑不變）
+        - /專案A/文件.pdf + try_projects=True → /mnt/nas/projects/專案A/文件.pdf
+        - xxx.pdf + default_base="/mnt/nas/ctos/linebot/files" → /mnt/nas/ctos/linebot/files/xxx.pdf
+    """
+    from pathlib import Path as FilePath
+    from ..config import settings
+
+    # 常見的系統絕對路徑前綴
+    system_prefixes = ("/tmp/", "/mnt/", "/home/", "/var/", "/etc/", "/usr/", "/opt/")
+
+    if path.startswith("nas://"):
+        # nas:// 格式 → /mnt/nas/ctos/...
+        nas_relative = path[6:]  # 移除 "nas://"
+        return f"{settings.ctos_mount_path}/{nas_relative}"
+    elif path.startswith(system_prefixes):
+        # 系統絕對路徑，直接使用
+        return path
+    elif path.startswith("/"):
+        # 以 / 開頭但不是系統路徑 - 可能是 search_nas_files 回傳的相對路徑
+        # 例如：/專案A/文件.pdf → /mnt/nas/projects/專案A/文件.pdf
+        if try_projects:
+            projects_path = f"{settings.projects_mount_path}{path}"
+            if FilePath(projects_path).exists():
+                return projects_path
+        # 如果檔案不存在或 try_projects=False，則視為絕對路徑
+        return path
+    elif default_base:
+        # 相對路徑，加上預設基礎目錄
+        return f"{default_base}/{path.lstrip('/')}"
+    else:
+        return path
 
 
 # ============================================================
@@ -1864,28 +1918,29 @@ async def read_document(
     將文件轉換為純文字，讓 AI 可以分析、總結或查詢內容。
 
     Args:
-        file_path: NAS 檔案路徑（相對於 /mnt/nas/projects 或完整路徑）
+        file_path: NAS 檔案路徑（nas:// 格式、相對路徑或完整路徑）
         max_chars: 最大字元數限制，預設 50000
     """
     from pathlib import Path
     from ..config import settings
     from . import document_reader
 
-    projects_path = Path(settings.projects_mount_path)
+    # 使用共用函式解析路徑
+    # - 相對路徑預設在 projects 目錄下
+    # - try_projects=True 支援 search_nas_files 回傳的路徑（如 /專案A/文件.pdf）
+    resolved_path = resolve_nas_path(
+        file_path,
+        default_base=settings.projects_mount_path,
+        try_projects=True,
+    )
+    full_path = Path(resolved_path)
 
-    # 正規化路徑
-    if file_path.startswith(settings.projects_mount_path):
-        # 完整路徑
-        full_path = Path(file_path)
-    else:
-        # 相對路徑（移除開頭的 /）
-        rel_path = file_path.lstrip("/")
-        full_path = projects_path / rel_path
-
-    # 安全檢查：確保路徑在允許範圍內
+    # 安全檢查：確保路徑在允許範圍內（/mnt/nas/ 下）
+    nas_path = Path(settings.nas_mount_path)
     try:
         full_path = full_path.resolve()
-        if not str(full_path).startswith(str(projects_path.resolve())):
+        resolved_nas = str(nas_path.resolve())
+        if not str(full_path).startswith(resolved_nas):
             return "錯誤：不允許存取此路徑"
     except Exception:
         return "錯誤：無效的路徑"
@@ -2918,7 +2973,7 @@ async def get_project_attachments(
         # 查詢附件
         rows = await conn.fetch(
             """
-            SELECT id, filename, file_type, file_size, description, uploaded_at, uploaded_by
+            SELECT id, filename, file_type, file_size, storage_path, description, uploaded_at, uploaded_by
             FROM project_attachments
             WHERE project_id = $1
             ORDER BY uploaded_at DESC
@@ -2948,6 +3003,9 @@ async def get_project_attachments(
             result += f"  大小：{size_str}\n"
             if r["description"]:
                 result += f"  說明：{r['description']}\n"
+            # 顯示路徑（供 convert_pdf_to_images 等工具使用）
+            if r["storage_path"]:
+                result += f"  路徑：{r['storage_path']}\n"
             result += f"  ID：{r['id']}\n\n"
 
         return result.strip()
@@ -3026,6 +3084,132 @@ async def delete_project_attachment(
         await conn.execute("DELETE FROM project_attachments WHERE id = $1", attachment_id)
 
         return f"✅ 已刪除附件「{attachment['filename']}」"
+
+
+# ============================================================
+# PDF 轉換工具
+# ============================================================
+
+
+@mcp.tool()
+async def convert_pdf_to_images(
+    pdf_path: str,
+    pages: str = "all",
+    output_format: str = "png",
+    dpi: int = 150,
+    max_pages: int = 20,
+) -> str:
+    """
+    將 PDF 轉換為圖片
+
+    Args:
+        pdf_path: PDF 檔案路徑（NAS 路徑或暫存路徑）
+        pages: 要轉換的頁面，預設 "all"
+            - "0"：只查詢頁數，不轉換
+            - "1"：只轉換第 1 頁
+            - "1-3"：轉換第 1 到 3 頁
+            - "1,3,5"：轉換第 1、3、5 頁
+            - "all"：轉換全部頁面
+        output_format: 輸出格式，可選 "png"（預設）或 "jpg"
+        dpi: 解析度，預設 150，範圍 72-600
+        max_pages: 最大頁數限制，預設 20
+    """
+    import json
+    from pathlib import Path as FilePath
+
+    from ..config import settings
+    from .document_reader import (
+        CorruptedFileError,
+        PasswordProtectedError,
+        UnsupportedFormatError,
+        convert_pdf_to_images as do_convert,
+    )
+
+    # 驗證參數
+    if output_format not in ("png", "jpg"):
+        return json.dumps({
+            "success": False,
+            "error": f"不支援的輸出格式: {output_format}，請使用 png 或 jpg"
+        }, ensure_ascii=False)
+
+    if not 72 <= dpi <= 600:
+        return json.dumps({
+            "success": False,
+            "error": f"DPI 必須在 72-600 之間，目前為 {dpi}"
+        }, ensure_ascii=False)
+
+    # 使用共用函式解析路徑
+    # - 相對路徑預設在 linebot/files 目錄下
+    # - try_projects=True 支援 search_nas_files 回傳的路徑（如 /專案A/文件.pdf）
+    actual_path = resolve_nas_path(
+        pdf_path,
+        default_base=settings.linebot_local_path,
+        try_projects=True,
+    )
+
+    # 檢查檔案存在
+    if not FilePath(actual_path).exists():
+        return json.dumps({
+            "success": False,
+            "error": f"PDF 檔案不存在: {pdf_path}"
+        }, ensure_ascii=False)
+
+    try:
+        # 建立輸出目錄
+        today = datetime.now(TAIPEI_TZ).strftime("%Y-%m-%d")
+        unique_id = str(uuid_module.uuid4())[:8]
+        output_dir = f"{settings.linebot_local_path}/pdf-converted/{today}/{unique_id}"
+
+        # 執行轉換
+        result = do_convert(
+            file_path=actual_path,
+            output_dir=output_dir,
+            pages=pages,
+            dpi=dpi,
+            output_format=output_format,
+            max_pages=max_pages,
+        )
+
+        return json.dumps({
+            "success": result.success,
+            "total_pages": result.total_pages,
+            "converted_pages": result.converted_pages,
+            "images": result.images,
+            "message": result.message,
+        }, ensure_ascii=False)
+
+    except FileNotFoundError as e:
+        return json.dumps({
+            "success": False,
+            "error": str(e)
+        }, ensure_ascii=False)
+    except PasswordProtectedError:
+        return json.dumps({
+            "success": False,
+            "error": "此 PDF 有密碼保護，無法轉換"
+        }, ensure_ascii=False)
+    except UnsupportedFormatError as e:
+        return json.dumps({
+            "success": False,
+            "error": str(e)
+        }, ensure_ascii=False)
+    except CorruptedFileError as e:
+        return json.dumps({
+            "success": False,
+            "error": str(e)
+        }, ensure_ascii=False)
+    except ValueError as e:
+        # 頁碼格式錯誤
+        return json.dumps({
+            "success": False,
+            "error": str(e)
+        }, ensure_ascii=False)
+    except Exception as e:
+        logger.error(f"PDF 轉換失敗: {e}")
+        return json.dumps({
+            "success": False,
+            "error": f"轉換失敗: {str(e)}"
+        }, ensure_ascii=False)
 
 
 # ============================================================
