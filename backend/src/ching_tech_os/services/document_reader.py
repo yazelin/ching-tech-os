@@ -243,7 +243,7 @@ def _extract_xlsx(file_path: str) -> DocumentContent:
         text=text,
         format="xlsx",
         page_count=sheet_count,
-        metadata={"sheet_names": wb.sheetnames if hasattr(wb, 'sheetnames') else []},
+        metadata={"sheet_names": wb.sheetnames},
         truncated=truncated,
         error=None
     )
@@ -298,54 +298,49 @@ def _extract_pptx(file_path: str) -> DocumentContent:
 def _extract_pdf(file_path: str) -> DocumentContent:
     """解析 PDF 文件"""
     try:
-        doc = fitz.open(file_path)
+        with fitz.open(file_path) as doc:
+            # 檢查是否需要密碼
+            if doc.needs_pass:
+                raise PasswordProtectedError("此文件有密碼保護，無法讀取")
+
+            result = []
+            page_count = len(doc)
+            has_text = False
+
+            for page in doc:
+                text = page.get_text()
+                if text.strip():
+                    result.append(text)
+                    has_text = True
+
+            # 檢查是否為純圖片 PDF
+            if not has_text:
+                return DocumentContent(
+                    text="此 PDF 為掃描圖片，沒有可提取的文字。建議截圖後上傳讓 AI 讀取。",
+                    format="pdf",
+                    page_count=page_count,
+                    metadata={"is_scanned": True},
+                    truncated=False,
+                    error="純圖片 PDF，無文字層"
+                )
+
+            text = "\n".join(result)
+
+            # 檢查是否需要截斷
+            truncated = False
+            if len(text) > MAX_OUTPUT_CHARS:
+                text = text[:MAX_OUTPUT_CHARS] + f"\n\n[內容已截斷，原文共 {len(text)} 字元]"
+                truncated = True
+
+            return DocumentContent(
+                text=text,
+                format="pdf",
+                page_count=page_count,
+                metadata={},
+                truncated=truncated,
+                error=None
+            )
+    except PasswordProtectedError:
+        raise
     except Exception as e:
-        error_msg = str(e).lower()
-        if "password" in error_msg or "encrypted" in error_msg:
-            raise PasswordProtectedError("此文件有密碼保護，無法讀取")
         raise CorruptedFileError(f"無法解析 PDF 檔案: {e}")
-
-    # 檢查是否需要密碼
-    if doc.needs_pass:
-        doc.close()
-        raise PasswordProtectedError("此文件有密碼保護，無法讀取")
-
-    result = []
-    page_count = len(doc)
-    has_text = False
-
-    for page in doc:
-        text = page.get_text()
-        if text.strip():
-            result.append(text)
-            has_text = True
-
-    doc.close()
-
-    # 檢查是否為純圖片 PDF
-    if not has_text:
-        return DocumentContent(
-            text="此 PDF 為掃描圖片，沒有可提取的文字。建議截圖後上傳讓 AI 讀取。",
-            format="pdf",
-            page_count=page_count,
-            metadata={"is_scanned": True},
-            truncated=False,
-            error="純圖片 PDF，無文字層"
-        )
-
-    text = "\n".join(result)
-
-    # 檢查是否需要截斷
-    truncated = False
-    if len(text) > MAX_OUTPUT_CHARS:
-        text = text[:MAX_OUTPUT_CHARS] + f"\n\n[內容已截斷，原文共 {len(text)} 字元]"
-        truncated = True
-
-    return DocumentContent(
-        text=text,
-        format="pdf",
-        page_count=page_count,
-        metadata={},
-        truncated=truncated,
-        error=None
-    )

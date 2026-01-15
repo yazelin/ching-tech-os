@@ -15,6 +15,7 @@ import logging
 import mimetypes
 import random
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from uuid import UUID
 
 import httpx
@@ -1701,7 +1702,7 @@ def is_legacy_office_file(filename: str) -> bool:
     """
     if not filename:
         return False
-    ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    ext = Path(filename).suffix.lower()
     return ext in LEGACY_OFFICE_EXTENSIONS
 
 
@@ -1716,7 +1717,7 @@ def is_document_file(filename: str) -> bool:
     """
     if not filename:
         return False
-    ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    ext = Path(filename).suffix.lower()
     return ext in DOCUMENT_EXTENSIONS
 
 
@@ -1910,10 +1911,11 @@ async def ensure_temp_file(
                 return None
             finally:
                 # 清理臨時檔案
-                try:
-                    os.unlink(tmp_path)
-                except Exception:
-                    pass
+                if 'tmp_path' in locals() and os.path.exists(tmp_path):
+                    try:
+                        os.unlink(tmp_path)
+                    except OSError as unlink_error:
+                        logger.warning(f"無法清理臨時檔案 {tmp_path}: {unlink_error}")
 
         except Exception as e:
             logger.error(f"文件處理失敗: {filename} - {e}")
