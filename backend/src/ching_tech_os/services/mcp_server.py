@@ -54,6 +54,44 @@ async def ensure_db_connection():
 
 
 # ============================================================
+# 路徑處理輔助函數
+# ============================================================
+
+
+def resolve_nas_path(path: str, default_base: str = None) -> str:
+    """
+    將 nas:// 或相對路徑轉換為實際檔案系統路徑
+
+    Args:
+        path: 輸入路徑（nas:// 格式、絕對路徑或相對路徑）
+        default_base: 相對路徑的預設基礎目錄
+
+    Returns:
+        實際檔案系統路徑
+
+    範例:
+        - nas://linebot/files/... → /mnt/nas/ctos/linebot/files/...
+        - nas://projects/attachments/... → /mnt/nas/ctos/projects/attachments/...
+        - /tmp/xxx.pdf → /tmp/xxx.pdf（絕對路徑不變）
+        - xxx.pdf + default_base="/mnt/nas/ctos/linebot/files" → /mnt/nas/ctos/linebot/files/xxx.pdf
+    """
+    from ..config import settings
+
+    if path.startswith("nas://"):
+        # nas:// 格式 → /mnt/nas/ctos/...
+        nas_relative = path[6:]  # 移除 "nas://"
+        return f"{settings.ctos_mount_path}/{nas_relative}"
+    elif path.startswith("/"):
+        # 絕對路徑，直接使用
+        return path
+    elif default_base:
+        # 相對路徑，加上預設基礎目錄
+        return f"{default_base}/{path.lstrip('/')}"
+    else:
+        return path
+
+
+# ============================================================
 # 權限檢查輔助函數
 # ============================================================
 
@@ -1872,28 +1910,12 @@ async def read_document(
     from ..config import settings
     from . import document_reader
 
-    projects_path = Path(settings.projects_mount_path)
-    ctos_path = Path(settings.ctos_mount_path)
-    nas_path = Path(settings.nas_mount_path)
-
-    # 正規化路徑
-    if file_path.startswith("nas://"):
-        # nas://linebot/files/... -> /mnt/nas/ctos/linebot/files/...
-        # nas://projects/attachments/... -> /mnt/nas/ctos/projects/attachments/...
-        nas_relative = file_path[6:]  # 移除 "nas://"
-        full_path = ctos_path / nas_relative
-    elif file_path.startswith(settings.ctos_mount_path):
-        # ctos 完整路徑
-        full_path = Path(file_path)
-    elif file_path.startswith(settings.projects_mount_path):
-        # projects 完整路徑
-        full_path = Path(file_path)
-    else:
-        # 相對路徑（移除開頭的 /）- 預設在 projects 目錄下
-        rel_path = file_path.lstrip("/")
-        full_path = projects_path / rel_path
+    # 使用共用函式解析路徑（相對路徑預設在 projects 目錄下）
+    resolved_path = resolve_nas_path(file_path, default_base=settings.projects_mount_path)
+    full_path = Path(resolved_path)
 
     # 安全檢查：確保路徑在允許範圍內（/mnt/nas/ 下）
+    nas_path = Path(settings.nas_mount_path)
     try:
         full_path = full_path.resolve()
         resolved_nas = str(nas_path.resolve())
@@ -3095,15 +3117,8 @@ async def convert_pdf_to_images(
             "error": f"DPI 必須在 72-600 之間，目前為 {dpi}"
         }, ensure_ascii=False)
 
-    # 處理 PDF 路徑
-    actual_path = pdf_path
-    if pdf_path.startswith("nas://"):
-        # nas://linebot/files/... -> /mnt/nas/ctos/linebot/files/...
-        nas_relative = pdf_path[6:]  # 移除 "nas://"
-        actual_path = f"{settings.ctos_mount_path}/{nas_relative}"
-    elif not pdf_path.startswith("/"):
-        # 相對路徑，嘗試 linebot/files 目錄
-        actual_path = f"{settings.linebot_local_path}/{pdf_path}"
+    # 使用共用函式解析路徑（相對路徑預設在 linebot/files 目錄下）
+    actual_path = resolve_nas_path(pdf_path, default_base=settings.linebot_local_path)
 
     # 檢查檔案存在
     if not FilePath(actual_path).exists():

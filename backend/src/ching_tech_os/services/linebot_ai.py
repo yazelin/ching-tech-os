@@ -43,6 +43,34 @@ logger = logging.getLogger("linebot_ai")
 
 
 # ============================================================
+# PDF 路徑解析輔助函式
+# ============================================================
+
+
+def parse_pdf_temp_path(temp_path: str) -> tuple[str, str]:
+    """
+    解析 PDF 特殊格式路徑
+
+    PDF 上傳時會同時保留原始檔和文字版，格式為 "PDF:xxx.pdf|TXT:xxx.txt"
+
+    Args:
+        temp_path: 暫存檔路徑（可能是 PDF 特殊格式或一般路徑）
+
+    Returns:
+        (pdf_path, txt_path) 元組
+        - 若為 PDF 特殊格式：回傳 (PDF 路徑, 文字版路徑)
+        - 若為一般路徑：回傳 (原路徑, "")
+    """
+    if not temp_path.startswith("PDF:"):
+        return (temp_path, "")
+
+    parts = temp_path.split("|")
+    pdf_path = parts[0].replace("PDF:", "")
+    txt_path = parts[1].replace("TXT:", "") if len(parts) > 1 else ""
+    return (pdf_path, txt_path)
+
+
+# ============================================================
 # AI 生成圖片自動處理
 # ============================================================
 
@@ -467,11 +495,10 @@ async def process_message_with_ai(
         if quoted_image_path:
             user_message = f"[回覆圖片: {quoted_image_path}]\n{user_message}"
         elif quoted_file_path:
-            # 檢查是否為 PDF 特殊格式 "PDF:xxx.pdf|TXT:xxx.txt"
-            if quoted_file_path.startswith("PDF:"):
-                parts = quoted_file_path.split("|")
-                pdf_path = parts[0].replace("PDF:", "")
-                txt_path = parts[1].replace("TXT:", "") if len(parts) > 1 else ""
+            # 使用共用函式解析 PDF 特殊格式
+            pdf_path, txt_path = parse_pdf_temp_path(quoted_file_path)
+            if pdf_path != quoted_file_path:
+                # 是 PDF 特殊格式
                 if txt_path:
                     user_message = f"[回覆 PDF: {pdf_path}（文字版: {txt_path}）]\n{user_message}"
                 else:
@@ -831,31 +858,22 @@ async def get_conversation_context(
                             row["line_message_id"], row["nas_path"], file_name, file_size
                         )
                         if temp_path:
-                            # 檢查是否為 PDF 特殊格式 "PDF:xxx.pdf|TXT:xxx.txt"
-                            if temp_path.startswith("PDF:"):
-                                # 解析 PDF 特殊格式
-                                parts = temp_path.split("|")
-                                pdf_path = parts[0].replace("PDF:", "")
-                                txt_path = parts[1].replace("TXT:", "") if len(parts) > 1 else ""
+                            # 使用共用函式解析 PDF 特殊格式
+                            pdf_path, txt_path = parse_pdf_temp_path(temp_path)
+                            is_recent = row["line_message_id"] == latest_file_id
 
+                            if pdf_path != temp_path:
+                                # 是 PDF 特殊格式
                                 if txt_path:
-                                    # 有文字版
-                                    if row["line_message_id"] == latest_file_id:
-                                        content = f"[上傳 PDF（最近）: {pdf_path}（文字版: {txt_path}）]"
-                                    else:
-                                        content = f"[上傳 PDF: {pdf_path}（文字版: {txt_path}）]"
+                                    prefix = "上傳 PDF（最近）" if is_recent else "上傳 PDF"
+                                    content = f"[{prefix}: {pdf_path}（文字版: {txt_path}）]"
                                 else:
-                                    # 純圖片 PDF，無文字版
-                                    if row["line_message_id"] == latest_file_id:
-                                        content = f"[上傳 PDF（最近）: {pdf_path}（純圖片，無文字）]"
-                                    else:
-                                        content = f"[上傳 PDF: {pdf_path}（純圖片，無文字）]"
+                                    prefix = "上傳 PDF（最近）" if is_recent else "上傳 PDF"
+                                    content = f"[{prefix}: {pdf_path}（純圖片，無文字）]"
                             else:
                                 # 一般檔案
-                                if row["line_message_id"] == latest_file_id:
-                                    content = f"[上傳檔案（最近）: {temp_path}]"
-                                else:
-                                    content = f"[上傳檔案: {temp_path}]"
+                                prefix = "上傳檔案（最近）" if is_recent else "上傳檔案"
+                                content = f"[{prefix}: {temp_path}]"
                             # 記錄檔案資訊（暫存成功才加入）
                             files.append({
                                 "line_message_id": row["line_message_id"],
