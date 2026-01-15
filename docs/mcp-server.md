@@ -117,7 +117,10 @@ uv run python -m ching_tech_os.mcp_cli
 |----------|------|------|
 | `search_nas_files` | 搜尋 NAS 共享檔案 | `keywords`（必填，逗號分隔）, `file_types`（副檔名，如 pdf,xlsx）, `limit` |
 | `get_nas_file_info` | 取得 NAS 檔案詳細資訊 | `file_path`（必填，/mnt/nas/projects/... 路徑） |
+| `read_document` | 讀取文件內容（Word/Excel/PowerPoint/PDF） | `file_path`（必填）, `max_chars`（預設 50000） |
 | `prepare_file_message` | 準備檔案訊息供 Line Bot 回覆 | `file_path`（必填） |
+
+> **文件讀取支援格式**：`read_document` 可讀取 `.docx`、`.xlsx`、`.pptx`、`.pdf` 檔案，將內容轉為純文字供 AI 分析。不支援舊版格式（`.doc`、`.xls`、`.ppt`）和加密文件。
 
 ### 分享功能
 

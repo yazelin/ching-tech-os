@@ -44,6 +44,7 @@ from linebot.v3.webhooks import (
 from ..config import settings
 from ..database import get_connection
 from .local_file import LocalFileService, LocalFileError, create_linebot_file_service
+from . import document_reader
 
 logger = logging.getLogger("linebot")
 
@@ -1655,9 +1656,20 @@ TEMP_FILE_DIR = "/tmp/linebot-files"
 
 # 可讀取的檔案副檔名（AI 可透過 Read 工具讀取）
 READABLE_FILE_EXTENSIONS = {
+    # 純文字格式
     ".txt", ".md", ".json", ".csv", ".log",
-    ".xml", ".yaml", ".yml", ".pdf",
+    ".xml", ".yaml", ".yml",
+    # Office 文件（透過 document_reader 解析）
+    ".docx", ".xlsx", ".pptx",
+    # PDF 文件（透過 document_reader 解析）
+    ".pdf",
 }
+
+# 舊版 Office 格式（提示轉檔）
+LEGACY_OFFICE_EXTENSIONS = {".doc", ".xls", ".ppt"}
+
+# 需要文件解析的格式（透過 document_reader 處理）
+DOCUMENT_EXTENSIONS = {".docx", ".xlsx", ".pptx", ".pdf"}
 
 # 最大可讀取檔案大小（5MB）
 MAX_READABLE_FILE_SIZE = 5 * 1024 * 1024
@@ -1676,6 +1688,36 @@ def is_readable_file(filename: str) -> bool:
         return False
     ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     return ext in READABLE_FILE_EXTENSIONS
+
+
+def is_legacy_office_file(filename: str) -> bool:
+    """判斷檔案是否為舊版 Office 格式
+
+    Args:
+        filename: 檔案名稱
+
+    Returns:
+        是否為舊版格式（.doc, .xls, .ppt）
+    """
+    if not filename:
+        return False
+    ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    return ext in LEGACY_OFFICE_EXTENSIONS
+
+
+def is_document_file(filename: str) -> bool:
+    """判斷檔案是否需要文件解析
+
+    Args:
+        filename: 檔案名稱
+
+    Returns:
+        是否為需要解析的文件格式（.docx, .xlsx, .pptx, .pdf）
+    """
+    if not filename:
+        return False
+    ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    return ext in DOCUMENT_EXTENSIONS
 
 
 def get_temp_image_path(line_message_id: str) -> str:
@@ -1782,6 +1824,7 @@ async def ensure_temp_file(
     """確保檔案暫存檔存在
 
     如果暫存檔不存在，從 NAS 讀取並寫入暫存。
+    對於 Office 文件和 PDF，會先解析成純文字再存入 .txt 暫存檔。
 
     Args:
         line_message_id: Line 訊息 ID
@@ -1793,21 +1836,30 @@ async def ensure_temp_file(
         暫存檔案路徑，失敗或不符合條件回傳 None
     """
     import os
+    import tempfile
 
     # 檢查是否為可讀取類型
     if not is_readable_file(filename):
         logger.debug(f"檔案類型不支援讀取: {filename}")
         return None
 
-    # 檢查檔案大小
-    if file_size is not None and file_size > MAX_READABLE_FILE_SIZE:
+    # 對於需要解析的文件格式，使用 document_reader 的大小限制
+    needs_parsing = is_document_file(filename)
+
+    # 檢查檔案大小（文件解析有自己的大小限制，這裡先做基本檢查）
+    if not needs_parsing and file_size is not None and file_size > MAX_READABLE_FILE_SIZE:
         logger.debug(f"檔案過大，跳過暫存: {filename} ({file_size} bytes)")
         return None
 
     # 確保暫存目錄存在
     os.makedirs(TEMP_FILE_DIR, exist_ok=True)
 
-    temp_path = get_temp_file_path(line_message_id, filename)
+    # 對於需要解析的文件，暫存檔使用 .txt 副檔名
+    if needs_parsing:
+        base_name = os.path.splitext(filename)[0]
+        temp_path = f"{TEMP_FILE_DIR}/{line_message_id}_{base_name}.txt"
+    else:
+        temp_path = get_temp_file_path(line_message_id, filename)
 
     # 如果暫存檔已存在，直接回傳
     if os.path.exists(temp_path):
@@ -1819,20 +1871,69 @@ async def ensure_temp_file(
         logger.warning(f"無法從 NAS 讀取檔案: {nas_path}")
         return None
 
-    # 再次檢查實際檔案大小
-    if len(content) > MAX_READABLE_FILE_SIZE:
-        logger.debug(f"檔案實際大小超過限制: {filename} ({len(content)} bytes)")
-        return None
+    # 如果需要解析文件
+    if needs_parsing:
+        try:
+            # 將二進位內容寫入臨時檔案供 document_reader 解析
+            ext = os.path.splitext(filename)[1].lower()
+            with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+                tmp.write(content)
+                tmp_path = tmp.name
 
-    # 寫入暫存檔
-    try:
-        with open(temp_path, "wb") as f:
-            f.write(content)
-        logger.debug(f"已建立檔案暫存: {temp_path}")
-        return temp_path
-    except Exception as e:
-        logger.error(f"寫入暫存檔失敗: {e}")
-        return None
+            try:
+                # 解析文件
+                result = document_reader.extract_text(tmp_path)
+                text_content = result.text
+
+                # 如果有錯誤訊息（部分成功），附加說明
+                if result.error:
+                    text_content = f"[注意：{result.error}]\n\n{text_content}"
+
+                # 寫入純文字暫存檔
+                with open(temp_path, "w", encoding="utf-8") as f:
+                    f.write(text_content)
+
+                logger.debug(f"已建立文件暫存（已解析）: {temp_path}")
+                return temp_path
+
+            except document_reader.FileTooLargeError as e:
+                logger.debug(f"文件過大: {filename} - {e}")
+                return None
+            except document_reader.PasswordProtectedError as e:
+                logger.debug(f"文件有密碼保護: {filename}")
+                # 寫入錯誤訊息到暫存檔，讓 AI 知道
+                with open(temp_path, "w", encoding="utf-8") as f:
+                    f.write(f"[錯誤] 此文件有密碼保護，無法讀取。")
+                return temp_path
+            except document_reader.DocumentReadError as e:
+                logger.warning(f"文件解析失敗: {filename} - {e}")
+                return None
+            finally:
+                # 清理臨時檔案
+                try:
+                    os.unlink(tmp_path)
+                except Exception:
+                    pass
+
+        except Exception as e:
+            logger.error(f"文件處理失敗: {filename} - {e}")
+            return None
+    else:
+        # 純文字格式：直接寫入
+        # 再次檢查實際檔案大小
+        if len(content) > MAX_READABLE_FILE_SIZE:
+            logger.debug(f"檔案實際大小超過限制: {filename} ({len(content)} bytes)")
+            return None
+
+        # 寫入暫存檔
+        try:
+            with open(temp_path, "wb") as f:
+                f.write(content)
+            logger.debug(f"已建立檔案暫存: {temp_path}")
+            return temp_path
+        except Exception as e:
+            logger.error(f"寫入暫存檔失敗: {e}")
+            return None
 
 
 async def get_file_info_by_line_message_id(line_message_id: str) -> dict | None:
