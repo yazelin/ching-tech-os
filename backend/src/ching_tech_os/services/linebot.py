@@ -757,6 +757,11 @@ async def reply_text(reply_token: str, text: str) -> str | None:
         return None
 
 
+# Mention 佔位符常數
+MENTION_KEY = "user"
+MENTION_PLACEHOLDER = f"{{{MENTION_KEY}}} "  # "{user} "
+
+
 def create_text_message_with_mention(
     text: str,
     mention_user_id: str | None = None,
@@ -774,9 +779,9 @@ def create_text_message_with_mention(
         # 使用 TextMessageV2 + mention
         # {user} 是佔位符，會被替換為 @用戶名稱
         return TextMessageV2(
-            text="{user} " + text,
+            text=MENTION_PLACEHOLDER + text,
             substitution={
-                "user": MentionSubstitutionObject(
+                MENTION_KEY: MentionSubstitutionObject(
                     mentionee=UserMentionTarget(userId=mention_user_id)
                 )
             },

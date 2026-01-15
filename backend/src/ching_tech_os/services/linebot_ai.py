@@ -15,6 +15,7 @@ from .linebot import (
     reply_text,
     reply_messages,
     create_text_message_with_mention,
+    MENTION_PLACEHOLDER,
     mark_message_ai_processed,
     should_trigger_ai,
     is_bot_message,
@@ -213,6 +214,39 @@ def parse_ai_response(response: str) -> tuple[str, list[dict]]:
     return text, files
 
 
+def _append_text_to_first_message(
+    messages: list,
+    append_text: str,
+    mention_line_user_id: str | None = None,
+) -> None:
+    """將文字附加到訊息列表的第一則文字訊息
+
+    如果第一則訊息帶有 mention，會保留 mention 並附加文字。
+    如果沒有現有文字訊息，會建立新的文字訊息。
+
+    Args:
+        messages: 訊息列表（會被修改）
+        append_text: 要附加的文字
+        mention_line_user_id: mention 的 Line 用戶 ID
+    """
+    from linebot.v3.messaging import TextMessage
+
+    if messages and hasattr(messages[0], 'text'):
+        # 追加到現有文字訊息
+        original_text = messages[0].text
+        # 處理帶 mention 的情況：移除佔位符前綴，重新建立訊息
+        if mention_line_user_id and original_text.startswith(MENTION_PLACEHOLDER):
+            base_text = original_text[len(MENTION_PLACEHOLDER):]
+            new_text = base_text + "\n\n" + append_text
+            messages[0] = create_text_message_with_mention(new_text, mention_line_user_id)
+        else:
+            new_text = original_text + "\n\n" + append_text
+            messages[0] = TextMessage(text=new_text)
+    else:
+        # 沒有現有文字訊息，建立新的（保留 mention）
+        messages.append(create_text_message_with_mention(append_text, mention_line_user_id))
+
+
 async def send_ai_response(
     reply_token: str,
     text: str,
@@ -231,7 +265,7 @@ async def send_ai_response(
     Returns:
         發送成功的訊息 ID 列表
     """
-    from linebot.v3.messaging import TextMessage, ImageMessage
+    from linebot.v3.messaging import ImageMessage
 
     messages = []
 
@@ -259,19 +293,7 @@ async def send_ai_response(
             if size:
                 link_text += f"（{size}）"
             link_text += f"\n{url}\n⏰ 連結 24 小時內有效"
-
-            # 檢查第一則訊息是否為文字訊息（TextMessage 或 TextMessageV2）
-            if messages and hasattr(messages[0], 'text'):
-                # 追加到現有文字訊息
-                original_text = messages[0].text
-                # 移除 {user} 佔位符前綴（如果有的話），重新建立訊息
-                if original_text.startswith("{user} "):
-                    new_text = original_text[7:] + "\n\n" + link_text
-                    messages[0] = create_text_message_with_mention(new_text, mention_line_user_id)
-                else:
-                    messages[0] = TextMessage(text=original_text + "\n\n" + link_text)
-            else:
-                messages.append(TextMessage(text=link_text))
+            _append_text_to_first_message(messages, link_text, mention_line_user_id)
 
     # Line 限制每次最多 5 則訊息
     # 如果檔案太多，只發送前 4 張圖片（預留 1 則給文字）
@@ -286,15 +308,9 @@ async def send_ai_response(
             if isinstance(msg, ImageMessage):
                 extra_links.append(msg.original_content_url)
 
-        if extra_links and messages and hasattr(messages[0], 'text'):
-            original_text = messages[0].text
-            extra_text = "\n\n其他圖片連結：\n" + "\n".join(extra_links)
-            # 處理帶 mention 的情況
-            if original_text.startswith("{user} "):
-                new_text = original_text[7:] + extra_text
-                messages[0] = create_text_message_with_mention(new_text, mention_line_user_id)
-            else:
-                messages[0] = TextMessage(text=original_text + extra_text)
+        if extra_links:
+            extra_text = "其他圖片連結：\n" + "\n".join(extra_links)
+            _append_text_to_first_message(messages, extra_text, mention_line_user_id)
 
     if not messages:
         return []
