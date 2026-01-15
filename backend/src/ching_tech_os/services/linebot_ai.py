@@ -467,7 +467,17 @@ async def process_message_with_ai(
         if quoted_image_path:
             user_message = f"[回覆圖片: {quoted_image_path}]\n{user_message}"
         elif quoted_file_path:
-            user_message = f"[回覆檔案: {quoted_file_path}]\n{user_message}"
+            # 檢查是否為 PDF 特殊格式 "PDF:xxx.pdf|TXT:xxx.txt"
+            if quoted_file_path.startswith("PDF:"):
+                parts = quoted_file_path.split("|")
+                pdf_path = parts[0].replace("PDF:", "")
+                txt_path = parts[1].replace("TXT:", "") if len(parts) > 1 else ""
+                if txt_path:
+                    user_message = f"[回覆 PDF: {pdf_path}（文字版: {txt_path}）]\n{user_message}"
+                else:
+                    user_message = f"[回覆 PDF: {pdf_path}（純圖片，無文字）]\n{user_message}"
+            else:
+                user_message = f"[回覆檔案: {quoted_file_path}]\n{user_message}"
 
         # MCP 工具列表（動態取得）
         from .mcp_server import get_mcp_tool_names
@@ -821,10 +831,31 @@ async def get_conversation_context(
                             row["line_message_id"], row["nas_path"], file_name, file_size
                         )
                         if temp_path:
-                            if row["line_message_id"] == latest_file_id:
-                                content = f"[上傳檔案（最近）: {temp_path}]"
+                            # 檢查是否為 PDF 特殊格式 "PDF:xxx.pdf|TXT:xxx.txt"
+                            if temp_path.startswith("PDF:"):
+                                # 解析 PDF 特殊格式
+                                parts = temp_path.split("|")
+                                pdf_path = parts[0].replace("PDF:", "")
+                                txt_path = parts[1].replace("TXT:", "") if len(parts) > 1 else ""
+
+                                if txt_path:
+                                    # 有文字版
+                                    if row["line_message_id"] == latest_file_id:
+                                        content = f"[上傳 PDF（最近）: {pdf_path}（文字版: {txt_path}）]"
+                                    else:
+                                        content = f"[上傳 PDF: {pdf_path}（文字版: {txt_path}）]"
+                                else:
+                                    # 純圖片 PDF，無文字版
+                                    if row["line_message_id"] == latest_file_id:
+                                        content = f"[上傳 PDF（最近）: {pdf_path}（純圖片，無文字）]"
+                                    else:
+                                        content = f"[上傳 PDF: {pdf_path}（純圖片，無文字）]"
                             else:
-                                content = f"[上傳檔案: {temp_path}]"
+                                # 一般檔案
+                                if row["line_message_id"] == latest_file_id:
+                                    content = f"[上傳檔案（最近）: {temp_path}]"
+                                else:
+                                    content = f"[上傳檔案: {temp_path}]"
                             # 記錄檔案資訊（暫存成功才加入）
                             files.append({
                                 "line_message_id": row["line_message_id"],
@@ -900,6 +931,12 @@ async def build_system_prompt(
 對話歷史中可能包含用戶上傳的圖片或檔案：
 - [上傳圖片: /tmp/...] → 使用 Read 工具檢視圖片內容
 - [上傳檔案: /tmp/...] → 使用 Read 工具讀取檔案內容
+- [上傳 PDF: /tmp/xxx.pdf（文字版: /tmp/xxx.txt）] → PDF 檔案
+  · 讀取文字內容：用 Read 工具讀取「文字版」路徑（.txt）
+  · 轉成圖片：用 convert_pdf_to_images 處理 PDF 路徑（.pdf）
+- [上傳 PDF: /tmp/xxx.pdf（純圖片，無文字）] → 掃描版 PDF，沒有文字可提取
+  · 只能用 convert_pdf_to_images 轉成圖片
+- [回覆 PDF: ...] → 同上，用戶回覆的 PDF
 - [圖片暫存已過期...] 或 [檔案...暫存已過期...] → 暫存已清理，無法直接檢視
 - [上傳檔案: filename（無法讀取此類型）] → 告知用戶此類型不支援
 - [上傳檔案: filename（不支援舊版格式...）] → 建議用戶轉存為新版格式
@@ -907,8 +944,8 @@ async def build_system_prompt(
 支援的檔案類型：
 - 純文字：txt, md, json, csv, log, xml, yaml, yml
 - Office 文件：docx, xlsx, pptx（自動轉換為純文字）
-- PDF 文件：pdf（自動提取文字）
-注意：Office 文件和 PDF 會自動轉換為純文字，可能遺失格式資訊。
+- PDF 文件：pdf（同時提供原始檔和純文字版）
+注意：Office 文件會自動轉換為純文字，可能遺失格式資訊。
 舊版格式（.doc, .xls, .ppt）不支援，請建議用戶轉存為新版格式。
 
 重要：Read 工具僅用於「檢視」圖片/檔案內容（例如「這張圖是什麼？」）。
