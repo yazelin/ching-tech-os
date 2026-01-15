@@ -86,6 +86,7 @@ async def my_tool(param: str) -> str:
 - 模組使用 IIFE 模式
 - CSS/JS 檔案需在 `index.html` **和** `login.html` 引入（兩個頁面都需要）
 - 桌面應用程式需在 `desktop.js` 的 `applications` 和 `openApp` 中註冊
+- **不要**在 JS 或 CSS 檔案路徑後加 `?v=` 版本號（如 `script.js?v=123`），nginx 已設定正確的快取策略
 
 ### 圖示使用規則（重要）
 **`getIcon()` 必須包在 `<span class="icon">` 裡面**，否則 SVG 大小和對齊會錯誤。

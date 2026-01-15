@@ -1,6 +1,7 @@
 """專案管理服務"""
 
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID
 
@@ -434,6 +435,14 @@ async def create_meeting(
         if not exists:
             raise ProjectNotFoundError(f"專案 {project_id} 不存在")
 
+        # 處理日期時間時區問題
+        meeting_date = data.meeting_date
+        if meeting_date is not None and isinstance(meeting_date, datetime):
+            if meeting_date.tzinfo is None:
+                # 如果沒有時區資訊，假設是本地時間 (UTC+8)
+                from datetime import timedelta
+                meeting_date = meeting_date.replace(tzinfo=timezone(timedelta(hours=8)))
+
         row = await conn.fetchrow(
             """
             INSERT INTO project_meetings (project_id, title, meeting_date, location, attendees, content, created_by)
@@ -442,7 +451,7 @@ async def create_meeting(
             """,
             project_id,
             data.title,
-            data.meeting_date,
+            meeting_date,
             data.location,
             data.attendees,
             data.content,
@@ -472,6 +481,13 @@ async def update_meeting(
         for field in ["title", "meeting_date", "location", "attendees", "content"]:
             value = getattr(data, field)
             if value is not None:
+                # 處理日期時間時區問題（資料庫使用 timestamptz）
+                if field == "meeting_date" and isinstance(value, datetime):
+                    if value.tzinfo is None:
+                        # 如果沒有時區資訊，假設是本地時間 (UTC+8)
+                        from datetime import timedelta
+                        value = value.replace(tzinfo=timezone(timedelta(hours=8)))
+                    # 如果已有時區資訊（例如 UTC），直接使用，資料庫會正確儲存
                 updates.append(f"{field} = ${param_idx}")
                 params.append(value)
                 param_idx += 1

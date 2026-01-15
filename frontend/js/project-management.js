@@ -428,6 +428,27 @@ const ProjectManagementModule = (function() {
   }
 
   /**
+   * Format datetime for datetime-local input (YYYY-MM-DDTHH:MM in local timezone)
+   * 將 UTC/ISO 時間字串轉換成本地時間格式，供 datetime-local 輸入使用
+   */
+  function formatDateTimeLocal(dateStr) {
+    if (!dateStr) return '';
+    // 如果日期字串沒有時區資訊（沒有 Z 或 +/-），視為 UTC 時間
+    let normalizedStr = dateStr;
+    if (!/[Z+-]/.test(dateStr.slice(-6))) {
+      normalizedStr = dateStr + 'Z';
+    }
+    const date = new Date(normalizedStr);
+    // 取得本地時間各部分
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  }
+
+  /**
    * Select project
    */
   async function selectProject(id) {
@@ -966,7 +987,7 @@ const ProjectManagementModule = (function() {
           <div class="pm-form-row">
             <div class="pm-form-group">
               <label>日期時間 *</label>
-              <input type="datetime-local" id="meetingDate" value="${meeting ? new Date(meeting.meeting_date).toISOString().slice(0, 16) : ''}" required>
+              <input type="datetime-local" id="meetingDate" value="${meeting ? formatDateTimeLocal(meeting.meeting_date) : ''}" required>
             </div>
             <div class="pm-form-group">
               <label>地點</label>
@@ -1006,9 +1027,25 @@ const ProjectManagementModule = (function() {
         return;
       }
 
+      // datetime-local 值格式是 YYYY-MM-DDTHH:MM，需要正確轉換為 ISO 字串
+      // 直接 new Date(dateValue) 可能會被誤解為 UTC，需要手動處理
+      const [datePart, timePart] = dateValue.split('T');
+      const [year, month, day] = datePart.split('-').map(Number);
+      const timeParts = timePart.split(':').map(Number);
+      const hours = timeParts[0] || 0;
+      const minutes = timeParts[1] || 0;
+      // 使用本地時間建立 Date 物件
+      const localDate = new Date(year, month - 1, day, hours, minutes);
+
+      // 確保日期有效
+      if (isNaN(localDate.getTime())) {
+        NotificationModule.show({ title: '錯誤', message: '日期格式無效', icon: 'alert' });
+        return;
+      }
+
       const data = {
         title,
-        meeting_date: new Date(dateValue).toISOString(),
+        meeting_date: localDate.toISOString(),
         location: modal.querySelector('#meetingLocation').value.trim() || null,
         attendees: attendeesValue ? attendeesValue.split(',').map(s => s.trim()).filter(Boolean) : [],
         content: modal.querySelector('#meetingContent').value || null,
