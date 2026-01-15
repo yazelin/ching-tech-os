@@ -31,9 +31,32 @@
 
 ---
 
+## Phase 2: 新功能使用新格式
+
+### 後端
+
+- [x] 建立 `backend/src/ching_tech_os/api/files.py`
+  - [x] `GET /api/files/{zone}/{path}` - 讀取/預覽檔案
+  - [x] `GET /api/files/{zone}/{path}/download` - 下載檔案
+  - [x] 支援四種 zone: ctos, shared, temp, local
+  - [x] 路徑穿越攻擊防護
+- [x] 在 `main.py` 註冊 files router
+
+### 待整合
+
+- [ ] 前端 `PathUtils.toApiUrl()` 已可產生正確的 API 路徑
+- [ ] 等待現有程式碼逐步遷移使用新 API
+
+---
+
 ## 驗收標準
 
+### Phase 1
 1. PathManager 可正確解析所有舊格式路徑
 2. PathManager 可正確轉換為新格式
 3. 前端 PathUtils 與後端邏輯一致
 4. 不影響現有功能（Phase 1 不修改現有程式碼）
+
+### Phase 2
+1. `/api/files/{zone}/{path}` 可正確存取四種區域的檔案
+2. 新 API 使用 PathManager 處理路徑
