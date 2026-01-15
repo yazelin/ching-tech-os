@@ -8,12 +8,14 @@
  * - shared://  → 公司專案共用區
  * - temp://    → 暫存檔案
  * - local://   → 本機小檔案
+ * - nas://     → NAS 共享（透過 SMB 存取，用於檔案管理器）
  *
  * 範例：
  * - ctos://knowledge/kb-001/file.pdf
  * - ctos://linebot/groups/C123/images/2026-01-05/abc.jpg
  * - shared://亦達光學/layout.pdf
  * - temp://linebot/msg123.pdf
+ * - nas://home/photos/image.jpg（檔案管理器瀏覽的 NAS 共享）
  */
 
 const PathUtils = (function () {
@@ -27,12 +29,22 @@ const PathUtils = (function () {
     SHARED: 'shared', // 公司專案共用區
     TEMP: 'temp', // 暫存
     LOCAL: 'local', // 本機
+    NAS: 'nas', // NAS 共享（透過 SMB 存取，用於檔案管理器）
   };
 
   /**
    * Line Bot 相對路徑前綴
    */
   const LINEBOT_PREFIXES = ['groups/', 'users/', 'ai-images/', 'pdf-converted/'];
+
+  /**
+   * 檔案管理器虛擬路徑映射
+   * 將 /擎添共用區/... 格式轉換為對應的 zone
+   */
+  const FILE_MANAGER_MAPPINGS = {
+    '/擎添共用區/在案資料分享': { zone: StorageZone.SHARED, prefix: '' },
+    '/擎添共用區/CTOS資料區': { zone: StorageZone.CTOS, prefix: '' },
+  };
 
   /**
    * 舊格式前綴對應（用於向後相容）
@@ -65,7 +77,12 @@ const PathUtils = (function () {
     }
 
     // 1. 新格式：{protocol}://...
+    // 注意：排除 nas://，因為它在舊格式中有特殊意義（向後相容）
+    // NAS zone 只用於以 / 開頭的非系統路徑（檔案管理器）
     for (const zone of Object.values(StorageZone)) {
+      if (zone === StorageZone.NAS) {
+        continue; // 跳過 NAS zone，讓它在步驟 6 處理
+      }
       const prefix = `${zone}://`;
       if (path.startsWith(prefix)) {
         return {
@@ -129,17 +146,37 @@ const PathUtils = (function () {
       };
     }
 
-    // 5. 以 / 開頭但不是系統路徑 → shared://
-    // （這是 search_nas_files 回傳的格式）
+    // 5. 檔案管理器虛擬路徑：/擎添共用區/...
+    for (const [fmPrefix, mapping] of Object.entries(FILE_MANAGER_MAPPINGS)) {
+      if (path.startsWith(fmPrefix + '/')) {
+        const relative = path.slice(fmPrefix.length + 1); // 移除前綴和斜線
+        return {
+          zone: mapping.zone,
+          path: mapping.prefix + relative,
+          raw: path,
+        };
+      }
+      // 精確匹配（路徑就是前綴本身，無額外內容）
+      if (path === fmPrefix) {
+        return {
+          zone: mapping.zone,
+          path: mapping.prefix || '',
+          raw: path,
+        };
+      }
+    }
+
+    // 6. 以 / 開頭但不是系統路徑 → nas://（檔案管理器的 NAS 共享路徑）
+    // 例如：/home/file.jpg, /公司檔案/doc.pdf
     if (path.startsWith('/') && !path.startsWith('/tmp/') && !path.startsWith('/mnt/')) {
       return {
-        zone: StorageZone.SHARED,
+        zone: StorageZone.NAS,
         path: path.slice(1), // 移除開頭的 /
         raw: path,
       };
     }
 
-    // 6. 純相對路徑（無法判斷 zone）→ 預設 CTOS
+    // 7. 純相對路徑（無法判斷 zone）→ 預設 CTOS
     return {
       zone: StorageZone.CTOS,
       path: path,
@@ -241,11 +278,11 @@ const PathUtils = (function () {
    * 判斷路徑是否為唯讀
    *
    * @param {string} path - 檔案路徑
-   * @returns {boolean} shared:// 區域為唯讀
+   * @returns {boolean} shared:// 和 nas:// 區域為唯讀
    */
   function isReadonly(path) {
     const parsed = parse(path);
-    return parsed.zone === StorageZone.SHARED;
+    return parsed.zone === StorageZone.SHARED || parsed.zone === StorageZone.NAS;
   }
 
   /**

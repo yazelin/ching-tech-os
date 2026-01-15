@@ -76,6 +76,7 @@ class Settings:
     # ===================
     # 路徑設定
     # ===================
+    project_root: str = _get_env("PROJECT_ROOT", str(_project_root))
     frontend_dir: str = _get_env("FRONTEND_DIR", "/home/ct/SDD/ching-tech-os/frontend")
 
     # NAS 路徑（相對於 ctos_mount_path）
@@ -87,6 +88,10 @@ class Settings:
     project_attachments_path: str = _get_env(
         "PROJECT_ATTACHMENTS_PATH",
         "/home/ct/SDD/ching-tech-os/data/projects/attachments"
+    )
+    knowledge_data_path: str = _get_env(
+        "KNOWLEDGE_DATA_PATH",
+        "/home/ct/SDD/ching-tech-os/data/knowledge"
     )
 
     # ===================

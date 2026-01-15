@@ -7,6 +7,7 @@
 - shared://  → 公司專案共用區 (/mnt/nas/projects/)
 - temp://    → 暫存檔案 (/tmp/ctos/)
 - local://   → 本機小檔案 (應用程式 data 目錄)
+- nas://     → NAS 共享（透過 SMB 存取，用於檔案管理器）
 
 範例：
 - ctos://knowledge/kb-001/file.pdf
@@ -14,6 +15,7 @@
 - shared://亦達光學/layout.pdf
 - temp://linebot/msg123.pdf
 - local://knowledge/images/kb-001-demo.png
+- nas://home/photos/image.jpg （檔案管理器瀏覽的 NAS 共享）
 """
 
 from dataclasses import dataclass
@@ -29,6 +31,7 @@ class StorageZone(Enum):
     SHARED = "shared"    # 公司專案共用區
     TEMP = "temp"        # 暫存
     LOCAL = "local"      # 本機
+    NAS = "nas"          # NAS 共享（透過 SMB，用於檔案管理器）
 
 
 @dataclass
@@ -72,6 +75,7 @@ class PathManager:
             StorageZone.SHARED: settings.projects_mount_path, # /mnt/nas/projects
             StorageZone.TEMP: "/tmp/ctos",
             StorageZone.LOCAL: str(Path(settings.frontend_dir).parent / "data"),
+            StorageZone.NAS: None,  # NAS zone 使用 SMB，無本地掛載點
         }
 
         # 舊格式前綴對應（用於向後相容）
@@ -92,8 +96,9 @@ class PathManager:
         # Line Bot 相對路徑前綴（groups/, users/ 開頭）
         self._linebot_prefixes = ("groups/", "users/", "ai-images/", "pdf-converted/")
 
-        # 系統絕對路徑前綴
-        self._system_prefixes = ("/tmp/", "/mnt/", "/home/", "/var/", "/etc/", "/usr/", "/opt/")
+        # 系統絕對路徑前綴（用於識別需要轉換的本地檔案路徑）
+        # 注意：不包含 /home/，因為檔案管理器的 NAS 共享可能有 /home/ 目錄
+        self._system_prefixes = ("/tmp/", "/mnt/")
 
     def parse(self, path: str) -> ParsedPath:
         """解析路徑，支援新舊格式
@@ -108,7 +113,11 @@ class PathManager:
             raise ValueError("路徑不可為空")
 
         # 1. 新格式：{protocol}://...
+        # 注意：排除 nas://，因為它在舊格式中有特殊意義（向後相容）
+        # NAS zone 只用於以 / 開頭的非系統路徑（檔案管理器）
         for zone in StorageZone:
+            if zone == StorageZone.NAS:
+                continue  # 跳過 NAS zone，讓它在步驟 5 處理
             prefix = f"{zone.value}://"
             if path.startswith(prefix):
                 return ParsedPath(
@@ -189,10 +198,11 @@ class PathManager:
                     raw=path
                 )
 
-        # 5. 以 / 開頭但不是系統路徑 → 可能是 shared:// (search_nas_files 回傳格式)
+        # 5. 以 / 開頭但不是系統路徑 → nas://（檔案管理器的 NAS 共享路徑）
+        # 例如：/home/file.jpg, /公司檔案/doc.pdf, /擎添共用區/在案資料分享/xxx
         if path.startswith("/") and not path.startswith(self._system_prefixes):
             return ParsedPath(
-                zone=StorageZone.SHARED,
+                zone=StorageZone.NAS,
                 path=path.lstrip("/"),
                 raw=path
             )
@@ -213,9 +223,17 @@ class PathManager:
 
         Returns:
             實際的檔案系統絕對路徑
+
+        Raises:
+            ValueError: NAS zone 無法轉換為本地路徑
         """
         parsed = self.parse(path)
         mount_path = self._zone_mounts[parsed.zone]
+
+        # NAS zone 使用 SMB，無本地掛載點
+        if mount_path is None:
+            raise ValueError(f"NAS zone 路徑無法轉換為本地檔案系統路徑: {path}")
+
         return f"{mount_path}/{parsed.path}"
 
     def to_api(self, path: str) -> str:
@@ -257,7 +275,14 @@ class PathManager:
 
         Returns:
             檔案是否存在
+
+        Note:
+            NAS zone 無法直接檢查，需要透過 SMB 連線
         """
+        parsed = self.parse(path)
+        if parsed.zone == StorageZone.NAS:
+            # NAS zone 無法直接檢查，回傳 True（由 API 層處理實際檢查）
+            return True
         fs_path = self.to_filesystem(path)
         return Path(fs_path).exists()
 
@@ -279,9 +304,10 @@ class PathManager:
             path: 輸入路徑（任何格式）
 
         Returns:
-            是否為唯讀（shared:// 區域為唯讀）
+            是否為唯讀（shared:// 和 nas:// 區域為唯讀）
         """
-        return self.get_zone(path) == StorageZone.SHARED
+        zone = self.get_zone(path)
+        return zone in (StorageZone.SHARED, StorageZone.NAS)
 
 
 # 全域單例

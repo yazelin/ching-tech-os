@@ -185,7 +185,7 @@ app.mount("/js", StaticFiles(directory=FRONTEND / "js"), name="js")
 app.mount("/assets", StaticFiles(directory=FRONTEND / "assets"), name="assets")
 
 # 知識庫本機附件目錄
-KNOWLEDGE_ASSETS = Path("/home/ct/SDD/ching-tech-os/data/knowledge/assets")
+KNOWLEDGE_ASSETS = Path(settings.knowledge_data_path) / "assets"
 if KNOWLEDGE_ASSETS.exists():
     app.mount("/data/knowledge/assets", StaticFiles(directory=KNOWLEDGE_ASSETS), name="knowledge-assets")
 

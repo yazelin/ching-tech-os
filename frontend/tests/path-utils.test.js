@@ -86,6 +86,7 @@ test('local:// 格式解析', () => {
   assertEqual(result.path, 'knowledge/assets/x.jpg');
 });
 
+
 // ============================================================
 // parse() 舊格式測試
 // ============================================================
@@ -158,10 +159,16 @@ test('/tmp/linebot-files/ 特殊路徑', () => {
   assertEqual(result.path, 'linebot/msg123.pdf');
 });
 
-test('以 / 開頭的非系統路徑（search_nas_files 回傳格式）', () => {
-  const result = PathUtils.parse('/亦達光學/文件/report.pdf');
-  assertEqual(result.zone, 'shared');
-  assertEqual(result.path, '亦達光學/文件/report.pdf');
+test('以 / 開頭的非系統路徑（檔案管理器 NAS 共享）', () => {
+  const result = PathUtils.parse('/home/photos/image.jpg');
+  assertEqual(result.zone, 'nas');
+  assertEqual(result.path, 'home/photos/image.jpg');
+});
+
+test('以 / 開頭的中文路徑（檔案管理器 NAS 共享）', () => {
+  const result = PathUtils.parse('/公司檔案/文件/report.pdf');
+  assertEqual(result.zone, 'nas');
+  assertEqual(result.path, '公司檔案/文件/report.pdf');
 });
 
 // ============================================================
@@ -209,6 +216,11 @@ test('shared:// 轉換為 API URL', () => {
 test('舊格式轉換為 API URL', () => {
   const result = PathUtils.toApiUrl('nas://knowledge/assets/img.jpg');
   assertEqual(result, '/api/files/ctos/knowledge/assets/img.jpg');
+});
+
+test('檔案管理器路徑轉換為 API URL', () => {
+  const result = PathUtils.toApiUrl('/home/photos/image.jpg');
+  assertEqual(result, '/api/files/nas/home/photos/image.jpg');
 });
 
 // ============================================================
@@ -294,6 +306,14 @@ test('isReadonly() - ctos 應可寫入', () => {
 
 test('isReadonly() - temp 應可寫入', () => {
   assertEqual(PathUtils.isReadonly('temp://test.pdf'), false);
+});
+
+test('isReadonly() - nas 應為唯讀', () => {
+  assertEqual(PathUtils.isReadonly('/home/test.pdf'), true);
+});
+
+test('getZone() - 檔案管理器路徑', () => {
+  assertEqual(PathUtils.getZone('/home/photos/image.jpg'), 'nas');
 });
 
 // ============================================================

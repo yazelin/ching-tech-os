@@ -1729,7 +1729,7 @@ async def search_nas_files(
                 modified = None
 
             matched_files.append({
-                "path": f"/{rel_path_str}",
+                "path": f"shared://{rel_path_str}",
                 "name": file_path.name,
                 "size": size,
                 "modified": modified,
@@ -2820,14 +2820,9 @@ async def add_project_attachment(
     """
     import mimetypes
     from pathlib import Path as FilePath
-    from ..config import settings
+    from .path_manager import path_manager, StorageZone
 
     await ensure_db_connection()
-
-    # 取得 NAS 路徑設定
-    ctos_mount = settings.ctos_mount_path  # /mnt/nas/ctos
-    linebot_files_path = settings.linebot_local_path  # /mnt/nas/ctos/ching-tech-os/linebot/files
-    line_files_nas_path = settings.line_files_nas_path  # ching-tech-os/linebot/files
 
     async with get_connection() as conn:
         # 驗證專案存在
@@ -2838,44 +2833,26 @@ async def add_project_attachment(
         if not project:
             return f"錯誤：找不到專案 {project_id}"
 
-        # 處理 NAS 路徑 - 支援多種格式
-        # 1. nas://... - 完整 NAS 格式
-        # 2. /mnt/nas/ctos/... - 完整掛載路徑
-        # 3. users/... 或 groups/... - Line Bot 附件相對路徑
-        # 4. projects/... - NAS 專案檔案相對路徑
+        # 使用 PathManager 解析路徑
+        # 支援：nas://..., ctos://..., /mnt/nas/..., users/..., groups/..., projects/... 等格式
+        try:
+            parsed = path_manager.parse(nas_path)
+        except ValueError as e:
+            return f"錯誤：無效的路徑格式 - {e}"
 
-        if nas_path.startswith("nas://"):
-            # nas:// 格式
-            relative_path = nas_path.replace("nas://", "")
-            actual_path = FilePath(ctos_mount) / relative_path
-            storage_path = nas_path
-        elif nas_path.startswith(ctos_mount):
-            # 完整掛載路徑
-            actual_path = FilePath(nas_path)
-            relative_path = nas_path.replace(f"{ctos_mount}/", "")
-            storage_path = f"nas://{relative_path}"
-        elif nas_path.startswith("users/") or nas_path.startswith("groups/"):
-            # Line Bot 附件相對路徑（來自 get_message_attachments）
-            # 實際路徑在 linebot_files_path（如 /mnt/nas/ctos/linebot/files/）
-            actual_path = FilePath(linebot_files_path) / nas_path
-            storage_path = f"nas://{line_files_nas_path}/{nas_path}"
-        elif nas_path.startswith("projects/"):
-            # NAS 專案檔案相對路徑（來自 search_nas_files）
-            actual_path = FilePath(ctos_mount) / nas_path
-            storage_path = f"nas://{nas_path}"
-        else:
-            # 嘗試作為 linebot/files 下的相對路徑
-            actual_path = FilePath(linebot_files_path) / nas_path
-            if actual_path.exists():
-                storage_path = f"nas://{line_files_nas_path}/{nas_path}"
-            else:
-                # 嘗試作為 ctos_mount 下的相對路徑
-                actual_path = FilePath(ctos_mount) / nas_path
-                storage_path = f"nas://{nas_path}"
+        # 只允許 CTOS 區域的檔案
+        if parsed.zone != StorageZone.CTOS:
+            return f"錯誤：只能添加 CTOS 區域的檔案，目前路徑屬於 {parsed.zone.value}://"
+
+        # 取得實際檔案系統路徑
+        actual_path = FilePath(path_manager.to_filesystem(nas_path))
 
         # 檢查檔案存在
         if not actual_path.exists():
             return f"錯誤：找不到檔案 {nas_path}（嘗試路徑：{actual_path}）"
+
+        # 取得標準化的儲存路徑
+        storage_path = path_manager.to_storage(nas_path)
 
         # 取得檔案資訊
         filename = actual_path.name

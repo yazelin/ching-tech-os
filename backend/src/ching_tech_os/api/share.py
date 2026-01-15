@@ -261,7 +261,7 @@ async def get_public_attachment(token: str, path: str) -> Response:
             assets_path = "assets/" + path[len("local/"):]
 
             # 讀取本機檔案
-            assets_base = FilePath("/home/ct/SDD/ching-tech-os/data/knowledge")
+            assets_base = FilePath(settings.knowledge_data_path)
             file_path = assets_base / assets_path
 
             if not file_path.exists():

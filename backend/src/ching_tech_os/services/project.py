@@ -537,22 +537,27 @@ def _get_file_type(filename: str) -> str:
 
 def _delete_attachment_file(storage_path: str) -> None:
     """刪除附件檔案"""
-    if storage_path.startswith("nas://"):
-        # NAS 檔案（透過掛載路徑存取）
-        try:
-            nas_path = storage_path.replace("nas://projects/", "")
-            file_service = create_project_file_service()
-            file_service.delete_file(nas_path)
-        except LocalFileError:
-            pass  # 忽略刪除錯誤
-    else:
-        # 本機檔案
-        try:
-            file_path = Path(settings.project_attachments_path) / storage_path
-            if file_path.exists():
-                file_path.unlink()
-        except Exception:
-            pass  # 忽略刪除錯誤
+    from .path_manager import path_manager, StorageZone
+    try:
+        parsed = path_manager.parse(storage_path)
+        if parsed.zone == StorageZone.CTOS:
+            # CTOS 區檔案：使用 path_manager 解析完整路徑
+            try:
+                full_path = Path(path_manager.to_filesystem(storage_path))
+                if full_path.exists():
+                    full_path.unlink()
+            except Exception:
+                pass  # 忽略刪除錯誤
+        elif parsed.zone == StorageZone.LOCAL:
+            # 本機檔案
+            try:
+                file_path = Path(settings.project_attachments_path) / parsed.path
+                if file_path.exists():
+                    file_path.unlink()
+            except Exception:
+                pass  # 忽略刪除錯誤
+    except Exception:
+        pass  # 路徑解析失敗，忽略
 
 
 async def list_attachments(project_id: UUID) -> list[ProjectAttachmentResponse]:
@@ -605,7 +610,7 @@ async def upload_attachment(
             except LocalFileError as e:
                 raise ProjectError(f"上傳至 NAS 失敗：{e}") from e
 
-            storage_path = f"nas://projects/{nas_path}"
+            storage_path = f"ctos://projects/{nas_path}"
 
         # 寫入資料庫
         row = await conn.fetchrow(
@@ -638,39 +643,33 @@ async def get_attachment_content(project_id: UUID, attachment_id: UUID) -> tuple
         storage_path = row["storage_path"]
         filename = row["filename"]
 
-        if storage_path.startswith("nas://"):
-            # NAS 檔案（透過掛載路徑存取）
-            # 支援不同的 NAS 路徑格式：
-            # - nas://projects/... - 專案檔案
-            # - nas://ching-tech-os/linebot/files/... - Line Bot 附件
-            try:
-                if storage_path.startswith("nas://projects/"):
-                    nas_path = storage_path.replace("nas://projects/", "")
-                    file_service = create_project_file_service()
-                elif storage_path.startswith(f"nas://{settings.line_files_nas_path}/"):
-                    # Line Bot 附件（從 MCP 工具新增的）
-                    nas_path = storage_path.replace(f"nas://{settings.line_files_nas_path}/", "")
-                    file_service = create_linebot_file_service()
-                else:
-                    # 通用 NAS 路徑（相對於 ctos_mount_path）
-                    nas_path = storage_path.replace("nas://", "")
-                    from pathlib import Path
-                    full_path = Path(settings.ctos_mount_path) / nas_path
-                    if not full_path.exists():
+        # 使用 PathManager 解析路徑
+        from .path_manager import path_manager, StorageZone
+        try:
+            parsed = path_manager.parse(storage_path)
+
+            if parsed.zone == StorageZone.CTOS:
+                # CTOS 區檔案（透過掛載路徑存取）
+                try:
+                    fs_path = path_manager.to_filesystem(storage_path)
+                    file_path = Path(fs_path)
+                    if not file_path.exists():
                         raise ProjectError(f"檔案不存在：{storage_path}")
-                    with open(full_path, "rb") as f:
+                    with open(file_path, "rb") as f:
                         return f.read(), filename
-                content = file_service.read_file(nas_path)
-                return content, filename
-            except LocalFileError as e:
-                raise ProjectError(f"讀取 NAS 檔案失敗：{e}") from e
-        else:
-            # 本機檔案
-            file_path = Path(settings.project_attachments_path) / storage_path
-            if not file_path.exists():
-                raise ProjectError(f"檔案不存在：{storage_path}")
-            with open(file_path, "rb") as f:
-                return f.read(), filename
+                except LocalFileError as e:
+                    raise ProjectError(f"讀取檔案失敗：{e}") from e
+            elif parsed.zone == StorageZone.LOCAL:
+                # 本機檔案
+                file_path = Path(settings.project_attachments_path) / parsed.path
+                if not file_path.exists():
+                    raise ProjectError(f"檔案不存在：{storage_path}")
+                with open(file_path, "rb") as f:
+                    return f.read(), filename
+            else:
+                raise ProjectError(f"不支援的儲存區域：{parsed.zone.value}")
+        except ValueError as e:
+            raise ProjectError(f"無效的路徑格式：{storage_path}") from e
 
 
 async def update_attachment(

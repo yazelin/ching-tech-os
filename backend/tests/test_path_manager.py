@@ -155,10 +155,16 @@ class TestParseSystemPath:
         assert result.path == "linebot/msg123.pdf"
 
     def test_slash_relative_path(self, path_manager):
-        """以 / 開頭的非系統路徑（search_nas_files 回傳格式）"""
-        result = path_manager.parse("/亦達光學/文件/report.pdf")
-        assert result.zone == StorageZone.SHARED
-        assert result.path == "亦達光學/文件/report.pdf"
+        """以 / 開頭的非系統路徑（檔案管理器 NAS 共享）"""
+        result = path_manager.parse("/home/photos/image.jpg")
+        assert result.zone == StorageZone.NAS
+        assert result.path == "home/photos/image.jpg"
+
+    def test_slash_chinese_path(self, path_manager):
+        """以 / 開頭的中文路徑（檔案管理器 NAS 共享）"""
+        result = path_manager.parse("/公司檔案/文件/report.pdf")
+        assert result.zone == StorageZone.NAS
+        assert result.path == "公司檔案/文件/report.pdf"
 
 
 # ============================================================
@@ -213,6 +219,11 @@ class TestToFilesystem:
         result = path_manager.to_filesystem("/mnt/nas/projects/test.pdf")
         assert result == "/mnt/nas/projects/test.pdf"
 
+    def test_nas_to_filesystem_raises_error(self, path_manager):
+        """NAS 路徑轉換為檔案系統路徑應拋出錯誤"""
+        with pytest.raises(ValueError, match="NAS zone 路徑無法轉換"):
+            path_manager.to_filesystem("/home/photos/image.jpg")
+
 
 # ============================================================
 # to_api() 測試
@@ -235,6 +246,11 @@ class TestToApi:
         """舊格式轉換為 API 路徑"""
         result = path_manager.to_api("/mnt/nas/projects/test.pdf")
         assert result == "/api/files/shared/test.pdf"
+
+    def test_slash_path_to_api(self, path_manager):
+        """檔案管理器路徑轉換為 API 路徑"""
+        result = path_manager.to_api("/home/photos/image.jpg")
+        assert result == "/api/files/nas/home/photos/image.jpg"
 
 
 # ============================================================
@@ -301,6 +317,10 @@ class TestIsReadonly:
     def test_temp_is_writable(self, path_manager):
         """temp:// 應可寫入"""
         assert path_manager.is_readonly("temp://test.pdf") is False
+
+    def test_nas_is_readonly(self, path_manager):
+        """NAS 路徑應為唯讀"""
+        assert path_manager.is_readonly("/home/test.pdf") is True
 
 
 # ============================================================

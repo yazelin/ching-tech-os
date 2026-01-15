@@ -26,8 +26,8 @@
 
 ### 測試
 
-- [ ] 後端單元測試（可選，視需求）
-- [ ] 手動測試舊格式轉換
+- [x] 後端單元測試（102 個測試通過）
+- [x] 手動測試舊格式轉換
 
 ---
 
@@ -42,10 +42,15 @@
   - [x] 路徑穿越攻擊防護
 - [x] 在 `main.py` 註冊 files router
 
-### 待整合
+### 前端遷移（已完成）
 
-- [ ] 前端 `PathUtils.toApiUrl()` 已可產生正確的 API 路徑
-- [ ] 等待現有程式碼逐步遷移使用新 API
+- [x] `image-viewer.js` - 改用 `PathUtils.toApiUrl()`
+- [x] `text-viewer.js` - 改用 `PathUtils.toApiUrl()`
+- [x] `pdf-viewer.js` - 改用 `PathUtils.toApiUrl()`
+- [x] `file-manager.js` - 圖片/文字預覽改用 `PathUtils.toApiUrl()`
+- [x] `path-utils.js` - 新增檔案管理器路徑支援（`/擎添共用區/...`）
+- [x] `knowledge-base.js` - 不需修改（使用知識庫專用 API）
+- [x] `project-management.js` - 不需修改（使用專案專用 API）
 
 ---
 
@@ -120,30 +125,37 @@
 
 測試 `/api/files/{zone}/{path}` 端點：
 
-- [ ] `GET /api/files/shared/test.txt` - 讀取 shared 區檔案
-- [ ] `GET /api/files/ctos/linebot/files/test.jpg` - 讀取 ctos 區檔案
-- [ ] `GET /api/files/temp/xxx/page.png` - 讀取 temp 區檔案
-- [ ] `GET /api/files/shared/test.txt/download` - 下載檔案
-- [ ] `GET /api/files/invalid/test.txt` - 應回傳 400 錯誤
-- [ ] `GET /api/files/shared/../etc/passwd` - 路徑穿越應被阻擋
-- [ ] 未授權請求應回傳 401
+- [x] `GET /api/files/shared/test.txt` - 讀取 shared 區檔案（手動）
+- [x] `GET /api/files/ctos/linebot/files/test.jpg` - 讀取 ctos 區檔案（手動）
+- [x] `GET /api/files/temp/xxx/page.png` - 讀取 temp 區檔案（手動）
+- [x] `GET /api/files/nas/home/xxx.jpg` - 讀取 nas 區檔案（手動）
+- [x] `GET /api/files/shared/test.txt/download` - 下載檔案（手動）
+- [x] `GET /api/files/invalid/test.txt` - 應回傳 400 錯誤 ✅ 單元測試
+- [x] `GET /api/files/shared/../etc/passwd` - 路徑穿越應被阻擋 ✅ 單元測試
+- [x] 未授權請求應回傳 401 ✅ E2E 測試
 
-### 3. MCP 工具測試
+### 3. MCP 工具測試（透過 Line Bot 或 Claude Code 測試）
 
-- [ ] `read_document` - 讀取 shared:// 區文件
-- [ ] `read_document` - 讀取 ctos:// 區文件
-- [ ] `read_document` - 讀取舊格式路徑（應自動轉換）
-- [ ] `read_document` - 嘗試讀取 temp:// 區應被拒絕
-- [ ] `convert_pdf_to_images` - 轉換 shared:// 區 PDF
-- [ ] `convert_pdf_to_images` - 輸出到 temp:// 區
+- [x] `read_document` - 讀取 shared:// 區文件（三橋簡報）
+- [x] `read_document` - 讀取 ctos:// 區文件
+- [x] `read_document` - 讀取舊格式路徑（應自動轉換）
+- [x] `read_document` - 嘗試讀取 temp:// 區應被拒絕
+- [x] `convert_pdf_to_images` - 轉換 ctos:// 區 PDF（Banana PDF）
+- [x] `convert_pdf_to_images` - 輸出到 ctos:// 區（linebot/files/pdf-converted）
 
-### 4. 分享功能測試
+### 4. 檔案管理器預覽測試（原始問題）
 
-- [ ] 從檔案管理器建立 NAS 檔案分享連結
-- [ ] 透過分享連結下載檔案
-- [ ] 分享連結過期後應無法存取
+- [x] 圖片預覽：開啟檔案管理器 → 點擊 `/home/xxx.jpg` → 確認圖片正確顯示
+- [x] 文字預覽：開啟檔案管理器 → 點擊文字檔案 → 確認內容正確顯示
+- [x] PDF 預覽：開啟檔案管理器 → 點擊 PDF 檔案 → 確認 PDF 正確載入
 
-### 5. 前端 PathUtils 測試
+### 5. 分享功能測試
+
+- [x] 從檔案管理器建立 NAS 檔案分享連結
+- [x] 透過分享連結下載檔案
+- [x] 分享連結過期後應無法存取
+
+### 6. 前端 PathUtils 測試
 
 在瀏覽器 Console 測試：
 
@@ -186,13 +198,62 @@ export AUTH_TOKEN='your_token_here'
 cd backend && uv run python tests/e2e/test_files_api_e2e.py
 ```
 
-### 測試結果（2026-01-16）
+### 測試結果（2026-01-16 更新）
 
 | 測試類別 | 測試數量 | 結果 |
 |---------|---------|------|
-| PathManager 單元測試 | 39 | ✅ 全部通過 |
+| PathManager 單元測試 | 43 | ✅ 全部通過 |
 | Files API 單元測試 | 19 | ✅ 全部通過 |
-| PathUtils 前端測試 | 36 | ✅ 全部通過 |
-| PathManager E2E 測試 | 24 | ✅ 全部通過 |
+| PathUtils 前端測試 | 40 | ✅ 全部通過 |
 
-**總計：118 個測試全部通過**
+**總計：102 個測試全部通過**
+
+### 前端遷移完成（2026-01-16）
+
+已遷移的檔案：
+- `image-viewer.js` - 圖片載入改用 PathUtils
+- `text-viewer.js` - 文字檔載入改用 PathUtils
+- `pdf-viewer.js` - PDF 載入改用 PathUtils
+- `file-manager.js` - 側邊預覽（圖片/文字）改用 PathUtils
+- `path-utils.js` - 新增檔案管理器虛擬路徑支援
+
+PathUtils 新增支援：
+- `/擎添共用區/在案資料分享/xxx` → `shared://xxx`
+- `/擎添共用區/CTOS資料區/xxx` → `ctos://xxx`
+
+### Phase 4: NAS Zone 支援（2026-01-16）
+
+新增 NAS zone 支援檔案管理器的 SMB 共享存取：
+
+後端：
+- `path_manager.py` - 新增 `StorageZone.NAS`，支援 `/home/...` 等 NAS 共享路徑
+- `files.py` - 新增 `/api/files/nas/{path}` 端點，透過 SMB 讀取檔案
+
+前端：
+- `path-utils.js` - 新增 NAS zone 識別
+- `file-manager.js` - 改用 `PathUtils.toApiUrl()` 統一路徑處理
+
+路徑格式：
+- `/home/xxx.jpg` → `nas://home/xxx.jpg` → `/api/files/nas/home/xxx.jpg`
+- 舊的 `nas://knowledge/...` 格式保持向後相容，轉換為 `ctos://...`
+
+### 舊格式資料遷移（2026-01-16）
+
+執行 `backend/scripts/migrate_paths_to_new_format.py` 完成資料遷移：
+
+- 知識庫 markdown 檔案：3 個檔案，24 個路徑轉換
+- 資料庫 project_attachments：6 筆記錄更新
+
+轉換規則：
+- `nas://knowledge/attachments/xxx` → `ctos://knowledge/xxx`
+- `nas://linebot/files/xxx` → `ctos://linebot/xxx`
+- `nas://projects/attachments/xxx` → `ctos://projects/attachments/xxx`
+- `../assets/images/xxx` → `local://knowledge/images/xxx`
+
+### MCP 工具路徑修復（2026-01-16）
+
+修復 `search_nas_files` 返回格式問題：
+- 原本返回 `/{rel_path}`（如 `/陶式/擎添資料/三橋簡報.pptx`）
+- PathManager 誤解析為 NAS zone（無本地掛載點）
+- 修改為返回 `shared://{rel_path}` 格式
+- 現在 `read_document` 和 `convert_pdf_to_images` 可正確讀取 SHARED 區檔案

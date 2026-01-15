@@ -162,7 +162,7 @@ def run_tests():
     if AUTH_TOKEN:
         test_banner("Zone 有效性測試")
 
-        for zone in ["ctos", "shared", "temp", "local"]:
+        for zone in ["ctos", "shared", "temp", "local", "nas"]:
             try:
                 # 請求一個不存在的檔案，應該得到 404（而不是 400）
                 status, body = make_request(
