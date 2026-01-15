@@ -1849,7 +1849,95 @@ async def get_nas_file_info(file_path: str) -> str:
 完整路徑：{str(full_path)}
 
 可用操作：
-- create_share_link(resource_type="nas_file", resource_id="{str(full_path)}") 產生下載連結"""
+- create_share_link(resource_type="nas_file", resource_id="{str(full_path)}") 產生下載連結
+- read_document(file_path="{str(full_path)}") 讀取文件內容（Word/Excel/PowerPoint/PDF）"""
+
+
+@mcp.tool()
+async def read_document(
+    file_path: str,
+    max_chars: int = 50000,
+) -> str:
+    """
+    讀取文件內容（支援 Word、Excel、PowerPoint、PDF）
+
+    將文件轉換為純文字，讓 AI 可以分析、總結或查詢內容。
+
+    Args:
+        file_path: NAS 檔案路徑（相對於 /mnt/nas/projects 或完整路徑）
+        max_chars: 最大字元數限制，預設 50000
+    """
+    from pathlib import Path
+    from ..config import settings
+    from . import document_reader
+
+    projects_path = Path(settings.projects_mount_path)
+
+    # 正規化路徑
+    if file_path.startswith(settings.projects_mount_path):
+        # 完整路徑
+        full_path = Path(file_path)
+    else:
+        # 相對路徑（移除開頭的 /）
+        rel_path = file_path.lstrip("/")
+        full_path = projects_path / rel_path
+
+    # 安全檢查：確保路徑在允許範圍內
+    try:
+        full_path = full_path.resolve()
+        if not str(full_path).startswith(str(projects_path.resolve())):
+            return "錯誤：不允許存取此路徑"
+    except Exception:
+        return "錯誤：無效的路徑"
+
+    if not full_path.exists():
+        return f"錯誤：檔案不存在 - {file_path}"
+
+    if not full_path.is_file():
+        return f"錯誤：路徑不是檔案 - {file_path}"
+
+    # 檢查是否為支援的文件格式
+    suffix = full_path.suffix.lower()
+    if suffix not in document_reader.SUPPORTED_EXTENSIONS:
+        if suffix in document_reader.LEGACY_EXTENSIONS:
+            return f"錯誤：不支援舊版格式 {suffix}，請轉存為新版格式（.docx/.xlsx/.pptx）"
+        return f"錯誤：不支援的檔案格式 {suffix}。支援的格式：{', '.join(document_reader.SUPPORTED_EXTENSIONS)}"
+
+    # 解析文件
+    try:
+        result = document_reader.extract_text(str(full_path))
+
+        # 截斷過長的內容
+        text = result.text
+        if len(text) > max_chars:
+            text = text[:max_chars] + f"\n\n[內容已截斷，原文共 {len(text)} 字元]"
+
+        # 建立回應
+        response = f"📄 **{full_path.name}**\n"
+        response += f"格式：{result.format.upper()}\n"
+        if result.page_count:
+            label = "工作表數" if result.format == "xlsx" else "頁數"
+            response += f"{label}：{result.page_count}\n"
+        if result.truncated:
+            response += "⚠️ 內容已截斷\n"
+        if result.error:
+            response += f"⚠️ 注意：{result.error}\n"
+        response += "\n---\n\n"
+        response += text
+
+        return response
+
+    except document_reader.FileTooLargeError as e:
+        return f"錯誤：{e}"
+    except document_reader.PasswordProtectedError:
+        return "錯誤：此文件有密碼保護，無法讀取"
+    except document_reader.CorruptedFileError as e:
+        return f"錯誤：文件損壞 - {e}"
+    except document_reader.UnsupportedFormatError as e:
+        return f"錯誤：{e}"
+    except Exception as e:
+        logger.error(f"read_document 錯誤: {e}")
+        return f"錯誤：讀取文件失敗 - {e}"
 
 
 @mcp.tool()

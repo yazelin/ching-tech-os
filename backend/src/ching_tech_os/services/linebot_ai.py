@@ -29,6 +29,7 @@ from .linebot import (
     get_file_info_by_line_message_id,
     get_temp_file_path,
     is_readable_file,
+    is_legacy_office_file,
     MAX_READABLE_FILE_SIZE,
 )
 from . import ai_manager
@@ -802,7 +803,11 @@ async def get_conversation_context(
                             content = f"[檔案 {file_name} 暫存已過期，若要加入知識庫請使用 get_message_attachments]"
                 else:
                     # 不可讀取的檔案類型
-                    content = f"[上傳檔案: {file_name}（無法讀取此類型）]"
+                    if is_legacy_office_file(file_name):
+                        # 舊版 Office 格式，提示轉檔
+                        content = f"[上傳檔案: {file_name}（不支援舊版格式，請轉存為 .docx/.xlsx/.pptx）]"
+                    else:
+                        content = f"[上傳檔案: {file_name}（無法讀取此類型）]"
             else:
                 content = row["content"]
 
@@ -863,7 +868,14 @@ async def build_system_prompt(
 - [上傳檔案: /tmp/...] → 使用 Read 工具讀取檔案內容
 - [圖片暫存已過期...] 或 [檔案...暫存已過期...] → 暫存已清理，無法直接檢視
 - [上傳檔案: filename（無法讀取此類型）] → 告知用戶此類型不支援
-支援的檔案類型：txt, md, json, csv, log, xml, yaml, yml, pdf
+- [上傳檔案: filename（不支援舊版格式...）] → 建議用戶轉存為新版格式
+
+支援的檔案類型：
+- 純文字：txt, md, json, csv, log, xml, yaml, yml
+- Office 文件：docx, xlsx, pptx（自動轉換為純文字）
+- PDF 文件：pdf（自動提取文字）
+注意：Office 文件和 PDF 會自動轉換為純文字，可能遺失格式資訊。
+舊版格式（.doc, .xls, .ppt）不支援，請建議用戶轉存為新版格式。
 
 重要：Read 工具僅用於「檢視」圖片/檔案內容（例如「這張圖是什麼？」）。
 若要將圖片/檔案「加入知識庫」，請使用 get_message_attachments 查詢 NAS 路徑，

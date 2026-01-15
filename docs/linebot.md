@@ -42,6 +42,7 @@ Line Platform
 | 檔案儲存 | 圖片、檔案自動下載到 NAS |
 | AI 對話 | 個人/群組對話支援 AI 助理 |
 | AI 圖片生成 | 根據文字描述生成圖片、編輯圖片 |
+| 文件讀取 | 支援讀取 Word、Excel、PowerPoint、PDF 文件內容 |
 | 專案管理 | 透過對話建立專案、新增成員和里程碑 |
 | 知識庫 | 透過對話新增筆記、搜尋知識、管理附件 |
 | NAS 檔案搜尋 | 搜尋並發送 NAS 共享檔案（圖片直接發送） |
@@ -191,6 +192,7 @@ AI 助理可使用的工具（完整列表見 [docs/mcp-server.md](mcp-server.md
 - `search_nas_files` - 搜尋 NAS 共享檔案
 - `get_nas_file_info` - 取得檔案詳細資訊
 - `prepare_file_message` - 準備檔案訊息供回覆
+- `read_document` - 讀取文件內容（Word/Excel/PowerPoint/PDF）
 
 **分享功能**
 - `create_share_link` - 建立公開分享連結（支援知識庫、專案、NAS 檔案）
@@ -342,6 +344,46 @@ NAS/{linebot_path}/
 ```
 
 檔案路徑記錄在 `line_files.nas_path`，可透過 `get_message_attachments` 工具查詢。
+
+## 文件讀取
+
+Line Bot 支援讀取常見文件格式的內容，讓 AI 可以進行總結、分析或查詢。
+
+### 支援格式
+
+| 格式 | 副檔名 | 說明 |
+|------|--------|------|
+| Word | .docx | 提取段落文字和表格內容 |
+| Excel | .xlsx | 提取所有工作表的資料（以 \| 分隔欄位） |
+| PowerPoint | .pptx | 提取所有投影片的文字內容 |
+| PDF | .pdf | 提取文字層內容 |
+
+> **舊版格式**：不支援 `.doc`、`.xls`、`.ppt` 舊版格式，上傳時會提示用戶轉存為新版格式。
+
+### 使用方式
+
+**用戶上傳文件到對話**
+```
+用戶：（上傳 report.docx）
+用戶：幫我總結這份報告
+AI：（自動讀取文件內容並分析）
+AI：這份報告主要內容是...
+```
+
+**讀取 NAS 上的文件**
+```
+用戶：幫我看一下 NAS 上的那份 Excel
+AI：（使用 search_nas_files 找到檔案）
+AI：（使用 read_document 讀取內容）
+AI：這份試算表包含 3 個工作表...
+```
+
+### 限制
+
+- **檔案大小**：PDF/Word/PowerPoint 最大 10MB，Excel 最大 5MB
+- **文字長度**：最大輸出 100,000 字元，超過會截斷
+- **加密文件**：不支援有密碼保護的文件
+- **純圖片 PDF**：掃描文件無法提取文字，建議截圖後上傳讓 AI 讀取
 
 ## 執行 Migration
 
