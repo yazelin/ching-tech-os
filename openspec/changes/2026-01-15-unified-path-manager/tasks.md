@@ -160,3 +160,39 @@ PathUtils.toApiUrl('shared://test/doc.pdf')
 PathUtils.isImage('shared://test/photo.jpg')  // true
 PathUtils.isPdf('shared://test/doc.pdf')      // true
 ```
+
+---
+
+## 自動化測試
+
+### 執行所有單元測試
+
+```bash
+# 後端測試（PathManager + Files API）
+cd backend && uv run pytest tests/test_path_manager.py tests/test_files_api.py -v
+
+# 前端測試（PathUtils）
+node frontend/tests/path-utils.test.js
+```
+
+### 執行 E2E 測試
+
+```bash
+# PathManager E2E 測試（不需要後端運行）
+cd backend && uv run python tests/e2e/test_path_manager_e2e.py
+
+# Files API E2E 測試（需要後端運行）
+export AUTH_TOKEN='your_token_here'
+cd backend && uv run python tests/e2e/test_files_api_e2e.py
+```
+
+### 測試結果（2026-01-16）
+
+| 測試類別 | 測試數量 | 結果 |
+|---------|---------|------|
+| PathManager 單元測試 | 39 | ✅ 全部通過 |
+| Files API 單元測試 | 19 | ✅ 全部通過 |
+| PathUtils 前端測試 | 36 | ✅ 全部通過 |
+| PathManager E2E 測試 | 24 | ✅ 全部通過 |
+
+**總計：118 個測試全部通過**
