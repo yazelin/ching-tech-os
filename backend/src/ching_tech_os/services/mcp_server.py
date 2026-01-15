@@ -54,59 +54,6 @@ async def ensure_db_connection():
 
 
 # ============================================================
-# 路徑處理輔助函數
-# ============================================================
-
-
-def resolve_nas_path(path: str, default_base: str = None, try_projects: bool = False) -> str:
-    """
-    將 nas:// 或相對路徑轉換為實際檔案系統路徑
-
-    Args:
-        path: 輸入路徑（nas:// 格式、絕對路徑或相對路徑）
-        default_base: 相對路徑的預設基礎目錄
-        try_projects: 若為 True，當檔案不存在時也會嘗試 projects_mount_path
-
-    Returns:
-        實際檔案系統路徑
-
-    範例:
-        - nas://linebot/files/... → /mnt/nas/ctos/linebot/files/...
-        - nas://projects/attachments/... → /mnt/nas/ctos/projects/attachments/...
-        - /tmp/xxx.pdf → /tmp/xxx.pdf（系統絕對路徑不變）
-        - /專案A/文件.pdf + try_projects=True → /mnt/nas/projects/專案A/文件.pdf
-        - xxx.pdf + default_base="/mnt/nas/ctos/linebot/files" → /mnt/nas/ctos/linebot/files/xxx.pdf
-    """
-    from pathlib import Path as FilePath
-    from ..config import settings
-
-    # 常見的系統絕對路徑前綴
-    system_prefixes = ("/tmp/", "/mnt/", "/home/", "/var/", "/etc/", "/usr/", "/opt/")
-
-    if path.startswith("nas://"):
-        # nas:// 格式 → /mnt/nas/ctos/...
-        nas_relative = path[6:]  # 移除 "nas://"
-        return f"{settings.ctos_mount_path}/{nas_relative}"
-    elif path.startswith(system_prefixes):
-        # 系統絕對路徑，直接使用
-        return path
-    elif path.startswith("/"):
-        # 以 / 開頭但不是系統路徑 - 可能是 search_nas_files 回傳的相對路徑
-        # 例如：/專案A/文件.pdf → /mnt/nas/projects/專案A/文件.pdf
-        if try_projects:
-            projects_path = f"{settings.projects_mount_path}{path}"
-            if FilePath(projects_path).exists():
-                return projects_path
-        # 如果檔案不存在或 try_projects=False，則視為絕對路徑
-        return path
-    elif default_base:
-        # 相對路徑，加上預設基礎目錄
-        return f"{default_base}/{path.lstrip('/')}"
-    else:
-        return path
-
-
-# ============================================================
 # 權限檢查輔助函數
 # ============================================================
 
@@ -1924,18 +1871,24 @@ async def read_document(
     from pathlib import Path
     from ..config import settings
     from . import document_reader
+    from .path_manager import path_manager, StorageZone
 
-    # 使用共用函式解析路徑
-    # - 相對路徑預設在 projects 目錄下
-    # - try_projects=True 支援 search_nas_files 回傳的路徑（如 /專案A/文件.pdf）
-    resolved_path = resolve_nas_path(
-        file_path,
-        default_base=settings.projects_mount_path,
-        try_projects=True,
-    )
+    # 使用 PathManager 解析路徑
+    # 支援：nas://..., ctos://..., shared://..., /專案A/..., groups/... 等格式
+    try:
+        parsed = path_manager.parse(file_path)
+    except ValueError as e:
+        return f"錯誤：{e}"
+
+    # 取得實際檔案系統路徑
+    resolved_path = path_manager.to_filesystem(file_path)
     full_path = Path(resolved_path)
 
-    # 安全檢查：確保路徑在允許範圍內（/mnt/nas/ 下）
+    # 安全檢查：只允許 CTOS 和 SHARED 區域（不允許 TEMP/LOCAL）
+    if parsed.zone not in (StorageZone.CTOS, StorageZone.SHARED):
+        return f"錯誤：不允許存取 {parsed.zone.value}:// 區域的檔案"
+
+    # 安全檢查：確保路徑在 /mnt/nas/ 下
     nas_path = Path(settings.nas_mount_path)
     try:
         full_path = full_path.resolve()
@@ -3138,14 +3091,26 @@ async def convert_pdf_to_images(
             "error": f"DPI 必須在 72-600 之間，目前為 {dpi}"
         }, ensure_ascii=False)
 
-    # 使用共用函式解析路徑
-    # - 相對路徑預設在 linebot/files 目錄下
-    # - try_projects=True 支援 search_nas_files 回傳的路徑（如 /專案A/文件.pdf）
-    actual_path = resolve_nas_path(
-        pdf_path,
-        default_base=settings.linebot_local_path,
-        try_projects=True,
-    )
+    # 使用 PathManager 解析路徑
+    # 支援：nas://..., ctos://..., shared://..., temp://..., /專案A/..., groups/... 等格式
+    from .path_manager import path_manager, StorageZone
+
+    try:
+        parsed = path_manager.parse(pdf_path)
+    except ValueError as e:
+        return json.dumps({
+            "success": False,
+            "error": str(e)
+        }, ensure_ascii=False)
+
+    # 安全檢查：只允許 CTOS、SHARED、TEMP 區域
+    if parsed.zone not in (StorageZone.CTOS, StorageZone.SHARED, StorageZone.TEMP):
+        return json.dumps({
+            "success": False,
+            "error": f"不允許存取 {parsed.zone.value}:// 區域的檔案"
+        }, ensure_ascii=False)
+
+    actual_path = path_manager.to_filesystem(pdf_path)
 
     # 檢查檔案存在
     if not FilePath(actual_path).exists():

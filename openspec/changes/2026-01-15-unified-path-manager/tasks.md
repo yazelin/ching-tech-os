@@ -60,3 +60,35 @@
 ### Phase 2
 1. `/api/files/{zone}/{path}` 可正確存取四種區域的檔案
 2. 新 API 使用 PathManager 處理路徑
+
+---
+
+## Phase 3: 遷移現有程式碼
+
+### MCP Server
+
+- [x] `read_document` 工具改用 `path_manager`
+  - [x] 使用 `path_manager.parse()` 解析路徑
+  - [x] 使用 `path_manager.to_filesystem()` 轉換路徑
+  - [x] 加入 zone 安全檢查（只允許 CTOS/SHARED）
+- [x] `convert_pdf_to_images` 工具改用 `path_manager`
+  - [x] 使用 `path_manager.parse()` 解析路徑
+  - [x] 使用 `path_manager.to_filesystem()` 轉換路徑
+  - [x] 加入 zone 安全檢查（允許 CTOS/SHARED/TEMP）
+- [x] 移除 `resolve_nas_path()` 函數
+
+### 待遷移
+
+- [ ] `share.py` - `validate_nas_file_path()`
+- [ ] `linebot.py` - `generate_nas_path()`
+- [ ] `knowledge.py` - 附件路徑處理
+- [ ] `project.py` - 專案附件路徑
+- [ ] 前端 `file-manager.js` - `toSystemMountPath()`
+
+---
+
+## 驗收標準
+
+### Phase 3
+1. 現有 MCP 工具正常運作
+2. 路徑解析邏輯統一使用 PathManager
