@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "ching-tech-os": {
+      "command": "bash",
+      "args": ["-c", "cd /home/ct/SDD/ching-tech-os/backend && uv run python -m ching_tech_os.mcp_cli"]
+    },
+    "nanobanana": {
+      "type": "stdio",
+      "command": "bash",
+      "args": [
+        "-c",
+        "source /path/to/your/project/.env && npx -y @willh/nano-banana-mcp"
+      ]
+    }
+  }
+}

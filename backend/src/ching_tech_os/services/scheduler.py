@@ -168,6 +168,43 @@ async def cleanup_linebot_temp_files():
         logger.debug("Line Bot 暫存檔清理: 無過期檔案")
 
 
+async def cleanup_ai_images():
+    """
+    清理 AI 生成的圖片
+    刪除修改時間超過 1 個月的圖片檔案
+    """
+    from ..config import settings
+
+    ai_images_dir = f"{settings.linebot_local_path}/ai-images"
+
+    if not os.path.exists(ai_images_dir):
+        logger.debug(f"AI 圖片目錄不存在: {ai_images_dir}")
+        return
+
+    one_month_ago = time.time() - (30 * 24 * 3600)  # 30 天前
+    deleted_count = 0
+    total_size = 0
+
+    try:
+        for filename in os.listdir(ai_images_dir):
+            filepath = os.path.join(ai_images_dir, filename)
+            if os.path.isfile(filepath):
+                if os.path.getmtime(filepath) < one_month_ago:
+                    file_size = os.path.getsize(filepath)
+                    os.unlink(filepath)
+                    deleted_count += 1
+                    total_size += file_size
+
+        if deleted_count > 0:
+            size_mb = total_size / (1024 * 1024)
+            logger.info(f"清理 AI 圖片: 刪除 {deleted_count} 個檔案，釋放 {size_mb:.1f} MB")
+        else:
+            logger.debug("AI 圖片清理: 無過期檔案")
+
+    except Exception as e:
+        logger.error(f"清理 AI 圖片失敗: {e}")
+
+
 def start_scheduler():
     """
     啟動排程器
@@ -205,6 +242,15 @@ def start_scheduler():
         IntervalTrigger(hours=1),
         id='cleanup_expired_share_links',
         name='清理過期分享連結',
+        replace_existing=True
+    )
+
+    # 每天凌晨 4 點清理超過 1 個月的 AI 生成圖片
+    scheduler.add_job(
+        cleanup_ai_images,
+        CronTrigger(hour=4, minute=30),
+        id='cleanup_ai_images',
+        name='清理 AI 生成圖片',
         replace_existing=True
     )
 

@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "ching-tech-os": {
-      "command": "bash",
-      "args": ["-c", "cd /home/ct/SDD/ching-tech-os/backend && uv run python -m ching_tech_os.mcp_cli"]
-    }
-  }
-}

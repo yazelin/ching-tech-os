@@ -41,6 +41,7 @@ Line Platform
 | 訊息儲存 | 自動儲存所有群組/個人訊息到資料庫 |
 | 檔案儲存 | 圖片、檔案自動下載到 NAS |
 | AI 對話 | 個人/群組對話支援 AI 助理 |
+| AI 圖片生成 | 根據文字描述生成圖片、編輯圖片 |
 | 專案管理 | 透過對話建立專案、新增成員和里程碑 |
 | 知識庫 | 透過對話新增筆記、搜尋知識、管理附件 |
 | NAS 檔案搜尋 | 搜尋並發送 NAS 共享檔案（圖片直接發送） |
@@ -194,6 +195,10 @@ AI 助理可使用的工具（完整列表見 [docs/mcp-server.md](mcp-server.md
 **分享功能**
 - `create_share_link` - 建立公開分享連結（支援知識庫、專案、NAS 檔案）
 
+**AI 圖片生成**（需設定 nanobanana MCP Server）
+- `mcp__nanobanana__generate_image` - 根據文字描述生成圖片
+- `mcp__nanobanana__edit_image` - 編輯/修改現有圖片
+
 ### 使用情境範例
 
 **建立專案並新增成員**
@@ -240,6 +245,32 @@ AI：這個資料夾有 10 張圖，我先傳 4 張給你看，其他的附上�
 AI：（發送 4 張 ImageMessage + 文字訊息含 6 個連結）
 ```
 
+**AI 圖片生成**
+```
+用戶：畫一隻可愛的貓
+AI：（使用 generate_image 生成圖片）
+AI：（使用 prepare_file_message 準備發送）
+AI：好的，我幫你畫了一隻貓 👇
+AI：（顯示生成的圖片）
+```
+
+**編輯 AI 生成的圖片**
+```
+用戶：（回覆 Bot 發送的圖片）把背景改成藍色
+AI：（查詢 line_files 取得原圖路徑）
+AI：（使用 edit_image 編輯圖片）
+AI：已修改背景顏色 👇
+AI：（顯示編輯後的圖片）
+```
+
+**以圖生圖**
+```
+用戶：（回覆一張自己上傳的圖）畫類似風格的狗
+AI：（取得用戶圖片路徑作為參考）
+AI：（使用 generate_image 生成類似風格的圖）
+AI：參考你的圖片風格畫了一隻狗 👇
+```
+
 ## 設定
 
 ### 環境變數
@@ -263,6 +294,31 @@ CHING_TECH_LINEBOT_NAS_PATH=linebot/files
 2. 設定 Webhook URL: `https://your-domain/api/linebot/webhook`
 3. 啟用 Webhook
 4. 取得 Channel Secret 和 Channel Access Token
+
+### AI 圖片生成設定
+
+需要設定 nanobanana MCP Server（使用 Google Gemini API）：
+
+1. 在 `.mcp.json` 加入設定（參考 `.mcp.json.example`）：
+```json
+{
+  "mcpServers": {
+    "nanobanana": {
+      "command": "npx",
+      "args": ["-y", "@anthropics/create-mcp", "@willh/nano-banana-mcp"],
+      "env": {
+        "GOOGLE_GENERATIVE_AI_API_KEY": "your-gemini-api-key"
+      }
+    }
+  }
+}
+```
+
+2. 系統會自動建立 symlink 將生成圖片存到 NAS：
+   - Symlink: `/tmp/ching-tech-os-cli/nanobanana-output`
+   - 目標: `/mnt/nas/ctos/linebot/files/ai-images`
+
+3. 生成的圖片會自動在 1 個月後清理（排程任務）
 
 ## 前端介面
 

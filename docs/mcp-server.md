@@ -125,6 +125,17 @@ uv run python -m ching_tech_os.mcp_cli
 |----------|------|------|
 | `create_share_link` | 建立公開分享連結 | `resource_type`（必填，knowledge/project/nas_file/project_attachment）, `resource_id`（必填）, `expires_in`（1h/24h/7d/null） |
 
+### AI 圖片生成（外部 MCP Server）
+
+透過 nanobanana MCP Server（使用 Google Gemini API）提供 AI 圖片生成功能：
+
+| 工具名稱 | 說明 | 參數 |
+|----------|------|------|
+| `mcp__nanobanana__generate_image` | 根據文字描述生成圖片 | `prompt`（必填，英文描述效果較好）, `files`（參考圖片路徑）, `resolution`（固定 "1K"） |
+| `mcp__nanobanana__edit_image` | 編輯/修改現有圖片 | `file`（必填，圖片路徑）, `prompt`（必填，編輯指示）, `resolution`（固定 "1K"） |
+
+> 設定方式請參考 [docs/linebot.md](linebot.md#ai-圖片生成設定)
+
 ## 使用範例
 
 ### 透過 Claude Code CLI
@@ -135,6 +146,7 @@ claude "查詢最近的專案"
 claude "建立一個新專案叫做「測試專案」"
 claude "幫我搜尋知識庫中關於水切爐的資料"
 claude "找一下亦達 layout 的 pdf"
+claude "畫一隻可愛的貓"  # AI 圖片生成（需設定 nanobanana）
 ```
 
 Claude 會自動使用對應的 MCP 工具執行操作。

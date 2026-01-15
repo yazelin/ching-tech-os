@@ -8,6 +8,7 @@ import asyncio
 import json
 import os
 import shutil
+import time
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -27,6 +28,28 @@ _mcp_src = os.path.join(PROJECT_ROOT, ".mcp.json")
 _mcp_dst = os.path.join(WORKING_DIR, ".mcp.json")
 if os.path.exists(_mcp_src):
     shutil.copy2(_mcp_src, _mcp_dst)
+
+# 設定 nanobanana 輸出目錄（symlink 到 NAS，讓生成的圖片可以透過 Line Bot 發送）
+_nas_ai_images_dir = "/mnt/nas/ctos/linebot/files/ai-images"
+_nanobanana_output_link = os.path.join(WORKING_DIR, "nanobanana-output")
+
+# 建立 NAS 目錄（如果不存在）
+if os.path.exists("/mnt/nas/ctos/linebot/files"):
+    os.makedirs(_nas_ai_images_dir, exist_ok=True)
+
+    # 建立 symlink（如果不存在或指向錯誤位置）
+    if os.path.islink(_nanobanana_output_link):
+        # 檢查是否指向正確位置
+        if os.readlink(_nanobanana_output_link) != _nas_ai_images_dir:
+            os.remove(_nanobanana_output_link)
+            os.symlink(_nas_ai_images_dir, _nanobanana_output_link)
+    elif os.path.exists(_nanobanana_output_link):
+        # 是普通目錄，移除後建立 symlink
+        shutil.rmtree(_nanobanana_output_link)
+        os.symlink(_nas_ai_images_dir, _nanobanana_output_link)
+    else:
+        # 不存在，直接建立 symlink
+        os.symlink(_nas_ai_images_dir, _nanobanana_output_link)
 
 
 def _find_claude_path() -> str:
@@ -83,6 +106,7 @@ class ClaudeResponse:
     tool_calls: list[ToolCall] = field(default_factory=list)
     input_tokens: Optional[int] = None
     output_tokens: Optional[int] = None
+    tool_timings: list[dict] = field(default_factory=list)  # [{name, duration_ms}]
 
 
 async def get_prompt_content(prompt_name: str) -> str | None:
@@ -130,14 +154,41 @@ def compose_prompt_with_history(
     return "\n".join(parts)
 
 
-def _parse_stream_json(stdout: str) -> tuple[str, list[ToolCall], int | None, int | None]:
-    """解析 stream-json 輸出
+@dataclass
+class ToolTiming:
+    """Tool 執行時間記錄"""
+    name: str
+    started_at: float
+    finished_at: float | None = None
+
+    @property
+    def duration_ms(self) -> int | None:
+        if self.finished_at:
+            return int((self.finished_at - self.started_at) * 1000)
+        return None
+
+
+@dataclass
+class ParseResult:
+    """stream-json 解析結果"""
+    text: str
+    tool_calls: list[ToolCall]
+    input_tokens: int | None
+    output_tokens: int | None
+    tool_timings: list[ToolTiming]
+    pending_tools: dict[str, ToolTiming]  # 尚未完成的 tools
+
+
+def _parse_stream_json_with_timing(
+    lines_with_time: list[tuple[float, str]]
+) -> ParseResult:
+    """解析 stream-json 輸出（含時間戳記）
 
     Args:
-        stdout: Claude CLI 的 stream-json 輸出（多行 JSON）
+        lines_with_time: [(timestamp, line), ...] 每行附帶讀取時間
 
     Returns:
-        tuple: (最終回應文字, 工具調用列表, input_tokens, output_tokens)
+        ParseResult: 包含解析結果和 tool 時間統計
     """
     result_text = ""
     tool_calls: list[ToolCall] = []
@@ -146,8 +197,10 @@ def _parse_stream_json(stdout: str) -> tuple[str, list[ToolCall], int | None, in
 
     # 暫存 tool_use，等待配對 tool_result
     pending_tools: dict[str, ToolCall] = {}
+    # tool 時間記錄
+    tool_timings: dict[str, ToolTiming] = {}
 
-    for line in stdout.strip().split("\n"):
+    for timestamp, line in lines_with_time:
         if not line.strip():
             continue
 
@@ -165,14 +218,19 @@ def _parse_stream_json(stdout: str) -> tuple[str, list[ToolCall], int | None, in
             for content in contents:
                 content_type = content.get("type")
                 if content_type == "tool_use":
-                    # 記錄工具調用
+                    # 記錄工具調用開始
                     tool_id = content.get("id", "")
+                    tool_name = content.get("name", "")
                     tool_call = ToolCall(
                         id=tool_id,
-                        name=content.get("name", ""),
+                        name=tool_name,
                         input=content.get("input", {}),
                     )
                     pending_tools[tool_id] = tool_call
+                    tool_timings[tool_id] = ToolTiming(
+                        name=tool_name,
+                        started_at=timestamp,
+                    )
                 elif content_type == "text":
                     # 累積文字回應（可能有多段）
                     text = content.get("text", "")
@@ -189,20 +247,19 @@ def _parse_stream_json(stdout: str) -> tuple[str, list[ToolCall], int | None, in
                 if content.get("type") == "tool_result":
                     tool_id = content.get("tool_use_id", "")
                     if tool_id in pending_tools:
-                        # 配對工具輸出
+                        # 配對工具輸出，記錄完成時間
                         pending_tools[tool_id].output = content.get("content", "")
                         tool_calls.append(pending_tools.pop(tool_id))
+                        if tool_id in tool_timings:
+                            tool_timings[tool_id].finished_at = timestamp
 
         elif event_type == "result":
             # 最終結果，包含 usage 統計
-            # 只在還沒有累積回應時才使用 result 欄位
-            # （result 欄位可能包含整個對話歷史，包括 user 訊息）
             if not result_text and event.get("result"):
                 result_text = event.get("result", "")
 
             # 計算 token 統計（包含 cache tokens）
             usage = event.get("usage", {})
-            # 總輸入 = 非快取 + 新建快取 + 讀取快取
             base_input = usage.get("input_tokens") or 0
             cache_creation = usage.get("cache_creation_input_tokens") or 0
             cache_read = usage.get("cache_read_input_tokens") or 0
@@ -213,7 +270,33 @@ def _parse_stream_json(stdout: str) -> tuple[str, list[ToolCall], int | None, in
     for tool in pending_tools.values():
         tool_calls.append(tool)
 
-    return result_text, tool_calls, input_tokens, output_tokens
+    # 分離已完成和未完成的 tool timings
+    completed_timings = [t for t in tool_timings.values() if t.finished_at]
+    pending_timings = {k: v for k, v in tool_timings.items() if not v.finished_at}
+
+    return ParseResult(
+        text=result_text,
+        tool_calls=tool_calls,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        tool_timings=completed_timings,
+        pending_tools=pending_timings,
+    )
+
+
+def _parse_stream_json(stdout: str) -> tuple[str, list[ToolCall], int | None, int | None]:
+    """解析 stream-json 輸出（相容舊版介面）
+
+    Args:
+        stdout: Claude CLI 的 stream-json 輸出（多行 JSON）
+
+    Returns:
+        tuple: (最終回應文字, 工具調用列表, input_tokens, output_tokens)
+    """
+    # 轉換為帶時間戳的格式（用 0 作為時間戳）
+    lines_with_time = [(0.0, line) for line in stdout.strip().split("\n")]
+    result = _parse_stream_json_with_timing(lines_with_time)
+    return result.text, result.tool_calls, result.input_tokens, result.output_tokens
 
 
 async def call_claude(
@@ -274,23 +357,95 @@ async def call_claude(
     # DEBUG: 輸出實際執行的命令
     print(f"[claude_agent] cmd: {cmd}")
 
+    proc = None
+    stdout_lines_with_time: list[tuple[float, str]] = []
+    start_time = time.time()
+
     try:
         # 建立非同步子程序（使用獨立工作目錄，避免讀取專案的 CLAUDE.md）
+        # 設定較大的 buffer limit（默認 64KB 可能不夠長的 JSON 行）
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=WORKING_DIR,
+            limit=10 * 1024 * 1024,  # 10MB limit per line
         )
+
+        # Streaming 讀取 stdout（邊讀邊收集，記錄時間戳）
+        async def read_stdout():
+            while True:
+                line = await proc.stdout.readline()
+                if not line:
+                    break
+                stdout_lines_with_time.append((time.time(), line.decode("utf-8")))
+
+        async def read_stderr():
+            return await proc.stderr.read()
 
         # 等待完成（含超時）
-        stdout_bytes, stderr_bytes = await asyncio.wait_for(
-            proc.communicate(),
-            timeout=timeout,
-        )
+        try:
+            stderr_bytes = await asyncio.wait_for(
+                asyncio.gather(read_stdout(), read_stderr()),
+                timeout=timeout,
+            )
+            stderr = stderr_bytes[1].decode("utf-8").strip() if stderr_bytes[1] else ""
+        except asyncio.TimeoutError:
+            # 超時：終止程序，但保留已讀取的 stdout
+            if proc:
+                proc.terminate()
+                try:
+                    await asyncio.wait_for(proc.wait(), timeout=5)
+                except asyncio.TimeoutError:
+                    proc.kill()
 
-        stdout = stdout_bytes.decode("utf-8").strip()
-        stderr = stderr_bytes.decode("utf-8").strip()
+            # 解析已讀取的部分（含時間統計）
+            parse_result = _parse_stream_json_with_timing(stdout_lines_with_time)
+
+            # 輸出診斷資訊
+            elapsed = time.time() - start_time
+            print(f"[claude_agent] TIMEOUT after {elapsed:.1f}s")
+            print(f"[claude_agent] 已完成的 tools ({len(parse_result.tool_calls)}):")
+            for timing in parse_result.tool_timings:
+                print(f"  - {timing.name}: {timing.duration_ms}ms")
+            if parse_result.pending_tools:
+                print(f"[claude_agent] 執行中的 tools (timeout 時仍在執行):")
+                for tool_id, timing in parse_result.pending_tools.items():
+                    running_time = int((time.time() - timing.started_at) * 1000)
+                    print(f"  - {timing.name}: 已執行 {running_time}ms (未完成)")
+
+            # 組合錯誤訊息
+            error_msg = f"請求超時（{timeout} 秒）"
+            if parse_result.pending_tools:
+                pending_names = [t.name for t in parse_result.pending_tools.values()]
+                error_msg += f"，執行中的工具：{', '.join(pending_names)}"
+
+            # 轉換 timing 為 dict 格式
+            timings_dict = [
+                {"name": t.name, "duration_ms": t.duration_ms}
+                for t in parse_result.tool_timings
+            ]
+
+            return ClaudeResponse(
+                success=False,
+                message=parse_result.text,
+                error=error_msg,
+                tool_calls=parse_result.tool_calls,  # 返回已完成的 tool_calls
+                input_tokens=parse_result.input_tokens,
+                output_tokens=parse_result.output_tokens,
+                tool_timings=timings_dict,
+            )
+
+        await proc.wait()
+
+        # 解析 stream-json 輸出（含時間統計）
+        parse_result = _parse_stream_json_with_timing(stdout_lines_with_time)
+
+        # 輸出 tool 執行時間（debug 用）
+        if parse_result.tool_timings:
+            print(f"[claude_agent] Tool 執行時間:")
+            for timing in parse_result.tool_timings:
+                print(f"  - {timing.name}: {timing.duration_ms}ms")
 
         # 檢查執行結果
         if proc.returncode != 0:
@@ -301,23 +456,19 @@ async def call_claude(
                 error=error_msg,
             )
 
-        # 解析 stream-json 輸出
-        result_text, tool_calls, input_tokens, output_tokens = _parse_stream_json(stdout)
+        # 轉換 timing 為 dict 格式
+        timings_dict = [
+            {"name": t.name, "duration_ms": t.duration_ms}
+            for t in parse_result.tool_timings
+        ]
 
         return ClaudeResponse(
             success=True,
-            message=result_text,
-            tool_calls=tool_calls,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-        )
-
-    except asyncio.TimeoutError:
-        # 超時處理
-        return ClaudeResponse(
-            success=False,
-            message="",
-            error=f"請求超時（{timeout} 秒）",
+            message=parse_result.text,
+            tool_calls=parse_result.tool_calls,
+            input_tokens=parse_result.input_tokens,
+            output_tokens=parse_result.output_tokens,
+            tool_timings=timings_dict,
         )
 
     except FileNotFoundError:

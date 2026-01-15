@@ -31,6 +31,30 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - 執行 migration：`cd backend && uv run alembic upgrade head`
 - 直接查詢資料庫：`docker exec ching-tech-os-db psql -U ching_tech -d ching_tech_os -c "SQL語句"`
 
+### AI Logs 查詢
+AI 對話記錄儲存在 `ai_logs` 表格（分區表）。常用查詢：
+
+```bash
+# 查詢最近 5 筆 AI logs（基本資訊）
+docker exec ching-tech-os-db psql -U ching_tech -d ching_tech_os -c "SELECT id, context_type, model, success, duration_ms, created_at FROM ai_logs ORDER BY created_at DESC LIMIT 5"
+
+# 查詢最近一筆的完整回應（raw_response 欄位）
+docker exec ching-tech-os-db psql -U ching_tech -d ching_tech_os -c "SELECT raw_response FROM ai_logs ORDER BY created_at DESC LIMIT 1"
+
+# 查詢失敗的請求
+docker exec ching-tech-os-db psql -U ching_tech -d ching_tech_os -c "SELECT id, error_message, created_at FROM ai_logs WHERE success = false ORDER BY created_at DESC LIMIT 5"
+
+# 查詢特定 context（如 Line 群組）
+docker exec ching-tech-os-db psql -U ching_tech -d ching_tech_os -c "SELECT * FROM ai_logs WHERE context_type = 'line_group' ORDER BY created_at DESC LIMIT 5"
+```
+
+**重要欄位**：
+- `raw_response`: AI 原始回應（注意：不是 `response_text`）
+- `parsed_response`: 解析後的 JSON 結構
+- `input_prompt`: 輸入的 prompt
+- `context_type`: 來源類型（line_group, line_user, web 等）
+- `allowed_tools`: 允許使用的工具列表
+
 ## 後端開發
 - 使用 FastAPI + asyncpg
 - Pydantic 資料模型放在 `models/` 目錄

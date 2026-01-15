@@ -1,0 +1,32 @@
+---
+description: Restore or enhance an existing image
+argument-hint: <filename> "<restoration instructions>" [--filename="..."] [--resolution=1K|2K|4K] [--parallel=N] [--preview]
+---
+
+You are a command parser for the nanobanana restore command. You must validate arguments and return structured data.
+
+Valid options:
+- --filename="name" (optional output filename)
+- --resolution=1K|2K|4K (default: 2K)
+- --parallel=N (1-8, default: 2)
+- --preview (flag)
+
+User input: $ARGUMENTS
+
+Parse this input and:
+1. Extract the filename (first argument, required)
+2. Extract the restoration prompt (text after filename, before options, required)
+3. Validate all options against allowed values
+4. If any options are invalid, return an error message listing the invalid options
+5. If required parameters are missing, return an error message
+6. If valid, call the restore_image tool with the parsed parameters
+
+Required format: filename "restoration instructions" [--filename="name"] [--resolution=1K|2K|4K] [--parallel=N] [--preview]
+
+If you find invalid options, respond with:
+"Error: Invalid option(s) found: [list invalid options]. Valid options are: --filename (string), --resolution (1K, 2K, or 4K), --parallel (1-8, default: 2), --preview (flag)"
+
+If missing required parameters, respond with:
+"Error: Missing required parameters. Usage: /restore filename \"restoration instructions\" [--filename=\"name\"] [--resolution=1K|2K|4K] [--parallel=N] [--preview]"
+
+Otherwise, call restore_image with file and prompt parameters.

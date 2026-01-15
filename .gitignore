@@ -46,3 +46,5 @@ data/projects/
 
 # Node (if added later)
 node_modules/
+.mcp.json
+nanobanana-output/
