@@ -58,6 +58,7 @@ class Settings:
     # ===================
     nas_host: str = _get_env("NAS_HOST", "192.168.11.50")
     nas_port: int = _get_env_int("NAS_PORT", 445)
+    smb_connect_timeout: int = _get_env_int("SMB_CONNECT_TIMEOUT", 10)  # SMB 連線逾時（秒）
     nas_user: str = _get_env("NAS_USER", required=True)
     nas_password: str = _get_env("NAS_PASSWORD", required=True)
     nas_share: str = _get_env("NAS_SHARE", "擎添開發")
@@ -76,6 +77,7 @@ class Settings:
     # ===================
     # 路徑設定
     # ===================
+    project_root: str = _get_env("PROJECT_ROOT", str(_project_root))
     frontend_dir: str = _get_env("FRONTEND_DIR", "/home/ct/SDD/ching-tech-os/frontend")
 
     # NAS 路徑（相對於 ctos_mount_path）
@@ -87,6 +89,10 @@ class Settings:
     project_attachments_path: str = _get_env(
         "PROJECT_ATTACHMENTS_PATH",
         "/home/ct/SDD/ching-tech-os/data/projects/attachments"
+    )
+    knowledge_data_path: str = _get_env(
+        "KNOWLEDGE_DATA_PATH",
+        "/home/ct/SDD/ching-tech-os/data/knowledge"
     )
 
     # ===================

@@ -12,6 +12,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from ..config import settings
 from . import ai_manager
 
 
@@ -23,18 +24,18 @@ WORKING_DIR = "/tmp/ching-tech-os-cli"
 os.makedirs(WORKING_DIR, exist_ok=True)
 
 # 複製 MCP 配置到工作目錄
-PROJECT_ROOT = "/home/ct/SDD/ching-tech-os"
+PROJECT_ROOT = settings.project_root
 _mcp_src = os.path.join(PROJECT_ROOT, ".mcp.json")
 _mcp_dst = os.path.join(WORKING_DIR, ".mcp.json")
 if os.path.exists(_mcp_src):
     shutil.copy2(_mcp_src, _mcp_dst)
 
 # 設定 nanobanana 輸出目錄（symlink 到 NAS，讓生成的圖片可以透過 Line Bot 發送）
-_nas_ai_images_dir = "/mnt/nas/ctos/linebot/files/ai-images"
+_nas_ai_images_dir = f"{settings.linebot_local_path}/ai-images"
 _nanobanana_output_link = os.path.join(WORKING_DIR, "nanobanana-output")
 
 # 建立 NAS 目錄（如果不存在）
-if os.path.exists("/mnt/nas/ctos/linebot/files"):
+if os.path.exists(settings.linebot_local_path):
     os.makedirs(_nas_ai_images_dir, exist_ok=True)
 
     # 建立 symlink（如果不存在或指向錯誤位置）

@@ -6,6 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response
 
+from ching_tech_os.config import settings
 from ching_tech_os.services.message import log_message
 from ching_tech_os.models.knowledge import (
     AttachmentUpdate,
@@ -161,7 +162,7 @@ async def get_local_asset(path: str) -> Response:
             detail="無效的路徑",
         )
 
-    assets_base = Path("/home/ct/SDD/ching-tech-os/data/knowledge/assets")
+    assets_base = Path(settings.knowledge_data_path) / "assets"
     file_path = assets_base / path
 
     if not file_path.exists():

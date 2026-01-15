@@ -259,7 +259,8 @@ const PdfViewerModule = (function() {
     } else if (currentPath.startsWith('http://') || currentPath.startsWith('https://')) {
       fetchUrl = currentPath;
     } else {
-      fetchUrl = `${basePath}/api/nas/file?path=${encodeURIComponent(currentPath)}`;
+      // Use PathUtils for unified path handling
+      fetchUrl = PathUtils.toApiUrl(currentPath);
     }
 
     const response = await fetch(fetchUrl, {

@@ -239,8 +239,8 @@ const TextViewerModule = (function() {
       } else if (currentPath.startsWith('/data/')) {
         fetchUrl = currentPath;
       } else {
-        // NAS file path - use NAS API
-        fetchUrl = `${basePath}/api/nas/file?path=${encodeURIComponent(currentPath)}`;
+        // Use PathUtils for unified path handling
+        fetchUrl = PathUtils.toApiUrl(currentPath);
         fetchOptions = { headers: { 'Authorization': `Bearer ${getToken()}` } };
       }
 

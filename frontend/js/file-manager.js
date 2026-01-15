@@ -807,8 +807,10 @@ const FileManagerModule = (function() {
     const filePath = currentPath === '/' ? `/${name}` : `${currentPath}/${name}`;
 
     // 使用 FileOpener 統一入口開啟檔案
+    // 傳入統一格式的路徑，FileOpener 會透過 PathUtils 轉換為 API URL
     if (typeof FileOpener !== 'undefined' && FileOpener.canOpen(name)) {
-      FileOpener.open(filePath, name);
+      const apiUrl = PathUtils.toApiUrl(filePath);
+      FileOpener.open(apiUrl, name);
     }
   }
 
@@ -1060,7 +1062,7 @@ const FileManagerModule = (function() {
     } else if (FileUtils.isImageFile(file.name)) {
       previewMainHTML = `
         <div class="fm-preview-image">
-          <img src="${window.API_BASE || ''}/api/nas/file?path=${encodeURIComponent(filePath)}&token=${encodeURIComponent(getToken())}" alt="${file.name}">
+          <img id="fmPreviewImage" alt="${file.name}" style="display: none;">
         </div>
       `;
     } else if (FileUtils.isTextFile(file.name)) {
@@ -1102,10 +1104,32 @@ const FileManagerModule = (function() {
 
     previewContent.innerHTML = previewHTML;
 
+    // Load image content async
+    // 使用統一的 Files API，PathUtils 會將 NAS 路徑轉換為 /api/files/nas/...
+    const apiUrl = PathUtils.toApiUrl(filePath);
+
+    if (FileUtils.isImageFile(file.name)) {
+      try {
+        const response = await fetch(apiUrl, {
+          headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+        if (response.ok) {
+          const blob = await response.blob();
+          const previewImage = windowEl.querySelector('#fmPreviewImage');
+          if (previewImage) {
+            previewImage.src = URL.createObjectURL(blob);
+            previewImage.style.display = '';
+          }
+        }
+      } catch (e) {
+        console.error('無法載入圖片預覽:', e);
+      }
+    }
+
     // Load text content async
     if (FileUtils.isTextFile(file.name)) {
       try {
-        const response = await fetch(`/api/nas/file?path=${encodeURIComponent(filePath)}`, {
+        const response = await fetch(apiUrl, {
           headers: { 'Authorization': `Bearer ${getToken()}` }
         });
         if (response.ok) {
@@ -1142,7 +1166,7 @@ const FileManagerModule = (function() {
     if (FileUtils.isImageFile(file.name)) {
       previewMainHTML = `
         <div class="fm-mobile-preview-image">
-          <img src="${window.API_BASE || ''}/api/nas/file?path=${encodeURIComponent(filePath)}&token=${encodeURIComponent(getToken())}" alt="${file.name}">
+          <img id="fmMobilePreviewImage" alt="${file.name}" style="display: none;">
         </div>
       `;
     } else if (FileUtils.isTextFile(file.name)) {
@@ -1219,10 +1243,32 @@ const FileManagerModule = (function() {
       });
     }
 
+    // Load image content async
+    // 使用統一的 Files API，PathUtils 會將 NAS 路徑轉換為 /api/files/nas/...
+    const apiUrl = PathUtils.toApiUrl(filePath);
+
+    if (FileUtils.isImageFile(file.name)) {
+      try {
+        const response = await fetch(apiUrl, {
+          headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
+        if (response.ok) {
+          const blob = await response.blob();
+          const previewImage = mobilePreviewOverlay.querySelector('#fmMobilePreviewImage');
+          if (previewImage) {
+            previewImage.src = URL.createObjectURL(blob);
+            previewImage.style.display = '';
+          }
+        }
+      } catch (e) {
+        console.error('無法載入圖片預覽:', e);
+      }
+    }
+
     // Load text content async
     if (FileUtils.isTextFile(file.name)) {
       try {
-        const response = await fetch(`/api/nas/file?path=${encodeURIComponent(filePath)}`, {
+        const response = await fetch(apiUrl, {
           headers: { 'Authorization': `Bearer ${getToken()}` }
         });
         if (response.ok) {

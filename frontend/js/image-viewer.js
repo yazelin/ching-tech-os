@@ -197,8 +197,8 @@ const ImageViewerModule = (function() {
       img.src = currentPath;
       return;
     } else {
-      // NAS file path - use NAS API
-      fetchUrl = `${basePath}/api/nas/file?path=${encodeURIComponent(currentPath)}`;
+      // Use PathUtils for unified path handling
+      fetchUrl = PathUtils.toApiUrl(currentPath);
     }
 
     // Add authorization header via fetch and create blob URL

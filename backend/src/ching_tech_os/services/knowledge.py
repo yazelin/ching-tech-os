@@ -52,7 +52,7 @@ class KnowledgeNotFoundError(KnowledgeError):
 
 
 # 知識庫路徑
-KNOWLEDGE_BASE_PATH = Path("/home/ct/SDD/ching-tech-os/data/knowledge")
+KNOWLEDGE_BASE_PATH = Path(settings.knowledge_data_path)
 ENTRIES_PATH = KNOWLEDGE_BASE_PATH / "entries"
 ASSETS_PATH = KNOWLEDGE_BASE_PATH / "assets"
 INDEX_PATH = KNOWLEDGE_BASE_PATH / "index.json"
@@ -599,17 +599,19 @@ def delete_knowledge(kb_id: str) -> None:
         attachments = []
 
     # 刪除所有附件（忽略錯誤，確保知識可以被刪除）
+    from .path_manager import path_manager, StorageZone
     file_service = create_knowledge_file_service()
     for attachment in attachments:
         attachment_path = attachment.get("path", "")
         try:
-            if attachment_path.startswith("nas://knowledge/"):
-                # NAS 檔案（透過掛載路徑存取）
-                nas_path = attachment_path.replace("nas://knowledge/", "")
+            parsed = path_manager.parse(attachment_path)
+            if parsed.zone == StorageZone.CTOS and parsed.path.startswith("knowledge/"):
+                # CTOS 區的知識庫檔案
+                nas_path = parsed.path.replace("knowledge/", "", 1)
                 file_service.delete_file(nas_path)
-            elif attachment_path.startswith("../assets/images/"):
+            elif parsed.zone == StorageZone.LOCAL:
                 # 本機檔案
-                filename = attachment_path.split("/")[-1]
+                filename = parsed.path.split("/")[-1]
                 local_path = ASSETS_PATH / "images" / filename
                 if local_path.exists():
                     local_path.unlink()
@@ -874,7 +876,7 @@ def upload_attachment(
         with open(local_path, "wb") as f:
             f.write(data)
 
-        attachment_path = f"../assets/images/{kb_id}-{filename}"
+        attachment_path = f"local://knowledge/images/{kb_id}-{filename}"
     else:
         # 大於等於 1MB 存 NAS（透過掛載路徑）
         nas_path = f"attachments/{kb_id}/{filename}"
@@ -886,7 +888,7 @@ def upload_attachment(
         except LocalFileError as e:
             raise KnowledgeError(f"上傳附件到 NAS 失敗：{e}") from e
 
-        attachment_path = f"nas://knowledge/{nas_path}"
+        attachment_path = f"ctos://knowledge/{nas_path}"
 
     attachment = KnowledgeAttachment(
         type=file_type,
@@ -1054,21 +1056,27 @@ def delete_attachment(kb_id: str, attachment_idx: int) -> None:
         attachment_path = attachment.get("path", "")
 
         # 刪除實體檔案（檔案不存在也繼續刪除參考）
-        if attachment_path.startswith("nas://knowledge/"):
-            # NAS 檔案（透過掛載路徑存取）
-            nas_path = attachment_path.replace("nas://knowledge/", "")
-            try:
-                file_service = create_knowledge_file_service()
-                file_service.delete_file(nas_path)
-            except Exception:
-                # 檔案可能已不存在，忽略錯誤繼續刪除參考
-                pass
-        else:
-            # 本機檔案
-            filename = attachment_path.split("/")[-1]
-            local_path = ASSETS_PATH / "images" / filename
-            if local_path.exists():
-                local_path.unlink()
+        from .path_manager import path_manager, StorageZone
+        try:
+            parsed = path_manager.parse(attachment_path)
+            if parsed.zone == StorageZone.CTOS and parsed.path.startswith("knowledge/"):
+                # CTOS 區的知識庫檔案
+                nas_path = parsed.path.replace("knowledge/", "", 1)
+                try:
+                    file_service = create_knowledge_file_service()
+                    file_service.delete_file(nas_path)
+                except Exception:
+                    # 檔案可能已不存在，忽略錯誤繼續刪除參考
+                    pass
+            elif parsed.zone == StorageZone.LOCAL:
+                # 本機檔案
+                filename = parsed.path.split("/")[-1]
+                local_path = ASSETS_PATH / "images" / filename
+                if local_path.exists():
+                    local_path.unlink()
+        except Exception:
+            # 路徑解析失敗，忽略
+            pass
 
         # 更新元資料
         attachments.pop(attachment_idx)

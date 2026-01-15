@@ -52,6 +52,18 @@ class SMBConnectionError(SMBError):
     pass
 
 
+class SMBFileNotFoundError(SMBError):
+    """SMB 檔案不存在錯誤"""
+
+    pass
+
+
+class SMBPermissionError(SMBError):
+    """SMB 權限錯誤"""
+
+    pass
+
+
 class SMBService:
     """SMB 服務
 
@@ -59,20 +71,24 @@ class SMBService:
     """
 
     def __init__(
-        self, host: str, username: str, password: str, port: int | None = None
+        self, host: str, username: str, password: str, port: int | None = None,
+        connect_timeout: int | None = None
     ):
         self.host = host
         self.username = username
         self.password = password
         self.port = port or settings.nas_port
+        self.connect_timeout = connect_timeout or settings.smb_connect_timeout
         self._connection: Connection | None = None
         self._session: Session | None = None
 
     def _connect(self) -> None:
-        """建立 SMB 連線"""
+        """建立 SMB 連線（含逾時設定）"""
         try:
             self._connection = Connection(uuid.uuid4(), self.host, self.port)
-            self._connection.connect()
+            self._connection.connect(timeout=self.connect_timeout)
+        except TimeoutError:
+            raise SMBConnectionError(f"連線檔案伺服器 {self.host} 逾時（{self.connect_timeout}秒）")
         except Exception as e:
             raise SMBConnectionError(f"無法連線至檔案伺服器 {self.host}") from e
 
@@ -329,9 +345,9 @@ class SMBService:
         except Exception as e:
             error_msg = str(e).lower()
             if "access" in error_msg or "denied" in error_msg:
-                raise SMBError("無權限讀取此檔案") from e
-            if "not found" in error_msg or "no such" in error_msg:
-                raise SMBError("檔案不存在") from e
+                raise SMBPermissionError("無權限讀取此檔案") from e
+            if "not found" in error_msg or "no such" in error_msg or "status_object_name_not_found" in error_msg:
+                raise SMBFileNotFoundError("檔案不存在") from e
             raise SMBError(f"讀取檔案失敗：{e}") from e
         finally:
             if tree is not None:

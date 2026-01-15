@@ -14,7 +14,7 @@ from .services.session import session_manager
 from .services.terminal import terminal_service
 from .services.scheduler import start_scheduler, stop_scheduler
 from .services.linebot_agents import ensure_default_linebot_agents
-from .api import auth, knowledge, login_records, messages, nas, user, ai_router, ai_management, project, linebot_router, share
+from .api import auth, knowledge, login_records, messages, nas, user, ai_router, ai_management, project, linebot_router, share, files
 
 # 建立 Socket.IO 伺服器
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
@@ -70,6 +70,7 @@ app.include_router(project.router)
 app.include_router(linebot_router.router)
 app.include_router(share.router)
 app.include_router(share.public_router)
+app.include_router(files.router)
 
 
 @app.get("/api/health")
@@ -184,7 +185,7 @@ app.mount("/js", StaticFiles(directory=FRONTEND / "js"), name="js")
 app.mount("/assets", StaticFiles(directory=FRONTEND / "assets"), name="assets")
 
 # 知識庫本機附件目錄
-KNOWLEDGE_ASSETS = Path("/home/ct/SDD/ching-tech-os/data/knowledge/assets")
+KNOWLEDGE_ASSETS = Path(settings.knowledge_data_path) / "assets"
 if KNOWLEDGE_ASSETS.exists():
     app.mount("/data/knowledge/assets", StaticFiles(directory=KNOWLEDGE_ASSETS), name="knowledge-assets")
 
