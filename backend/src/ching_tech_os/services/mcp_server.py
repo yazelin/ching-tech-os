@@ -1077,6 +1077,7 @@ async def update_knowledge_item(
     title: str | None = None,
     content: str | None = None,
     category: str | None = None,
+    scope: str | None = None,
     topics: list[str] | None = None,
     projects: list[str] | None = None,
     roles: list[str] | None = None,
@@ -1091,6 +1092,7 @@ async def update_knowledge_item(
         title: 新標題（不填則不更新）
         content: 新內容（不填則不更新）
         category: 新分類（不填則不更新）
+        scope: 知識範圍，可選 global（全域）或 personal（個人），改為 global 會自動清除 owner
         topics: 主題標籤列表（不填則不更新）
         projects: 關聯專案列表（不填則不更新）
         roles: 適用角色列表（不填則不更新）
@@ -1116,13 +1118,15 @@ async def update_knowledge_item(
             title=title,
             content=content,
             category=category,
+            scope=scope,
             type=type,
             tags=tags,
         )
 
         item = kb_service.update_knowledge(kb_id, update_data)
 
-        return f"✅ 已更新 [{item.id}] {item.title}"
+        scope_info = f"（{item.scope}）" if item.scope else ""
+        return f"✅ 已更新 [{item.id}] {item.title}{scope_info}"
 
     except Exception as e:
         logger.error(f"更新知識失敗: {e}")

@@ -79,6 +79,8 @@ class KnowledgeUpdate(BaseModel):
     content: str | None = None
     type: str | None = None
     category: str | None = None
+    scope: str | None = None  # global, personal, project
+    owner: str | None = None  # 擁有者帳號（設為空字串可清除）
     tags: KnowledgeTags | None = None
     source: KnowledgeSource | None = None
     related: list[str] | None = None

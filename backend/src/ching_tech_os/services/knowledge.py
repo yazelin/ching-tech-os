@@ -520,6 +520,14 @@ def update_knowledge(kb_id: str, data: KnowledgeUpdate) -> KnowledgeResponse:
         metadata["type"] = data.type
     if data.category is not None:
         metadata["category"] = data.category
+    if data.scope is not None:
+        metadata["scope"] = data.scope
+        # 如果改為 global，清除 owner
+        if data.scope == "global":
+            metadata["owner"] = None
+    if data.owner is not None:
+        # 空字串表示清除 owner
+        metadata["owner"] = data.owner if data.owner else None
     if data.tags is not None:
         metadata["tags"] = {
             "projects": data.tags.projects,
@@ -563,6 +571,13 @@ def update_knowledge(kb_id: str, data: KnowledgeUpdate) -> KnowledgeResponse:
                 entry.type = data.type
             if data.category is not None:
                 entry.category = data.category
+            if data.scope is not None:
+                entry.scope = data.scope
+                # 如果改為 global，清除 owner
+                if data.scope == "global":
+                    entry.owner = None
+            if data.owner is not None:
+                entry.owner = data.owner if data.owner else None
             if data.tags is not None:
                 entry.tags = data.tags
             entry.updated_at = date.today().isoformat()
