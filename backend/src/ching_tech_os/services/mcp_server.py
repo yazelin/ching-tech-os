@@ -3161,6 +3161,400 @@ async def convert_pdf_to_images(
 
 
 # ============================================================
+# 物料管理工具
+# ============================================================
+
+
+@mcp.tool()
+async def query_inventory(
+    keyword: str | None = None,
+    item_id: str | None = None,
+    category: str | None = None,
+    low_stock: bool = False,
+    limit: int = 20,
+) -> str:
+    """
+    查詢物料/庫存
+
+    Args:
+        keyword: 搜尋關鍵字（名稱或規格）
+        item_id: 物料 ID（查詢特定物料詳情）
+        category: 類別過濾
+        low_stock: 只顯示庫存不足的物料
+        limit: 最大回傳數量，預設 20
+    """
+    from decimal import Decimal
+    from ..services.inventory import (
+        list_inventory_items,
+        get_item_with_transactions,
+        calculate_is_low_stock,
+    )
+
+    await ensure_db_connection()
+
+    try:
+        # 如果指定了 item_id，查詢單一物料詳情
+        if item_id:
+            try:
+                data = await get_item_with_transactions(UUID(item_id))
+            except Exception:
+                return f"❌ 找不到物料 ID: {item_id}"
+
+            row = data["item"]
+            transactions = data["transactions"]
+
+            current_stock = row["current_stock"] or Decimal("0")
+            min_stock = row["min_stock"]
+            is_low = calculate_is_low_stock(current_stock, min_stock)
+
+            result = f"""📦 **{row['name']}**
+規格：{row['specification'] or '-'}
+單位：{row['unit'] or '-'}
+類別：{row['category'] or '-'}
+預設廠商：{row['default_vendor'] or '-'}
+目前庫存：{current_stock} {row['unit'] or ''}{'⚠️ 庫存不足' if is_low else ''}
+最低庫存：{min_stock or '-'}
+備註：{row['notes'] or '-'}
+
+📋 近期進出貨記錄："""
+
+            if transactions:
+                for t in transactions:
+                    t_type = "進貨" if t["type"] == "in" else "出貨"
+                    t_sign = "+" if t["type"] == "in" else "-"
+                    t_date = t["transaction_date"].strftime("%Y-%m-%d")
+                    t_project = f"（{t['project_name']}）" if t["project_name"] else ""
+                    t_vendor = f"廠商: {t['vendor']}" if t["vendor"] else ""
+                    result += f"\n- {t_date} {t_type} {t_sign}{t['quantity']} {t_vendor}{t_project}"
+            else:
+                result += "\n（無記錄）"
+
+            return result
+
+        # 查詢物料列表（使用 Service 層）
+        response = await list_inventory_items(query=keyword, category=category, low_stock=low_stock)
+        items = response.items[:limit]
+
+        if not items:
+            return "📦 找不到符合條件的物料"
+
+        result = f"📦 物料列表（共 {len(items)} 筆）：\n"
+        for item in items:
+            low_mark = " ⚠️" if item.is_low_stock else ""
+            spec = f"（{item.specification}）" if item.specification else ""
+            result += f"\n• {item.name}{spec}：{item.current_stock} {item.unit or ''}{low_mark}"
+
+        return result
+
+    except Exception as e:
+        logger.error(f"查詢物料失敗: {e}")
+        return f"❌ 查詢失敗：{str(e)}"
+
+
+@mcp.tool()
+async def add_inventory_item(
+    name: str,
+    specification: str | None = None,
+    unit: str | None = None,
+    category: str | None = None,
+    default_vendor: str | None = None,
+    min_stock: float | None = None,
+    notes: str | None = None,
+) -> str:
+    """
+    新增物料
+
+    Args:
+        name: 物料名稱（必填）
+        specification: 規格
+        unit: 單位（如：個、台、公斤）
+        category: 類別
+        default_vendor: 預設廠商
+        min_stock: 最低庫存量（低於此數量會警告）
+        notes: 備註
+    """
+    from decimal import Decimal
+    from ..services.inventory import create_inventory_item, InventoryError
+    from ..models.inventory import InventoryItemCreate
+
+    await ensure_db_connection()
+
+    try:
+        data = InventoryItemCreate(
+            name=name,
+            specification=specification,
+            unit=unit,
+            category=category,
+            default_vendor=default_vendor,
+            min_stock=Decimal(str(min_stock)) if min_stock else None,
+            notes=notes,
+        )
+        result = await create_inventory_item(data, created_by="linebot")
+
+        return f"✅ 已新增物料「{result.name}」\nID：{result.id}\n\n💡 提示：使用「進貨」指令來增加庫存"
+
+    except InventoryError as e:
+        return f"❌ {str(e)}"
+    except Exception as e:
+        logger.error(f"新增物料失敗: {e}")
+        return f"❌ 新增失敗：{str(e)}"
+
+
+@mcp.tool()
+async def record_inventory_in(
+    quantity: float,
+    item_id: str | None = None,
+    item_name: str | None = None,
+    vendor: str | None = None,
+    project_id: str | None = None,
+    project_name: str | None = None,
+    transaction_date: str | None = None,
+    notes: str | None = None,
+) -> str:
+    """
+    記錄進貨
+
+    Args:
+        quantity: 進貨數量（必填）
+        item_id: 物料 ID（與 item_name 擇一提供）
+        item_name: 物料名稱（與 item_id 擇一提供，會模糊匹配）
+        vendor: 廠商名稱
+        project_id: 關聯專案 ID
+        project_name: 關聯專案名稱（會搜尋匹配）
+        transaction_date: 進貨日期（格式：YYYY-MM-DD，預設今日）
+        notes: 備註
+    """
+    from datetime import date
+    from decimal import Decimal
+    from ..services.inventory import (
+        find_item_by_id_or_name,
+        find_project_by_id_or_name,
+        create_inventory_transaction_mcp,
+    )
+
+    await ensure_db_connection()
+
+    if quantity <= 0:
+        return "❌ 進貨數量必須大於 0"
+
+    try:
+        # 查詢物料
+        item_result = await find_item_by_id_or_name(item_id=item_id, item_name=item_name)
+        if not item_result.found:
+            if item_result.has_multiple:
+                candidates = "\n".join([f"• {i['name']}（ID: {i['id']}）" for i in item_result.candidates])
+                return f"⚠️ 找到多個匹配的物料，請指定：\n{candidates}"
+            return f"❌ {item_result.error}"
+        item = item_result.item
+
+        # 查詢專案（如果有指定）
+        project_result = await find_project_by_id_or_name(project_id=project_id, project_name=project_name)
+        if project_result.error:
+            if project_result.has_multiple:
+                candidates = "\n".join([f"• {p['name']}（ID: {p['id']}）" for p in project_result.candidates])
+                return f"⚠️ 找到多個匹配的專案，請指定專案 ID：\n{candidates}"
+            return f"❌ {project_result.error}"
+
+        actual_project_id = project_result.project["id"] if project_result.found else None
+        project_info = f"，關聯專案：{project_result.project['name']}" if project_result.found else ""
+
+        # 解析日期
+        t_date = date.today()
+        if transaction_date:
+            try:
+                t_date = date.fromisoformat(transaction_date)
+            except ValueError:
+                return f"❌ 日期格式錯誤，請使用 YYYY-MM-DD 格式"
+
+        # 建立進貨記錄
+        new_stock = await create_inventory_transaction_mcp(
+            item_id=item["id"],
+            transaction_type="in",
+            quantity=Decimal(str(quantity)),
+            transaction_date=t_date,
+            vendor=vendor,
+            project_id=actual_project_id,
+            notes=notes,
+        )
+
+        return f"✅ 已記錄進貨\n物料：{item['name']}\n數量：+{quantity} {item['unit'] or ''}\n目前庫存：{new_stock} {item['unit'] or ''}{project_info}"
+
+    except Exception as e:
+        logger.error(f"記錄進貨失敗: {e}")
+        return f"❌ 記錄失敗：{str(e)}"
+
+
+@mcp.tool()
+async def record_inventory_out(
+    quantity: float,
+    item_id: str | None = None,
+    item_name: str | None = None,
+    project_id: str | None = None,
+    project_name: str | None = None,
+    transaction_date: str | None = None,
+    notes: str | None = None,
+) -> str:
+    """
+    記錄出貨/領料
+
+    Args:
+        quantity: 出貨數量（必填）
+        item_id: 物料 ID（與 item_name 擇一提供）
+        item_name: 物料名稱（與 item_id 擇一提供，會模糊匹配）
+        project_id: 關聯專案 ID
+        project_name: 關聯專案名稱（會搜尋匹配）
+        transaction_date: 出貨日期（格式：YYYY-MM-DD，預設今日）
+        notes: 備註
+    """
+    from datetime import date
+    from decimal import Decimal
+
+    from ..services.inventory import (
+        find_item_by_id_or_name,
+        find_project_by_id_or_name,
+        create_inventory_transaction_mcp,
+    )
+
+    await ensure_db_connection()
+
+    if quantity <= 0:
+        return "❌ 出貨數量必須大於 0"
+
+    try:
+        # 查找物料
+        item_result = await find_item_by_id_or_name(
+            item_id=item_id, item_name=item_name, include_stock=True
+        )
+        if not item_result.found:
+            if item_result.has_multiple:
+                candidates = "\n".join(
+                    [f"• {c['name']}（ID: {c['id']}）" for c in item_result.candidates]
+                )
+                return f"⚠️ {item_result.error}，請指定：\n{candidates}"
+            return f"❌ {item_result.error}"
+
+        item = item_result.item
+        current_stock = item.get("current_stock") or Decimal("0")
+
+        # 檢查庫存（允許負庫存但警告）
+        warning = ""
+        if Decimal(str(quantity)) > current_stock:
+            warning = "\n⚠️ 注意：庫存將變為負數！"
+
+        # 查找專案（如果有指定）
+        actual_project_id = None
+        project_info = ""
+        project_result = await find_project_by_id_or_name(
+            project_id=project_id, project_name=project_name
+        )
+        if project_result.error and project_result.has_multiple:
+            candidates = "\n".join(
+                [f"• {p['name']}（ID: {p['id']}）" for p in project_result.candidates]
+            )
+            return f"⚠️ {project_result.error}，請指定專案 ID：\n{candidates}"
+        if project_result.found:
+            actual_project_id = UUID(str(project_result.project["id"]))
+            project_info = f"，關聯專案：{project_result.project['name']}"
+
+        # 解析日期
+        t_date = date.today()
+        if transaction_date:
+            try:
+                t_date = date.fromisoformat(transaction_date)
+            except ValueError:
+                return "❌ 日期格式錯誤，請使用 YYYY-MM-DD 格式"
+
+        # 建立出貨記錄
+        new_stock = await create_inventory_transaction_mcp(
+            item_id=UUID(str(item["id"])),
+            transaction_type="out",
+            quantity=Decimal(str(quantity)),
+            transaction_date=t_date,
+            project_id=actual_project_id,
+            notes=notes,
+        )
+
+        return f"✅ 已記錄出貨/領料\n物料：{item['name']}\n數量：-{quantity} {item['unit'] or ''}\n目前庫存：{new_stock} {item['unit'] or ''}{project_info}{warning}"
+
+    except Exception as e:
+        logger.error(f"記錄出貨失敗: {e}")
+        return f"❌ 記錄失敗：{str(e)}"
+
+
+@mcp.tool()
+async def adjust_inventory(
+    new_quantity: float,
+    reason: str,
+    item_id: str | None = None,
+    item_name: str | None = None,
+) -> str:
+    """
+    調整庫存（盤點校正）
+
+    Args:
+        new_quantity: 新的庫存數量（必填）
+        reason: 調整原因（必填，如「盤點調整」、「損耗」）
+        item_id: 物料 ID（與 item_name 擇一提供）
+        item_name: 物料名稱（與 item_id 擇一提供）
+    """
+    from decimal import Decimal
+
+    from ..services.inventory import (
+        find_item_by_id_or_name,
+        create_inventory_transaction_mcp,
+    )
+
+    await ensure_db_connection()
+
+    if new_quantity < 0:
+        return "❌ 庫存數量不能為負數"
+
+    if not reason or not reason.strip():
+        return "❌ 請提供調整原因"
+
+    try:
+        # 查找物料
+        item_result = await find_item_by_id_or_name(
+            item_id=item_id, item_name=item_name, include_stock=True
+        )
+        if not item_result.found:
+            if item_result.has_multiple:
+                candidates = "\n".join(
+                    [f"• {c['name']}（ID: {c['id']}）" for c in item_result.candidates]
+                )
+                return f"⚠️ {item_result.error}，請指定：\n{candidates}"
+            return f"❌ {item_result.error}"
+
+        item = item_result.item
+        current_stock = item.get("current_stock") or Decimal("0")
+        new_stock = Decimal(str(new_quantity))
+        diff = new_stock - current_stock
+
+        if diff == 0:
+            return f"ℹ️ 物料「{item['name']}」的庫存已經是 {current_stock}，無需調整"
+
+        # 決定交易類型
+        t_type = "in" if diff > 0 else "out"
+        t_quantity = abs(diff)
+        t_notes = f"[庫存調整] {reason}"
+
+        # 建立調整記錄
+        await create_inventory_transaction_mcp(
+            item_id=UUID(str(item["id"])),
+            transaction_type=t_type,
+            quantity=t_quantity,
+            notes=t_notes,
+        )
+
+        direction = "增加" if diff > 0 else "減少"
+        return f"✅ 已調整庫存\n物料：{item['name']}\n原庫存：{current_stock} {item['unit'] or ''}\n新庫存：{new_stock} {item['unit'] or ''}\n{direction}：{t_quantity}\n原因：{reason}"
+
+    except Exception as e:
+        logger.error(f"調整庫存失敗: {e}")
+        return f"❌ 調整失敗：{str(e)}"
+
+
+# ============================================================
 # 工具存取介面（供 Line Bot 和其他服務使用）
 # ============================================================
 
