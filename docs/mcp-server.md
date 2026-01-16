@@ -80,13 +80,25 @@ uv run python -m ching_tech_os.mcp_cli
 | `update_delivery_schedule` | 更新發包記錄 | `delivery_id` 或 `project_id` + `vendor` + `item`（模糊匹配）, `status`, `actual_delivery_date`, `expected_delivery_date`, `quantity`, `notes` |
 | `get_delivery_schedules` | 查詢發包列表 | `project_id`（必填）, `status`（過濾）, `vendor`（過濾）, `limit` |
 
+### 物料/庫存管理
+
+| 工具名稱 | 說明 | 參數 |
+|----------|------|------|
+| `query_inventory` | 查詢物料/庫存 | `keyword`（搜尋名稱或規格）, `item_id`（查詢特定物料詳情）, `category`（類別過濾）, `low_stock`（只顯示庫存不足）, `limit` |
+| `add_inventory_item` | 新增物料 | `name`（必填）, `specification`（規格）, `unit`（單位）, `category`（類別）, `default_vendor`（預設廠商）, `min_stock`（最低庫存量） |
+| `record_inventory_in` | 記錄進貨 | `quantity`（必填）, `item_id` 或 `item_name`（擇一）, `vendor`（廠商）, `project_id` 或 `project_name`（關聯專案）, `transaction_date`, `notes` |
+| `record_inventory_out` | 記錄出貨/領料 | `quantity`（必填）, `item_id` 或 `item_name`（擇一）, `project_id` 或 `project_name`（關聯專案）, `transaction_date`, `notes` |
+| `adjust_inventory` | 庫存調整（盤點校正） | `new_quantity`（必填）, `reason`（必填，如「盤點調整」）, `item_id` 或 `item_name`（擇一） |
+
+> **庫存低量警示**：當物料設定了 `min_stock` 且目前庫存低於此值，`query_inventory` 會顯示 ⚠️ 警示。使用 `low_stock=true` 可只查詢庫存不足的物料。
+
 ### 知識庫
 
 | 工具名稱 | 說明 | 參數 |
 |----------|------|------|
-| `search_knowledge` | 搜尋知識庫 | `query`（必填）, `project`, `category`, `limit` |
+| `search_knowledge` | 搜尋知識庫 | `query`（必填）, `project`, `category`, `limit`, `ctos_user_id`（傳入可搜尋個人知識） |
 | `get_knowledge_item` | 取得知識庫文件完整內容 | `kb_id`（必填，如 kb-001） |
-| `update_knowledge_item` | 更新知識庫文件 | `kb_id`（必填）, `title`, `content`, `category`, `topics`, `projects`, `roles`, `level`, `type` |
+| `update_knowledge_item` | 更新知識庫文件 | `kb_id`（必填）, `title`, `content`, `category`, `scope`（global/personal）, `topics`, `projects`, `roles`, `level`, `type`, `ctos_user_id`（改為 personal 時必填） |
 | `delete_knowledge_item` | 刪除知識庫文件 | `kb_id`（必填） |
 | `add_note` | 新增筆記到知識庫 | `title`（必填）, `content`（必填）, `category`, `topics`, `project`, `line_group_id`, `line_user_id`, `ctos_user_id` |
 | `add_note_with_attachments` | 新增筆記並加入附件 | `title`（必填）, `content`（必填）, `attachments`（必填，NAS 路徑列表）, `category`, `topics`, `project`, `line_group_id`, `line_user_id`, `ctos_user_id` |

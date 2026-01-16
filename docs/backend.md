@@ -159,6 +159,40 @@ uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8089 --reload
 | GET | `/api/linebot/files/{id}` | 取得檔案詳情 |
 | GET | `/api/linebot/files/{id}/download` | 下載檔案 |
 
+### 物料/庫存管理
+
+#### 物料
+
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| GET | `/api/inventory/items` | 列表物料（支援 keyword、category、low_stock 過濾） |
+| GET | `/api/inventory/items/{id}` | 取得物料詳情（含進出貨記錄） |
+| POST | `/api/inventory/items` | 新增物料 |
+| PUT | `/api/inventory/items/{id}` | 更新物料 |
+| DELETE | `/api/inventory/items/{id}` | 刪除物料 |
+| GET | `/api/inventory/categories` | 取得物料類別列表 |
+| GET | `/api/inventory/low-stock-count` | 取得庫存不足物料數量 |
+
+#### 進出貨記錄
+
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| GET | `/api/inventory/transactions` | 列表進出貨記錄（支援 item_id、type、project_id 過濾） |
+| POST | `/api/inventory/transactions` | 新增進出貨記錄 |
+| GET | `/api/inventory/transactions/{id}` | 取得記錄詳情 |
+| DELETE | `/api/inventory/transactions/{id}` | 刪除記錄 |
+
+### 廠商主檔
+
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| GET | `/api/vendors` | 列表廠商（支援 keyword、category 過濾） |
+| GET | `/api/vendors/{id}` | 取得廠商詳情 |
+| POST | `/api/vendors` | 新增廠商 |
+| PUT | `/api/vendors/{id}` | 更新廠商 |
+| DELETE | `/api/vendors/{id}` | 刪除廠商 |
+| GET | `/api/vendors/categories` | 取得廠商類別列表 |
+
 ### 終端機 (WebSocket)
 
 | 端點 | 說明 |
@@ -197,7 +231,9 @@ backend/
 │   │   ├── knowledge.py    # 知識庫 API
 │   │   ├── ai_router.py    # AI 對話 API
 │   │   ├── ai_management.py # AI 管理 API (Prompts/Agents/Logs)
-│   │   └── linebot_router.py # Line Bot API
+│   │   ├── linebot_router.py # Line Bot API
+│   │   ├── inventory.py    # 物料/庫存 API
+│   │   └── vendor.py       # 廠商主檔 API
 │   ├── services/
 │   │   ├── session.py      # Session 管理
 │   │   ├── smb.py          # SMB 連線服務
@@ -208,12 +244,16 @@ backend/
 │   │   ├── ai_manager.py   # AI 管理服務 (Prompts/Agents/Logs)
 │   │   ├── linebot.py      # Line Bot 服務
 │   │   ├── linebot_ai.py   # Line Bot AI 處理
-│   │   └── mcp_server.py   # MCP Server（FastMCP）
+│   │   ├── mcp_server.py   # MCP Server（FastMCP）
+│   │   ├── inventory.py    # 物料/庫存服務
+│   │   └── vendor.py       # 廠商主檔服務
 │   └── models/
 │       ├── auth.py         # 認證模型
 │       ├── nas.py          # NAS 模型
 │       ├── ai.py           # AI 相關模型
-│       └── linebot.py      # Line Bot 模型
+│       ├── linebot.py      # Line Bot 模型
+│       ├── inventory.py    # 物料/庫存模型
+│       └── vendor.py       # 廠商主檔模型
 └── tests/
 ```
 

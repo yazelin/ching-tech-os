@@ -253,53 +253,70 @@ def search_knowledge(
 
     if query:
         try:
-            # 使用 ripgrep 搜尋
-            result = subprocess.run(
-                [
-                    "rg",
-                    "-i",  # 不分大小寫
-                    "-l",  # 只輸出檔名
-                    "--type",
-                    "md",
-                    query,
-                    str(ENTRIES_PATH),
-                ],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
+            # 分詞搜尋：把 query 分成多個詞，每個詞都要匹配（AND 邏輯）
+            # 支援空格分隔和逗號分隔
+            import re
+            terms = [t.strip() for t in re.split(r'[,\s]+', query) if t.strip()]
 
-            matching_files = set()
-            if result.returncode == 0:
-                for line in result.stdout.strip().split("\n"):
-                    if line:
-                        matching_files.add(Path(line).name)
+            if terms:
+                # 對每個詞執行搜尋，取交集
+                term_results: list[set[str]] = []
+                for term in terms:
+                    result = subprocess.run(
+                        [
+                            "rg",
+                            "-i",  # 不分大小寫
+                            "-l",  # 只輸出檔名
+                            "--type",
+                            "md",
+                            term,
+                            str(ENTRIES_PATH),
+                        ],
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
+                    )
 
-            # 取得匹配片段
-            result_context = subprocess.run(
-                [
-                    "rg",
-                    "-i",
-                    "-C",
-                    "1",  # 前後各 1 行
-                    "--type",
-                    "md",
-                    query,
-                    str(ENTRIES_PATH),
-                ],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
+                    files_for_term = set()
+                    if result.returncode == 0:
+                        for line in result.stdout.strip().split("\n"):
+                            if line:
+                                files_for_term.add(Path(line).name)
+                    term_results.append(files_for_term)
 
-            if result_context.returncode == 0:
-                current_file = None
-                for line in result_context.stdout.split("\n"):
-                    if ":" in line:
-                        parts = line.split(":", 1)
-                        file_path = Path(parts[0]).name
-                        if file_path not in snippets:
-                            snippets[file_path] = parts[1][:200] if len(parts) > 1 else ""
+                # 取交集：所有詞都要匹配
+                if term_results:
+                    matching_files = term_results[0]
+                    for term_set in term_results[1:]:
+                        matching_files = matching_files.intersection(term_set)
+                else:
+                    matching_files = set()
+
+                # 取得匹配片段（用第一個詞來取得）
+                if terms:
+                    result_context = subprocess.run(
+                        [
+                            "rg",
+                            "-i",
+                            "-C",
+                            "1",  # 前後各 1 行
+                            "--type",
+                            "md",
+                            terms[0],
+                            str(ENTRIES_PATH),
+                        ],
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
+                    )
+
+                    if result_context.returncode == 0:
+                        for line in result_context.stdout.split("\n"):
+                            if ":" in line:
+                                parts = line.split(":", 1)
+                                file_path = Path(parts[0]).name
+                                if file_path not in snippets:
+                                    snippets[file_path] = parts[1][:200] if len(parts) > 1 else ""
 
         except subprocess.TimeoutExpired:
             pass  # 搜尋逾時，回退到全部列出
@@ -891,7 +908,7 @@ def upload_attachment(
         with open(local_path, "wb") as f:
             f.write(data)
 
-        attachment_path = f"local://knowledge/images/{kb_id}-{filename}"
+        attachment_path = f"local://knowledge/assets/images/{kb_id}-{filename}"
     else:
         # 大於等於 1MB 存 NAS（透過掛載路徑）
         nas_path = f"attachments/{kb_id}/{filename}"

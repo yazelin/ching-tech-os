@@ -1311,6 +1311,75 @@ async def update_knowledge_attachment(
         return f"更新失敗：{str(e)}"
 
 
+@mcp.tool()
+async def read_knowledge_attachment(
+    kb_id: str,
+    attachment_index: int = 0,
+    max_chars: int = 15000,
+) -> str:
+    """
+    讀取知識庫附件的內容
+
+    Args:
+        kb_id: 知識 ID（如 kb-001）
+        attachment_index: 附件索引（從 0 開始，可用 get_knowledge_attachments 查詢）
+        max_chars: 最大字元數限制，預設 15000（避免超過 CLI 的 25000 token 限制）
+    """
+    from . import knowledge as kb_service
+    from .path_manager import path_manager
+    from pathlib import Path
+
+    try:
+        item = kb_service.get_knowledge(kb_id)
+
+        if not item.attachments:
+            return f"知識 {kb_id} 沒有附件"
+
+        if attachment_index < 0 or attachment_index >= len(item.attachments):
+            return f"附件索引 {attachment_index} 超出範圍（共 {len(item.attachments)} 個附件，索引 0-{len(item.attachments)-1}）"
+
+        attachment = item.attachments[attachment_index]
+        filename = Path(attachment.path).name
+        file_ext = Path(attachment.path).suffix.lower()
+
+        # 解析路徑並轉換為檔案系統路徑
+        try:
+            fs_path = path_manager.to_filesystem(attachment.path)
+        except ValueError as e:
+            return f"無法解析附件路徑：{e}"
+
+        fs_path_obj = Path(fs_path)
+        if not fs_path_obj.exists():
+            return f"附件檔案不存在：{filename}"
+
+        # 判斷檔案類型
+        text_extensions = {".txt", ".md", ".json", ".yaml", ".yml", ".xml", ".csv", ".log", ".ini", ".conf", ".html", ".css", ".js", ".py", ".sh"}
+
+        if file_ext in text_extensions:
+            # 文字檔案：直接讀取
+            try:
+                content = fs_path_obj.read_text(encoding="utf-8")
+                if len(content) > max_chars:
+                    content = content[:max_chars] + f"\n\n... (內容已截斷，共 {len(content)} 字元)"
+
+                return f"📄 **{kb_id} 附件 [{attachment_index}]**\n檔名：{filename}\n\n---\n\n{content}"
+            except UnicodeDecodeError:
+                return f"無法讀取檔案 {filename}：編碼錯誤"
+        else:
+            # 二進位檔案：顯示檔案資訊
+            file_size = fs_path_obj.stat().st_size
+            if file_size >= 1024 * 1024:
+                size_str = f"{file_size / 1024 / 1024:.1f}MB"
+            else:
+                size_str = f"{file_size / 1024:.1f}KB"
+
+            return f"📎 **{kb_id} 附件 [{attachment_index}]**\n檔名：{filename}\n大小：{size_str}\n類型：{file_ext}\n\n此為二進位檔案，無法直接顯示內容。"
+
+    except Exception as e:
+        logger.error(f"讀取附件失敗: {e}")
+        return f"讀取附件失敗：{str(e)}"
+
+
 async def _determine_knowledge_scope(
     line_group_id: str | None,
     line_user_id: str | None,
