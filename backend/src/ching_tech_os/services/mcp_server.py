@@ -1083,6 +1083,7 @@ async def update_knowledge_item(
     roles: list[str] | None = None,
     level: str | None = None,
     type: str | None = None,
+    ctos_user_id: int | None = None,
 ) -> str:
     """
     更新知識庫文件
@@ -1092,17 +1093,34 @@ async def update_knowledge_item(
         title: 新標題（不填則不更新）
         content: 新內容（不填則不更新）
         category: 新分類（不填則不更新）
-        scope: 知識範圍，可選 global（全域）或 personal（個人），改為 global 會自動清除 owner
+        scope: 知識範圍，可選 global（全域）或 personal（個人）。改為 global 會清除 owner；改為 personal 會自動設定 owner 為當前用戶
         topics: 主題標籤列表（不填則不更新）
         projects: 關聯專案列表（不填則不更新）
         roles: 適用角色列表（不填則不更新）
         level: 難度層級，如 beginner、intermediate、advanced（不填則不更新）
         type: 知識類型，如 note、spec、guide（不填則不更新）
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於設定 personal 知識的 owner）
     """
     from ..models.knowledge import KnowledgeUpdate, KnowledgeTags
     from . import knowledge as kb_service
 
     try:
+        # 如果改為 personal，需要設定 owner
+        owner: str | None = None
+        if scope == "personal" and ctos_user_id:
+            await ensure_db_connection()
+            async with get_connection() as conn:
+                user_row = await conn.fetchrow(
+                    "SELECT username FROM users WHERE id = $1",
+                    ctos_user_id,
+                )
+                if user_row:
+                    owner = user_row["username"]
+                else:
+                    return "❌ 無法設為個人知識：找不到您的帳號"
+        elif scope == "personal" and not ctos_user_id:
+            return "❌ 無法設為個人知識：需要綁定 CTOS 帳號"
+
         # 建立標籤更新資料（任一標籤欄位有值就建立 KnowledgeTags）
         tags = None
         if any([topics, projects, roles, level]):
@@ -1119,6 +1137,7 @@ async def update_knowledge_item(
             content=content,
             category=category,
             scope=scope,
+            owner=owner,
             type=type,
             tags=tags,
         )
