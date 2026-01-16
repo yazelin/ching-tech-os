@@ -2,9 +2,23 @@
 
 from datetime import date, datetime
 from decimal import Decimal
+from enum import Enum
 from uuid import UUID
 
 from pydantic import BaseModel, Field
+
+
+class TransactionType(str, Enum):
+    """交易類型"""
+    IN = "in"    # 進貨
+    OUT = "out"  # 出貨
+
+
+def calculate_is_low_stock(current_stock: Decimal | None, min_stock: Decimal | None) -> bool:
+    """計算是否庫存不足"""
+    if current_stock is None or min_stock is None:
+        return False
+    return current_stock < min_stock
 
 
 # ============================================
@@ -82,7 +96,7 @@ class InventoryItemListResponse(BaseModel):
 class InventoryTransactionBase(BaseModel):
     """進出貨記錄基礎欄位"""
 
-    type: str = Field(..., description="類型：in（進貨）/ out（出貨）")
+    type: TransactionType = Field(..., description="類型：in（進貨）/ out（出貨）")
     quantity: Decimal = Field(..., description="數量")
     transaction_date: date = Field(default_factory=date.today, description="進出貨日期")
     vendor: str | None = Field(None, description="廠商")
@@ -99,7 +113,7 @@ class InventoryTransactionCreate(InventoryTransactionBase):
 class InventoryTransactionUpdate(BaseModel):
     """更新進出貨記錄請求"""
 
-    type: str | None = None
+    type: TransactionType | None = None
     quantity: Decimal | None = None
     transaction_date: date | None = None
     vendor: str | None = None
@@ -123,7 +137,7 @@ class InventoryTransactionListItem(BaseModel):
 
     id: UUID
     item_id: UUID
-    type: str
+    type: TransactionType
     quantity: Decimal
     transaction_date: date
     vendor: str | None = None

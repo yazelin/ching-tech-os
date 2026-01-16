@@ -84,32 +84,36 @@ def upgrade() -> None:
     """)
 
     # 建立觸發器：自動更新 current_stock
+    # 修正：當 item_id 變更時，需同時更新新舊物料的庫存
     op.execute("""
         CREATE OR REPLACE FUNCTION update_inventory_current_stock()
         RETURNS TRIGGER AS $$
-        DECLARE
-            new_stock NUMERIC(15, 3);
         BEGIN
-            -- 計算新庫存
-            IF TG_OP = 'DELETE' THEN
-                SELECT COALESCE(
-                    SUM(CASE WHEN type = 'in' THEN quantity ELSE -quantity END),
-                    0
-                ) INTO new_stock
-                FROM inventory_transactions
-                WHERE item_id = OLD.item_id;
+            -- INSERT 或 UPDATE 時，更新新物料的庫存
+            IF (TG_OP = 'INSERT' OR TG_OP = 'UPDATE') THEN
+                UPDATE inventory_items
+                SET current_stock = (
+                    SELECT COALESCE(SUM(CASE WHEN type = 'in' THEN quantity ELSE -quantity END), 0)
+                    FROM inventory_transactions
+                    WHERE item_id = NEW.item_id
+                )
+                WHERE id = NEW.item_id;
+            END IF;
 
-                UPDATE inventory_items SET current_stock = new_stock WHERE id = OLD.item_id;
+            -- DELETE 時，或 UPDATE 且 item_id 變更時，更新舊物料的庫存
+            IF (TG_OP = 'DELETE' OR (TG_OP = 'UPDATE' AND NEW.item_id <> OLD.item_id)) THEN
+                UPDATE inventory_items
+                SET current_stock = (
+                    SELECT COALESCE(SUM(CASE WHEN type = 'in' THEN quantity ELSE -quantity END), 0)
+                    FROM inventory_transactions
+                    WHERE item_id = OLD.item_id
+                )
+                WHERE id = OLD.item_id;
+            END IF;
+
+            IF TG_OP = 'DELETE' THEN
                 RETURN OLD;
             ELSE
-                SELECT COALESCE(
-                    SUM(CASE WHEN type = 'in' THEN quantity ELSE -quantity END),
-                    0
-                ) INTO new_stock
-                FROM inventory_transactions
-                WHERE item_id = NEW.item_id;
-
-                UPDATE inventory_items SET current_stock = new_stock WHERE id = NEW.item_id;
                 RETURN NEW;
             END IF;
         END;
@@ -130,12 +134,12 @@ def downgrade() -> None:
     op.execute("DROP FUNCTION IF EXISTS update_inventory_items_updated_at()")
 
     # 刪除索引
-    op.drop_index("idx_inventory_transactions_type")
-    op.drop_index("idx_inventory_transactions_date")
-    op.drop_index("idx_inventory_transactions_project_id")
-    op.drop_index("idx_inventory_transactions_item_id")
-    op.drop_index("idx_inventory_items_category")
-    op.drop_index("idx_inventory_items_name")
+    op.drop_index("idx_inventory_transactions_type", table_name="inventory_transactions")
+    op.drop_index("idx_inventory_transactions_date", table_name="inventory_transactions")
+    op.drop_index("idx_inventory_transactions_project_id", table_name="inventory_transactions")
+    op.drop_index("idx_inventory_transactions_item_id", table_name="inventory_transactions")
+    op.drop_index("idx_inventory_items_category", table_name="inventory_items")
+    op.drop_index("idx_inventory_items_name", table_name="inventory_items")
 
     # 刪除資料表
     op.drop_table("inventory_transactions")

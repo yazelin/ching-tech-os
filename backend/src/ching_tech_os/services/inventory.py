@@ -16,6 +16,8 @@ from ..models.inventory import (
     InventoryTransactionResponse,
     InventoryTransactionListItem,
     InventoryTransactionListResponse,
+    TransactionType,
+    calculate_is_low_stock,
 )
 
 
@@ -82,11 +84,7 @@ async def list_inventory_items(
                 category=row["category"],
                 current_stock=row["current_stock"] or Decimal("0"),
                 min_stock=row["min_stock"],
-                is_low_stock=(
-                    row["current_stock"] is not None
-                    and row["min_stock"] is not None
-                    and row["current_stock"] < row["min_stock"]
-                ),
+                is_low_stock=calculate_is_low_stock(row["current_stock"], row["min_stock"]),
                 updated_at=row["updated_at"],
             )
             for row in rows
@@ -117,11 +115,7 @@ async def get_inventory_item(item_id: UUID) -> InventoryItemResponse:
             created_at=row["created_at"],
             updated_at=row["updated_at"],
             created_by=row["created_by"],
-            is_low_stock=(
-                row["current_stock"] is not None
-                and row["min_stock"] is not None
-                and row["current_stock"] < row["min_stock"]
-            ),
+            is_low_stock=calculate_is_low_stock(row["current_stock"], row["min_stock"]),
         )
 
 
@@ -147,11 +141,7 @@ async def get_inventory_item_by_name(name: str) -> InventoryItemResponse | None:
             created_at=row["created_at"],
             updated_at=row["updated_at"],
             created_by=row["created_by"],
-            is_low_stock=(
-                row["current_stock"] is not None
-                and row["min_stock"] is not None
-                and row["current_stock"] < row["min_stock"]
-            ),
+            is_low_stock=calculate_is_low_stock(row["current_stock"], row["min_stock"]),
         )
 
 
@@ -182,11 +172,7 @@ async def search_inventory_items(keyword: str, limit: int = 10) -> list[Inventor
                 category=row["category"],
                 current_stock=row["current_stock"] or Decimal("0"),
                 min_stock=row["min_stock"],
-                is_low_stock=(
-                    row["current_stock"] is not None
-                    and row["min_stock"] is not None
-                    and row["current_stock"] < row["min_stock"]
-                ),
+                is_low_stock=calculate_is_low_stock(row["current_stock"], row["min_stock"]),
                 updated_at=row["updated_at"],
             )
             for row in rows
@@ -302,11 +288,7 @@ async def update_inventory_item(
             created_at=row["created_at"],
             updated_at=row["updated_at"],
             created_by=row["created_by"],
-            is_low_stock=(
-                row["current_stock"] is not None
-                and row["min_stock"] is not None
-                and row["current_stock"] < row["min_stock"]
-            ),
+            is_low_stock=calculate_is_low_stock(row["current_stock"], row["min_stock"]),
         )
 
 
@@ -418,9 +400,7 @@ async def create_inventory_transaction(
         if not item:
             raise InventoryItemNotFoundError(f"物料 {item_id} 不存在")
 
-        # 驗證類型
-        if data.type not in ("in", "out"):
-            raise InventoryError("類型必須是 'in'（進貨）或 'out'（出貨）")
+        # 類型已由 Pydantic 的 TransactionType Enum 驗證
 
         # 驗證專案是否存在（如果有指定）
         if data.project_id:
@@ -438,7 +418,7 @@ async def create_inventory_transaction(
             RETURNING *
             """,
             item_id,
-            data.type,
+            data.type.value,  # 使用 Enum 的值
             data.quantity,
             data.transaction_date or date.today(),
             data.vendor,
@@ -509,3 +489,243 @@ async def get_low_stock_count() -> int:
             """
         )
         return count or 0
+
+
+# ============================================
+# MCP 工具輔助函數
+# ============================================
+
+
+class ItemLookupResult:
+    """物料查詢結果"""
+    def __init__(
+        self,
+        item: dict | None = None,
+        error: str | None = None,
+        candidates: list[dict] | None = None,
+    ):
+        self.item = item
+        self.error = error
+        self.candidates = candidates
+
+    @property
+    def found(self) -> bool:
+        return self.item is not None
+
+    @property
+    def has_multiple(self) -> bool:
+        return self.candidates is not None and len(self.candidates) > 1
+
+
+class ProjectLookupResult:
+    """專案查詢結果"""
+    def __init__(
+        self,
+        project: dict | None = None,
+        error: str | None = None,
+        candidates: list[dict] | None = None,
+    ):
+        self.project = project
+        self.error = error
+        self.candidates = candidates
+
+    @property
+    def found(self) -> bool:
+        return self.project is not None
+
+    @property
+    def has_multiple(self) -> bool:
+        return self.candidates is not None and len(self.candidates) > 1
+
+
+async def find_item_by_id_or_name(
+    item_id: str | None = None,
+    item_name: str | None = None,
+    include_stock: bool = False,
+) -> ItemLookupResult:
+    """
+    依 ID 或名稱查詢物料（模糊匹配）
+
+    Args:
+        item_id: 物料 ID
+        item_name: 物料名稱（會模糊匹配）
+        include_stock: 是否包含庫存欄位
+
+    Returns:
+        ItemLookupResult 包含查詢結果、錯誤訊息或候選列表
+    """
+    if not item_id and not item_name:
+        return ItemLookupResult(error="請提供物料 ID 或物料名稱")
+
+    async with get_connection() as conn:
+        if item_id:
+            try:
+                columns = "id, name, unit, current_stock" if include_stock else "id, name, unit"
+                row = await conn.fetchrow(
+                    f"SELECT {columns} FROM inventory_items WHERE id = $1",
+                    UUID(item_id),
+                )
+                if not row:
+                    return ItemLookupResult(error=f"找不到物料 ID: {item_id}")
+                return ItemLookupResult(item=dict(row))
+            except ValueError:
+                return ItemLookupResult(error=f"無效的物料 ID 格式: {item_id}")
+        else:
+            columns = "id, name, unit, current_stock" if include_stock else "id, name, unit"
+            rows = await conn.fetch(
+                f"""
+                SELECT {columns} FROM inventory_items
+                WHERE name ILIKE $1
+                ORDER BY CASE WHEN name = $2 THEN 0 ELSE 1 END, name
+                LIMIT 5
+                """,
+                f"%{item_name}%",
+                item_name,
+            )
+            if not rows:
+                return ItemLookupResult(error=f"找不到物料「{item_name}」")
+
+            # 精確匹配或只有一個結果
+            if len(rows) == 1 or rows[0]["name"].lower() == item_name.lower():
+                return ItemLookupResult(item=dict(rows[0]))
+
+            # 多個候選
+            return ItemLookupResult(
+                candidates=[dict(r) for r in rows],
+                error="找到多個匹配的物料",
+            )
+
+
+async def find_project_by_id_or_name(
+    project_id: str | None = None,
+    project_name: str | None = None,
+) -> ProjectLookupResult:
+    """
+    依 ID 或名稱查詢專案（模糊匹配）
+
+    Args:
+        project_id: 專案 ID
+        project_name: 專案名稱（會模糊匹配）
+
+    Returns:
+        ProjectLookupResult 包含查詢結果、錯誤訊息或候選列表
+    """
+    if not project_id and not project_name:
+        return ProjectLookupResult()  # 無專案，不是錯誤
+
+    async with get_connection() as conn:
+        if project_id:
+            try:
+                row = await conn.fetchrow(
+                    "SELECT id, name FROM projects WHERE id = $1",
+                    UUID(project_id),
+                )
+                if not row:
+                    return ProjectLookupResult(error=f"找不到專案 ID: {project_id}")
+                return ProjectLookupResult(project=dict(row))
+            except ValueError:
+                return ProjectLookupResult(error=f"無效的專案 ID 格式: {project_id}")
+        else:
+            rows = await conn.fetch(
+                "SELECT id, name FROM projects WHERE name ILIKE $1 LIMIT 3",
+                f"%{project_name}%",
+            )
+            if not rows:
+                return ProjectLookupResult()  # 找不到專案，不算錯誤
+
+            if len(rows) == 1:
+                return ProjectLookupResult(project=dict(rows[0]))
+
+            # 多個候選
+            return ProjectLookupResult(
+                candidates=[dict(r) for r in rows],
+                error="找到多個匹配的專案",
+            )
+
+
+async def get_item_with_transactions(item_id: UUID, limit: int = 5) -> dict:
+    """
+    取得物料詳情及近期交易記錄
+
+    Args:
+        item_id: 物料 ID
+        limit: 交易記錄數量限制
+
+    Returns:
+        包含物料資訊和交易記錄的字典
+    """
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            "SELECT * FROM inventory_items WHERE id = $1",
+            item_id,
+        )
+        if not row:
+            raise InventoryItemNotFoundError(f"物料 {item_id} 不存在")
+
+        transactions = await conn.fetch(
+            """
+            SELECT t.*, p.name as project_name
+            FROM inventory_transactions t
+            LEFT JOIN projects p ON t.project_id = p.id
+            WHERE t.item_id = $1
+            ORDER BY t.transaction_date DESC, t.created_at DESC
+            LIMIT $2
+            """,
+            item_id,
+            limit,
+        )
+
+        return {
+            "item": dict(row),
+            "transactions": [dict(t) for t in transactions],
+        }
+
+
+async def create_inventory_transaction_mcp(
+    item_id: UUID,
+    transaction_type: str,
+    quantity: Decimal,
+    transaction_date: date | None = None,
+    vendor: str | None = None,
+    project_id: UUID | None = None,
+    notes: str | None = None,
+    created_by: str = "linebot",
+) -> Decimal:
+    """
+    建立進出貨記錄（MCP 專用，返回更新後的庫存）
+
+    Args:
+        item_id: 物料 ID
+        transaction_type: 交易類型（'in' 或 'out'）
+        quantity: 數量
+        transaction_date: 交易日期
+        vendor: 廠商
+        project_id: 專案 ID
+        notes: 備註
+        created_by: 建立者
+
+    Returns:
+        更新後的庫存數量
+    """
+    async with get_connection() as conn:
+        await conn.execute(
+            """
+            INSERT INTO inventory_transactions (
+                item_id, type, quantity, transaction_date, vendor, project_id, notes, created_by
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            """,
+            item_id,
+            transaction_type,
+            quantity,
+            transaction_date or date.today(),
+            vendor,
+            project_id,
+            notes,
+            created_by,
+        )
+
+        new_stock = await conn.fetchval(
+            "SELECT current_stock FROM inventory_items WHERE id = $1",
+            item_id,
+        )
+        return new_stock or Decimal("0")
