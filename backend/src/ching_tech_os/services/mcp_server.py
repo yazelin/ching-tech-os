@@ -965,6 +965,8 @@ async def search_knowledge(
     project: str | None = None,
     category: str | None = None,
     limit: int = 5,
+    line_user_id: str | None = None,
+    ctos_user_id: int | None = None,
 ) -> str:
     """
     搜尋知識庫
@@ -974,14 +976,32 @@ async def search_knowledge(
         project: 專案過濾（如：專案 ID 或名稱）
         category: 分類過濾（如：technical, process, tool）
         limit: 最大結果數量，預設 5
+        line_user_id: Line 用戶 ID（從對話識別取得，用於搜尋個人知識）
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於搜尋個人知識）
     """
     from . import knowledge as kb_service
+
+    # 取得使用者名稱（用於搜尋個人知識）
+    current_username: str | None = None
+    if ctos_user_id:
+        try:
+            await ensure_db_connection()
+            async with get_connection() as conn:
+                user_row = await conn.fetchrow(
+                    "SELECT username FROM users WHERE id = $1",
+                    ctos_user_id,
+                )
+                if user_row:
+                    current_username = user_row["username"]
+        except Exception as e:
+            logger.warning(f"取得使用者名稱失敗: {e}")
 
     try:
         result = kb_service.search_knowledge(
             query=query,
             project=project,
             category=category,
+            current_username=current_username,
         )
 
         if not result.items:
