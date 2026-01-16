@@ -1302,6 +1302,21 @@
   color: var(--text-primary);
 }
 
+.pm-erp-code {
+  font-family: monospace;
+  font-size: 11px;
+  color: var(--color-accent);
+  opacity: 0.85;
+}
+
+.pm-combo-input {
+  position: relative;
+}
+
+.pm-combo-input input[type="text"] {
+  width: 100%;
+}
+
 .pm-delivery-status-badge {
   display: inline-block;
   padding: 2px 8px;

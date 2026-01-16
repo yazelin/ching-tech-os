@@ -239,8 +239,10 @@ class ProjectMilestoneResponse(ProjectMilestoneBase):
 class DeliveryScheduleBase(BaseModel):
     """發包/交貨期程基礎欄位"""
 
-    vendor: str  # 廠商名稱
-    item: str  # 料件名稱
+    vendor: str  # 廠商名稱（文字）
+    vendor_id: UUID | None = None  # 關聯廠商 ID
+    item: str  # 料件名稱（文字）
+    item_id: UUID | None = None  # 關聯物料 ID
     quantity: str | None = None  # 數量（含單位，如「2 台」）
     order_date: date | None = None  # 發包日期
     expected_delivery_date: date | None = None  # 預計交貨日期
@@ -252,8 +254,10 @@ class DeliveryScheduleBase(BaseModel):
 class DeliveryScheduleCreate(BaseModel):
     """建立發包記錄請求"""
 
-    vendor: str
-    item: str
+    vendor: str | None = None  # 廠商名稱（可選，若提供 vendor_id 則自動填入）
+    vendor_id: UUID | None = None  # 關聯廠商 ID
+    item: str | None = None  # 料件名稱（可選，若提供 item_id 則自動填入）
+    item_id: UUID | None = None  # 關聯物料 ID
     quantity: str | None = None
     order_date: date | None = None
     expected_delivery_date: date | None = None
@@ -265,7 +269,9 @@ class DeliveryScheduleUpdate(BaseModel):
     """更新發包記錄請求"""
 
     vendor: str | None = None
+    vendor_id: UUID | None = None
     item: str | None = None
+    item_id: UUID | None = None
     quantity: str | None = None
     order_date: date | None = None
     expected_delivery_date: date | None = None
@@ -282,6 +288,10 @@ class DeliveryScheduleResponse(DeliveryScheduleBase):
     created_at: datetime
     updated_at: datetime
     created_by: str | None = None
+    # 關聯資料（若有關聯則顯示）
+    vendor_name: str | None = None  # 廠商主檔名稱
+    vendor_erp_code: str | None = None  # 廠商 ERP 編號
+    item_name: str | None = None  # 物料主檔名稱
 
 
 # ============================================

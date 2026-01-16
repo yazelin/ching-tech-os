@@ -14,7 +14,7 @@ from .services.session import session_manager
 from .services.terminal import terminal_service
 from .services.scheduler import start_scheduler, stop_scheduler
 from .services.linebot_agents import ensure_default_linebot_agents
-from .api import auth, knowledge, login_records, messages, nas, user, ai_router, ai_management, project, linebot_router, share, files, inventory
+from .api import auth, knowledge, login_records, messages, nas, user, ai_router, ai_management, project, linebot_router, share, files, inventory, vendor
 
 # 建立 Socket.IO 伺服器
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
@@ -72,6 +72,7 @@ app.include_router(share.router)
 app.include_router(share.public_router)
 app.include_router(files.router)
 app.include_router(inventory.router)
+app.include_router(vendor.router)
 
 
 @app.get("/api/health")

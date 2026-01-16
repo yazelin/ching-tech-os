@@ -907,7 +907,18 @@ async def list_deliveries(project_id: UUID) -> list[DeliveryScheduleResponse]:
     """列出專案發包記錄"""
     async with get_connection() as conn:
         rows = await conn.fetch(
-            "SELECT * FROM project_delivery_schedules WHERE project_id = $1 ORDER BY COALESCE(expected_delivery_date, '9999-12-31'), created_at",
+            """
+            SELECT
+                d.*,
+                v.name as vendor_name,
+                v.erp_code as vendor_erp_code,
+                i.name as item_name
+            FROM project_delivery_schedules d
+            LEFT JOIN vendors v ON d.vendor_id = v.id
+            LEFT JOIN inventory_items i ON d.item_id = i.id
+            WHERE d.project_id = $1
+            ORDER BY COALESCE(d.expected_delivery_date, '9999-12-31'), d.created_at
+            """,
             project_id,
         )
         return [DeliveryScheduleResponse(**dict(r)) for r in rows]
@@ -925,15 +936,43 @@ async def create_delivery(
         if not exists:
             raise ProjectNotFoundError(f"專案 {project_id} 不存在")
 
+        # 處理廠商：若提供 vendor_id 則自動查詢廠商名稱
+        vendor = data.vendor
+        vendor_id = data.vendor_id
+        if vendor_id and not vendor:
+            vendor_row = await conn.fetchrow(
+                "SELECT name FROM vendors WHERE id = $1", vendor_id
+            )
+            if vendor_row:
+                vendor = vendor_row["name"]
+
+        # 處理物料：若提供 item_id 則自動查詢物料名稱
+        item = data.item
+        item_id = data.item_id
+        if item_id and not item:
+            item_row = await conn.fetchrow(
+                "SELECT name FROM inventory_items WHERE id = $1", item_id
+            )
+            if item_row:
+                item = item_row["name"]
+
+        # 驗證必填欄位
+        if not vendor:
+            raise ProjectError("廠商名稱為必填")
+        if not item:
+            raise ProjectError("料件名稱為必填")
+
         row = await conn.fetchrow(
             """
-            INSERT INTO project_delivery_schedules (project_id, vendor, item, quantity, order_date, expected_delivery_date, status, notes, created_by)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            INSERT INTO project_delivery_schedules (project_id, vendor, vendor_id, item, item_id, quantity, order_date, expected_delivery_date, status, notes, created_by)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             RETURNING *
             """,
             project_id,
-            data.vendor,
-            data.item,
+            vendor,
+            vendor_id,
+            item,
+            item_id,
             data.quantity,
             data.order_date,
             data.expected_delivery_date,
@@ -941,7 +980,22 @@ async def create_delivery(
             data.notes,
             created_by,
         )
-        return DeliveryScheduleResponse(**dict(row))
+        # 取得關聯資料
+        result = await conn.fetchrow(
+            """
+            SELECT
+                d.*,
+                v.name as vendor_name,
+                v.erp_code as vendor_erp_code,
+                i.name as item_name
+            FROM project_delivery_schedules d
+            LEFT JOIN vendors v ON d.vendor_id = v.id
+            LEFT JOIN inventory_items i ON d.item_id = i.id
+            WHERE d.id = $1
+            """,
+            row["id"],
+        )
+        return DeliveryScheduleResponse(**dict(result))
 
 
 async def update_delivery(
@@ -957,12 +1011,53 @@ async def update_delivery(
         if not exists:
             raise ProjectNotFoundError(f"發包記錄 {delivery_id} 不存在")
 
+        # 處理廠商：若提供 vendor_id 則自動查詢廠商名稱
+        vendor = data.vendor
+        vendor_id = data.vendor_id
+        if vendor_id and not vendor:
+            vendor_row = await conn.fetchrow(
+                "SELECT name FROM vendors WHERE id = $1", vendor_id
+            )
+            if vendor_row:
+                vendor = vendor_row["name"]
+
+        # 處理物料：若提供 item_id 則自動查詢物料名稱
+        item = data.item
+        item_id = data.item_id
+        if item_id and not item:
+            item_row = await conn.fetchrow(
+                "SELECT name FROM inventory_items WHERE id = $1", item_id
+            )
+            if item_row:
+                item = item_row["name"]
+
         # 動態建立更新語句
         updates = []
         params = []
         param_idx = 1
 
-        for field in ["vendor", "item", "quantity", "order_date", "expected_delivery_date", "actual_delivery_date", "status", "notes"]:
+        # 處理文字欄位
+        if vendor is not None:
+            updates.append(f"vendor = ${param_idx}")
+            params.append(vendor)
+            param_idx += 1
+        if item is not None:
+            updates.append(f"item = ${param_idx}")
+            params.append(item)
+            param_idx += 1
+
+        # 處理外鍵欄位
+        if vendor_id is not None:
+            updates.append(f"vendor_id = ${param_idx}")
+            params.append(vendor_id)
+            param_idx += 1
+        if item_id is not None:
+            updates.append(f"item_id = ${param_idx}")
+            params.append(item_id)
+            param_idx += 1
+
+        # 處理其他欄位
+        for field in ["quantity", "order_date", "expected_delivery_date", "actual_delivery_date", "status", "notes"]:
             value = getattr(data, field)
             if value is not None:
                 updates.append(f"{field} = ${param_idx}")
@@ -970,16 +1065,44 @@ async def update_delivery(
                 param_idx += 1
 
         if not updates:
-            row = await conn.fetchrow(
-                "SELECT * FROM project_delivery_schedules WHERE id = $1", delivery_id
+            # 取得關聯資料
+            result = await conn.fetchrow(
+                """
+                SELECT
+                    d.*,
+                    v.name as vendor_name,
+                    v.erp_code as vendor_erp_code,
+                    i.name as item_name
+                FROM project_delivery_schedules d
+                LEFT JOIN vendors v ON d.vendor_id = v.id
+                LEFT JOIN inventory_items i ON d.item_id = i.id
+                WHERE d.id = $1
+                """,
+                delivery_id,
             )
-            return DeliveryScheduleResponse(**dict(row))
+            return DeliveryScheduleResponse(**dict(result))
 
         updates.append("updated_at = NOW()")
         params.append(delivery_id)
         sql = f"UPDATE project_delivery_schedules SET {', '.join(updates)} WHERE id = ${param_idx} RETURNING *"
-        row = await conn.fetchrow(sql, *params)
-        return DeliveryScheduleResponse(**dict(row))
+        await conn.fetchrow(sql, *params)
+
+        # 取得關聯資料
+        result = await conn.fetchrow(
+            """
+            SELECT
+                d.*,
+                v.name as vendor_name,
+                v.erp_code as vendor_erp_code,
+                i.name as item_name
+            FROM project_delivery_schedules d
+            LEFT JOIN vendors v ON d.vendor_id = v.id
+            LEFT JOIN inventory_items i ON d.item_id = i.id
+            WHERE d.id = $1
+            """,
+            delivery_id,
+        )
+        return DeliveryScheduleResponse(**dict(result))
 
 
 async def delete_delivery(project_id: UUID, delivery_id: UUID) -> None:
