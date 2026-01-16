@@ -139,7 +139,12 @@ const Icons = {
   'arrow-down-bold': '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M9,4H15V12H19.84L12,19.84L4.16,12H9V4Z"/></svg>',
   'arrow-up-bold': '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M15,20H9V12H4.16L12,4.16L19.84,12H15V20Z"/></svg>',
   'pencil': '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z"/></svg>',
-  'arrow-left': '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M20,11V13H8L13.5,18.5L12.08,19.92L4.16,12L12.08,4.08L13.5,5.5L8,11H20Z"/></svg>'
+  'arrow-left': '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M20,11V13H8L13.5,18.5L12.08,19.92L4.16,12L12.08,4.08L13.5,5.5L8,11H20Z"/></svg>',
+
+  // 廠商管理
+  'store': '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M12,18H6V14H12M21,14V12L20,7H4L3,12V14H4V20H14V14H18V20H20V14M20,4H4V6H20V4Z"/></svg>',
+  'store-off': '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M22.11,21.46L2.39,1.73L1.11,3L4.11,6H4V6H4L3,11V13H4V19H10.11L12.11,21H6V13H12V17.11L14,19.11V19H14.11L20.84,22.73M12,12.54L8.46,9H12V12.54M18,13V19.89L14.11,16H14V13H18M20,6V4H5.78L7.78,6H20M5.55,6L4.11,4.56L4.56,4.11L6,5.55L5.55,6M19.66,6.34L21,13V13H20V15.89L18,13.89V13H17.11L15.11,11H20L19.66,6.34Z"/></svg>',
+  'store-check': '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M21.8,13L20.7,12L14.8,18L11.5,14.6L10.5,15.7L14.9,20M12,13H6V9H12M21,9V11L20,6H4L3,11V13H4V20H14V18H6V13H14V9H18V13H20V13L21,9M20,4H4V6H20V4Z"/></svg>'
 };
 
 /**

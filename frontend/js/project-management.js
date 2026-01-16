@@ -1505,10 +1505,12 @@ const ProjectManagementModule = (function() {
             <div class="pm-delivery-status-indicator ${d.status}"></div>
             <div class="pm-delivery-info">
               <div class="pm-delivery-header">
-                <span class="pm-delivery-vendor">${d.vendor}</span>
+                <span class="pm-delivery-vendor">
+                  ${d.vendor_erp_code ? `<span class="pm-erp-code">[${escapeHtml(d.vendor_erp_code)}]</span> ` : ''}${escapeHtml(d.vendor)}
+                </span>
                 <span class="pm-delivery-status-badge ${d.status}">${getDeliveryStatusText(d.status)}</span>
               </div>
-              <div class="pm-delivery-item">${d.item}</div>
+              <div class="pm-delivery-item">${escapeHtml(d.item)}</div>
               ${d.quantity ? `<div class="pm-delivery-quantity">數量：${d.quantity}</div>` : ''}
               <div class="pm-delivery-dates">
                 ${d.order_date ? `<span><span class="icon">${getIcon('calendar-arrow-right')}</span>發包：${d.order_date}</span>` : ''}
@@ -1545,9 +1547,39 @@ const ProjectManagementModule = (function() {
     });
   }
 
-  function showDeliveryModal(delivery = null) {
+  async function showDeliveryModal(delivery = null) {
     const windowEl = document.getElementById(windowId);
     if (!windowEl) return;
+
+    // 載入廠商列表
+    let vendors = [];
+    try {
+      const token = getToken();
+      const resp = await fetch('/api/vendors?active=true&limit=500', {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        vendors = data.items || [];
+      }
+    } catch (e) {
+      console.error('載入廠商列表失敗:', e);
+    }
+
+    // 載入物料列表
+    let inventoryItems = [];
+    try {
+      const token = getToken();
+      const resp = await fetch('/api/inventory/items?limit=500', {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        inventoryItems = data.items || [];
+      }
+    } catch (e) {
+      console.error('載入物料列表失敗:', e);
+    }
 
     const isEdit = !!delivery;
     const modal = document.createElement('div');
@@ -1562,11 +1594,23 @@ const ProjectManagementModule = (function() {
           <div class="pm-form-row">
             <div class="pm-form-group">
               <label>廠商 *</label>
-              <input type="text" id="deliveryVendor" value="${delivery?.vendor || ''}" placeholder="廠商名稱" required>
+              <div class="pm-combo-input">
+                <input type="text" id="deliveryVendor" value="${delivery?.vendor || ''}" placeholder="輸入或選擇廠商" list="deliveryVendorList" required>
+                <datalist id="deliveryVendorList">
+                  ${vendors.map(v => `<option value="${escapeHtml(v.name)}" data-id="${v.id}">${v.erp_code ? `[${escapeHtml(v.erp_code)}] ` : ''}${escapeHtml(v.name)}</option>`).join('')}
+                </datalist>
+                <input type="hidden" id="deliveryVendorId" value="${delivery?.vendor_id || ''}">
+              </div>
             </div>
             <div class="pm-form-group">
               <label>料件 *</label>
-              <input type="text" id="deliveryItem" value="${delivery?.item || ''}" placeholder="料件名稱" required>
+              <div class="pm-combo-input">
+                <input type="text" id="deliveryItem" value="${delivery?.item || ''}" placeholder="輸入或選擇物料" list="deliveryItemList" required>
+                <datalist id="deliveryItemList">
+                  ${inventoryItems.map(i => `<option value="${escapeHtml(i.name)}" data-id="${i.id}">${i.specification ? `[${escapeHtml(i.specification)}] ` : ''}${escapeHtml(i.name)}</option>`).join('')}
+                </datalist>
+                <input type="hidden" id="deliveryItemId" value="${delivery?.item_id || ''}">
+              </div>
             </div>
           </div>
           <div class="pm-form-row">
@@ -1617,9 +1661,35 @@ const ProjectManagementModule = (function() {
     modal.querySelector('#deliveryCancel').addEventListener('click', closeModal);
     modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
 
+    // 當使用者從 datalist 選擇廠商時，自動填入 vendor_id
+    const vendorInput = modal.querySelector('#deliveryVendor');
+    const vendorIdInput = modal.querySelector('#deliveryVendorId');
+    vendorInput.addEventListener('change', () => {
+      const selectedVendor = vendors.find(v => v.name === vendorInput.value);
+      vendorIdInput.value = selectedVendor ? selectedVendor.id : '';
+    });
+    vendorInput.addEventListener('input', () => {
+      const selectedVendor = vendors.find(v => v.name === vendorInput.value);
+      vendorIdInput.value = selectedVendor ? selectedVendor.id : '';
+    });
+
+    // 當使用者從 datalist 選擇物料時，自動填入 item_id
+    const itemInput = modal.querySelector('#deliveryItem');
+    const itemIdInput = modal.querySelector('#deliveryItemId');
+    itemInput.addEventListener('change', () => {
+      const selectedItem = inventoryItems.find(i => i.name === itemInput.value);
+      itemIdInput.value = selectedItem ? selectedItem.id : '';
+    });
+    itemInput.addEventListener('input', () => {
+      const selectedItem = inventoryItems.find(i => i.name === itemInput.value);
+      itemIdInput.value = selectedItem ? selectedItem.id : '';
+    });
+
     modal.querySelector('#deliverySave').addEventListener('click', async () => {
       const vendor = modal.querySelector('#deliveryVendor').value.trim();
+      const vendorId = modal.querySelector('#deliveryVendorId').value || null;
       const item = modal.querySelector('#deliveryItem').value.trim();
+      const itemId = modal.querySelector('#deliveryItemId').value || null;
 
       if (!vendor || !item) {
         NotificationModule.show({ title: '提醒', message: '請填寫廠商和料件', icon: 'alert' });
@@ -1628,7 +1698,9 @@ const ProjectManagementModule = (function() {
 
       const data = {
         vendor,
+        vendor_id: vendorId,
         item,
+        item_id: itemId,
         quantity: modal.querySelector('#deliveryQuantity').value.trim() || null,
         status: modal.querySelector('#deliveryStatus').value,
         order_date: modal.querySelector('#deliveryOrderDate').value || null,

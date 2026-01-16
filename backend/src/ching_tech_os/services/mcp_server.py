@@ -2255,8 +2255,10 @@ async def prepare_file_message(
 @mcp.tool()
 async def add_delivery_schedule(
     project_id: str,
-    vendor: str,
-    item: str,
+    vendor: str | None = None,
+    vendor_id: str | None = None,
+    item: str | None = None,
+    item_id: str | None = None,
     quantity: str | None = None,
     order_date: str | None = None,
     expected_delivery_date: str | None = None,
@@ -2268,8 +2270,10 @@ async def add_delivery_schedule(
 
     Args:
         project_id: 專案 UUID
-        vendor: 廠商名稱（必填）
-        item: 料件名稱（必填）
+        vendor: 廠商名稱（若提供 vendor_id 則自動填入）
+        vendor_id: 廠商 UUID（關聯廠商主檔）
+        item: 料件名稱（若提供 item_id 則自動填入）
+        item_id: 物料 UUID（關聯物料主檔）
         quantity: 數量（含單位，如「2 台」）
         order_date: 發包日期（格式:YYYY-MM-DD）
         expected_delivery_date: 預計交貨日期（格式:YYYY-MM-DD）
@@ -2287,6 +2291,36 @@ async def add_delivery_schedule(
         )
         if not project:
             return f"錯誤：找不到專案 {project_id}"
+
+        # 處理廠商：若提供 vendor_id 則自動查詢廠商名稱
+        actual_vendor = vendor
+        actual_vendor_id = vendor_id
+        if vendor_id and not vendor:
+            vendor_row = await conn.fetchrow(
+                "SELECT name FROM vendors WHERE id = $1", vendor_id
+            )
+            if vendor_row:
+                actual_vendor = vendor_row["name"]
+            else:
+                return f"錯誤：找不到廠商 {vendor_id}"
+
+        # 處理物料：若提供 item_id 則自動查詢物料名稱
+        actual_item = item
+        actual_item_id = item_id
+        if item_id and not item:
+            item_row = await conn.fetchrow(
+                "SELECT name FROM inventory_items WHERE id = $1", item_id
+            )
+            if item_row:
+                actual_item = item_row["name"]
+            else:
+                return f"錯誤：找不到物料 {item_id}"
+
+        # 驗證必填欄位
+        if not actual_vendor:
+            return "錯誤：請提供廠商名稱或廠商 ID"
+        if not actual_item:
+            return "錯誤：請提供料件名稱或物料 ID"
 
         # 解析日期
         parsed_order_date = None
@@ -2313,13 +2347,15 @@ async def add_delivery_schedule(
         row = await conn.fetchrow(
             """
             INSERT INTO project_delivery_schedules
-                (project_id, vendor, item, quantity, order_date, expected_delivery_date, status, notes, created_by)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'AI')
+                (project_id, vendor, vendor_id, item, item_id, quantity, order_date, expected_delivery_date, status, notes, created_by)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'AI')
             RETURNING id, vendor, item
             """,
             project_id,
-            vendor,
-            item,
+            actual_vendor,
+            actual_vendor_id,
+            actual_item,
+            actual_item_id,
             quantity,
             parsed_order_date,
             parsed_expected_date,
@@ -2337,8 +2373,14 @@ async def add_delivery_schedule(
 
         result = f"✅ 已新增發包記錄\n"
         result += f"- 專案：{project['name']}\n"
-        result += f"- 廠商：{vendor}\n"
-        result += f"- 料件：{item}\n"
+        result += f"- 廠商：{actual_vendor}"
+        if actual_vendor_id:
+            result += " (已關聯廠商主檔)"
+        result += "\n"
+        result += f"- 料件：{actual_item}"
+        if actual_item_id:
+            result += " (已關聯物料主檔)"
+        result += "\n"
         if quantity:
             result += f"- 數量：{quantity}\n"
         if parsed_order_date:
@@ -3158,6 +3200,257 @@ async def convert_pdf_to_images(
             "success": False,
             "error": f"轉換失敗: {str(e)}"
         }, ensure_ascii=False)
+
+
+# ============================================================
+# 廠商管理工具
+# ============================================================
+
+
+@mcp.tool()
+async def query_vendors(
+    keyword: str | None = None,
+    erp_code: str | None = None,
+    limit: int = 20,
+) -> str:
+    """
+    查詢廠商
+
+    Args:
+        keyword: 搜尋關鍵字（名稱、簡稱、ERP 編號）
+        erp_code: ERP 編號（精確查詢）
+        limit: 最大回傳數量，預設 20
+    """
+    await ensure_db_connection()
+
+    async with get_connection() as conn:
+        if erp_code:
+            # 精確查詢 ERP 編號
+            row = await conn.fetchrow(
+                "SELECT id, erp_code, name, short_name, contact_person, phone, is_active FROM vendors WHERE erp_code = $1",
+                erp_code
+            )
+            if not row:
+                return f"找不到 ERP 編號為 {erp_code} 的廠商"
+            result = "📋 廠商資訊：\n"
+            result += f"- ID：{row['id']}\n"
+            result += f"- ERP 編號：{row['erp_code'] or '無'}\n"
+            result += f"- 名稱：{row['name']}\n"
+            if row['short_name']:
+                result += f"- 簡稱：{row['short_name']}\n"
+            if row['contact_person']:
+                result += f"- 聯絡人：{row['contact_person']}\n"
+            if row['phone']:
+                result += f"- 電話：{row['phone']}\n"
+            result += f"- 狀態：{'啟用' if row['is_active'] else '停用'}"
+            return result
+
+        # 關鍵字搜尋
+        sql = """
+            SELECT id, erp_code, name, short_name, contact_person, phone, is_active
+            FROM vendors
+            WHERE is_active = true
+        """
+        params = []
+        param_idx = 1
+
+        if keyword:
+            sql += f" AND (name ILIKE ${param_idx} OR short_name ILIKE ${param_idx} OR erp_code ILIKE ${param_idx})"
+            params.append(f"%{keyword}%")
+            param_idx += 1
+
+        sql += f" ORDER BY name LIMIT ${param_idx}"
+        params.append(limit)
+
+        rows = await conn.fetch(sql, *params)
+
+        if not rows:
+            return "找不到符合條件的廠商" + (f"（關鍵字：{keyword}）" if keyword else "")
+
+        result = f"📋 廠商列表（共 {len(rows)} 筆）：\n\n"
+        for i, row in enumerate(rows, 1):
+            result += f"{i}. {row['name']}"
+            if row['erp_code']:
+                result += f" [{row['erp_code']}]"
+            if row['short_name']:
+                result += f"（{row['short_name']}）"
+            if row['contact_person'] or row['phone']:
+                result += f"\n   "
+                if row['contact_person']:
+                    result += f"聯絡人：{row['contact_person']}"
+                if row['phone']:
+                    result += f" | 電話：{row['phone']}"
+            result += "\n"
+
+        return result
+
+
+@mcp.tool()
+async def add_vendor(
+    name: str,
+    erp_code: str | None = None,
+    short_name: str | None = None,
+    contact_person: str | None = None,
+    phone: str | None = None,
+    fax: str | None = None,
+    email: str | None = None,
+    address: str | None = None,
+    tax_id: str | None = None,
+    payment_terms: str | None = None,
+    notes: str | None = None,
+) -> str:
+    """
+    新增廠商
+
+    Args:
+        name: 廠商名稱（必填）
+        erp_code: ERP 系統廠商編號
+        short_name: 簡稱
+        contact_person: 聯絡人
+        phone: 電話
+        fax: 傳真
+        email: Email
+        address: 地址
+        tax_id: 統一編號
+        payment_terms: 付款條件
+        notes: 備註
+    """
+    await ensure_db_connection()
+
+    async with get_connection() as conn:
+        # 檢查 ERP 編號是否重複
+        if erp_code:
+            exists = await conn.fetchval(
+                "SELECT 1 FROM vendors WHERE erp_code = $1", erp_code
+            )
+            if exists:
+                return f"錯誤：ERP 編號 {erp_code} 已存在"
+
+        row = await conn.fetchrow(
+            """
+            INSERT INTO vendors (erp_code, name, short_name, contact_person, phone, fax, email, address, tax_id, payment_terms, notes, created_by)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'AI')
+            RETURNING id, name, erp_code
+            """,
+            erp_code,
+            name,
+            short_name,
+            contact_person,
+            phone,
+            fax,
+            email,
+            address,
+            tax_id,
+            payment_terms,
+            notes,
+        )
+
+        result = f"✅ 已新增廠商\n"
+        result += f"- ID：{row['id']}\n"
+        result += f"- 名稱：{row['name']}\n"
+        if row['erp_code']:
+            result += f"- ERP 編號：{row['erp_code']}\n"
+        if short_name:
+            result += f"- 簡稱：{short_name}\n"
+        if contact_person:
+            result += f"- 聯絡人：{contact_person}\n"
+        if phone:
+            result += f"- 電話：{phone}"
+
+        return result
+
+
+@mcp.tool()
+async def update_vendor(
+    vendor_id: str,
+    erp_code: str | None = None,
+    name: str | None = None,
+    short_name: str | None = None,
+    contact_person: str | None = None,
+    phone: str | None = None,
+    fax: str | None = None,
+    email: str | None = None,
+    address: str | None = None,
+    tax_id: str | None = None,
+    payment_terms: str | None = None,
+    notes: str | None = None,
+    is_active: bool | None = None,
+) -> str:
+    """
+    更新廠商資訊
+
+    Args:
+        vendor_id: 廠商 UUID
+        erp_code: ERP 系統廠商編號
+        name: 廠商名稱
+        short_name: 簡稱
+        contact_person: 聯絡人
+        phone: 電話
+        fax: 傳真
+        email: Email
+        address: 地址
+        tax_id: 統一編號
+        payment_terms: 付款條件
+        notes: 備註
+        is_active: 是否啟用
+    """
+    await ensure_db_connection()
+
+    async with get_connection() as conn:
+        # 檢查廠商是否存在
+        vendor = await conn.fetchrow(
+            "SELECT id, name FROM vendors WHERE id = $1", vendor_id
+        )
+        if not vendor:
+            return f"錯誤：找不到廠商 {vendor_id}"
+
+        # 檢查 ERP 編號是否重複
+        if erp_code is not None:
+            dup = await conn.fetchval(
+                "SELECT 1 FROM vendors WHERE erp_code = $1 AND id != $2",
+                erp_code, vendor_id
+            )
+            if dup:
+                return f"錯誤：ERP 編號 {erp_code} 已存在"
+
+        # 動態建立更新語句
+        updates = []
+        params = []
+        param_idx = 1
+
+        for field, value in [
+            ("erp_code", erp_code),
+            ("name", name),
+            ("short_name", short_name),
+            ("contact_person", contact_person),
+            ("phone", phone),
+            ("fax", fax),
+            ("email", email),
+            ("address", address),
+            ("tax_id", tax_id),
+            ("payment_terms", payment_terms),
+            ("notes", notes),
+            ("is_active", is_active),
+        ]:
+            if value is not None:
+                updates.append(f"{field} = ${param_idx}")
+                params.append(value)
+                param_idx += 1
+
+        if not updates:
+            return "沒有需要更新的資料"
+
+        params.append(vendor_id)
+        sql = f"UPDATE vendors SET {', '.join(updates)} WHERE id = ${param_idx} RETURNING name, erp_code, is_active"
+        row = await conn.fetchrow(sql, *params)
+
+        result = f"✅ 已更新廠商 {row['name']}"
+        if row['erp_code']:
+            result += f" [{row['erp_code']}]"
+        if is_active is not None:
+            result += f"\n- 狀態：{'啟用' if row['is_active'] else '停用'}"
+
+        return result
 
 
 # ============================================================

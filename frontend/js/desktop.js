@@ -13,6 +13,7 @@ const DesktopModule = (function() {
     { id: 'code-editor', name: 'VSCode', icon: 'mdi-code-braces' },
     { id: 'project-management', name: '專案管理', icon: 'mdi-clipboard-text' },
     { id: 'inventory-management', name: '物料管理', icon: 'mdi-package-variant' },
+    { id: 'vendor-management', name: '廠商管理', icon: 'mdi-store' },
     { id: 'ai-assistant', name: 'AI 助手', icon: 'mdi-robot' },
     { id: 'prompt-editor', name: 'Prompt 編輯器', icon: 'mdi-script-text' },
     { id: 'agent-settings', name: 'Agent 設定', icon: 'mdi-tune-variant' },
@@ -132,6 +133,11 @@ const DesktopModule = (function() {
       case 'inventory-management':
         if (typeof InventoryManagementModule !== 'undefined') {
           InventoryManagementModule.open();
+        }
+        break;
+      case 'vendor-management':
+        if (typeof VendorManagementModule !== 'undefined') {
+          VendorManagementModule.open();
         }
         break;
       case 'settings':

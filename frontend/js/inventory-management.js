@@ -586,6 +586,7 @@ const InventoryManagementModule = (function() {
       unit: '',
       category: '',
       default_vendor: '',
+      default_vendor_id: '',
       min_stock: null,
       notes: '',
     };
@@ -604,6 +605,7 @@ const InventoryManagementModule = (function() {
       unit: selectedItem.unit || '',
       category: selectedItem.category || '',
       default_vendor: selectedItem.default_vendor || '',
+      default_vendor_id: selectedItem.default_vendor_id || '',
       min_stock: selectedItem.min_stock,
       notes: selectedItem.notes || '',
     };
@@ -611,7 +613,7 @@ const InventoryManagementModule = (function() {
     renderEditor(windowEl);
   }
 
-  function renderEditor(windowEl) {
+  async function renderEditor(windowEl) {
     const emptyEl = windowEl.querySelector('#invContentEmpty');
     const viewEl = windowEl.querySelector('#invContentView');
     const editorEl = windowEl.querySelector('#invEditor');
@@ -619,6 +621,21 @@ const InventoryManagementModule = (function() {
     emptyEl.style.display = 'none';
     viewEl.style.display = 'none';
     editorEl.style.display = 'flex';
+
+    // 載入廠商列表
+    let vendors = [];
+    try {
+      const token = getToken();
+      const resp = await fetch('/api/vendors?active=true&limit=500', {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        vendors = data.items || [];
+      }
+    } catch (e) {
+      console.error('載入廠商列表失敗:', e);
+    }
 
     const isNew = !selectedItem;
     editorEl.innerHTML = `
@@ -653,7 +670,13 @@ const InventoryManagementModule = (function() {
         </div>
         <div class="inv-form-group">
           <label>預設廠商</label>
-          <input type="text" id="invEditVendor" value="${escapeHtml(editingData.default_vendor)}">
+          <div class="inv-combo-input">
+            <input type="text" id="invEditVendor" value="${escapeHtml(editingData.default_vendor)}" list="invVendorList" placeholder="輸入或選擇廠商">
+            <datalist id="invVendorList">
+              ${vendors.map(v => `<option value="${escapeHtml(v.name)}" data-id="${v.id}">${v.erp_code ? `[${escapeHtml(v.erp_code)}] ` : ''}${escapeHtml(v.name)}</option>`).join('')}
+            </datalist>
+            <input type="hidden" id="invEditVendorId" value="${editingData.default_vendor_id || ''}">
+          </div>
         </div>
         <div class="inv-form-group">
           <label>備註</label>
@@ -668,6 +691,18 @@ const InventoryManagementModule = (function() {
 
     // Load categories for datalist
     loadCategoriesForDatalist(windowEl);
+
+    // 當使用者從 datalist 選擇廠商時，自動填入 vendor_id
+    const vendorInput = editorEl.querySelector('#invEditVendor');
+    const vendorIdInput = editorEl.querySelector('#invEditVendorId');
+    vendorInput.addEventListener('change', () => {
+      const selectedVendor = vendors.find(v => v.name === vendorInput.value);
+      vendorIdInput.value = selectedVendor ? selectedVendor.id : '';
+    });
+    vendorInput.addEventListener('input', () => {
+      const selectedVendor = vendors.find(v => v.name === vendorInput.value);
+      vendorIdInput.value = selectedVendor ? selectedVendor.id : '';
+    });
 
     editorEl.querySelector('#invEditCancel').addEventListener('click', cancelEdit);
     editorEl.querySelector('#invEditSave').addEventListener('click', saveItem);
@@ -710,12 +745,14 @@ const InventoryManagementModule = (function() {
     }
 
     const minStockValue = windowEl.querySelector('#invEditMinStock').value;
+    const vendorIdValue = windowEl.querySelector('#invEditVendorId').value;
     const data = {
       name,
       specification: windowEl.querySelector('#invEditSpec').value.trim() || null,
       unit: windowEl.querySelector('#invEditUnit').value.trim() || null,
       category: windowEl.querySelector('#invEditCategory').value.trim() || null,
       default_vendor: windowEl.querySelector('#invEditVendor').value.trim() || null,
+      default_vendor_id: vendorIdValue || null,
       min_stock: minStockValue !== '' ? parseFloat(minStockValue) : null,
       notes: windowEl.querySelector('#invEditNotes').value.trim() || null,
     };
