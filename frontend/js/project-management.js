@@ -406,6 +406,19 @@ const ProjectManagementModule = (function() {
   }
 
   /**
+   * Escape HTML special characters
+   */
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  /**
    * Get delivery status text
    */
   function getDeliveryStatusText(status) {
