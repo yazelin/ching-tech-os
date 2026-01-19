@@ -24,13 +24,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 from ching_tech_os.services.path_manager import path_manager, StorageZone
 
 
-def test_banner(name: str):
+def print_banner(name: str):
     print(f"\n{'='*60}")
     print(f"  {name}")
     print('='*60)
 
 
-def test_result(name: str, passed: bool, detail: str = ""):
+def print_result(name: str, passed: bool, detail: str = ""):
     status = "✓ PASS" if passed else "✗ FAIL"
     print(f"{status}: {name}")
     if detail:
@@ -45,7 +45,7 @@ def run_tests():
     # ============================================================
     # 測試 1: PathManager 解析
     # ============================================================
-    test_banner("PathManager 路徑解析測試")
+    print_banner("PathManager 路徑解析測試")
 
     test_cases = [
         # 新格式
@@ -68,23 +68,23 @@ def run_tests():
             zone_ok = parsed.zone == expected_zone
             path_ok = parsed.path == expected_path
             if zone_ok and path_ok:
-                test_result(f"parse('{input_path}')", True)
+                print_result(f"parse('{input_path}')", True)
                 passed += 1
             else:
-                test_result(
+                print_result(
                     f"parse('{input_path}')",
                     False,
                     f"Expected zone={expected_zone.value}, path={expected_path}; Got zone={parsed.zone.value}, path={parsed.path}"
                 )
                 failed += 1
         except Exception as e:
-            test_result(f"parse('{input_path}')", False, str(e))
+            print_result(f"parse('{input_path}')", False, str(e))
             failed += 1
 
     # ============================================================
     # 測試 2: to_filesystem 轉換
     # ============================================================
-    test_banner("to_filesystem() 轉換測試")
+    print_banner("to_filesystem() 轉換測試")
 
     fs_test_cases = [
         ("ctos://linebot/files/test.jpg", "/mnt/nas/ctos/linebot/files/test.jpg"),
@@ -96,23 +96,23 @@ def run_tests():
         try:
             result = path_manager.to_filesystem(input_path)
             if result == expected_fs:
-                test_result(f"to_filesystem('{input_path}')", True)
+                print_result(f"to_filesystem('{input_path}')", True)
                 passed += 1
             else:
-                test_result(
+                print_result(
                     f"to_filesystem('{input_path}')",
                     False,
                     f"Expected: {expected_fs}, Got: {result}"
                 )
                 failed += 1
         except Exception as e:
-            test_result(f"to_filesystem('{input_path}')", False, str(e))
+            print_result(f"to_filesystem('{input_path}')", False, str(e))
             failed += 1
 
     # ============================================================
     # 測試 3: to_api 轉換
     # ============================================================
-    test_banner("to_api() 轉換測試")
+    print_banner("to_api() 轉換測試")
 
     api_test_cases = [
         ("ctos://linebot/files/test.jpg", "/api/files/ctos/linebot/files/test.jpg"),
@@ -125,23 +125,23 @@ def run_tests():
         try:
             result = path_manager.to_api(input_path)
             if result == expected_api:
-                test_result(f"to_api('{input_path}')", True)
+                print_result(f"to_api('{input_path}')", True)
                 passed += 1
             else:
-                test_result(
+                print_result(
                     f"to_api('{input_path}')",
                     False,
                     f"Expected: {expected_api}, Got: {result}"
                 )
                 failed += 1
         except Exception as e:
-            test_result(f"to_api('{input_path}')", False, str(e))
+            print_result(f"to_api('{input_path}')", False, str(e))
             failed += 1
 
     # ============================================================
     # 測試 4: to_storage 轉換（標準化 URI）
     # ============================================================
-    test_banner("to_storage() 轉換測試")
+    print_banner("to_storage() 轉換測試")
 
     storage_test_cases = [
         # 新格式應保持不變
@@ -156,23 +156,23 @@ def run_tests():
         try:
             result = path_manager.to_storage(input_path)
             if result == expected_uri:
-                test_result(f"to_storage('{input_path}')", True)
+                print_result(f"to_storage('{input_path}')", True)
                 passed += 1
             else:
-                test_result(
+                print_result(
                     f"to_storage('{input_path}')",
                     False,
                     f"Expected: {expected_uri}, Got: {result}"
                 )
                 failed += 1
         except Exception as e:
-            test_result(f"to_storage('{input_path}')", False, str(e))
+            print_result(f"to_storage('{input_path}')", False, str(e))
             failed += 1
 
     # ============================================================
     # 測試 5: is_readonly 檢查
     # ============================================================
-    test_banner("is_readonly() 測試")
+    print_banner("is_readonly() 測試")
 
     readonly_test_cases = [
         ("shared://test.pdf", True),
@@ -185,23 +185,23 @@ def run_tests():
         try:
             result = path_manager.is_readonly(input_path)
             if result == expected_readonly:
-                test_result(f"is_readonly('{input_path}')", True)
+                print_result(f"is_readonly('{input_path}')", True)
                 passed += 1
             else:
-                test_result(
+                print_result(
                     f"is_readonly('{input_path}')",
                     False,
                     f"Expected: {expected_readonly}, Got: {result}"
                 )
                 failed += 1
         except Exception as e:
-            test_result(f"is_readonly('{input_path}')", False, str(e))
+            print_result(f"is_readonly('{input_path}')", False, str(e))
             failed += 1
 
     # ============================================================
     # 測試 6: 檔案存在檢查（需要 NAS 掛載）
     # ============================================================
-    test_banner("exists() 測試（需要 NAS 掛載）")
+    print_banner("exists() 測試（需要 NAS 掛載）")
 
     # 測試一個已知存在的路徑
     test_paths = [
@@ -214,13 +214,13 @@ def run_tests():
         try:
             # 測試 shared 根目錄
             result = Path("/mnt/nas/projects").exists()
-            test_result("NAS 掛載點可用", result)
+            print_result("NAS 掛載點可用", result)
             if result:
                 passed += 1
             else:
                 failed += 1
         except Exception as e:
-            test_result("NAS 掛載點可用", False, str(e))
+            print_result("NAS 掛載點可用", False, str(e))
             failed += 1
     else:
         print("  (跳過：NAS 未掛載)")
@@ -228,7 +228,7 @@ def run_tests():
     # ============================================================
     # 測試結果摘要
     # ============================================================
-    test_banner("測試結果摘要")
+    print_banner("測試結果摘要")
     total = passed + failed
     print(f"總測試數: {total}")
     print(f"通過: {passed}")

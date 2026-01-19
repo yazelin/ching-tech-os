@@ -77,7 +77,7 @@ class TestKnowledgeCreatePermissions:
     def test_user_without_permission_cannot_create_global_knowledge(self):
         """沒有權限的使用者無法建立全域知識"""
         with patch("ching_tech_os.api.knowledge.get_user_preferences", new_callable=AsyncMock) as mock_prefs, \
-             patch("ching_tech_os.api.knowledge.check_knowledge_permission", return_value=False):
+             patch("ching_tech_os.api.knowledge.check_knowledge_permission_async", new_callable=AsyncMock, return_value=False):
 
             mock_prefs.return_value = {}
 
@@ -113,7 +113,7 @@ class TestKnowledgeUpdatePermissions:
 
         with patch("ching_tech_os.api.knowledge.get_knowledge") as mock_get, \
              patch("ching_tech_os.api.knowledge.get_user_preferences", new_callable=AsyncMock) as mock_prefs, \
-             patch("ching_tech_os.api.knowledge.check_knowledge_permission", return_value=False):
+             patch("ching_tech_os.api.knowledge.check_knowledge_permission_async", new_callable=AsyncMock, return_value=False):
 
             mock_get.return_value = mock_kb
             mock_prefs.return_value = {}
@@ -134,7 +134,7 @@ class TestKnowledgeUpdatePermissions:
 
         with patch("ching_tech_os.api.knowledge.get_knowledge") as mock_get, \
              patch("ching_tech_os.api.knowledge.get_user_preferences", new_callable=AsyncMock) as mock_prefs, \
-             patch("ching_tech_os.api.knowledge.check_knowledge_permission", return_value=False):
+             patch("ching_tech_os.api.knowledge.check_knowledge_permission_async", new_callable=AsyncMock, return_value=False):
 
             mock_get.return_value = mock_kb
             mock_prefs.return_value = {}
@@ -166,7 +166,7 @@ class TestKnowledgeDeletePermissions:
 
         with patch("ching_tech_os.api.knowledge.get_knowledge") as mock_get, \
              patch("ching_tech_os.api.knowledge.get_user_preferences", new_callable=AsyncMock) as mock_prefs, \
-             patch("ching_tech_os.api.knowledge.check_knowledge_permission", return_value=True), \
+             patch("ching_tech_os.api.knowledge.check_knowledge_permission_async", new_callable=AsyncMock, return_value=True), \
              patch("ching_tech_os.api.knowledge.delete_knowledge") as mock_delete, \
              patch("ching_tech_os.api.knowledge.log_message", new_callable=AsyncMock):
 
@@ -185,7 +185,7 @@ class TestKnowledgeDeletePermissions:
 
         with patch("ching_tech_os.api.knowledge.get_knowledge") as mock_get, \
              patch("ching_tech_os.api.knowledge.get_user_preferences", new_callable=AsyncMock) as mock_prefs, \
-             patch("ching_tech_os.api.knowledge.check_knowledge_permission", return_value=False):
+             patch("ching_tech_os.api.knowledge.check_knowledge_permission_async", new_callable=AsyncMock, return_value=False):
 
             mock_get.return_value = mock_kb
             mock_prefs.return_value = {}
@@ -203,7 +203,7 @@ class TestKnowledgeDeletePermissions:
 
         with patch("ching_tech_os.api.knowledge.get_knowledge") as mock_get, \
              patch("ching_tech_os.api.knowledge.get_user_preferences", new_callable=AsyncMock) as mock_prefs, \
-             patch("ching_tech_os.api.knowledge.check_knowledge_permission", return_value=False):
+             patch("ching_tech_os.api.knowledge.check_knowledge_permission_async", new_callable=AsyncMock, return_value=False):
 
             mock_get.return_value = mock_kb
             mock_prefs.return_value = {}
@@ -220,7 +220,7 @@ class TestKnowledgeDeletePermissions:
 
         with patch("ching_tech_os.api.knowledge.get_knowledge") as mock_get, \
              patch("ching_tech_os.api.knowledge.get_user_preferences", new_callable=AsyncMock) as mock_prefs, \
-             patch("ching_tech_os.api.knowledge.check_knowledge_permission", return_value=True), \
+             patch("ching_tech_os.api.knowledge.check_knowledge_permission_async", new_callable=AsyncMock, return_value=True), \
              patch("ching_tech_os.api.knowledge.delete_knowledge") as mock_delete, \
              patch("ching_tech_os.api.knowledge.log_message", new_callable=AsyncMock):
 

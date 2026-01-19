@@ -41,13 +41,13 @@ TEST_FILES = {
 }
 
 
-def test_banner(name: str):
+def print_banner(name: str):
     print(f"\n{'='*60}")
     print(f"  {name}")
     print('='*60)
 
 
-def test_result(name: str, passed: bool, detail: str = ""):
+def print_result(name: str, passed: bool, detail: str = ""):
     status = "✓ PASS" if passed else "✗ FAIL"
     print(f"{status}: {name}")
     if detail:
@@ -75,26 +75,26 @@ def run_tests():
     failed = 0
 
     # 檢查後端是否運行
-    test_banner("前置檢查")
+    print_banner("前置檢查")
 
     try:
         status, body = make_request("GET", f"{API_BASE}/api/health")
         if status == 200:
-            test_result("後端服務運行中", True)
+            print_result("後端服務運行中", True)
             passed += 1
         else:
-            test_result("後端服務運行中", False, f"Status: {status}")
+            print_result("後端服務運行中", False, f"Status: {status}")
             print("\n⚠️  後端服務未運行，無法執行 API 測試")
             return False
     except Exception as e:
-        test_result("後端服務運行中", False, str(e))
+        print_result("後端服務運行中", False, str(e))
         print("\n⚠️  無法連接後端服務，無法執行 API 測試")
         return False
 
     # ============================================================
     # 測試 1: 無效 zone 應回傳 400
     # ============================================================
-    test_banner("錯誤處理測試")
+    print_banner("錯誤處理測試")
 
     if AUTH_TOKEN:
         headers = {"Authorization": f"Bearer {AUTH_TOKEN}"}
@@ -107,13 +107,13 @@ def run_tests():
                 headers
             )
             if status == 400:
-                test_result("無效 zone 回傳 400", True)
+                print_result("無效 zone 回傳 400", True)
                 passed += 1
             else:
-                test_result("無效 zone 回傳 400", False, f"Got status {status}")
+                print_result("無效 zone 回傳 400", False, f"Got status {status}")
                 failed += 1
         except Exception as e:
-            test_result("無效 zone 回傳 400", False, str(e))
+            print_result("無效 zone 回傳 400", False, str(e))
             failed += 1
 
         # 路徑穿越
@@ -124,13 +124,13 @@ def run_tests():
                 headers
             )
             if status == 400:
-                test_result("路徑穿越被阻擋 (..)", True)
+                print_result("路徑穿越被阻擋 (..)", True)
                 passed += 1
             else:
-                test_result("路徑穿越被阻擋 (..)", False, f"Got status {status}")
+                print_result("路徑穿越被阻擋 (..)", False, f"Got status {status}")
                 failed += 1
         except Exception as e:
-            test_result("路徑穿越被阻擋 (..)", False, str(e))
+            print_result("路徑穿越被阻擋 (..)", False, str(e))
             failed += 1
     else:
         print("  (跳過：未提供 AUTH_TOKEN)")
@@ -138,7 +138,7 @@ def run_tests():
     # ============================================================
     # 測試 2: 未授權請求應回傳 401
     # ============================================================
-    test_banner("認證測試")
+    print_banner("認證測試")
 
     try:
         status, body = make_request(
@@ -147,20 +147,20 @@ def run_tests():
             # 不帶 Authorization header
         )
         if status == 401:
-            test_result("未授權請求回傳 401", True)
+            print_result("未授權請求回傳 401", True)
             passed += 1
         else:
-            test_result("未授權請求回傳 401", False, f"Got status {status}")
+            print_result("未授權請求回傳 401", False, f"Got status {status}")
             failed += 1
     except Exception as e:
-        test_result("未授權請求回傳 401", False, str(e))
+        print_result("未授權請求回傳 401", False, str(e))
         failed += 1
 
     # ============================================================
     # 測試 3: 各 Zone 有效性（需要 token）
     # ============================================================
     if AUTH_TOKEN:
-        test_banner("Zone 有效性測試")
+        print_banner("Zone 有效性測試")
 
         for zone in ["ctos", "shared", "temp", "local", "nas"]:
             try:
@@ -172,23 +172,23 @@ def run_tests():
                 )
                 # 404 表示 zone 有效但檔案不存在，這是正確的
                 if status == 404:
-                    test_result(f"Zone '{zone}' 有效", True)
+                    print_result(f"Zone '{zone}' 有效", True)
                     passed += 1
                 elif status == 400:
-                    test_result(f"Zone '{zone}' 有效", False, "Zone 被拒絕")
+                    print_result(f"Zone '{zone}' 有效", False, "Zone 被拒絕")
                     failed += 1
                 else:
-                    test_result(f"Zone '{zone}' 有效", True, f"Status: {status}")
+                    print_result(f"Zone '{zone}' 有效", True, f"Status: {status}")
                     passed += 1
             except Exception as e:
-                test_result(f"Zone '{zone}' 有效", False, str(e))
+                print_result(f"Zone '{zone}' 有效", False, str(e))
                 failed += 1
 
     # ============================================================
     # 測試 4: 讀取實際檔案（需要 token 和 NAS）
     # ============================================================
     if AUTH_TOKEN:
-        test_banner("檔案讀取測試")
+        print_banner("檔案讀取測試")
 
         # 檢查 NAS 是否可用
         nas_path = Path("/mnt/nas/projects")
@@ -205,13 +205,13 @@ def run_tests():
                         headers
                     )
                     if status == 200:
-                        test_result(f"讀取 shared://{rel_path}", True)
+                        print_result(f"讀取 shared://{rel_path}", True)
                         passed += 1
                     else:
-                        test_result(f"讀取 shared://{rel_path}", False, f"Status: {status}")
+                        print_result(f"讀取 shared://{rel_path}", False, f"Status: {status}")
                         failed += 1
                 except Exception as e:
-                    test_result(f"讀取 shared://{rel_path}", False, str(e))
+                    print_result(f"讀取 shared://{rel_path}", False, str(e))
                     failed += 1
             else:
                 print("  (跳過：找不到測試用的 .txt 檔案)")
@@ -221,7 +221,7 @@ def run_tests():
     # ============================================================
     # 測試結果摘要
     # ============================================================
-    test_banner("測試結果摘要")
+    print_banner("測試結果摘要")
     total = passed + failed
     print(f"總測試數: {total}")
     print(f"通過: {passed}")
