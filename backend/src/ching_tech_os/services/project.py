@@ -1084,8 +1084,8 @@ async def update_delivery(
 
         updates.append("updated_at = NOW()")
         params.append(delivery_id)
-        sql = f"UPDATE project_delivery_schedules SET {', '.join(updates)} WHERE id = ${param_idx} RETURNING *"
-        await conn.fetchrow(sql, *params)
+        sql = f"UPDATE project_delivery_schedules SET {', '.join(updates)} WHERE id = ${param_idx}"
+        await conn.execute(sql, *params)
 
         # 取得關聯資料
         result = await conn.fetchrow(
