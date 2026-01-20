@@ -11,17 +11,23 @@
     <meta property="og:type" content="article">
     <meta property="og:site_name" content="擎添工業 CTOS">
 
-    <!-- 子路徑部署：使用絕對路徑 -->
+    <!-- 子路徑部署：動態檢測 base path -->
     <script>
       // 計算 base path 並設為全域變數供其他腳本使用
       window.PUBLIC_BASE = (function() {
         var path = window.location.pathname;
-        if (path.indexOf('/ctos/') === 0) return '/ctos';
+        var knownPaths = ['/ctos', '/trial'];
+        for (var i = 0; i < knownPaths.length; i++) {
+          if (path.indexOf(knownPaths[i] + '/') === 0 || path === knownPaths[i]) {
+            return knownPaths[i];
+          }
+        }
         return '';
       })();
+      // 動態載入 favicon 和 CSS
+      document.write('<link rel="icon" type="image/svg+xml" href="' + window.PUBLIC_BASE + '/assets/images/logo.svg">');
+      document.write('<link rel="stylesheet" href="' + window.PUBLIC_BASE + '/css/public.css">');
     </script>
-    <link rel="icon" type="image/svg+xml" href="/ctos/assets/images/logo.svg">
-    <link rel="stylesheet" href="/ctos/css/public.css">
     <!-- Markdown 渲染 -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <!-- 程式碼高亮 -->
@@ -32,7 +38,7 @@
     <!-- 頂部導覽列 -->
     <header class="public-header">
         <div class="header-left">
-            <img src="/ctos/assets/images/logo-cyan-static.svg" alt="擎添工業" class="logo">
+            <img id="header-logo" src="" alt="擎添工業" class="logo">
             <span class="brand-name">擎添工業</span>
         </div>
         <div class="header-right">
@@ -66,7 +72,7 @@
             </div>
             <h2 id="error-title">連結無效</h2>
             <p id="error-message">此連結不存在或已被撤銷</p>
-            <a href="/ctos/" class="error-link">前往首頁</a>
+            <a id="home-link-error" href="" class="error-link">前往首頁</a>
         </div>
 
         <!-- 內容區 -->
@@ -113,7 +119,7 @@
         <div class="footer-content">
             <span id="footer-info">此內容由擎添工業分享</span>
             <span class="footer-divider">|</span>
-            <a href="/ctos/" class="footer-link">登入 CTOS 系統</a>
+            <a id="home-link-footer" href="" class="footer-link">登入 CTOS 系統</a>
         </div>
     </footer>
 
@@ -126,6 +132,6 @@
         </div>
     </div>
 
-    <script src="/ctos/js/public.js"></script>
+    <script>document.write('<script src="' + window.PUBLIC_BASE + '/js/public.js"><\/script>');</script>
 </body>
 </html>

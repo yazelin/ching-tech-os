@@ -50,6 +50,205 @@ async def require_platform_admin(session: SessionData) -> SessionData:
     return session
 
 
+# ============================================================
+# Line 群組租戶管理（必須在 /{tenant_id} 路由之前定義）
+# ============================================================
+
+
+class LineGroupTenantUpdateRequest(BaseModel):
+    """Line 群組租戶更新請求"""
+    new_tenant_id: str
+
+
+class LineGroupTenantResponse(BaseModel):
+    """Line 群組租戶回應"""
+    success: bool
+    message: str
+    group_id: str | None = None
+    old_tenant_id: str | None = None
+    new_tenant_id: str | None = None
+
+
+@router.get("/line-groups")
+async def list_all_line_groups(
+    limit: int = 50,
+    offset: int = 0,
+    tenant_id: str | None = None,
+    session: SessionData = Depends(get_current_session),
+):
+    """列出所有 Line 群組（跨租戶）
+
+    僅平台管理員可操作。
+    可選擇性過濾特定租戶的群組。
+
+    Args:
+        limit: 最大數量
+        offset: 偏移量
+        tenant_id: 租戶 ID（可選，不指定則列出所有租戶的群組）
+    """
+    from uuid import UUID
+    from ...database import get_connection
+
+    await require_platform_admin(session)
+
+    # 轉換 tenant_id 為 UUID
+    tenant_uuid = None
+    if tenant_id:
+        try:
+            tenant_uuid = UUID(tenant_id)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="無效的租戶 ID 格式",
+            )
+
+    async with get_connection() as conn:
+        if tenant_uuid:
+            # 過濾特定租戶
+            total = await conn.fetchval(
+                "SELECT COUNT(*) FROM line_groups WHERE tenant_id = $1",
+                tenant_uuid,
+            )
+            rows = await conn.fetch(
+                """
+                SELECT g.*, t.name as tenant_name
+                FROM line_groups g
+                LEFT JOIN tenants t ON g.tenant_id = t.id
+                WHERE g.tenant_id = $1
+                ORDER BY g.updated_at DESC
+                LIMIT $2 OFFSET $3
+                """,
+                tenant_uuid,
+                limit,
+                offset,
+            )
+        else:
+            # 列出所有租戶的群組
+            total = await conn.fetchval("SELECT COUNT(*) FROM line_groups")
+            rows = await conn.fetch(
+                """
+                SELECT g.*, t.name as tenant_name
+                FROM line_groups g
+                LEFT JOIN tenants t ON g.tenant_id = t.id
+                ORDER BY g.updated_at DESC
+                LIMIT $1 OFFSET $2
+                """,
+                limit,
+                offset,
+            )
+
+        groups = []
+        for row in rows:
+            group = dict(row)
+            # 轉換 UUID 為字串
+            group["id"] = str(group["id"])
+            group["tenant_id"] = str(group["tenant_id"])
+            if group.get("project_id"):
+                group["project_id"] = str(group["project_id"])
+            # 轉換 datetime 為 ISO 字串
+            if group.get("created_at"):
+                group["created_at"] = group["created_at"].isoformat()
+            if group.get("updated_at"):
+                group["updated_at"] = group["updated_at"].isoformat()
+            groups.append(group)
+
+        return {
+            "items": groups,
+            "total": total,
+        }
+
+
+@router.patch("/line-groups/{group_id}/tenant")
+async def update_line_group_tenant(
+    group_id: str,
+    request: LineGroupTenantUpdateRequest,
+    session: SessionData = Depends(get_current_session),
+) -> LineGroupTenantResponse:
+    """更新 Line 群組的租戶
+
+    將群組從一個租戶移動到另一個租戶。
+    僅平台管理員可操作。
+
+    Args:
+        group_id: 群組 UUID
+        request: 包含新租戶 ID 的請求
+
+    Returns:
+        更新結果
+    """
+    from uuid import UUID
+    from ..linebot_router import get_group_by_id
+    from ...services.linebot import update_group_tenant
+
+    await require_platform_admin(session)
+
+    try:
+        group_uuid = UUID(group_id)
+        new_tenant_uuid = UUID(request.new_tenant_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="無效的 UUID 格式",
+        )
+
+    # 確認新租戶存在
+    new_tenant = await get_tenant_by_id(request.new_tenant_id)
+    if new_tenant is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="目標租戶不存在",
+        )
+
+    # 取得群組（不指定 tenant_id，平台管理員可以看到所有租戶的群組）
+    # 需要直接查詢，因為 get_group_by_id 會過濾 tenant_id
+    from ...database import get_connection
+
+    async with get_connection() as conn:
+        group = await conn.fetchrow(
+            "SELECT id, tenant_id FROM line_groups WHERE id = $1",
+            group_uuid,
+        )
+
+    if group is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="群組不存在",
+        )
+
+    old_tenant_id = str(group["tenant_id"])
+
+    # 如果已經是目標租戶，直接返回成功
+    if str(group["tenant_id"]) == request.new_tenant_id:
+        return LineGroupTenantResponse(
+            success=True,
+            message="群組已屬於此租戶",
+            group_id=group_id,
+            old_tenant_id=old_tenant_id,
+            new_tenant_id=request.new_tenant_id,
+        )
+
+    # 更新租戶
+    success = await update_group_tenant(
+        group_uuid,
+        new_tenant_uuid,
+        current_tenant_id=group["tenant_id"],
+    )
+
+    if success:
+        return LineGroupTenantResponse(
+            success=True,
+            message="群組租戶已更新",
+            group_id=group_id,
+            old_tenant_id=old_tenant_id,
+            new_tenant_id=request.new_tenant_id,
+        )
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="更新失敗",
+        )
+
+
 # === 租戶 CRUD API ===
 
 
@@ -314,197 +513,3 @@ async def remove_tenant_admin_by_platform(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="管理員不存在",
         )
-
-
-# ============================================================
-# Line 群組租戶管理
-# ============================================================
-
-
-class LineGroupTenantUpdateRequest(BaseModel):
-    """Line 群組租戶更新請求"""
-    new_tenant_id: str
-
-
-class LineGroupTenantResponse(BaseModel):
-    """Line 群組租戶回應"""
-    success: bool
-    message: str
-    group_id: str | None = None
-    old_tenant_id: str | None = None
-    new_tenant_id: str | None = None
-
-
-@router.patch("/line-groups/{group_id}/tenant")
-async def update_line_group_tenant(
-    group_id: str,
-    request: LineGroupTenantUpdateRequest,
-    session: SessionData = Depends(get_current_session),
-) -> LineGroupTenantResponse:
-    """更新 Line 群組的租戶
-
-    將群組從一個租戶移動到另一個租戶。
-    僅平台管理員可操作。
-
-    Args:
-        group_id: 群組 UUID
-        request: 包含新租戶 ID 的請求
-
-    Returns:
-        更新結果
-    """
-    from uuid import UUID
-    from ..linebot_router import get_group_by_id
-    from ...services.linebot import update_group_tenant
-
-    await require_platform_admin(session)
-
-    try:
-        group_uuid = UUID(group_id)
-        new_tenant_uuid = UUID(request.new_tenant_id)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="無效的 UUID 格式",
-        )
-
-    # 確認新租戶存在
-    new_tenant = await get_tenant_by_id(request.new_tenant_id)
-    if new_tenant is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="目標租戶不存在",
-        )
-
-    # 取得群組（不指定 tenant_id，平台管理員可以看到所有租戶的群組）
-    # 需要直接查詢，因為 get_group_by_id 會過濾 tenant_id
-    from ...database import get_connection
-
-    async with get_connection() as conn:
-        group = await conn.fetchrow(
-            "SELECT id, tenant_id FROM line_groups WHERE id = $1",
-            group_uuid,
-        )
-
-    if group is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="群組不存在",
-        )
-
-    old_tenant_id = str(group["tenant_id"])
-
-    # 如果已經是目標租戶，直接返回成功
-    if str(group["tenant_id"]) == request.new_tenant_id:
-        return LineGroupTenantResponse(
-            success=True,
-            message="群組已屬於此租戶",
-            group_id=group_id,
-            old_tenant_id=old_tenant_id,
-            new_tenant_id=request.new_tenant_id,
-        )
-
-    # 更新租戶
-    success = await update_group_tenant(
-        group_uuid,
-        new_tenant_uuid,
-        current_tenant_id=group["tenant_id"],
-    )
-
-    if success:
-        return LineGroupTenantResponse(
-            success=True,
-            message="群組租戶已更新",
-            group_id=group_id,
-            old_tenant_id=old_tenant_id,
-            new_tenant_id=request.new_tenant_id,
-        )
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="更新失敗",
-        )
-
-
-@router.get("/line-groups")
-async def list_all_line_groups(
-    limit: int = 50,
-    offset: int = 0,
-    tenant_id: str | None = None,
-    session: SessionData = Depends(get_current_session),
-):
-    """列出所有 Line 群組（跨租戶）
-
-    僅平台管理員可操作。
-    可選擇性過濾特定租戶的群組。
-
-    Args:
-        limit: 最大數量
-        offset: 偏移量
-        tenant_id: 租戶 ID（可選，不指定則列出所有租戶的群組）
-    """
-    from uuid import UUID
-    from ...database import get_connection
-
-    await require_platform_admin(session)
-
-    # 轉換 tenant_id 為 UUID
-    tenant_uuid = None
-    if tenant_id:
-        try:
-            tenant_uuid = UUID(tenant_id)
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="無效的租戶 ID 格式",
-            )
-
-    async with get_connection() as conn:
-        if tenant_uuid:
-            # 過濾特定租戶
-            total = await conn.fetchval(
-                "SELECT COUNT(*) FROM line_groups WHERE tenant_id = $1",
-                tenant_uuid,
-            )
-            rows = await conn.fetch(
-                """
-                SELECT g.*, t.name as tenant_name
-                FROM line_groups g
-                LEFT JOIN tenants t ON g.tenant_id = t.id
-                WHERE g.tenant_id = $1
-                ORDER BY g.updated_at DESC
-                LIMIT $2 OFFSET $3
-                """,
-                tenant_uuid,
-                limit,
-                offset,
-            )
-        else:
-            # 列出所有租戶的群組
-            total = await conn.fetchval("SELECT COUNT(*) FROM line_groups")
-            rows = await conn.fetch(
-                """
-                SELECT g.*, t.name as tenant_name
-                FROM line_groups g
-                LEFT JOIN tenants t ON g.tenant_id = t.id
-                ORDER BY g.updated_at DESC
-                LIMIT $1 OFFSET $2
-                """,
-                limit,
-                offset,
-            )
-
-        groups = []
-        for row in rows:
-            group = dict(row)
-            # 轉換 UUID 為字串
-            group["id"] = str(group["id"])
-            group["tenant_id"] = str(group["tenant_id"])
-            if group.get("project_id"):
-                group["project_id"] = str(group["project_id"])
-            groups.append(group)
-
-        return {
-            "items": groups,
-            "total": total,
-        }

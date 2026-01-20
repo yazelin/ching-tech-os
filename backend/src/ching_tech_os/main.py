@@ -21,10 +21,34 @@ from .api.admin import tenants as admin_tenants
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
 
 
+def ensure_directories():
+    """確保必要的目錄存在"""
+    from pathlib import Path
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    # 需要建立的目錄
+    directories = [
+        Path(settings.knowledge_local_path),  # 知識庫
+        Path(settings.project_local_path),    # 專案
+        Path(settings.linebot_local_path) / "ai-images",  # AI 生成圖片
+    ]
+
+    for dir_path in directories:
+        if not dir_path.exists():
+            try:
+                dir_path.mkdir(parents=True, exist_ok=True)
+                logger.info(f"建立目錄: {dir_path}")
+            except Exception as e:
+                logger.warning(f"無法建立目錄 {dir_path}: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """應用程式生命週期管理"""
     # 啟動時
+    ensure_directories()  # 確保必要目錄存在
     await init_db_pool()
     await ensure_default_linebot_agents()  # 確保 Line Bot Agent 存在
     await session_manager.start_cleanup_task()

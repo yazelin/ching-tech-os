@@ -503,6 +503,16 @@
     // ============================================
 
     async function init() {
+        // 初始化動態路徑元素
+        const basePath = window.PUBLIC_BASE || '';
+        const headerLogo = document.getElementById('header-logo');
+        const homeLinkError = document.getElementById('home-link-error');
+        const homeLinkFooter = document.getElementById('home-link-footer');
+
+        if (headerLogo) headerLogo.src = basePath + '/assets/images/logo-cyan-static.svg';
+        if (homeLinkError) homeLinkError.href = basePath + '/';
+        if (homeLinkFooter) homeLinkFooter.href = basePath + '/';
+
         // 取得 token
         let token = getUrlParam('t');
 

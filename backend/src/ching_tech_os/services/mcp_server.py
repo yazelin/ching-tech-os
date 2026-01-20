@@ -2282,7 +2282,7 @@ async def create_share_link(
             expires_in=expires_in,
         )
         # 使用 system 作為建立者（Line Bot 代理建立）
-        result = await _create_share_link(data, "linebot")
+        result = await _create_share_link(data, "linebot", tenant_id=tid)
 
         # 轉換為台北時區顯示
         if result.expires_at:
@@ -2374,7 +2374,7 @@ async def send_nas_file(
             resource_id=file_path,
             expires_in="24h",
         )
-        result = await _create_share_link(data, "linebot")
+        result = await _create_share_link(data, "linebot", tenant_id=tid)
     except Exception as e:
         return f"建立分享連結失敗：{e}"
 
@@ -2493,7 +2493,7 @@ async def prepare_file_message(
             resource_id=file_path,
             expires_in="24h",
         )
-        result = await _create_share_link(data, "linebot")
+        result = await _create_share_link(data, "linebot", tenant_id=tid)
     except Exception as e:
         return f"建立分享連結失敗：{e}"
 
