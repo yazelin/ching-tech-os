@@ -8,6 +8,7 @@ import subprocess
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 import yaml
 
@@ -726,7 +727,6 @@ async def get_all_tags(tenant_id: str | UUID | None = None) -> TagsResponse:
     Args:
         tenant_id: 租戶 ID
     """
-    from uuid import UUID
     if tenant_id is None:
         tid = UUID(settings.default_tenant_id)
     elif isinstance(tenant_id, UUID):
