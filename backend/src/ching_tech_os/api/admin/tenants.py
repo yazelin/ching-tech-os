@@ -443,16 +443,28 @@ async def list_all_line_groups(
         offset: 偏移量
         tenant_id: 租戶 ID（可選，不指定則列出所有租戶的群組）
     """
+    from uuid import UUID
     from ...database import get_connection
 
     await require_platform_admin(session)
 
+    # 轉換 tenant_id 為 UUID
+    tenant_uuid = None
+    if tenant_id:
+        try:
+            tenant_uuid = UUID(tenant_id)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="無效的租戶 ID 格式",
+            )
+
     async with get_connection() as conn:
-        if tenant_id:
+        if tenant_uuid:
             # 過濾特定租戶
             total = await conn.fetchval(
                 "SELECT COUNT(*) FROM line_groups WHERE tenant_id = $1",
-                tenant_id,
+                tenant_uuid,
             )
             rows = await conn.fetch(
                 """
@@ -463,7 +475,7 @@ async def list_all_line_groups(
                 ORDER BY g.updated_at DESC
                 LIMIT $2 OFFSET $3
                 """,
-                tenant_id,
+                tenant_uuid,
                 limit,
                 offset,
             )

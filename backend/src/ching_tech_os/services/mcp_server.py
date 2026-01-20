@@ -66,13 +66,15 @@ def _get_tenant_id(tenant_id: str | None) -> UUID:
     轉換租戶 ID 字串為 UUID
 
     Args:
-        tenant_id: 租戶 ID 字串，None 則返回預設租戶
+        tenant_id: 租戶 ID 字串或 UUID，None 則返回預設租戶
 
     Returns:
         租戶 UUID
     """
     if tenant_id is None:
         return DEFAULT_TENANT_ID
+    if isinstance(tenant_id, UUID):
+        return tenant_id
     try:
         return UUID(tenant_id)
     except ValueError:

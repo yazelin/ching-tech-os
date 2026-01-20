@@ -720,14 +720,19 @@ def delete_knowledge(kb_id: str, tenant_id: str | None = None) -> None:
     _save_index(index, tenant_id=tenant_id)
 
 
-async def get_all_tags(tenant_id: str | None = None) -> TagsResponse:
+async def get_all_tags(tenant_id: str | UUID | None = None) -> TagsResponse:
     """取得所有標籤（專案從資料庫動態載入）
 
     Args:
         tenant_id: 租戶 ID
     """
     from uuid import UUID
-    tid = UUID(tenant_id) if tenant_id else UUID(settings.default_tenant_id)
+    if tenant_id is None:
+        tid = UUID(settings.default_tenant_id)
+    elif isinstance(tenant_id, UUID):
+        tid = tenant_id
+    else:
+        tid = UUID(tenant_id)
     index = _load_index(tenant_id=tenant_id)
 
     # 從資料庫取得專案列表

@@ -197,7 +197,7 @@ async def get_project_attachment_info(attachment_id: str) -> dict:
 async def create_share_link(
     data: ShareLinkCreate,
     created_by: str,
-    tenant_id: str | None = None,
+    tenant_id: str | UUID | None = None,
 ) -> ShareLinkResponse:
     """建立分享連結
 
@@ -241,7 +241,7 @@ async def create_share_link(
             created_by,
             expires_at,
             now,
-            UUID(tenant_id) if tenant_id else None,
+            (tenant_id if isinstance(tenant_id, UUID) else UUID(str(tenant_id))) if tenant_id else None,
         )
 
         return ShareLinkResponse(
@@ -259,7 +259,7 @@ async def create_share_link(
 
 
 async def list_my_links(
-    username: str, tenant_id: str | None = None
+    username: str, tenant_id: str | UUID | None = None
 ) -> ShareLinkListResponse:
     """列出使用者的分享連結
 
@@ -269,6 +269,8 @@ async def list_my_links(
     """
     async with get_connection() as conn:
         if tenant_id:
+            # 確保 tenant_id 是 UUID 類型
+            tenant_uuid = tenant_id if isinstance(tenant_id, UUID) else UUID(str(tenant_id))
             rows = await conn.fetch(
                 """
                 SELECT token, resource_type, resource_id, created_by, expires_at, access_count, created_at
@@ -277,7 +279,7 @@ async def list_my_links(
                 ORDER BY created_at DESC
                 """,
                 username,
-                UUID(tenant_id),
+                tenant_uuid,
             )
         else:
             rows = await conn.fetch(
@@ -326,7 +328,7 @@ async def list_my_links(
         return ShareLinkListResponse(links=links)
 
 
-async def list_all_links(tenant_id: str | None = None) -> ShareLinkListResponse:
+async def list_all_links(tenant_id: str | UUID | None = None) -> ShareLinkListResponse:
     """列出所有分享連結（管理員用）
 
     Args:
@@ -334,6 +336,8 @@ async def list_all_links(tenant_id: str | None = None) -> ShareLinkListResponse:
     """
     async with get_connection() as conn:
         if tenant_id:
+            # 確保 tenant_id 是 UUID 類型
+            tenant_uuid = tenant_id if isinstance(tenant_id, UUID) else UUID(str(tenant_id))
             rows = await conn.fetch(
                 """
                 SELECT token, resource_type, resource_id, created_by, expires_at, access_count, created_at
@@ -341,7 +345,7 @@ async def list_all_links(tenant_id: str | None = None) -> ShareLinkListResponse:
                 WHERE tenant_id = $1
                 ORDER BY created_at DESC
                 """,
-                UUID(tenant_id),
+                tenant_uuid,
             )
         else:
             rows = await conn.fetch(
