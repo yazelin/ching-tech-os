@@ -46,6 +46,7 @@ from ..api.auth import get_current_session
 from ..models.auth import SessionData
 from ..services.linebot import (
     verify_signature,
+    verify_webhook_signature,
     get_webhook_parser,
     save_message,
     save_file_record,
@@ -81,6 +82,9 @@ from ..services.linebot import (
     reply_text,
     # 租戶解析
     resolve_tenant_for_message,
+    # 共用 Bot 租戶綁定
+    is_bind_tenant_command,
+    bind_group_to_tenant_by_code,
 )
 from ..services.linebot_ai import handle_text_message
 
@@ -104,16 +108,25 @@ async def webhook(
     Line Webhook 端點
 
     接收並處理 Line 平台發送的事件
+
+    多租戶支援：
+    - 獨立 Bot 模式：從簽章驗證中識別租戶
+    - 共用 Bot 模式：從群組綁定或用戶綁定解析租戶
     """
     # 取得請求 body
     body = await request.body()
 
-    # 驗證簽章
-    if not verify_signature(body, x_line_signature):
+    # 多租戶簽章驗證
+    # 會嘗試所有租戶的 channel_secret，找到匹配的租戶
+    is_valid, webhook_tenant_id = await verify_webhook_signature(body, x_line_signature)
+
+    if not is_valid:
         logger.warning("Webhook 簽章驗證失敗")
         raise HTTPException(status_code=400, detail="Invalid signature")
 
     # 解析事件
+    # 注意：此處的 parser 使用預設 channel_secret，因為簽章已驗證通過
+    # 獨立 Bot 模式下租戶已識別，共用 Bot 模式下會在 process_event 中解析
     try:
         parser = get_webhook_parser()
         events = parser.parse(body.decode("utf-8"), x_line_signature)
@@ -121,19 +134,22 @@ async def webhook(
         logger.error(f"解析 Webhook 事件失敗: {e}")
         raise HTTPException(status_code=400, detail="Invalid webhook body")
 
-    # 處理每個事件
+    # 處理每個事件（傳遞從簽章識別的租戶 ID）
     for event in events:
-        background_tasks.add_task(process_event, event)
+        background_tasks.add_task(process_event, event, webhook_tenant_id)
 
     return {"status": "ok"}
 
 
-async def process_event(event) -> None:
+async def process_event(event, webhook_tenant_id: UUID | None = None) -> None:
     """
     處理單個 Line 事件
 
     Args:
         event: Line Webhook 事件
+        webhook_tenant_id: 從 Webhook 簽章識別的租戶 ID
+            - 有值：獨立 Bot 模式，直接使用此租戶
+            - None：共用 Bot 模式，需從群組/用戶綁定解析租戶
     """
     try:
         # 取得事件中的群組和用戶 ID，用於解析租戶
@@ -141,8 +157,15 @@ async def process_event(event) -> None:
         line_user_id = source.user_id if hasattr(source, "user_id") else None
         line_group_id = source.group_id if hasattr(source, "group_id") else None
 
-        # 解析租戶 ID
-        tenant_id = await resolve_tenant_for_message(line_group_id, line_user_id)
+        # 決定租戶 ID
+        if webhook_tenant_id:
+            # 獨立 Bot 模式：直接使用從簽章識別的租戶
+            tenant_id = webhook_tenant_id
+            logger.debug(f"獨立 Bot 模式，租戶: {tenant_id}")
+        else:
+            # 共用 Bot 模式：從群組綁定或用戶綁定解析租戶
+            tenant_id = await resolve_tenant_for_message(line_group_id, line_user_id)
+            logger.debug(f"共用 Bot 模式，解析租戶: {tenant_id}")
 
         if isinstance(event, MessageEvent):
             await process_message_event(event, tenant_id)
@@ -213,13 +236,14 @@ async def process_message_event(event: MessageEvent, tenant_id: UUID) -> None:
         content = None
 
     # 取得或建立用戶
-    user_profile = await get_user_profile(line_user_id)
+    # 注意：傳遞 tenant_id 以使用租戶的 access_token（獨立 Bot 模式）
+    user_profile = await get_user_profile(line_user_id, tenant_id=tenant_id)
     user_uuid = await get_or_create_user(line_user_id, user_profile, tenant_id=tenant_id)
 
     # 取得群組 UUID（如果是群組訊息）
     group_uuid = None
     if line_group_id:
-        group_profile = await get_group_profile(line_group_id)
+        group_profile = await get_group_profile(line_group_id, tenant_id=tenant_id)
         group_uuid = await get_or_create_group(line_group_id, group_profile, tenant_id=tenant_id)
 
     # 檢查是否為綁定驗證碼（僅個人對話、文字訊息、6 位數字）
@@ -229,10 +253,41 @@ async def process_message_event(event: MessageEvent, tenant_id: UUID) -> None:
         success, reply_msg = await verify_binding_code(user_uuid, content, tenant_id=tenant_id)
         if event.reply_token:
             try:
-                await reply_text(event.reply_token, reply_msg)
+                await reply_text(event.reply_token, reply_msg, tenant_id=tenant_id)
             except Exception as e:
                 logger.warning(f"回覆綁定訊息失敗: {e}")
         return  # 不再繼續處理
+
+    # 處理共用 Bot 的租戶綁定指令（僅群組訊息）
+    # 格式：/綁定 公司代碼 或 /bind 公司代碼
+    if is_group and message_type == "text" and content:
+        is_bind_cmd, tenant_code = is_bind_tenant_command(content)
+        if is_bind_cmd:
+            if not tenant_code:
+                # 沒有提供租戶代碼，回覆使用說明
+                reply_msg = (
+                    "請提供公司代碼來綁定此群組。\n\n"
+                    "使用方式：\n"
+                    "/綁定 公司代碼\n\n"
+                    "例如：/綁定 ching-tech"
+                )
+            else:
+                # 執行綁定
+                success, reply_msg, new_tenant_id = await bind_group_to_tenant_by_code(
+                    line_group_id, tenant_code
+                )
+                if success and new_tenant_id:
+                    # 更新當前處理的 tenant_id
+                    tenant_id = new_tenant_id
+                    logger.info(f"群組 {line_group_id} 已綁定到租戶 {tenant_id}")
+
+            if event.reply_token:
+                try:
+                    # 注意：回覆時使用新的 tenant_id（如果綁定成功）
+                    await reply_text(event.reply_token, reply_msg, tenant_id=tenant_id)
+                except Exception as e:
+                    logger.warning(f"回覆綁定訊息失敗: {e}")
+            return  # 不再繼續處理
 
     # 儲存訊息
     message_uuid = await save_message(
@@ -248,6 +303,7 @@ async def process_message_event(event: MessageEvent, tenant_id: UUID) -> None:
     logger.info(f"已儲存訊息: {message.id} (type={message_type})")
 
     # 處理媒體檔案（圖片、影片、音訊、檔案）
+    # 注意：tenant_id 用於下載檔案時選用正確的 access_token
     if message_type in ("image", "video", "audio", "file"):
         await process_media_message(
             message_id=message.id,
@@ -279,6 +335,7 @@ async def process_message_event(event: MessageEvent, tenant_id: UUID) -> None:
                             "2. 進入 Line Bot 管理頁面\n"
                             "3. 點擊「綁定 Line 帳號」產生驗證碼\n"
                             "4. 將驗證碼發送給我完成綁定",
+                            tenant_id=tenant_id,
                         )
                     except Exception as e:
                         logger.warning(f"回覆未綁定訊息失敗: {e}")
@@ -344,6 +401,7 @@ async def process_media_message(
                 logger.info(f"檔案 {file_name} 重新分類為 image")
 
         # 下載並儲存檔案到 NAS
+        # 注意：傳遞 tenant_id 以使用租戶的 access_token
         nas_path = await download_and_save_file(
             message_id=message_id,
             message_uuid=message_uuid,
@@ -351,6 +409,7 @@ async def process_media_message(
             line_group_id=line_group_id,
             line_user_id=line_user_id,
             file_name=file_name,
+            tenant_id=tenant_id,
         )
 
         # 儲存檔案記錄到資料庫
@@ -410,7 +469,8 @@ async def process_follow_event(event: FollowEvent, tenant_id: UUID) -> None:
     line_user_id = source.user_id if hasattr(source, "user_id") else None
 
     if line_user_id:
-        profile = await get_user_profile(line_user_id)
+        # 注意：傳遞 tenant_id 以使用租戶的 access_token
+        profile = await get_user_profile(line_user_id, tenant_id=tenant_id)
         await get_or_create_user(line_user_id, profile, is_friend=True, tenant_id=tenant_id)
         # 更新現有用戶的好友狀態
         await update_user_friend_status(line_user_id, is_friend=True, tenant_id=tenant_id)

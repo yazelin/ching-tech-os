@@ -123,6 +123,9 @@ class Settings:
     line_channel_secret: str = _get_env("LINE_CHANNEL_SECRET", required=True)
     line_channel_access_token: str = _get_env("LINE_CHANNEL_ACCESS_TOKEN", required=True)
 
+    # 租戶憑證加密金鑰（用於加密 Line Bot credentials）
+    tenant_secret_key: str = _get_env("TENANT_SECRET_KEY", "")
+
     # Bot 觸發名稱（用於群組 @ 觸發，檢查訊息是否包含 @名稱）
     line_bot_trigger_names: list[str] = [
         "ChingTech 擎添工業",  # Line 自動填入的完整名稱

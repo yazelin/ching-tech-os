@@ -529,6 +529,190 @@
 }
 
 /* ==========================================================================
+   Line Bot 設定區段
+   ========================================================================== */
+
+.linebot-settings-section {
+  margin-top: var(--spacing-xl);
+  padding-top: var(--spacing-lg);
+  border-top: 2px solid var(--border-medium);
+}
+
+.linebot-settings-section .settings-group-title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.linebot-settings-section .settings-group-title .icon {
+  color: #00c300; /* Line 綠色 */
+}
+
+.linebot-settings-section .settings-group-title .icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.settings-description {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin: 0 0 var(--spacing-md) 0;
+  line-height: 1.5;
+}
+
+/* Line Bot 狀態 */
+.linebot-status {
+  margin-bottom: var(--spacing-md);
+}
+
+.linebot-status-loading {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  background-color: var(--bg-surface);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+}
+
+.linebot-status-configured {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  background-color: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: var(--radius-md);
+  color: var(--color-success);
+}
+
+.linebot-status-configured .icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.linebot-channel-id {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  background-color: rgba(34, 197, 94, 0.15);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+}
+
+.linebot-status-unconfigured {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+}
+
+.linebot-status-unconfigured .icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.linebot-status-error {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  background-color: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: var(--radius-md);
+  color: var(--color-error);
+}
+
+/* Line Bot 表單 */
+.linebot-form {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+}
+
+.linebot-form .form-group {
+  margin-bottom: var(--spacing-md);
+}
+
+.linebot-form .form-group:last-of-type {
+  margin-bottom: var(--spacing-lg);
+}
+
+.form-hint {
+  display: block;
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  margin-top: var(--spacing-xs);
+}
+
+/* Line Bot 操作按鈕 */
+.linebot-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+/* 文字型危險按鈕（透明背景 + 紅色文字） */
+.linebot-actions .btn-text-danger {
+  background-color: transparent;
+  color: var(--color-error);
+  border: 1px solid transparent;
+}
+
+.linebot-actions .btn-text-danger:hover {
+  background-color: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+/* Line Bot 測試結果 */
+.linebot-test-result {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  margin-top: var(--spacing-md);
+}
+
+.linebot-test-result.success {
+  background-color: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: var(--color-success);
+}
+
+.linebot-test-result.error {
+  background-color: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: var(--color-error);
+}
+
+.linebot-test-result .icon svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.linebot-test-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.linebot-test-info strong {
+  font-weight: 600;
+}
+
+.linebot-test-info span {
+  font-size: var(--font-size-sm);
+  opacity: 0.9;
+}
+
+/* ==========================================================================
    手機版樣式
    ========================================================================== */
 

@@ -15,6 +15,9 @@ from ...models.tenant import (
     TenantListResponse,
     TenantAdminCreate,
     TenantAdminInfo,
+    LineBotSettingsUpdate,
+    LineBotSettingsResponse,
+    LineBotTestResponse,
 )
 from ...services.tenant import (
     create_tenant,
@@ -27,7 +30,10 @@ from ...services.tenant import (
     list_tenant_admins,
     TenantNotFoundError,
     TenantCodeExistsError,
+    get_tenant_line_credentials,
+    update_tenant_line_settings,
 )
+from ...services.linebot import invalidate_tenant_secrets_cache
 from ..auth import get_current_session
 
 router = APIRouter(prefix="/api/admin/tenants", tags=["admin-tenants"])
@@ -513,3 +519,192 @@ async def remove_tenant_admin_by_platform(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="管理員不存在",
         )
+
+
+# ============================================================
+# Line Bot 設定 API
+# ============================================================
+
+
+@router.get("/{tenant_id}/linebot", response_model=LineBotSettingsResponse)
+async def get_tenant_linebot_settings(
+    tenant_id: str,
+    session: SessionData = Depends(get_current_session),
+) -> LineBotSettingsResponse:
+    """取得租戶 Line Bot 設定
+
+    僅平台管理員可操作。
+    回傳設定狀態，不包含敏感憑證。
+    """
+    await require_platform_admin(session)
+
+    # 確認租戶存在
+    tenant = await get_tenant_by_id(tenant_id)
+    if tenant is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="租戶不存在",
+        )
+
+    # 取得 Line Bot 憑證（解密後）
+    credentials = await get_tenant_line_credentials(tenant_id)
+
+    if credentials:
+        return LineBotSettingsResponse(
+            configured=True,
+            channel_id=credentials.get("channel_id"),
+        )
+    else:
+        return LineBotSettingsResponse(
+            configured=False,
+            channel_id=None,
+        )
+
+
+@router.put("/{tenant_id}/linebot", response_model=LineBotSettingsResponse)
+async def update_tenant_linebot_settings(
+    tenant_id: str,
+    request: LineBotSettingsUpdate,
+    session: SessionData = Depends(get_current_session),
+) -> LineBotSettingsResponse:
+    """更新租戶 Line Bot 設定
+
+    僅平台管理員可操作。
+    更新 Line Bot 憑證（會自動加密儲存）。
+    """
+    await require_platform_admin(session)
+
+    # 確認租戶存在
+    tenant = await get_tenant_by_id(tenant_id)
+    if tenant is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="租戶不存在",
+        )
+
+    # 更新設定
+    success = await update_tenant_line_settings(
+        tenant_id,
+        channel_id=request.channel_id,
+        channel_secret=request.channel_secret,
+        access_token=request.access_token,
+    )
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="更新失敗",
+        )
+
+    # 清除租戶 secrets 快取（讓新設定立即生效）
+    invalidate_tenant_secrets_cache()
+
+    # 取得更新後的設定
+    credentials = await get_tenant_line_credentials(tenant_id)
+
+    return LineBotSettingsResponse(
+        configured=bool(credentials),
+        channel_id=credentials.get("channel_id") if credentials else None,
+    )
+
+
+@router.post("/{tenant_id}/linebot/test", response_model=LineBotTestResponse)
+async def test_tenant_linebot(
+    tenant_id: str,
+    session: SessionData = Depends(get_current_session),
+) -> LineBotTestResponse:
+    """測試租戶 Line Bot 憑證
+
+    僅平台管理員可操作。
+    使用租戶的憑證呼叫 Line API 確認設定是否正確。
+    """
+    from uuid import UUID
+    from linebot.v3.messaging import AsyncApiClient, AsyncMessagingApi, Configuration
+
+    await require_platform_admin(session)
+
+    # 確認租戶存在
+    tenant = await get_tenant_by_id(tenant_id)
+    if tenant is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="租戶不存在",
+        )
+
+    # 取得 Line Bot 憑證
+    credentials = await get_tenant_line_credentials(tenant_id)
+
+    if not credentials:
+        return LineBotTestResponse(
+            success=False,
+            error="尚未設定 Line Bot 憑證",
+        )
+
+    access_token = credentials.get("access_token")
+    if not access_token:
+        return LineBotTestResponse(
+            success=False,
+            error="缺少 Access Token",
+        )
+
+    # 測試憑證
+    try:
+        config = Configuration(access_token=access_token)
+        async with AsyncApiClient(config) as api_client:
+            api = AsyncMessagingApi(api_client)
+            bot_info = await api.get_bot_info()
+
+            return LineBotTestResponse(
+                success=True,
+                bot_info={
+                    "display_name": bot_info.display_name,
+                    "basic_id": bot_info.basic_id,
+                    "premium_id": bot_info.premium_id,
+                    "chat_mode": bot_info.chat_mode,
+                },
+            )
+    except Exception as e:
+        return LineBotTestResponse(
+            success=False,
+            error=str(e),
+        )
+
+
+@router.delete("/{tenant_id}/linebot", response_model=SuspendResponse)
+async def delete_tenant_linebot_settings(
+    tenant_id: str,
+    session: SessionData = Depends(get_current_session),
+) -> SuspendResponse:
+    """清除租戶 Line Bot 設定
+
+    僅平台管理員可操作。
+    清除所有 Line Bot 憑證。
+    """
+    await require_platform_admin(session)
+
+    # 確認租戶存在
+    tenant = await get_tenant_by_id(tenant_id)
+    if tenant is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="租戶不存在",
+        )
+
+    # 清除設定（傳入空值）
+    success = await update_tenant_line_settings(
+        tenant_id,
+        channel_id=None,
+        channel_secret=None,
+        access_token=None,
+    )
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="清除失敗",
+        )
+
+    # 清除租戶 secrets 快取
+    invalidate_tenant_secrets_cache()
+
+    return SuspendResponse(success=True, message="Line Bot 設定已清除")

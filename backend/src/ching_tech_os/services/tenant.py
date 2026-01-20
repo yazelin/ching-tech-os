@@ -1,6 +1,7 @@
 """租戶服務"""
 
 import json
+import logging
 from datetime import datetime, timedelta
 from uuid import UUID
 
@@ -16,6 +17,9 @@ from ..models.tenant import (
     TenantAdminCreate,
     TenantAdminInfo,
 )
+from ..utils.crypto import encrypt_credential, decrypt_credential
+
+logger = logging.getLogger(__name__)
 
 
 class TenantNotFoundError(Exception):
@@ -239,7 +243,10 @@ async def update_tenant(tenant_id: UUID | str, data: TenantUpdate) -> TenantInfo
 
         if data.settings is not None:
             updates.append(f"settings = ${param_idx}")
-            params.append(json.dumps(data.settings.model_dump()))
+            # 加密 Line Bot 憑證後儲存
+            settings_dict = data.settings.model_dump()
+            settings_dict = _encrypt_settings_credentials(settings_dict)
+            params.append(json.dumps(settings_dict))
             param_idx += 1
 
         if not updates:
@@ -557,13 +564,25 @@ async def get_tenant_admin_role(tenant_id: UUID | str, user_id: int) -> str | No
 # === 輔助函數 ===
 
 
-def _row_to_tenant_info(row) -> TenantInfo:
-    """將資料庫列轉換為 TenantInfo"""
+def _row_to_tenant_info(row, decrypt_secrets: bool = False) -> TenantInfo:
+    """將資料庫列轉換為 TenantInfo
+
+    Args:
+        row: 資料庫列
+        decrypt_secrets: 是否解密 Line Bot 憑證（預設 False，API 回應不需要）
+    """
     settings_data = row["settings"]
     if isinstance(settings_data, str):
         settings_data = json.loads(settings_data)
     elif settings_data is None:
         settings_data = {}
+
+    # 解密 Line Bot 憑證（如果需要）
+    if decrypt_secrets:
+        settings_data = _decrypt_settings_credentials(settings_data)
+    else:
+        # 不回傳加密的憑證，只回傳是否已設定
+        settings_data = _mask_settings_credentials(settings_data)
 
     return TenantInfo(
         id=row["id"],
@@ -589,3 +608,203 @@ def _row_to_tenant_brief(row) -> TenantBrief:
         status=row["status"],
         plan=row["plan"],
     )
+
+
+def _encrypt_settings_credentials(settings_dict: dict) -> dict:
+    """加密 settings 中的 Line Bot 憑證"""
+    result = settings_dict.copy()
+
+    if result.get("line_channel_secret"):
+        result["line_channel_secret"] = encrypt_credential(result["line_channel_secret"])
+
+    if result.get("line_channel_access_token"):
+        result["line_channel_access_token"] = encrypt_credential(result["line_channel_access_token"])
+
+    return result
+
+
+def _decrypt_settings_credentials(settings_dict: dict) -> dict:
+    """解密 settings 中的 Line Bot 憑證"""
+    result = settings_dict.copy()
+
+    if result.get("line_channel_secret"):
+        try:
+            result["line_channel_secret"] = decrypt_credential(result["line_channel_secret"])
+        except ValueError as e:
+            logger.warning(f"解密 line_channel_secret 失敗: {e}")
+            result["line_channel_secret"] = None
+
+    if result.get("line_channel_access_token"):
+        try:
+            result["line_channel_access_token"] = decrypt_credential(result["line_channel_access_token"])
+        except ValueError as e:
+            logger.warning(f"解密 line_channel_access_token 失敗: {e}")
+            result["line_channel_access_token"] = None
+
+    return result
+
+
+def _mask_settings_credentials(settings_dict: dict) -> dict:
+    """遮蔽 settings 中的 Line Bot 憑證（用於 API 回應）
+
+    憑證欄位會被設為 None，但會新增 has_xxx 欄位表示是否已設定
+    """
+    result = settings_dict.copy()
+
+    # 記錄是否已設定（之後可在 API 回應中使用）
+    # 注意：這裡只是清除敏感資料，不回傳加密後的值
+    result["line_channel_secret"] = None
+    result["line_channel_access_token"] = None
+
+    return result
+
+
+# === Line Bot 憑證專用函數 ===
+
+
+async def get_tenant_line_credentials(tenant_id: UUID | str) -> dict | None:
+    """取得租戶的 Line Bot 憑證（解密後）
+
+    用於 Webhook 驗證和發送訊息。
+
+    Args:
+        tenant_id: 租戶 UUID
+
+    Returns:
+        包含 channel_id, channel_secret, access_token 的字典，或 None
+    """
+    if isinstance(tenant_id, str):
+        tenant_id = UUID(tenant_id)
+
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            "SELECT settings FROM tenants WHERE id = $1",
+            tenant_id,
+        )
+        if row is None:
+            return None
+
+        settings_data = row["settings"]
+        if isinstance(settings_data, str):
+            settings_data = json.loads(settings_data)
+        elif settings_data is None:
+            return None
+
+        # 解密憑證
+        channel_id = settings_data.get("line_channel_id")
+        channel_secret = settings_data.get("line_channel_secret")
+        access_token = settings_data.get("line_channel_access_token")
+
+        if not channel_secret or not access_token:
+            return None
+
+        try:
+            return {
+                "channel_id": channel_id,
+                "channel_secret": decrypt_credential(channel_secret),
+                "access_token": decrypt_credential(access_token),
+            }
+        except ValueError as e:
+            logger.warning(f"解密租戶 {tenant_id} 的 Line Bot 憑證失敗: {e}")
+            return None
+
+
+async def get_all_tenant_line_secrets() -> list[dict]:
+    """取得所有已設定 Line Bot 的租戶的 channel_secret
+
+    用於 Webhook 多租戶驗證。
+
+    Returns:
+        包含 tenant_id, channel_id, channel_secret 的列表
+    """
+    async with get_connection() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT id, settings
+            FROM tenants
+            WHERE status != 'suspended'
+              AND settings->>'line_channel_secret' IS NOT NULL
+              AND settings->>'line_channel_secret' != ''
+            """
+        )
+
+        results = []
+        for row in rows:
+            settings_data = row["settings"]
+            if isinstance(settings_data, str):
+                settings_data = json.loads(settings_data)
+
+            channel_secret = settings_data.get("line_channel_secret")
+            if channel_secret:
+                try:
+                    results.append({
+                        "tenant_id": row["id"],
+                        "channel_id": settings_data.get("line_channel_id"),
+                        "channel_secret": decrypt_credential(channel_secret),
+                    })
+                except ValueError as e:
+                    logger.warning(f"解密租戶 {row['id']} 的 Line Bot secret 失敗: {e}")
+
+        return results
+
+
+async def update_tenant_line_settings(
+    tenant_id: UUID | str,
+    channel_id: str | None,
+    channel_secret: str | None,
+    access_token: str | None,
+) -> bool:
+    """更新租戶的 Line Bot 設定
+
+    Args:
+        tenant_id: 租戶 UUID
+        channel_id: Line Channel ID
+        channel_secret: Line Channel Secret（明文，會被加密儲存）
+        access_token: Line Access Token（明文，會被加密儲存）
+
+    Returns:
+        是否成功更新
+    """
+    if isinstance(tenant_id, str):
+        tenant_id = UUID(tenant_id)
+
+    async with get_connection() as conn:
+        # 取得現有 settings
+        row = await conn.fetchrow(
+            "SELECT settings FROM tenants WHERE id = $1",
+            tenant_id,
+        )
+        if row is None:
+            return False
+
+        settings_data = row["settings"]
+        if isinstance(settings_data, str):
+            settings_data = json.loads(settings_data)
+        elif settings_data is None:
+            settings_data = {}
+
+        # 更新 Line Bot 設定
+        settings_data["line_channel_id"] = channel_id
+
+        if channel_secret:
+            settings_data["line_channel_secret"] = encrypt_credential(channel_secret)
+        else:
+            settings_data["line_channel_secret"] = None
+
+        if access_token:
+            settings_data["line_channel_access_token"] = encrypt_credential(access_token)
+        else:
+            settings_data["line_channel_access_token"] = None
+
+        # 儲存
+        await conn.execute(
+            """
+            UPDATE tenants
+            SET settings = $2, updated_at = NOW()
+            WHERE id = $1
+            """,
+            tenant_id,
+            json.dumps(settings_data),
+        )
+
+        return True

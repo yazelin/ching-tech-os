@@ -1,7 +1,7 @@
 """Line Bot 服務
 
 處理：
-- Webhook 簽章驗證
+- Webhook 簽章驗證（多租戶支援）
 - 訊息儲存（群組+個人）
 - 群組加入/離開事件
 - NAS 檔案儲存
@@ -14,8 +14,10 @@ import base64
 import logging
 import mimetypes
 import random
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Callable, TypeVar
 from uuid import UUID
 
 import httpx
@@ -169,44 +171,200 @@ MIME_TO_EXTENSION = {
 
 
 # ============================================================
-# Line Bot 客戶端
+# 租戶 Line Bot 憑證快取
 # ============================================================
 
-def get_line_config() -> Configuration:
-    """取得 Line API 設定"""
-    return Configuration(access_token=settings.line_channel_access_token)
+# 快取 TTL（5 分鐘）
+TENANT_SECRETS_CACHE_TTL = 300
+
+# 快取資料結構
+_tenant_secrets_cache: list[dict] | None = None
+_tenant_secrets_cache_time: float = 0
 
 
-def get_webhook_parser() -> WebhookParser:
-    """取得 Webhook 解析器"""
-    return WebhookParser(settings.line_channel_secret)
+async def _load_tenant_secrets() -> list[dict]:
+    """從資料庫載入所有租戶的 Line Bot secrets"""
+    from . import tenant as tenant_service
+    return await tenant_service.get_all_tenant_line_secrets()
 
 
-async def get_messaging_api() -> AsyncMessagingApi:
-    """取得 Messaging API 客戶端"""
-    config = get_line_config()
+async def get_cached_tenant_secrets() -> list[dict]:
+    """取得快取的租戶 secrets
+
+    包含 TTL 機制，5 分鐘後自動重新載入。
+
+    Returns:
+        包含 tenant_id, channel_id, channel_secret 的列表
+    """
+    global _tenant_secrets_cache, _tenant_secrets_cache_time
+
+    now = time.time()
+
+    # 檢查快取是否過期
+    if _tenant_secrets_cache is None or (now - _tenant_secrets_cache_time) > TENANT_SECRETS_CACHE_TTL:
+        _tenant_secrets_cache = await _load_tenant_secrets()
+        _tenant_secrets_cache_time = now
+        logger.debug(f"已重新載入租戶 secrets 快取，共 {len(_tenant_secrets_cache)} 筆")
+
+    return _tenant_secrets_cache
+
+
+def invalidate_tenant_secrets_cache():
+    """清除租戶 secrets 快取
+
+    當租戶更新 Line Bot 設定時呼叫。
+    """
+    global _tenant_secrets_cache, _tenant_secrets_cache_time
+    _tenant_secrets_cache = None
+    _tenant_secrets_cache_time = 0
+    logger.debug("已清除租戶 secrets 快取")
+
+
+# ============================================================
+# Line Bot 客戶端（多租戶支援）
+# ============================================================
+
+def get_line_config(access_token: str | None = None) -> Configuration:
+    """取得 Line API 設定
+
+    Args:
+        access_token: 指定的 access token，不指定則使用環境變數
+    """
+    token = access_token or settings.line_channel_access_token
+    return Configuration(access_token=token)
+
+
+def get_webhook_parser(channel_secret: str | None = None) -> WebhookParser:
+    """取得 Webhook 解析器
+
+    Args:
+        channel_secret: 指定的 channel secret，不指定則使用環境變數
+    """
+    secret = channel_secret or settings.line_channel_secret
+    return WebhookParser(secret)
+
+
+async def get_messaging_api(tenant_id: UUID | str | None = None) -> AsyncMessagingApi:
+    """取得 Messaging API 客戶端
+
+    Args:
+        tenant_id: 租戶 ID，指定時會使用該租戶的 access token
+
+    Returns:
+        AsyncMessagingApi 客戶端
+    """
+    access_token = None
+
+    # 如果指定租戶，嘗試取得該租戶的 access token
+    if tenant_id:
+        from . import tenant as tenant_service
+        credentials = await tenant_service.get_tenant_line_credentials(tenant_id)
+        if credentials:
+            access_token = credentials.get("access_token")
+
+    config = get_line_config(access_token)
     api_client = AsyncApiClient(config)
     return AsyncMessagingApi(api_client)
 
 
 # ============================================================
-# Webhook 簽章驗證
+# Webhook 簽章驗證（多租戶支援）
 # ============================================================
 
-def verify_signature(body: bytes, signature: str) -> bool:
-    """驗證 Line Webhook 簽章"""
-    if not settings.line_channel_secret:
+def verify_signature(body: bytes, signature: str, channel_secret: str | None = None) -> bool:
+    """驗證 Line Webhook 簽章
+
+    Args:
+        body: 請求內容
+        signature: X-Line-Signature header
+        channel_secret: 指定的 channel secret，不指定則使用環境變數
+
+    Returns:
+        簽章是否正確
+    """
+    secret = channel_secret or settings.line_channel_secret
+    if not secret:
         logger.warning("Line channel secret 未設定")
         return False
 
     hash_value = hmac.new(
-        settings.line_channel_secret.encode("utf-8"),
+        secret.encode("utf-8"),
         body,
         hashlib.sha256,
     ).digest()
     expected_signature = base64.b64encode(hash_value).decode("utf-8")
 
     return hmac.compare_digest(signature, expected_signature)
+
+
+async def verify_signature_multi_tenant(body: bytes, signature: str) -> UUID | None:
+    """多租戶簽章驗證
+
+    遍歷所有租戶的 channel_secret 進行驗證，
+    驗證成功則回傳該租戶的 ID。
+
+    流程：
+    1. 先嘗試各租戶的 secret（獨立 Bot 模式）
+    2. 全部失敗則嘗試環境變數的 secret（共用 Bot 模式）
+
+    Args:
+        body: 請求內容
+        signature: X-Line-Signature header
+
+    Returns:
+        租戶 UUID 或 None（使用預設 Bot 時回傳 None，需從群組綁定判斷）
+    """
+    # 1. 嘗試各租戶的 secret（獨立 Bot 模式）
+    tenant_secrets = await get_cached_tenant_secrets()
+
+    for tenant_info in tenant_secrets:
+        secret = tenant_info.get("channel_secret")
+        if secret and verify_signature(body, signature, secret):
+            tenant_id = tenant_info["tenant_id"]
+            logger.debug(f"簽章驗證成功，租戶: {tenant_id}")
+            return tenant_id
+
+    # 2. 嘗試環境變數的 secret（共用 Bot 模式）
+    if verify_signature(body, signature):
+        logger.debug("簽章驗證成功，使用共用 Bot")
+        return None  # None 表示使用共用 Bot，需從群組綁定判斷租戶
+
+    logger.warning("所有簽章驗證失敗")
+    return None  # 這裡也回傳 None，但外層需要檢查是否驗證失敗
+
+
+async def verify_webhook_signature(body: bytes, signature: str) -> tuple[bool, UUID | None]:
+    """驗證 Webhook 簽章並識別租戶
+
+    這是對外的主要驗證函數。
+
+    Args:
+        body: 請求內容
+        signature: X-Line-Signature header
+
+    Returns:
+        (是否驗證成功, 租戶 UUID)
+        - (True, tenant_id): 驗證成功，識別為指定租戶（獨立 Bot）
+        - (True, None): 驗證成功，使用共用 Bot（需從群組綁定判斷租戶）
+        - (False, None): 驗證失敗
+    """
+    # 1. 先嘗試各租戶的 secret
+    tenant_secrets = await get_cached_tenant_secrets()
+
+    for tenant_info in tenant_secrets:
+        secret = tenant_info.get("channel_secret")
+        if secret and verify_signature(body, signature, secret):
+            tenant_id = tenant_info["tenant_id"]
+            logger.debug(f"Webhook 驗證成功（獨立 Bot），租戶: {tenant_id}")
+            return True, tenant_id
+
+    # 2. 嘗試環境變數的 secret
+    if verify_signature(body, signature):
+        logger.debug("Webhook 驗證成功（共用 Bot）")
+        return True, None
+
+    logger.warning("Webhook 簽章驗證失敗")
+    return False, None
 
 
 # ============================================================
@@ -303,14 +461,21 @@ async def update_user_friend_status(
         return result == "UPDATE 1"
 
 
-async def get_user_profile(line_user_id: str) -> dict | None:
+async def get_user_profile(
+    line_user_id: str,
+    tenant_id: UUID | str | None = None,
+) -> dict | None:
     """從 Line API 取得用戶 profile（個人對話用）
 
     注意：此 API 只能取得與 Bot 有好友關係的用戶資料。
     群組訊息請使用 get_group_member_profile()。
+
+    Args:
+        line_user_id: Line 用戶 ID
+        tenant_id: 租戶 ID（用於選擇正確的 access token）
     """
     try:
-        api = await get_messaging_api()
+        api = await get_messaging_api(tenant_id)
         profile = await api.get_profile(line_user_id)
         return {
             "displayName": profile.display_name,
@@ -322,7 +487,11 @@ async def get_user_profile(line_user_id: str) -> dict | None:
         return None
 
 
-async def get_group_member_profile(line_group_id: str, line_user_id: str) -> dict | None:
+async def get_group_member_profile(
+    line_group_id: str,
+    line_user_id: str,
+    tenant_id: UUID | str | None = None,
+) -> dict | None:
     """從 Line API 取得群組成員 profile
 
     此 API 可取得群組內任何成員的資料，不需要好友關係。
@@ -330,12 +499,13 @@ async def get_group_member_profile(line_group_id: str, line_user_id: str) -> dic
     Args:
         line_group_id: Line 群組 ID
         line_user_id: Line 用戶 ID
+        tenant_id: 租戶 ID（用於選擇正確的 access token）
 
     Returns:
         包含 displayName、pictureUrl 的字典，失敗回傳 None
     """
     try:
-        api = await get_messaging_api()
+        api = await get_messaging_api(tenant_id)
         profile = await api.get_group_member_profile(line_group_id, line_user_id)
         return {
             "displayName": profile.display_name,
@@ -407,10 +577,18 @@ async def get_or_create_group(
         return row["id"]
 
 
-async def get_group_profile(line_group_id: str) -> dict | None:
-    """從 Line API 取得群組 profile"""
+async def get_group_profile(
+    line_group_id: str,
+    tenant_id: UUID | str | None = None,
+) -> dict | None:
+    """從 Line API 取得群組 profile
+
+    Args:
+        line_group_id: Line 群組 ID
+        tenant_id: 租戶 ID（用於選擇正確的 access token）
+    """
     try:
-        api = await get_messaging_api()
+        api = await get_messaging_api(tenant_id)
         summary = await api.get_group_summary(line_group_id)
         member_count_response = await api.get_group_member_count(line_group_id)
         return {
@@ -724,6 +902,7 @@ async def download_and_save_file(
     line_group_id: str | None = None,
     line_user_id: str | None = None,
     file_name: str | None = None,
+    tenant_id: UUID | str | None = None,
 ) -> str | None:
     """下載 Line 檔案並儲存到 NAS，回傳 NAS 路徑
 
@@ -734,13 +913,14 @@ async def download_and_save_file(
         line_group_id: Line 群組 ID（群組訊息時使用）
         line_user_id: Line 用戶 ID（個人訊息時使用）
         file_name: 原始檔案名稱（file 類型時使用）
+        tenant_id: 租戶 ID（用於選擇正確的 access token）
 
     Returns:
         NAS 路徑，失敗時回傳 None
     """
     try:
         # 1. 使用 Line API 下載檔案
-        content = await download_line_content(message_id)
+        content = await download_line_content(message_id, tenant_id)
         if not content:
             logger.error(f"無法下載 Line 檔案: {message_id}")
             return None
@@ -769,17 +949,29 @@ async def download_and_save_file(
         return None
 
 
-async def download_line_content(message_id: str) -> bytes | None:
+async def download_line_content(
+    message_id: str,
+    tenant_id: UUID | str | None = None,
+) -> bytes | None:
     """從 Line API 下載檔案內容
 
     Args:
         message_id: Line 訊息 ID
+        tenant_id: 租戶 ID（用於選擇正確的 access token）
 
     Returns:
         檔案內容 bytes，失敗時回傳 None
     """
+    # 取得正確的 access token
+    access_token = settings.line_channel_access_token
+    if tenant_id:
+        from . import tenant as tenant_service
+        credentials = await tenant_service.get_tenant_line_credentials(tenant_id)
+        if credentials and credentials.get("access_token"):
+            access_token = credentials["access_token"]
+
     url = f"https://api-data.line.me/v2/bot/message/{message_id}/content"
-    headers = {"Authorization": f"Bearer {settings.line_channel_access_token}"}
+    headers = {"Authorization": f"Bearer {access_token}"}
 
     try:
         # 使用較長的 timeout（影片可能較大）
@@ -909,14 +1101,23 @@ async def save_to_nas(relative_path: str, content: bytes) -> bool:
 # 回覆訊息
 # ============================================================
 
-async def reply_text(reply_token: str, text: str) -> str | None:
+async def reply_text(
+    reply_token: str,
+    text: str,
+    tenant_id: UUID | str | None = None,
+) -> str | None:
     """回覆文字訊息
+
+    Args:
+        reply_token: Line 回覆 token
+        text: 回覆內容
+        tenant_id: 租戶 ID（用於選擇正確的 access token）
 
     Returns:
         Line 訊息 ID，如果失敗則為 None
     """
     try:
-        api = await get_messaging_api()
+        api = await get_messaging_api(tenant_id)
         response = await api.reply_message(
             ReplyMessageRequest(
                 reply_token=reply_token,
@@ -970,12 +1171,14 @@ def create_text_message_with_mention(
 async def reply_messages(
     reply_token: str,
     messages: list[TextMessage | TextMessageV2 | ImageMessage],
+    tenant_id: UUID | str | None = None,
 ) -> list[str]:
     """回覆多則訊息（文字 + 圖片混合）
 
     Args:
         reply_token: Line 回覆 token
         messages: 訊息列表（TextMessage 或 ImageMessage，最多 5 則）
+        tenant_id: 租戶 ID（用於選擇正確的 access token）
 
     Returns:
         發送成功的訊息 ID 列表
@@ -987,7 +1190,7 @@ async def reply_messages(
     messages_to_send = messages[:5]
 
     try:
-        api = await get_messaging_api()
+        api = await get_messaging_api(tenant_id)
         response = await api.reply_message(
             ReplyMessageRequest(
                 reply_token=reply_token,
@@ -1030,18 +1233,23 @@ def _parse_line_error(error: Exception) -> str:
     return f"發送失敗：{error}"
 
 
-async def push_text(to: str, text: str) -> tuple[str | None, str | None]:
+async def push_text(
+    to: str,
+    text: str,
+    tenant_id: UUID | str | None = None,
+) -> tuple[str | None, str | None]:
     """主動推送文字訊息
 
     Args:
         to: 目標 ID（Line 用戶 ID 或群組 ID）
         text: 訊息內容
+        tenant_id: 租戶 ID（用於選擇正確的 access token）
 
     Returns:
         (Line 訊息 ID, 錯誤訊息)，成功時錯誤訊息為 None
     """
     try:
-        api = await get_messaging_api()
+        api = await get_messaging_api(tenant_id)
         response = await api.push_message(
             PushMessageRequest(
                 to=to,
@@ -1057,19 +1265,25 @@ async def push_text(to: str, text: str) -> tuple[str | None, str | None]:
         return None, _parse_line_error(e)
 
 
-async def push_image(to: str, image_url: str, preview_url: str | None = None) -> tuple[str | None, str | None]:
+async def push_image(
+    to: str,
+    image_url: str,
+    preview_url: str | None = None,
+    tenant_id: UUID | str | None = None,
+) -> tuple[str | None, str | None]:
     """主動推送圖片訊息
 
     Args:
         to: 目標 ID（Line 用戶 ID 或群組 ID）
         image_url: 圖片 URL（必須是 HTTPS）
         preview_url: 預覽圖 URL（可選，預設使用 image_url）
+        tenant_id: 租戶 ID（用於選擇正確的 access token）
 
     Returns:
         (Line 訊息 ID, 錯誤訊息)，成功時錯誤訊息為 None
     """
     try:
-        api = await get_messaging_api()
+        api = await get_messaging_api(tenant_id)
         response = await api.push_message(
             PushMessageRequest(
                 to=to,
@@ -1972,6 +2186,121 @@ async def update_group_tenant(
             tid,
         )
         return result == "UPDATE 1"
+
+
+async def bind_group_to_tenant_by_code(
+    line_group_id: str,
+    tenant_code: str,
+) -> tuple[bool, str, UUID | None]:
+    """
+    透過租戶代碼綁定群組到租戶（共用 Bot 模式）
+
+    當使用共用 Bot 時，用戶需要在群組中發送 `/綁定 公司代碼` 指令
+    來將群組綁定到特定租戶。
+
+    Args:
+        line_group_id: Line 群組 ID
+        tenant_code: 租戶代碼（如 ching-tech）
+
+    Returns:
+        (是否成功, 回覆訊息, 新租戶ID)
+    """
+    async with get_connection() as conn:
+        # 查詢租戶
+        tenant_row = await conn.fetchrow(
+            """
+            SELECT id, name, code, status
+            FROM tenants
+            WHERE LOWER(code) = LOWER($1)
+            """,
+            tenant_code.strip(),
+        )
+
+        if not tenant_row:
+            return False, f"找不到代碼為「{tenant_code}」的租戶，請確認代碼是否正確。", None
+
+        if tenant_row["status"] != "active":
+            return False, f"租戶「{tenant_row['name']}」目前未啟用，無法綁定。", None
+
+        new_tenant_id = tenant_row["id"]
+        tenant_name = tenant_row["name"]
+
+        # 檢查群組是否已存在
+        group_row = await conn.fetchrow(
+            "SELECT id, tenant_id, name FROM line_groups WHERE line_group_id = $1",
+            line_group_id,
+        )
+
+        if group_row:
+            current_tenant_id = group_row["tenant_id"]
+
+            # 檢查是否已綁定到相同租戶
+            if current_tenant_id == new_tenant_id:
+                return False, f"此群組已綁定到「{tenant_name}」。", None
+
+            # 更新群組的租戶
+            await conn.execute(
+                """
+                UPDATE line_groups
+                SET tenant_id = $2, updated_at = NOW()
+                WHERE id = $1
+                """,
+                group_row["id"],
+                new_tenant_id,
+            )
+
+            # 同時更新相關訊息和檔案的租戶
+            await conn.execute(
+                "UPDATE line_messages SET tenant_id = $2 WHERE line_group_id = $1",
+                group_row["id"],
+                new_tenant_id,
+            )
+            await conn.execute(
+                """
+                UPDATE line_files SET tenant_id = $2
+                WHERE message_id IN (SELECT id FROM line_messages WHERE line_group_id = $1)
+                """,
+                group_row["id"],
+                new_tenant_id,
+            )
+
+            logger.info(f"群組 {line_group_id} 從租戶 {current_tenant_id} 轉移到 {new_tenant_id}")
+            return True, f"✅ 已將此群組綁定到「{tenant_name}」", new_tenant_id
+        else:
+            # 群組不存在，建立新群組並綁定到指定租戶
+            # 此情況通常不會發生，因為收到 /綁定 指令時群組應已存在
+            logger.warning(f"群組 {line_group_id} 不存在，無法綁定")
+            return False, "群組記錄不存在，請先發送任意訊息後再嘗試綁定。", None
+
+
+def is_bind_tenant_command(text: str) -> tuple[bool, str | None]:
+    """
+    檢查是否為綁定租戶指令
+
+    支援格式：
+    - /綁定 公司代碼
+    - /bind 公司代碼
+
+    Args:
+        text: 訊息文字
+
+    Returns:
+        (是否為綁定指令, 租戶代碼)
+    """
+    if not text:
+        return False, None
+
+    text = text.strip()
+
+    # 支援 /綁定 和 /bind 指令
+    for prefix in ["/綁定 ", "/綁定", "/bind ", "/bind"]:
+        if text.lower().startswith(prefix.lower()):
+            code = text[len(prefix):].strip()
+            if code:
+                return True, code
+            return True, None
+
+    return False, None
 
 
 async def list_users_with_binding(
