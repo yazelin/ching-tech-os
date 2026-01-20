@@ -161,7 +161,7 @@ WorkingDirectory=/home/ct/SDD/ching-tech-os/backend
 EnvironmentFile=/home/ct/SDD/ching-tech-os/.env
 
 # 確保 PATH 包含 uv、nvm node 和其他工具
-Environment="PATH=/home/ct/.local/bin:/home/ct/.nvm/versions/node/v24.11.1/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PATH=/home/ct/.local/bin:/home/ct/.nvm/versions/node/v24.13.0/bin:/usr/local/bin:/usr/bin:/bin"
 
 # 啟動前確保資料庫容器運行
 ExecStartPre=/usr/bin/docker compose -f /home/ct/SDD/ching-tech-os/docker/docker-compose.yml up -d postgres

@@ -79,6 +79,8 @@ from ..services.linebot import (
     check_line_access,
     update_group_settings,
     reply_text,
+    # 租戶解析
+    resolve_tenant_for_message,
 )
 from ..services.linebot_ai import handle_text_message
 
@@ -134,24 +136,37 @@ async def process_event(event) -> None:
         event: Line Webhook 事件
     """
     try:
+        # 取得事件中的群組和用戶 ID，用於解析租戶
+        source = event.source
+        line_user_id = source.user_id if hasattr(source, "user_id") else None
+        line_group_id = source.group_id if hasattr(source, "group_id") else None
+
+        # 解析租戶 ID
+        tenant_id = await resolve_tenant_for_message(line_group_id, line_user_id)
+
         if isinstance(event, MessageEvent):
-            await process_message_event(event)
+            await process_message_event(event, tenant_id)
         elif isinstance(event, JoinEvent):
-            await process_join_event(event)
+            await process_join_event(event, tenant_id)
         elif isinstance(event, LeaveEvent):
-            await process_leave_event(event)
+            await process_leave_event(event, tenant_id)
         elif isinstance(event, FollowEvent):
-            await process_follow_event(event)
+            await process_follow_event(event, tenant_id)
         elif isinstance(event, UnfollowEvent):
-            await process_unfollow_event(event)
+            await process_unfollow_event(event, tenant_id)
         else:
             logger.debug(f"未處理的事件類型: {type(event).__name__}")
     except Exception as e:
         logger.error(f"處理事件失敗: {e}")
 
 
-async def process_message_event(event: MessageEvent) -> None:
-    """處理訊息事件"""
+async def process_message_event(event: MessageEvent, tenant_id: UUID) -> None:
+    """處理訊息事件
+
+    Args:
+        event: Line 訊息事件
+        tenant_id: 租戶 ID
+    """
     message = event.message
     source = event.source
 
@@ -199,19 +214,19 @@ async def process_message_event(event: MessageEvent) -> None:
 
     # 取得或建立用戶
     user_profile = await get_user_profile(line_user_id)
-    user_uuid = await get_or_create_user(line_user_id, user_profile)
+    user_uuid = await get_or_create_user(line_user_id, user_profile, tenant_id=tenant_id)
 
     # 取得群組 UUID（如果是群組訊息）
     group_uuid = None
     if line_group_id:
         group_profile = await get_group_profile(line_group_id)
-        group_uuid = await get_or_create_group(line_group_id, group_profile)
+        group_uuid = await get_or_create_group(line_group_id, group_profile, tenant_id=tenant_id)
 
     # 檢查是否為綁定驗證碼（僅個人對話、文字訊息、6 位數字）
     is_group = line_group_id is not None
     if not is_group and message_type == "text" and content and await is_binding_code_format(content):
         # 嘗試驗證綁定碼
-        success, reply_msg = await verify_binding_code(user_uuid, content)
+        success, reply_msg = await verify_binding_code(user_uuid, content, tenant_id=tenant_id)
         if event.reply_token:
             try:
                 await reply_text(event.reply_token, reply_msg)
@@ -227,6 +242,7 @@ async def process_message_event(event: MessageEvent) -> None:
         message_type=message_type,
         content=content,
         reply_token=event.reply_token,
+        tenant_id=tenant_id,
     )
 
     logger.info(f"已儲存訊息: {message.id} (type={message_type})")
@@ -242,12 +258,13 @@ async def process_message_event(event: MessageEvent) -> None:
             file_name=file_name,
             file_size=file_size,
             duration=duration,
+            tenant_id=tenant_id,
         )
 
     # 如果是文字訊息，進行存取控制檢查並觸發 AI 處理
     if message_type == "text" and content:
         # 存取控制檢查
-        has_access, deny_reason = await check_line_access(user_uuid, group_uuid)
+        has_access, deny_reason = await check_line_access(user_uuid, group_uuid, tenant_id=tenant_id)
 
         if not has_access:
             if deny_reason == "user_not_bound":
@@ -280,6 +297,7 @@ async def process_message_event(event: MessageEvent) -> None:
             line_group_id=group_uuid,
             reply_token=event.reply_token,
             quoted_message_id=quoted_message_id,
+            tenant_id=tenant_id,
         )
 
 
@@ -292,6 +310,7 @@ async def process_media_message(
     file_name: str | None = None,
     file_size: int | None = None,
     duration: int | None = None,
+    tenant_id: UUID | None = None,
 ) -> None:
     """處理媒體訊息（圖片、影片、音訊、檔案）
 
@@ -304,6 +323,7 @@ async def process_media_message(
         file_name: 原始檔案名稱
         file_size: 檔案大小
         duration: 音訊/影片長度（毫秒）
+        tenant_id: 租戶 ID
     """
     try:
         # 根據副檔名自動重新分類檔案類型
@@ -342,6 +362,7 @@ async def process_media_message(
             mime_type=None,  # 稍後可從內容判斷
             nas_path=nas_path,
             duration=duration,
+            tenant_id=tenant_id,
         )
 
         logger.info(f"媒體訊息處理完成: {message_id} -> {nas_path}")
@@ -350,44 +371,64 @@ async def process_media_message(
         logger.error(f"處理媒體訊息失敗 {message_id}: {e}")
 
 
-async def process_join_event(event: JoinEvent) -> None:
-    """處理加入群組事件"""
+async def process_join_event(event: JoinEvent, tenant_id: UUID) -> None:
+    """處理加入群組事件
+
+    Args:
+        event: Line 加入群組事件
+        tenant_id: 租戶 ID
+    """
     source = event.source
     line_group_id = source.group_id if hasattr(source, "group_id") else None
 
     if line_group_id:
-        await handle_join_event(line_group_id)
+        await handle_join_event(line_group_id, tenant_id=tenant_id)
 
 
-async def process_leave_event(event: LeaveEvent) -> None:
-    """處理離開群組事件"""
+async def process_leave_event(event: LeaveEvent, tenant_id: UUID) -> None:
+    """處理離開群組事件
+
+    Args:
+        event: Line 離開群組事件
+        tenant_id: 租戶 ID
+    """
     source = event.source
     line_group_id = source.group_id if hasattr(source, "group_id") else None
 
     if line_group_id:
-        await handle_leave_event(line_group_id)
+        await handle_leave_event(line_group_id, tenant_id=tenant_id)
 
 
-async def process_follow_event(event: FollowEvent) -> None:
-    """處理用戶加好友事件"""
+async def process_follow_event(event: FollowEvent, tenant_id: UUID) -> None:
+    """處理用戶加好友事件
+
+    Args:
+        event: Line 加好友事件
+        tenant_id: 租戶 ID
+    """
     source = event.source
     line_user_id = source.user_id if hasattr(source, "user_id") else None
 
     if line_user_id:
         profile = await get_user_profile(line_user_id)
-        await get_or_create_user(line_user_id, profile, is_friend=True)
+        await get_or_create_user(line_user_id, profile, is_friend=True, tenant_id=tenant_id)
         # 更新現有用戶的好友狀態
-        await update_user_friend_status(line_user_id, is_friend=True)
+        await update_user_friend_status(line_user_id, is_friend=True, tenant_id=tenant_id)
         logger.info(f"用戶加好友: {line_user_id}")
 
 
-async def process_unfollow_event(event: UnfollowEvent) -> None:
-    """處理用戶封鎖/取消好友事件"""
+async def process_unfollow_event(event: UnfollowEvent, tenant_id: UUID) -> None:
+    """處理用戶封鎖/取消好友事件
+
+    Args:
+        event: Line 取消好友事件
+        tenant_id: 租戶 ID
+    """
     source = event.source
     line_user_id = source.user_id if hasattr(source, "user_id") else None
 
     if line_user_id:
-        await update_user_friend_status(line_user_id, is_friend=False)
+        await update_user_friend_status(line_user_id, is_friend=False, tenant_id=tenant_id)
         logger.info(f"用戶封鎖/取消好友: {line_user_id}")
 
 
@@ -402,6 +443,7 @@ async def api_list_groups(
     project_id: UUID | None = None,
     limit: int = 50,
     offset: int = 0,
+    session: SessionData = Depends(get_current_session),
 ):
     """列出 Line 群組"""
     items, total = await list_groups(
@@ -409,6 +451,7 @@ async def api_list_groups(
         project_id=project_id,
         limit=limit,
         offset=offset,
+        tenant_id=session.tenant_id,
     )
     return LineGroupListResponse(
         items=[LineGroupResponse(**item) for item in items],
@@ -417,40 +460,53 @@ async def api_list_groups(
 
 
 @router.get("/groups/{group_id}", response_model=LineGroupResponse)
-async def api_get_group(group_id: UUID):
+async def api_get_group(
+    group_id: UUID,
+    session: SessionData = Depends(get_current_session),
+):
     """取得群組詳情"""
-    group = await get_group_by_id(group_id)
+    group = await get_group_by_id(group_id, tenant_id=session.tenant_id)
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
     return LineGroupResponse(**group)
 
 
 @router.post("/groups/{group_id}/bind-project")
-async def api_bind_project(group_id: UUID, request: ProjectBindingRequest):
+async def api_bind_project(
+    group_id: UUID,
+    request: ProjectBindingRequest,
+    session: SessionData = Depends(get_current_session),
+):
     """綁定群組到專案"""
-    success = await bind_group_to_project(group_id, request.project_id)
+    success = await bind_group_to_project(group_id, request.project_id, tenant_id=session.tenant_id)
     if not success:
         raise HTTPException(status_code=404, detail="Group not found")
     return {"status": "ok", "message": "專案綁定成功"}
 
 
 @router.delete("/groups/{group_id}/bind-project")
-async def api_unbind_project(group_id: UUID):
+async def api_unbind_project(
+    group_id: UUID,
+    session: SessionData = Depends(get_current_session),
+):
     """解除群組與專案的綁定"""
-    success = await unbind_group_from_project(group_id)
+    success = await unbind_group_from_project(group_id, tenant_id=session.tenant_id)
     if not success:
         raise HTTPException(status_code=404, detail="Group not found")
     return {"status": "ok", "message": "已解除專案綁定"}
 
 
 @router.delete("/groups/{group_id}")
-async def api_delete_group(group_id: UUID):
+async def api_delete_group(
+    group_id: UUID,
+    session: SessionData = Depends(get_current_session),
+):
     """刪除群組及其相關資料
 
     刪除群組記錄，同時級聯刪除相關的訊息和檔案記錄。
     注意：NAS 上的實體檔案不會被刪除。
     """
-    result = await delete_group(group_id)
+    result = await delete_group(group_id, tenant_id=session.tenant_id)
     if not result:
         raise HTTPException(status_code=404, detail="Group not found")
     return {
@@ -466,9 +522,13 @@ async def api_delete_group(group_id: UUID):
 
 
 @router.get("/users", response_model=LineUserListResponse)
-async def api_list_users(limit: int = 50, offset: int = 0):
+async def api_list_users(
+    limit: int = 50,
+    offset: int = 0,
+    session: SessionData = Depends(get_current_session),
+):
     """列出 Line 用戶"""
-    items, total = await list_users(limit=limit, offset=offset)
+    items, total = await list_users(limit=limit, offset=offset, tenant_id=session.tenant_id)
     return LineUserListResponse(
         items=[LineUserResponse(**item) for item in items],
         total=total,
@@ -476,9 +536,12 @@ async def api_list_users(limit: int = 50, offset: int = 0):
 
 
 @router.get("/users/{user_id}", response_model=LineUserResponse)
-async def api_get_user(user_id: UUID):
+async def api_get_user(
+    user_id: UUID,
+    session: SessionData = Depends(get_current_session),
+):
     """取得用戶詳情"""
-    user = await get_user_by_id(user_id)
+    user = await get_user_by_id(user_id, tenant_id=session.tenant_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return LineUserResponse(**user)
@@ -495,6 +558,7 @@ async def api_list_messages(
     user_id: UUID | None = None,
     page: int = 1,
     page_size: int = 50,
+    session: SessionData = Depends(get_current_session),
 ):
     """列出訊息"""
     offset = (page - 1) * page_size
@@ -503,6 +567,7 @@ async def api_list_messages(
         line_user_id=user_id,
         limit=page_size,
         offset=offset,
+        tenant_id=session.tenant_id,
     )
     return LineMessageListResponse(
         items=[LineMessageResponse(**item) for item in items],
@@ -523,6 +588,7 @@ async def api_list_group_files(
     file_type: str | None = None,
     page: int = 1,
     page_size: int = 50,
+    session: SessionData = Depends(get_current_session),
 ):
     """列出群組檔案
 
@@ -538,6 +604,7 @@ async def api_list_group_files(
         file_type=file_type,
         limit=page_size,
         offset=offset,
+        tenant_id=session.tenant_id,
     )
     return LineFileListResponse(
         items=[LineFileResponse(**item) for item in items],
@@ -552,6 +619,7 @@ async def api_list_files(
     file_type: str | None = None,
     page: int = 1,
     page_size: int = 50,
+    session: SessionData = Depends(get_current_session),
 ):
     """列出所有檔案（可過濾群組/用戶）
 
@@ -569,6 +637,7 @@ async def api_list_files(
         file_type=file_type,
         limit=page_size,
         offset=offset,
+        tenant_id=session.tenant_id,
     )
     return LineFileListResponse(
         items=[LineFileResponse(**item) for item in items],
@@ -577,22 +646,28 @@ async def api_list_files(
 
 
 @router.get("/files/{file_id}")
-async def api_get_file(file_id: UUID):
+async def api_get_file(
+    file_id: UUID,
+    session: SessionData = Depends(get_current_session),
+):
     """取得檔案詳情"""
-    file_info = await get_file_by_id(file_id)
+    file_info = await get_file_by_id(file_id, tenant_id=session.tenant_id)
     if not file_info:
         raise HTTPException(status_code=404, detail="File not found")
     return LineFileResponse(**file_info)
 
 
 @router.get("/files/{file_id}/download")
-async def api_download_file(file_id: UUID):
+async def api_download_file(
+    file_id: UUID,
+    session: SessionData = Depends(get_current_session),
+):
     """下載檔案
 
     從 NAS 讀取檔案並回傳
     """
     # 取得檔案資訊
-    file_info = await get_file_by_id(file_id)
+    file_info = await get_file_by_id(file_id, tenant_id=session.tenant_id)
     if not file_info:
         raise HTTPException(status_code=404, detail="File not found")
 
@@ -639,12 +714,15 @@ async def api_download_file(file_id: UUID):
 
 
 @router.delete("/files/{file_id}")
-async def api_delete_file(file_id: UUID):
+async def api_delete_file(
+    file_id: UUID,
+    session: SessionData = Depends(get_current_session),
+):
     """刪除檔案
 
     從 NAS 和資料庫中刪除檔案
     """
-    success = await delete_file(file_id)
+    success = await delete_file(file_id, tenant_id=session.tenant_id)
     if not success:
         raise HTTPException(status_code=404, detail="File not found")
     return {"status": "ok", "message": "檔案已刪除"}
@@ -662,21 +740,21 @@ async def api_generate_binding_code(session: SessionData = Depends(get_current_s
     產生 6 位數字驗證碼，有效期 5 分鐘。
     用戶需在 Line 私訊 Bot 發送此驗證碼來完成綁定。
     """
-    code, expires_at = await generate_binding_code(session.user_id)
+    code, expires_at = await generate_binding_code(session.user_id, tenant_id=session.tenant_id)
     return BindingCodeResponse(code=code, expires_at=expires_at)
 
 
 @router.get("/binding/status", response_model=BindingStatusResponse)
 async def api_get_binding_status(session: SessionData = Depends(get_current_session)):
     """查詢當前用戶的 Line 綁定狀態"""
-    status = await get_binding_status(session.user_id)
+    status = await get_binding_status(session.user_id, tenant_id=session.tenant_id)
     return BindingStatusResponse(**status)
 
 
 @router.delete("/binding")
 async def api_unbind_line(session: SessionData = Depends(get_current_session)):
     """解除當前用戶的 Line 綁定"""
-    success = await unbind_line_user(session.user_id)
+    success = await unbind_line_user(session.user_id, tenant_id=session.tenant_id)
     if not success:
         raise HTTPException(status_code=404, detail="未找到綁定記錄")
     return {"status": "ok", "message": "已解除 Line 綁定"}
@@ -700,18 +778,18 @@ async def api_update_group(
     - project_id: 綁定專案（使用 bind-project API）
     """
     # 檢查群組是否存在
-    group = await get_group_by_id(group_id)
+    group = await get_group_by_id(group_id, tenant_id=session.tenant_id)
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
 
     # 更新 allow_ai_response
     if update.allow_ai_response is not None:
-        success = await update_group_settings(group_id, update.allow_ai_response)
+        success = await update_group_settings(group_id, update.allow_ai_response, tenant_id=session.tenant_id)
         if not success:
             raise HTTPException(status_code=500, detail="更新失敗")
 
     # 重新取得群組資訊
-    updated_group = await get_group_by_id(group_id)
+    updated_group = await get_group_by_id(group_id, tenant_id=session.tenant_id)
     return LineGroupResponse(**updated_group)
 
 
@@ -727,7 +805,7 @@ async def api_list_users_with_binding(
     session: SessionData = Depends(get_current_session),
 ):
     """列出 Line 用戶（包含 CTOS 帳號綁定狀態）"""
-    items, total = await list_users_with_binding(limit=limit, offset=offset)
+    items, total = await list_users_with_binding(limit=limit, offset=offset, tenant_id=session.tenant_id)
     return LineUserListResponse(
         items=[LineUserResponse(**item) for item in items],
         total=total,

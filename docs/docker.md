@@ -10,12 +10,13 @@ ChingTech OS 使用 Docker Compose 管理以下服務：
 
 ```
 docker/
-├── docker-compose.yml      # 服務定義
-├── init.sql                # 資料庫初始化（僅基本表）
-├── .env.example            # 環境變數範例
-├── .env                    # 環境變數（不進入 git）
-├── code-server.gitconfig   # code-server 的 Git 設定
-└── code-server.git-credentials  # code-server 的 Git 憑證
+├── docker-compose.yml            # 服務定義（單租戶模式）
+├── docker-compose.multi-tenant.yml  # 多租戶模式 override
+├── init.sql                      # 資料庫初始化（僅基本表）
+├── .env.example                  # 環境變數範例
+├── .env                          # 環境變數（不進入 git）
+├── code-server.gitconfig         # code-server 的 Git 設定
+└── code-server.git-credentials   # code-server 的 Git 憑證
 ```
 
 ---
@@ -167,6 +168,58 @@ CODE_PORT=8443
 
 ---
 
+## 多租戶模式
+
+ChingTech OS 支援多租戶部署模式，允許多個組織在同一系統上運作。
+
+### 啟用方式
+
+**方法 1：環境變數**
+
+在 `.env` 中設定：
+
+```bash
+MULTI_TENANT_MODE=true
+DEFAULT_TENANT_ID=00000000-0000-0000-0000-000000000000
+```
+
+然後正常啟動：
+
+```bash
+docker compose up -d
+```
+
+**方法 2：使用 override 檔案**
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.multi-tenant.yml up -d
+```
+
+### 環境變數
+
+| 變數 | 說明 | 預設值 |
+|------|------|--------|
+| `MULTI_TENANT_MODE` | 是否啟用多租戶模式 | `false` |
+| `DEFAULT_TENANT_ID` | 預設租戶 UUID | `00000000-0000-0000-0000-000000000000` |
+
+### 資料庫遷移
+
+首次啟用多租戶模式前，需執行資料庫遷移：
+
+```bash
+cd backend
+uv run alembic upgrade head
+```
+
+遷移會自動將現有資料歸屬到預設租戶。
+
+### 詳細說明
+
+- [多租戶架構](multi-tenant.md) - 完整技術文件
+- [租戶管理員操作手冊](tenant-admin-guide.md) - 管理員指南
+
+---
+
 ## 常用指令
 
 ### 服務管理
@@ -302,8 +355,11 @@ docker compose exec postgres ping localhost
 
 | 位置 | 說明 |
 |------|------|
-| `docker/docker-compose.yml` | 服務定義 |
+| `docker/docker-compose.yml` | 服務定義（單租戶模式） |
+| `docker/docker-compose.multi-tenant.yml` | 多租戶模式 override |
 | `docker/init.sql` | 資料庫初始化 |
 | `docker/.env` | 環境變數 |
 | `backend/src/ching_tech_os/config.py` | 後端連線設定 |
 | `frontend/js/code-editor.js` | code-server 整合 |
+| `docs/multi-tenant.md` | 多租戶架構文件 |
+| `docs/tenant-admin-guide.md` | 租戶管理員手冊 |

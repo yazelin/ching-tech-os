@@ -4,11 +4,22 @@
 """
 
 import logging
+from uuid import UUID
 
 from . import ai_manager
+from ..config import settings
 from ..models.ai import AiPromptCreate, AiAgentCreate
 
 logger = logging.getLogger("linebot_agents")
+
+
+def _get_tenant_id(tenant_id: UUID | str | None) -> UUID:
+    """處理 tenant_id 參數"""
+    if tenant_id is None:
+        return UUID(settings.default_tenant_id)
+    if isinstance(tenant_id, str):
+        return UUID(tenant_id)
+    return tenant_id
 
 # Agent 名稱常數
 AGENT_LINEBOT_PERSONAL = "linebot-personal"
@@ -428,25 +439,30 @@ DEFAULT_LINEBOT_AGENTS = [
 ]
 
 
-async def ensure_default_linebot_agents() -> None:
+async def ensure_default_linebot_agents(tenant_id: UUID | str | None = None) -> None:
     """
     確保預設的 Line Bot Agent 存在。
 
     如果 Agent 已存在則跳過（保留使用者修改）。
     如果不存在則建立 Agent 和對應的 Prompt。
+
+    Args:
+        tenant_id: 租戶 ID
     """
+    tid = _get_tenant_id(tenant_id)
+
     for agent_config in DEFAULT_LINEBOT_AGENTS:
         agent_name = agent_config["name"]
 
         # 檢查 Agent 是否存在
-        existing_agent = await ai_manager.get_agent_by_name(agent_name)
+        existing_agent = await ai_manager.get_agent_by_name(agent_name, tenant_id=tid)
         if existing_agent:
             logger.debug(f"Agent '{agent_name}' 已存在，跳過建立")
             continue
 
         # 檢查 Prompt 是否存在
         prompt_config = agent_config["prompt"]
-        existing_prompt = await ai_manager.get_prompt_by_name(prompt_config["name"])
+        existing_prompt = await ai_manager.get_prompt_by_name(prompt_config["name"], tenant_id=tid)
 
         if existing_prompt:
             prompt_id = existing_prompt["id"]
@@ -460,7 +476,7 @@ async def ensure_default_linebot_agents() -> None:
                 content=prompt_config["content"],
                 description=prompt_config["description"],
             )
-            new_prompt = await ai_manager.create_prompt(prompt_data)
+            new_prompt = await ai_manager.create_prompt(prompt_data, tenant_id=tid)
             prompt_id = new_prompt["id"]
             logger.info(f"已建立 Prompt: {prompt_config['name']}")
 
@@ -473,20 +489,25 @@ async def ensure_default_linebot_agents() -> None:
             system_prompt_id=prompt_id,
             is_active=True,
         )
-        await ai_manager.create_agent(agent_data)
+        await ai_manager.create_agent(agent_data, tenant_id=tid)
         logger.info(f"已建立 Agent: {agent_name}")
 
 
-async def get_linebot_agent(is_group: bool) -> dict | None:
+async def get_linebot_agent(
+    is_group: bool,
+    tenant_id: UUID | str | None = None,
+) -> dict | None:
     """
     取得 Line Bot Agent 設定。
 
     Args:
         is_group: 是否為群組對話
+        tenant_id: 租戶 ID
 
     Returns:
         Agent 設定字典，包含 model 和 system_prompt
         如果找不到則回傳 None
     """
+    tid = _get_tenant_id(tenant_id)
     agent_name = AGENT_LINEBOT_GROUP if is_group else AGENT_LINEBOT_PERSONAL
-    return await ai_manager.get_agent_by_name(agent_name)
+    return await ai_manager.get_agent_by_name(agent_name, tenant_id=tid)

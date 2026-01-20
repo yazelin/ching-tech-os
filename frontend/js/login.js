@@ -9,6 +9,8 @@ const LoginModule = (function() {
   // Session key for localStorage
   const SESSION_KEY = 'chingtech_session';
   const TOKEN_KEY = 'chingtech_token';
+  const TENANT_KEY = 'chingtech_tenant';
+  const LAST_TENANT_KEY = 'chingtech_last_tenant';
 
   // API base URL (空字串表示同源，由 config.js 自動處理)
   const API_BASE = '';
@@ -57,14 +59,38 @@ const LoginModule = (function() {
    * Create a new session
    * @param {string} username
    * @param {string} token
+   * @param {Object} tenant - 租戶資訊（可選）
+   * @param {string} role - 使用者角色（user, tenant_admin, platform_admin）
    */
-  function createSession(username, token) {
+  function createSession(username, token, tenant = null, role = 'user') {
     const session = {
       username: username,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      role: role
     };
     localStorage.setItem(SESSION_KEY, JSON.stringify(session));
     localStorage.setItem(TOKEN_KEY, token);
+
+    // 儲存租戶資訊
+    if (tenant) {
+      localStorage.setItem(TENANT_KEY, JSON.stringify(tenant));
+      localStorage.setItem(LAST_TENANT_KEY, tenant.code);
+    }
+  }
+
+  /**
+   * Get current tenant info
+   * @returns {Object|null}
+   */
+  function getTenant() {
+    const tenant = localStorage.getItem(TENANT_KEY);
+    if (!tenant) return null;
+
+    try {
+      return JSON.parse(tenant);
+    } catch (e) {
+      return null;
+    }
   }
 
   /**
@@ -73,6 +99,8 @@ const LoginModule = (function() {
   function clearSession() {
     localStorage.removeItem(SESSION_KEY);
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(TENANT_KEY);
+    // 注意：不清除 LAST_TENANT_KEY，方便下次登入時自動填入
   }
 
   /**
@@ -80,13 +108,17 @@ const LoginModule = (function() {
    * @param {string} username
    * @param {string} password
    * @param {Object} device - 裝置資訊
-   * @returns {Promise<{success: boolean, token?: string, username?: string, error?: string}>}
+   * @param {string} tenantCode - 租戶代碼（多租戶模式必填）
+   * @returns {Promise<{success: boolean, token?: string, username?: string, tenant?: Object, error?: string}>}
    */
-  async function callLoginAPI(username, password, device = null) {
+  async function callLoginAPI(username, password, device = null, tenantCode = null) {
     try {
       const body = { username, password };
       if (device) {
         body.device = device;
+      }
+      if (tenantCode) {
+        body.tenant_code = tenantCode;
       }
 
       const response = await fetch(`${API_BASE}/api/auth/login`, {
@@ -177,12 +209,22 @@ const LoginModule = (function() {
     const form = event.target;
     const username = form.querySelector('#username').value.trim();
     const password = form.querySelector('#password').value;
+    const tenantCodeInput = form.querySelector('#tenantCode');
+    const tenantCode = tenantCodeInput ? tenantCodeInput.value.trim() : null;
     const submitBtn = form.querySelector('.login-btn');
     const errorDiv = form.querySelector('.login-error');
 
     // Basic validation
     if (!username || !password) {
       errorDiv.textContent = '請輸入使用者名稱和密碼';
+      errorDiv.classList.add('show');
+      return;
+    }
+
+    // 多租戶模式下檢查租戶代碼
+    const tenantCodeGroup = document.getElementById('tenantCodeGroup');
+    if (tenantCodeGroup && tenantCodeGroup.style.display !== 'none' && !tenantCode) {
+      errorDiv.textContent = '請輸入公司代碼';
       errorDiv.classList.add('show');
       return;
     }
@@ -203,10 +245,10 @@ const LoginModule = (function() {
         }
       }
 
-      const result = await callLoginAPI(username, password, deviceInfo);
+      const result = await callLoginAPI(username, password, deviceInfo, tenantCode);
 
       if (result.success && result.token) {
-        createSession(result.username, result.token);
+        createSession(result.username, result.token, result.tenant, result.role);
         // Redirect to desktop
         window.location.href = 'index.html';
       } else {
@@ -255,6 +297,7 @@ const LoginModule = (function() {
     validateSession,
     getSession,
     getToken,
+    getTenant,
     clearSession,
     logout
   };

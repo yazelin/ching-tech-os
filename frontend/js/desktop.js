@@ -22,6 +22,8 @@ const DesktopModule = (function() {
     { id: 'linebot', name: 'Line Bot', icon: 'mdi-message-text' },
     { id: 'memory-manager', name: '記憶管理', icon: 'mdi-brain' },
     { id: 'share-manager', name: '分享管理', icon: 'mdi-share-variant' },
+    { id: 'tenant-admin', name: '租戶管理', icon: 'office-building' },
+    { id: 'platform-admin', name: '平台管理', icon: 'shield-crown', requireRole: 'platform_admin' },
     { id: 'settings', name: '系統設定', icon: 'mdi-cog' }
   ];
 
@@ -157,6 +159,16 @@ const DesktopModule = (function() {
       case 'memory-manager':
         if (typeof MemoryManagerApp !== 'undefined') {
           MemoryManagerApp.open();
+        }
+        break;
+      case 'tenant-admin':
+        if (typeof TenantAdminApp !== 'undefined') {
+          TenantAdminApp.open();
+        }
+        break;
+      case 'platform-admin':
+        if (typeof PlatformAdminApp !== 'undefined') {
+          PlatformAdminApp.open();
         }
         break;
       default:

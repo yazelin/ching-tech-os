@@ -11,7 +11,7 @@
   let basePath = '';
 
   // 檢查已知的子路徑部署
-  const knownBasePaths = ['/ctos'];
+  const knownBasePaths = ['/ctos', '/trial'];
   for (const known of knownBasePaths) {
     if (pathName.startsWith(known + '/') || pathName === known) {
       basePath = known;
@@ -23,9 +23,15 @@
   window.API_BASE = basePath;
   window.CTOS_CONFIG = {
     API_BASE: basePath,
+    // 租戶模式（將在載入時動態設定）
+    MULTI_TENANT_MODE: false,
     apiUrl: function(path) {
       if (!path.startsWith('/')) path = '/' + path;
       return this.API_BASE + path;
+    },
+    // 取得租戶模式
+    isMultiTenantMode: function() {
+      return this.MULTI_TENANT_MODE;
     }
   };
 

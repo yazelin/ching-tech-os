@@ -1,69 +1,108 @@
 """使用者服務"""
 
 from datetime import datetime
+from uuid import UUID
 
+from ..config import settings, DEFAULT_TENANT_UUID
 from ..database import get_connection
 
 
-async def upsert_user(username: str) -> int:
+async def upsert_user(username: str, tenant_id: UUID | str | None = None) -> int:
     """建立或更新使用者記錄
 
     如果使用者不存在，建立新記錄；否則更新最後登入時間。
+    使用者唯一性在租戶範圍內驗證（同租戶不能有重複帳號）。
 
     Args:
         username: 使用者帳號
+        tenant_id: 租戶 UUID（可選，預設使用預設租戶）
 
     Returns:
         使用者 ID
     """
+    # 處理 tenant_id
+    if tenant_id is None:
+        tenant_id = UUID(settings.default_tenant_id)
+    elif isinstance(tenant_id, str):
+        tenant_id = UUID(tenant_id)
+
     async with get_connection() as conn:
-        # 嘗試插入或更新
+        # 嘗試插入或更新（使用 tenant_id + username 的複合唯一鍵）
         result = await conn.fetchrow(
             """
-            INSERT INTO users (username, last_login_at)
-            VALUES ($1, $2)
-            ON CONFLICT (username) DO UPDATE
-            SET last_login_at = $2
+            INSERT INTO users (username, tenant_id, last_login_at)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (tenant_id, username) DO UPDATE
+            SET last_login_at = $3
             RETURNING id
             """,
             username,
+            tenant_id,
             datetime.now(),
         )
         return result["id"]
 
 
-async def get_user_by_username(username: str) -> dict | None:
+async def get_user_by_username(
+    username: str,
+    tenant_id: UUID | str | None = None,
+) -> dict | None:
     """根據帳號取得使用者資料
 
     Args:
         username: 使用者帳號
+        tenant_id: 租戶 UUID（可選，預設使用預設租戶）
 
     Returns:
         使用者資料或 None
     """
+    # 處理 tenant_id
+    if tenant_id is None:
+        tenant_id = UUID(settings.default_tenant_id)
+    elif isinstance(tenant_id, str):
+        tenant_id = UUID(tenant_id)
+
     async with get_connection() as conn:
         row = await conn.fetchrow(
-            "SELECT id, username, display_name, created_at, last_login_at, preferences FROM users WHERE username = $1",
+            """
+            SELECT id, username, display_name, created_at, last_login_at,
+                   preferences, tenant_id, role
+            FROM users
+            WHERE username = $1 AND tenant_id = $2
+            """,
             username,
+            tenant_id,
         )
         if row:
             return dict(row)
         return None
 
 
-async def get_all_users() -> list[dict]:
+async def get_all_users(tenant_id: UUID | str | None = None) -> list[dict]:
     """取得所有使用者列表
+
+    Args:
+        tenant_id: 租戶 UUID（可選，預設使用預設租戶）
 
     Returns:
         使用者列表
     """
+    # 處理 tenant_id
+    if tenant_id is None:
+        tenant_id = UUID(settings.default_tenant_id)
+    elif isinstance(tenant_id, str):
+        tenant_id = UUID(tenant_id)
+
     async with get_connection() as conn:
         rows = await conn.fetch(
             """
-            SELECT id, username, display_name, created_at, last_login_at, preferences
+            SELECT id, username, display_name, created_at, last_login_at,
+                   preferences, tenant_id, role
             FROM users
+            WHERE tenant_id = $1
             ORDER BY created_at DESC
-            """
+            """,
+            tenant_id,
         )
         return [dict(row) for row in rows]
 
@@ -140,25 +179,38 @@ async def update_user_permissions(user_id: int, permissions: dict) -> dict:
         return current_prefs
 
 
-async def update_user_display_name(username: str, display_name: str) -> dict | None:
+async def update_user_display_name(
+    username: str,
+    display_name: str,
+    tenant_id: UUID | str | None = None,
+) -> dict | None:
     """更新使用者顯示名稱
 
     Args:
         username: 使用者帳號
         display_name: 新的顯示名稱
+        tenant_id: 租戶 UUID（可選，預設使用預設租戶）
 
     Returns:
         更新後的使用者資料或 None
     """
+    # 處理 tenant_id
+    if tenant_id is None:
+        tenant_id = UUID(settings.default_tenant_id)
+    elif isinstance(tenant_id, str):
+        tenant_id = UUID(tenant_id)
+
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
             UPDATE users SET display_name = $2
-            WHERE username = $1
-            RETURNING id, username, display_name, created_at, last_login_at
+            WHERE username = $1 AND tenant_id = $3
+            RETURNING id, username, display_name, created_at, last_login_at,
+                      preferences, tenant_id, role
             """,
             username,
             display_name,
+            tenant_id,
         )
         if row:
             return dict(row)

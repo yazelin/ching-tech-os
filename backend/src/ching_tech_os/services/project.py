@@ -5,8 +5,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID
 
-from ..config import settings
+from ..config import settings, DEFAULT_TENANT_UUID
 from ..database import get_connection
+
+
+def _get_tenant_id(tenant_id: UUID | str | None) -> UUID:
+    """處理 tenant_id 參數"""
+    if tenant_id is None:
+        return UUID(settings.default_tenant_id)
+    if isinstance(tenant_id, str):
+        return UUID(tenant_id)
+    return tenant_id
 from ..models.project import (
     ProjectCreate,
     ProjectUpdate,
@@ -55,8 +64,11 @@ class ProjectNotFoundError(ProjectError):
 async def list_projects(
     status: str | None = None,
     query: str | None = None,
+    tenant_id: UUID | str | None = None,
 ) -> ProjectListResponse:
     """列出專案"""
+    tid = _get_tenant_id(tenant_id)
+
     async with get_connection() as conn:
         # 建立查詢
         sql = """
@@ -66,10 +78,10 @@ async def list_projects(
                 (SELECT COUNT(*) FROM project_meetings WHERE project_id = p.id) as meeting_count,
                 (SELECT COUNT(*) FROM project_attachments WHERE project_id = p.id) as attachment_count
             FROM projects p
-            WHERE 1=1
+            WHERE p.tenant_id = $1
         """
-        params = []
-        param_idx = 1
+        params = [tid]
+        param_idx = 2
 
         if status:
             sql += f" AND p.status = ${param_idx}"
@@ -103,12 +115,19 @@ async def list_projects(
         return ProjectListResponse(items=items, total=len(items))
 
 
-async def get_project(project_id: UUID) -> ProjectDetailResponse:
+async def get_project(
+    project_id: UUID,
+    tenant_id: UUID | str | None = None,
+) -> ProjectDetailResponse:
     """取得專案詳情"""
+    tid = _get_tenant_id(tenant_id)
+
     async with get_connection() as conn:
         # 取得專案基本資料
         row = await conn.fetchrow(
-            "SELECT * FROM projects WHERE id = $1", project_id
+            "SELECT * FROM projects WHERE id = $1 AND tenant_id = $2",
+            project_id,
+            tid,
         )
         if not row:
             raise ProjectNotFoundError(f"專案 {project_id} 不存在")
@@ -174,13 +193,19 @@ async def get_project(project_id: UUID) -> ProjectDetailResponse:
         )
 
 
-async def create_project(data: ProjectCreate, created_by: str | None = None) -> ProjectResponse:
+async def create_project(
+    data: ProjectCreate,
+    created_by: str | None = None,
+    tenant_id: UUID | str | None = None,
+) -> ProjectResponse:
     """建立專案"""
+    tid = _get_tenant_id(tenant_id)
+
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
-            INSERT INTO projects (name, description, status, start_date, end_date, created_by)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO projects (name, description, status, start_date, end_date, created_by, tenant_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             RETURNING *
             """,
             data.name,
@@ -189,16 +214,25 @@ async def create_project(data: ProjectCreate, created_by: str | None = None) -> 
             data.start_date,
             data.end_date,
             created_by,
+            tid,
         )
         return ProjectResponse(**dict(row))
 
 
-async def update_project(project_id: UUID, data: ProjectUpdate) -> ProjectResponse:
+async def update_project(
+    project_id: UUID,
+    data: ProjectUpdate,
+    tenant_id: UUID | str | None = None,
+) -> ProjectResponse:
     """更新專案"""
+    tid = _get_tenant_id(tenant_id)
+
     async with get_connection() as conn:
         # 檢查專案是否存在
         exists = await conn.fetchval(
-            "SELECT 1 FROM projects WHERE id = $1", project_id
+            "SELECT 1 FROM projects WHERE id = $1 AND tenant_id = $2",
+            project_id,
+            tid,
         )
         if not exists:
             raise ProjectNotFoundError(f"專案 {project_id} 不存在")
@@ -244,12 +278,19 @@ async def update_project(project_id: UUID, data: ProjectUpdate) -> ProjectRespon
         return ProjectResponse(**dict(row))
 
 
-async def delete_project(project_id: UUID) -> None:
+async def delete_project(
+    project_id: UUID,
+    tenant_id: UUID | str | None = None,
+) -> None:
     """刪除專案"""
+    tid = _get_tenant_id(tenant_id)
+
     async with get_connection() as conn:
         # 檢查專案是否存在
         exists = await conn.fetchval(
-            "SELECT 1 FROM projects WHERE id = $1", project_id
+            "SELECT 1 FROM projects WHERE id = $1 AND tenant_id = $2",
+            project_id,
+            tid,
         )
         if not exists:
             raise ProjectNotFoundError(f"專案 {project_id} 不存在")
@@ -261,7 +302,11 @@ async def delete_project(project_id: UUID) -> None:
         )
 
         # 刪除專案（會級聯刪除所有關聯資料）
-        await conn.execute("DELETE FROM projects WHERE id = $1", project_id)
+        await conn.execute(
+            "DELETE FROM projects WHERE id = $1 AND tenant_id = $2",
+            project_id,
+            tid,
+        )
 
         # 刪除附件檔案
         for att in attachments:

@@ -1,6 +1,7 @@
 """認證相關資料模型"""
 
 from datetime import datetime
+from uuid import UUID
 from pydantic import BaseModel
 
 
@@ -22,6 +23,17 @@ class LoginRequest(BaseModel):
     username: str
     password: str
     device: DeviceInfo | None = None
+    # 多租戶欄位（SaaS 模式必填，單租戶模式可省略）
+    tenant_code: str | None = None
+
+
+class TenantBriefInfo(BaseModel):
+    """租戶簡要資訊（登入回應用）"""
+
+    id: UUID
+    code: str
+    name: str
+    plan: str
 
 
 class LoginResponse(BaseModel):
@@ -31,6 +43,9 @@ class LoginResponse(BaseModel):
     token: str | None = None
     username: str | None = None
     error: str | None = None
+    # 多租戶欄位
+    tenant: TenantBriefInfo | None = None
+    role: str | None = None  # user, tenant_admin, platform_admin
 
 
 class LogoutResponse(BaseModel):
@@ -48,6 +63,9 @@ class SessionData(BaseModel):
     user_id: int | None = None  # 資料庫中的使用者 ID
     created_at: datetime
     expires_at: datetime
+    # 多租戶欄位
+    tenant_id: UUID | None = None  # 租戶 UUID
+    role: str = "user"  # user, tenant_admin, platform_admin
 
 
 class ErrorResponse(BaseModel):

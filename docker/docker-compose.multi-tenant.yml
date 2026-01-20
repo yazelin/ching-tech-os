@@ -1,0 +1,65 @@
+# Ching Tech OS - 多租戶模式 Override 設定
+#
+# 此檔案為 docker-compose.yml 的 override，用於啟用多租戶模式。
+#
+# 使用方式：
+#   docker compose -f docker-compose.yml -f docker-compose.multi-tenant.yml up -d
+#
+# 或在 .env 中設定以下變數後直接使用 docker compose up -d：
+#   MULTI_TENANT_MODE=true
+#   DEFAULT_TENANT_ID=00000000-0000-0000-0000-000000000000
+#
+# 詳細說明請參考：
+#   - docs/multi-tenant.md - 多租戶架構文件
+#   - docs/tenant-admin-guide.md - 租戶管理員操作手冊
+
+# 注意：此 override 檔案主要用於文件說明，
+# 實際的多租戶設定由應用程式環境變數控制（見 .env.example）
+#
+# 如需在 Docker 內執行後端服務，可取消下方註解並調整設定。
+
+# services:
+#   backend:
+#     build:
+#       context: ../backend
+#       dockerfile: Dockerfile
+#     container_name: ching-tech-os-backend
+#     environment:
+#       # 資料庫連線
+#       CHING_TECH_DB_HOST: postgres
+#       CHING_TECH_DB_PORT: 5432
+#       CHING_TECH_DB_USER: ${DB_USER:-ching_tech}
+#       CHING_TECH_DB_PASSWORD: ${DB_PASSWORD}
+#       CHING_TECH_DB_NAME: ${DB_NAME:-ching_tech_os}
+#
+#       # 多租戶設定
+#       MULTI_TENANT_MODE: "true"
+#       DEFAULT_TENANT_ID: ${DEFAULT_TENANT_ID:-00000000-0000-0000-0000-000000000000}
+#
+#       # NAS 設定
+#       CHING_TECH_NAS_HOST: ${NAS_HOST:-192.168.11.50}
+#       NAS_MOUNT_PATH: /mnt/nas
+#       CTOS_MOUNT_PATH: /mnt/nas/ctos
+#       PROJECTS_MOUNT_PATH: /mnt/nas/projects
+#
+#       # Line Bot（可選）
+#       LINE_CHANNEL_SECRET: ${LINE_CHANNEL_SECRET:-}
+#       LINE_CHANNEL_ACCESS_TOKEN: ${LINE_CHANNEL_ACCESS_TOKEN:-}
+#
+#       # 其他設定
+#       SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-8}
+#       ADMIN_USERNAME: ${ADMIN_USERNAME:-}
+#     volumes:
+#       # NAS 掛載點（需在主機上先掛載）
+#       - /mnt/nas:/mnt/nas:rw
+#     ports:
+#       - "${BACKEND_PORT:-8088}:8088"
+#     depends_on:
+#       postgres:
+#         condition: service_healthy
+#     restart: unless-stopped
+#     healthcheck:
+#       test: ["CMD", "curl", "-f", "http://localhost:8088/api/health"]
+#       interval: 30s
+#       timeout: 10s
+#       retries: 3

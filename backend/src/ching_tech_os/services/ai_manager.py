@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
+from ..config import settings
 from ..database import get_connection
 from ..models.ai import (
     AiAgentCreate,
@@ -25,46 +26,61 @@ from ..models.ai import (
 from .claude_agent import call_claude, compose_prompt_with_history
 
 
+def _get_tenant_id(tenant_id: UUID | str | None) -> UUID:
+    """處理 tenant_id 參數"""
+    if tenant_id is None:
+        return UUID(settings.default_tenant_id)
+    if isinstance(tenant_id, str):
+        return UUID(tenant_id)
+    return tenant_id
+
+
 # ============================================================
 # Prompt CRUD
 # ============================================================
 
 
-async def get_prompts(category: str | None = None) -> list[dict]:
+async def get_prompts(category: str | None = None, tenant_id: UUID | str | None = None) -> list[dict]:
     """取得 Prompt 列表"""
+    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         if category:
             rows = await conn.fetch(
                 """
                 SELECT id, name, display_name, category, description, updated_at
                 FROM ai_prompts
-                WHERE category = $1
+                WHERE category = $1 AND tenant_id = $2
                 ORDER BY name
                 """,
                 category,
+                tid,
             )
         else:
             rows = await conn.fetch(
                 """
                 SELECT id, name, display_name, category, description, updated_at
                 FROM ai_prompts
+                WHERE tenant_id = $1
                 ORDER BY name
-                """
+                """,
+                tid,
             )
         return [dict(row) for row in rows]
 
 
-async def get_prompt(prompt_id: UUID) -> dict | None:
+async def get_prompt(prompt_id: UUID, tenant_id: UUID | str | None = None) -> dict | None:
     """取得 Prompt 詳情"""
+    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
             SELECT id, name, display_name, category, content, description,
                    variables, created_at, updated_at
             FROM ai_prompts
-            WHERE id = $1
+            WHERE id = $1 AND tenant_id = $2
             """,
             prompt_id,
+            tid,
         )
         if row is None:
             return None
@@ -74,17 +90,19 @@ async def get_prompt(prompt_id: UUID) -> dict | None:
         return result
 
 
-async def get_prompt_by_name(name: str) -> dict | None:
+async def get_prompt_by_name(name: str, tenant_id: UUID | str | None = None) -> dict | None:
     """依名稱取得 Prompt"""
+    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
             SELECT id, name, display_name, category, content, description,
                    variables, created_at, updated_at
             FROM ai_prompts
-            WHERE name = $1
+            WHERE name = $1 AND tenant_id = $2
             """,
             name,
+            tid,
         )
         if row is None:
             return None
@@ -94,15 +112,16 @@ async def get_prompt_by_name(name: str) -> dict | None:
         return result
 
 
-async def create_prompt(data: AiPromptCreate) -> dict:
+async def create_prompt(data: AiPromptCreate, tenant_id: UUID | str | None = None) -> dict:
     """建立 Prompt"""
+    tid = _get_tenant_id(tenant_id)
     variables_json = json.dumps(data.variables) if data.variables else None
 
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
-            INSERT INTO ai_prompts (name, display_name, category, content, description, variables)
-            VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+            INSERT INTO ai_prompts (name, display_name, category, content, description, variables, tenant_id)
+            VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
             RETURNING id, name, display_name, category, content, description,
                       variables, created_at, updated_at
             """,
@@ -112,6 +131,7 @@ async def create_prompt(data: AiPromptCreate) -> dict:
             data.content,
             data.description,
             variables_json,
+            tid,
         )
         result = dict(row)
         if result.get("variables"):
@@ -119,8 +139,9 @@ async def create_prompt(data: AiPromptCreate) -> dict:
         return result
 
 
-async def update_prompt(prompt_id: UUID, data: AiPromptUpdate) -> dict | None:
+async def update_prompt(prompt_id: UUID, data: AiPromptUpdate, tenant_id: UUID | str | None = None) -> dict | None:
     """更新 Prompt"""
+    tid = _get_tenant_id(tenant_id)
     updates = []
     params = []
     param_idx = 1
@@ -156,17 +177,17 @@ async def update_prompt(prompt_id: UUID, data: AiPromptUpdate) -> dict | None:
         param_idx += 1
 
     if not updates:
-        return await get_prompt(prompt_id)
+        return await get_prompt(prompt_id, tenant_id=tid)
 
     updates.append("updated_at = NOW()")
-    params.append(prompt_id)
+    params.extend([prompt_id, tid])
 
     async with get_connection() as conn:
         row = await conn.fetchrow(
             f"""
             UPDATE ai_prompts
             SET {", ".join(updates)}
-            WHERE id = ${param_idx}
+            WHERE id = ${param_idx} AND tenant_id = ${param_idx + 1}
             RETURNING id, name, display_name, category, content, description,
                       variables, created_at, updated_at
             """,
@@ -180,19 +201,21 @@ async def update_prompt(prompt_id: UUID, data: AiPromptUpdate) -> dict | None:
         return result
 
 
-async def delete_prompt(prompt_id: UUID) -> tuple[bool, str | None]:
+async def delete_prompt(prompt_id: UUID, tenant_id: UUID | str | None = None) -> tuple[bool, str | None]:
     """刪除 Prompt
 
     Returns:
         (success, error_message)
     """
+    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
-        # 檢查是否被 Agent 引用
+        # 檢查是否被 Agent 引用（在同一租戶內）
         agents = await conn.fetch(
             """
-            SELECT name FROM ai_agents WHERE system_prompt_id = $1
+            SELECT name FROM ai_agents WHERE system_prompt_id = $1 AND tenant_id = $2
             """,
             prompt_id,
+            tid,
         )
         if agents:
             agent_names = [a["name"] for a in agents]
@@ -200,23 +223,26 @@ async def delete_prompt(prompt_id: UUID) -> tuple[bool, str | None]:
 
         result = await conn.execute(
             """
-            DELETE FROM ai_prompts WHERE id = $1
+            DELETE FROM ai_prompts WHERE id = $1 AND tenant_id = $2
             """,
             prompt_id,
+            tid,
         )
         return "DELETE 1" in result, None
 
 
-async def get_prompt_referencing_agents(prompt_id: UUID) -> list[dict]:
+async def get_prompt_referencing_agents(prompt_id: UUID, tenant_id: UUID | str | None = None) -> list[dict]:
     """取得引用此 Prompt 的 Agents"""
+    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         rows = await conn.fetch(
             """
             SELECT id, name, display_name
             FROM ai_agents
-            WHERE system_prompt_id = $1
+            WHERE system_prompt_id = $1 AND tenant_id = $2
             """,
             prompt_id,
+            tid,
         )
         return [dict(row) for row in rows]
 
@@ -226,15 +252,18 @@ async def get_prompt_referencing_agents(prompt_id: UUID) -> list[dict]:
 # ============================================================
 
 
-async def get_agents() -> list[dict]:
+async def get_agents(tenant_id: UUID | str | None = None) -> list[dict]:
     """取得 Agent 列表"""
+    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         rows = await conn.fetch(
             """
             SELECT id, name, display_name, model, is_active, tools, updated_at
             FROM ai_agents
+            WHERE tenant_id = $1
             ORDER BY name
-            """
+            """,
+            tid,
         )
         result = []
         for row in rows:
@@ -246,8 +275,9 @@ async def get_agents() -> list[dict]:
         return result
 
 
-async def get_agent(agent_id: UUID) -> dict | None:
+async def get_agent(agent_id: UUID, tenant_id: UUID | str | None = None) -> dict | None:
     """取得 Agent 詳情（含關聯的 Prompt）"""
+    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
@@ -260,9 +290,10 @@ async def get_agent(agent_id: UUID) -> dict | None:
                    p.created_at as prompt_created_at, p.updated_at as prompt_updated_at
             FROM ai_agents a
             LEFT JOIN ai_prompts p ON a.system_prompt_id = p.id
-            WHERE a.id = $1
+            WHERE a.id = $1 AND a.tenant_id = $2
             """,
             agent_id,
+            tid,
         )
         if row is None:
             return None
@@ -298,8 +329,9 @@ async def get_agent(agent_id: UUID) -> dict | None:
         return result
 
 
-async def get_agent_by_name(name: str) -> dict | None:
+async def get_agent_by_name(name: str, tenant_id: UUID | str | None = None) -> dict | None:
     """依名稱取得 Agent（含關聯的 Prompt）"""
+    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
@@ -312,9 +344,10 @@ async def get_agent_by_name(name: str) -> dict | None:
                    p.created_at as prompt_created_at, p.updated_at as prompt_updated_at
             FROM ai_agents a
             LEFT JOIN ai_prompts p ON a.system_prompt_id = p.id
-            WHERE a.name = $1
+            WHERE a.name = $1 AND a.tenant_id = $2
             """,
             name,
+            tid,
         )
         if row is None:
             return None
@@ -350,8 +383,9 @@ async def get_agent_by_name(name: str) -> dict | None:
         return result
 
 
-async def create_agent(data: AiAgentCreate) -> dict:
+async def create_agent(data: AiAgentCreate, tenant_id: UUID | str | None = None) -> dict:
     """建立 Agent"""
+    tid = _get_tenant_id(tenant_id)
     settings_json = json.dumps(data.settings) if data.settings else None
     tools_json = json.dumps(data.tools) if data.tools else None
 
@@ -359,8 +393,8 @@ async def create_agent(data: AiAgentCreate) -> dict:
         row = await conn.fetchrow(
             """
             INSERT INTO ai_agents (name, display_name, description, model,
-                                   system_prompt_id, is_active, tools, settings)
-            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb)
+                                   system_prompt_id, is_active, tools, settings, tenant_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9)
             RETURNING id, name, display_name, description, model,
                       system_prompt_id, is_active, tools, settings, created_at, updated_at
             """,
@@ -372,6 +406,7 @@ async def create_agent(data: AiAgentCreate) -> dict:
             data.is_active,
             tools_json,
             settings_json,
+            tid,
         )
         result = dict(row)
         if result.get("settings"):
@@ -381,8 +416,9 @@ async def create_agent(data: AiAgentCreate) -> dict:
         return result
 
 
-async def update_agent(agent_id: UUID, data: AiAgentUpdate) -> dict | None:
+async def update_agent(agent_id: UUID, data: AiAgentUpdate, tenant_id: UUID | str | None = None) -> dict | None:
     """更新 Agent"""
+    tid = _get_tenant_id(tenant_id)
     updates = []
     params = []
     param_idx = 1
@@ -428,17 +464,17 @@ async def update_agent(agent_id: UUID, data: AiAgentUpdate) -> dict | None:
         param_idx += 1
 
     if not updates:
-        return await get_agent(agent_id)
+        return await get_agent(agent_id, tenant_id=tid)
 
     updates.append("updated_at = NOW()")
-    params.append(agent_id)
+    params.extend([agent_id, tid])
 
     async with get_connection() as conn:
         row = await conn.fetchrow(
             f"""
             UPDATE ai_agents
             SET {", ".join(updates)}
-            WHERE id = ${param_idx}
+            WHERE id = ${param_idx} AND tenant_id = ${param_idx + 1}
             RETURNING id, name, display_name, description, model,
                       system_prompt_id, is_active, tools, settings, created_at, updated_at
             """,
@@ -454,14 +490,16 @@ async def update_agent(agent_id: UUID, data: AiAgentUpdate) -> dict | None:
         return result
 
 
-async def delete_agent(agent_id: UUID) -> bool:
+async def delete_agent(agent_id: UUID, tenant_id: UUID | str | None = None) -> bool:
     """刪除 Agent（相關的 ai_logs 會將 agent_id 設為 null）"""
+    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         result = await conn.execute(
             """
-            DELETE FROM ai_agents WHERE id = $1
+            DELETE FROM ai_agents WHERE id = $1 AND tenant_id = $2
             """,
             agent_id,
+            tid,
         )
         return "DELETE 1" in result
 
@@ -471,8 +509,9 @@ async def delete_agent(agent_id: UUID) -> bool:
 # ============================================================
 
 
-async def create_log(data: AiLogCreate) -> dict:
+async def create_log(data: AiLogCreate, tenant_id: UUID | str | None = None) -> dict:
     """建立 AI Log"""
+    tid = _get_tenant_id(tenant_id)
     parsed_json = json.dumps(data.parsed_response) if data.parsed_response else None
     allowed_tools_json = json.dumps(data.allowed_tools) if data.allowed_tools else None
 
@@ -481,8 +520,8 @@ async def create_log(data: AiLogCreate) -> dict:
             """
             INSERT INTO ai_logs (agent_id, prompt_id, context_type, context_id,
                                 input_prompt, system_prompt, allowed_tools, raw_response, parsed_response, model,
-                                success, error_message, duration_ms, input_tokens, output_tokens)
-            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9::jsonb, $10, $11, $12, $13, $14, $15)
+                                success, error_message, duration_ms, input_tokens, output_tokens, tenant_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9::jsonb, $10, $11, $12, $13, $14, $15, $16)
             RETURNING id, agent_id, prompt_id, context_type, context_id,
                       input_prompt, system_prompt, allowed_tools, raw_response, parsed_response, model,
                       success, error_message, duration_ms, input_tokens, output_tokens, created_at
@@ -502,6 +541,7 @@ async def create_log(data: AiLogCreate) -> dict:
             data.duration_ms,
             data.input_tokens,
             data.output_tokens,
+            tid,
         )
         result = dict(row)
         if result.get("parsed_response"):
@@ -515,15 +555,17 @@ async def get_logs(
     filter_data: AiLogFilter | None = None,
     page: int = 1,
     page_size: int = 50,
+    tenant_id: UUID | str | None = None,
 ) -> tuple[list[dict], int]:
     """取得 AI Log 列表（分頁）
 
     Returns:
         (items, total)
     """
-    where_clauses = []
-    params = []
-    param_idx = 1
+    tid = _get_tenant_id(tenant_id)
+    where_clauses = [f"l.tenant_id = ${1}"]
+    params = [tid]
+    param_idx = 2
 
     if filter_data:
         if filter_data.agent_id:
@@ -551,7 +593,7 @@ async def get_logs(
             params.append(filter_data.end_date)
             param_idx += 1
 
-    where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+    where_sql = f"WHERE {' AND '.join(where_clauses)}"
 
     async with get_connection() as conn:
         # 取得總數
@@ -604,8 +646,9 @@ async def get_logs(
         return items, total
 
 
-async def get_log(log_id: UUID) -> dict | None:
+async def get_log(log_id: UUID, tenant_id: UUID | str | None = None) -> dict | None:
     """取得 AI Log 詳情"""
+    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
@@ -615,9 +658,10 @@ async def get_log(log_id: UUID) -> dict | None:
                    l.duration_ms, l.input_tokens, l.output_tokens, l.created_at
             FROM ai_logs l
             LEFT JOIN ai_agents a ON l.agent_id = a.id
-            WHERE l.id = $1
+            WHERE l.id = $1 AND l.tenant_id = $2
             """,
             log_id,
+            tid,
         )
         if row is None:
             return None
@@ -633,11 +677,13 @@ async def get_log_stats(
     agent_id: UUID | None = None,
     start_date: datetime | None = None,
     end_date: datetime | None = None,
+    tenant_id: UUID | str | None = None,
 ) -> dict:
     """取得 AI Log 統計"""
-    where_clauses = []
-    params = []
-    param_idx = 1
+    tid = _get_tenant_id(tenant_id)
+    where_clauses = [f"tenant_id = ${1}"]
+    params = [tid]
+    param_idx = 2
 
     if agent_id:
         where_clauses.append(f"agent_id = ${param_idx}")
@@ -654,7 +700,7 @@ async def get_log_stats(
         params.append(end_date)
         param_idx += 1
 
-    where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+    where_sql = f"WHERE {' AND '.join(where_clauses)}"
 
     async with get_connection() as conn:
         row = await conn.fetchrow(
@@ -698,6 +744,7 @@ async def call_agent(
     context_type: str | None = None,
     context_id: str | None = None,
     history: list[dict] | None = None,
+    tenant_id: UUID | str | None = None,
 ) -> dict:
     """透過 Agent 調用 AI
 
@@ -709,6 +756,7 @@ async def call_agent(
         context_type: 調用情境類型
         context_id: 調用情境 ID
         history: 對話歷史
+        tenant_id: 租戶 ID
 
     Returns:
         {
@@ -719,8 +767,10 @@ async def call_agent(
             "log_id": UUID | None
         }
     """
+    tid = _get_tenant_id(tenant_id)
+
     # 取得 Agent
-    agent = await get_agent_by_name(agent_name)
+    agent = await get_agent_by_name(agent_name, tenant_id=tid)
     if agent is None:
         return {
             "success": False,
@@ -781,7 +831,7 @@ async def call_agent(
         error_message=result.error if not result.success else None,
         duration_ms=duration_ms,
     )
-    log = await create_log(log_data)
+    log = await create_log(log_data, tenant_id=tid)
 
     return {
         "success": result.success,
@@ -792,7 +842,7 @@ async def call_agent(
     }
 
 
-async def test_agent(agent_id: UUID, message: str) -> dict:
+async def test_agent(agent_id: UUID, message: str, tenant_id: UUID | str | None = None) -> dict:
     """測試 Agent
 
     Returns:
@@ -804,8 +854,10 @@ async def test_agent(agent_id: UUID, message: str) -> dict:
             "log_id": UUID | None
         }
     """
+    tid = _get_tenant_id(tenant_id)
+
     # 取得 Agent
-    agent = await get_agent(agent_id)
+    agent = await get_agent(agent_id, tenant_id=tid)
     if agent is None:
         return {
             "success": False,
@@ -821,6 +873,7 @@ async def test_agent(agent_id: UUID, message: str) -> dict:
         message=message,
         context_type="test",
         context_id=str(agent_id),
+        tenant_id=tid,
     )
 
 

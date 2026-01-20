@@ -108,6 +108,36 @@
   height: 16px;
 }
 
+/* Tenant Info */
+.header-tenant {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background-color: var(--bg-surface);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+  cursor: default;
+}
+
+.header-tenant .icon {
+  color: var(--color-primary);
+}
+
+.header-tenant .icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.header-tenant-name {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* User Info */
 .header-user {
   display: flex;
@@ -288,5 +318,20 @@
   .header-messages-btn {
     width: 36px;
     height: 36px;
+  }
+
+  /* 隱藏租戶名稱，只顯示圖示 */
+  .header-tenant-name {
+    display: none;
+  }
+
+  .header-tenant {
+    padding: var(--spacing-xs);
+    min-width: 32px;
+    justify-content: center;
+  }
+
+  .header-tenant-divider {
+    display: none !important;
   }
 }

@@ -504,6 +504,7 @@ async def process_message_with_ai(
     reply_token: str | None,
     user_display_name: str | None = None,
     quoted_message_id: str | None = None,
+    tenant_id: UUID | None = None,
 ) -> str | None:
     """
     使用 AI 處理訊息
@@ -516,6 +517,7 @@ async def process_message_with_ai(
         reply_token: Line 回覆 token（可能已過期）
         user_display_name: 發送者顯示名稱
         quoted_message_id: 被回覆的訊息 ID（Line 的 quotedMessageId）
+        tenant_id: 租戶 ID
 
     Returns:
         AI 回應文字，或 None（如果不需處理）
@@ -529,13 +531,14 @@ async def process_message_with_ai(
             return None
         elif line_user_id:
             # 個人對話：執行重置
-            await reset_conversation(line_user_id)
+            await reset_conversation(line_user_id, tenant_id=tenant_id)
             reset_msg = "已清除對話歷史，開始新對話！有什麼可以幫你的嗎？"
             # 儲存 Bot 回應
             await save_bot_response(
                 group_uuid=None,
                 content=reset_msg,
                 responding_to_line_user_id=line_user_id,
+                tenant_id=tenant_id,
             )
             # 回覆訊息
             if reply_token:
@@ -563,7 +566,7 @@ async def process_message_with_ai(
 
     try:
         # 取得 Agent 設定
-        agent = await get_linebot_agent(is_group)
+        agent = await get_linebot_agent(is_group, tenant_id=tenant_id)
         agent_name = AGENT_LINEBOT_GROUP if is_group else AGENT_LINEBOT_PERSONAL
 
         if not agent:
@@ -588,12 +591,12 @@ async def process_message_with_ai(
             return error_msg
 
         # 建立系統提示（加入群組資訊和內建工具說明）
-        system_prompt = await build_system_prompt(line_group_id, line_user_id, base_prompt, agent_tools)
+        system_prompt = await build_system_prompt(line_group_id, line_user_id, base_prompt, agent_tools, tenant_id)
 
         # 取得對話歷史（20 則提供更好的上下文理解，包含圖片和檔案）
         # 排除當前訊息，避免重複（compose_prompt_with_history 會再加一次）
         history, images, files = await get_conversation_context(
-            line_group_id, line_user_id, limit=20, exclude_message_id=message_uuid
+            line_group_id, line_user_id, limit=20, exclude_message_id=message_uuid, tenant_id=tenant_id
         )
 
         # 處理回覆舊訊息（quotedMessageId）- 圖片、檔案或文字
@@ -602,7 +605,7 @@ async def process_message_with_ai(
         quoted_text_content = None
         if quoted_message_id:
             # 先嘗試查詢圖片
-            image_info = await get_image_info_by_line_message_id(quoted_message_id)
+            image_info = await get_image_info_by_line_message_id(quoted_message_id, tenant_id=tenant_id)
             if image_info and image_info.get("nas_path"):
                 # 確保圖片暫存存在
                 temp_path = await ensure_temp_image(quoted_message_id, image_info["nas_path"])
@@ -611,7 +614,7 @@ async def process_message_with_ai(
                     logger.info(f"用戶回覆圖片: {quoted_message_id} -> {temp_path}")
             else:
                 # 嘗試查詢檔案
-                file_info = await get_file_info_by_line_message_id(quoted_message_id)
+                file_info = await get_file_info_by_line_message_id(quoted_message_id, tenant_id=tenant_id)
                 if file_info and file_info.get("nas_path") and file_info.get("file_name"):
                     file_name = file_info["file_name"]
                     file_size = file_info.get("file_size")
@@ -709,6 +712,7 @@ async def process_message_with_ai(
             model=model,
             response=response,
             duration_ms=duration_ms,
+            tenant_id=tenant_id,
         )
 
         # 檢查 nanobanana 是否有錯誤（overloaded/timeout）
@@ -823,6 +827,7 @@ async def process_message_with_ai(
                     content=text_response,
                     responding_to_line_user_id=line_user_id if not is_group else None,
                     line_message_id=msg_id,
+                    tenant_id=tenant_id,
                 )
             else:
                 # 圖片訊息
@@ -832,17 +837,18 @@ async def process_message_with_ai(
                 nas_path = img_info.get("nas_path")
 
                 # 儲存訊息記錄
-                message_uuid = await save_bot_response(
+                bot_message_uuid = await save_bot_response(
                     group_uuid=line_group_id,
                     content=f"[Bot 發送的圖片: {file_name}]",
                     responding_to_line_user_id=line_user_id if not is_group else None,
                     line_message_id=msg_id,
+                    tenant_id=tenant_id,
                 )
 
                 # 儲存圖片檔案記錄（讓用戶可以回覆 Bot 的圖片進行編輯）
                 if nas_path:
                     await save_file_record(
-                        message_uuid=message_uuid,
+                        message_uuid=bot_message_uuid,
                         file_type="image",
                         file_name=file_name,
                         nas_path=nas_path,
@@ -867,6 +873,7 @@ async def log_linebot_ai_call(
     model: str,
     response,
     duration_ms: int,
+    tenant_id: UUID | None = None,
 ) -> None:
     """
     記錄 Line Bot AI 調用到 AI Log
@@ -882,11 +889,12 @@ async def log_linebot_ai_call(
         model: 使用的模型
         response: Claude 回應物件
         duration_ms: 耗時（毫秒）
+        tenant_id: 租戶 ID
     """
     try:
         # 根據對話類型取得對應的 Agent
         agent_name = AGENT_LINEBOT_GROUP if is_group else AGENT_LINEBOT_PERSONAL
-        agent = await ai_manager.get_agent_by_name(agent_name)
+        agent = await ai_manager.get_agent_by_name(agent_name, tenant_id=tenant_id)
         agent_id = agent["id"] if agent else None
         prompt_id = agent.get("system_prompt", {}).get("id") if agent else None
 
@@ -930,9 +938,10 @@ async def log_linebot_ai_call(
             duration_ms=duration_ms,
             input_tokens=response.input_tokens,
             output_tokens=response.output_tokens,
+            tenant_id=tenant_id,
         )
 
-        await ai_manager.create_log(log_data)
+        await ai_manager.create_log(log_data, tenant_id=tenant_id)
         logger.debug(f"已記錄 AI Log: agent={agent_name}, message_uuid={message_uuid}, success={response.success}")
 
     except Exception as e:
@@ -945,6 +954,7 @@ async def get_conversation_context(
     line_user_id: str | None,
     limit: int = 20,
     exclude_message_id: UUID | None = None,
+    tenant_id: UUID | None = None,
 ) -> tuple[list[dict], list[dict], list[dict]]:
     """
     取得對話上下文（包含圖片和檔案訊息）
@@ -954,6 +964,7 @@ async def get_conversation_context(
         line_user_id: Line 用戶 ID（個人對話用）
         limit: 取得的訊息數量
         exclude_message_id: 要排除的訊息 ID（避免當前訊息重複）
+        tenant_id: 租戶 ID
 
     Returns:
         (context, images, files) tuple:
@@ -1122,6 +1133,7 @@ async def build_system_prompt(
     line_user_id: str | None,
     base_prompt: str,
     builtin_tools: list[str] | None = None,
+    tenant_id: UUID | None = None,
 ) -> str:
     """
     建立系統提示
@@ -1131,6 +1143,7 @@ async def build_system_prompt(
         line_user_id: Line 用戶 ID（個人對話用）
         base_prompt: 從 Agent 取得的基礎 prompt
         builtin_tools: 內建工具列表（如 WebSearch, WebFetch）
+        tenant_id: 租戶 ID
 
     Returns:
         系統提示文字
@@ -1285,6 +1298,7 @@ async def handle_text_message(
     line_group_id: UUID | None,
     reply_token: str | None,
     quoted_message_id: str | None = None,
+    tenant_id: UUID | None = None,
 ) -> None:
     """
     處理文字訊息的 Webhook 入口
@@ -1297,6 +1311,7 @@ async def handle_text_message(
         line_group_id: 內部群組 UUID（個人對話為 None）
         reply_token: Line 回覆 token
         quoted_message_id: 被回覆的訊息 ID（用戶回覆舊訊息時）
+        tenant_id: 租戶 ID
     """
     # 取得用戶顯示名稱
     user_display_name = None
@@ -1317,4 +1332,5 @@ async def handle_text_message(
         reply_token=reply_token,
         user_display_name=user_display_name,
         quoted_message_id=quoted_message_id,
+        tenant_id=tenant_id,
     )

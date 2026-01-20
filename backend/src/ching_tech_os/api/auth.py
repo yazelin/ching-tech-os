@@ -3,7 +3,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-from ..models.auth import LoginRequest, LoginResponse, LogoutResponse, ErrorResponse
+from ..config import settings
+from ..models.auth import LoginRequest, LoginResponse, LogoutResponse, ErrorResponse, TenantBriefInfo
 from ..models.login_record import DeviceInfo as LoginRecordDeviceInfo, DeviceType, GeoLocation
 from ..models.message import MessageSeverity, MessageSource
 from ..services.session import session_manager, SessionData
@@ -12,6 +13,13 @@ from ..services.user import upsert_user, get_user_by_username
 from ..services.login_record import record_login
 from ..services.message import log_message
 from ..services.geoip import resolve_ip_location, parse_device_info
+from ..services.tenant import (
+    resolve_tenant_id,
+    get_tenant_by_id,
+    get_tenant_admin_role,
+    TenantNotFoundError,
+    TenantSuspendedError,
+)
 from ..api.message_events import emit_new_message, emit_unread_count
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -121,10 +129,19 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
     """登入並建立 session
 
     使用 NAS SMB 認證驗證使用者身份。
+    多租戶模式下需要提供 tenant_code 參數。
     """
     # 取得客戶端資訊
     ip_address = get_client_ip(req)
     user_agent = req.headers.get("user-agent", "")
+
+    # 解析租戶 ID
+    try:
+        tenant_id = await resolve_tenant_id(request.tenant_code)
+    except TenantNotFoundError:
+        return LoginResponse(success=False, error="租戶代碼不存在")
+    except TenantSuspendedError:
+        return LoginResponse(success=False, error="此租戶帳號已被停用")
 
     # 解析地理位置
     geo = resolve_ip_location(ip_address)
@@ -193,13 +210,35 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
 
     # 記錄使用者並取得 user_id
     user_id = None
+    user_role = "user"
     try:
-        user_id = await upsert_user(request.username)
+        user_id = await upsert_user(request.username, tenant_id=tenant_id)
+        # 檢查是否為平台管理員（ADMIN_USERNAME 或 users.role = 'platform_admin'）
+        if request.username == settings.admin_username:
+            user_role = "platform_admin"
+        elif user_id:
+            # 先從 users 表讀取 role
+            user_data = await get_user_by_username(request.username, tenant_id=tenant_id)
+            if user_data and user_data.get("role") == "platform_admin":
+                user_role = "platform_admin"
+            elif user_data and user_data.get("role") == "tenant_admin":
+                user_role = "tenant_admin"
+            else:
+                # 檢查是否在 tenant_admins 表中
+                admin_role = await get_tenant_admin_role(tenant_id, user_id)
+                if admin_role:
+                    user_role = "tenant_admin"
     except Exception:
         pass
 
-    # 認證成功，建立 session（包含 user_id）
-    token = session_manager.create_session(request.username, request.password, user_id=user_id)
+    # 認證成功，建立 session（包含 user_id、tenant_id、role）
+    token = session_manager.create_session(
+        request.username,
+        request.password,
+        user_id=user_id,
+        tenant_id=tenant_id,
+        role=user_role,
+    )
 
     # 記錄成功登入
     try:
@@ -241,10 +280,26 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
     except Exception:
         pass
 
+    # 取得租戶資訊（用於回應）
+    tenant_brief = None
+    try:
+        tenant_data = await get_tenant_by_id(tenant_id)
+        if tenant_data:
+            tenant_brief = TenantBriefInfo(
+                id=tenant_data["id"],
+                code=tenant_data["code"],
+                name=tenant_data["name"],
+                plan=tenant_data["plan"],
+            )
+    except Exception:
+        pass
+
     return LoginResponse(
         success=True,
         token=token,
         username=request.username,
+        tenant=tenant_brief,
+        role=user_role,
     )
 
 

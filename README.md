@@ -37,6 +37,7 @@ ChingTech OS 是擎添工業內部使用的整合式工作平台，以 Web 技�
 | 訊息中心 | 完成 | 系統訊息、登入記錄追蹤、未讀狀態管理 |
 | 使用者管理 | 完成 | 使用者列表、功能權限設定（管理員） |
 | 系統設定 | 完成 | 亮色/暗色主題切換 |
+| 多租戶支援 | 完成 | 租戶隔離、資料匯出/匯入、租戶管理員、跨租戶遷移 |
 
 ## 快速開始
 
@@ -71,6 +72,10 @@ cp .env.example .env
 - `DB_PASSWORD` - 資料庫密碼
 - `NAS_USER` / `NAS_PASSWORD` - NAS 服務帳號
 - `LINE_CHANNEL_SECRET` / `LINE_CHANNEL_ACCESS_TOKEN` - Line Bot（如需使用）
+
+多租戶模式（可選）：
+- `MULTI_TENANT_MODE` - 設為 `true` 啟用多租戶模式
+- `DEFAULT_TENANT_ID` - 預設租戶 UUID（單租戶模式使用）
 
 ### 啟動服務
 
@@ -180,6 +185,8 @@ ching-tech-os/
 |------|------|
 | [docs/docker.md](docs/docker.md) | Docker 服務設定 |
 | [docs/security.md](docs/security.md) | 認證、Session、登入追蹤 |
+| [docs/multi-tenant.md](docs/multi-tenant.md) | 多租戶架構、部署指南 |
+| [docs/tenant-admin-guide.md](docs/tenant-admin-guide.md) | 租戶管理員操作手冊 |
 
 ### 規範
 

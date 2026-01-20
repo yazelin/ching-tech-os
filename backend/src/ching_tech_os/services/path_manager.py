@@ -9,6 +9,11 @@
 - local://   → 本機小檔案 (應用程式 data 目錄)
 - nas://     → NAS 共享（透過 SMB 存取，用於檔案管理器）
 
+多租戶模式下，CTOS zone 會映射到租戶專屬目錄：
+- /mnt/nas/ctos/tenants/{tenant_id}/knowledge/
+- /mnt/nas/ctos/tenants/{tenant_id}/linebot/
+- /mnt/nas/ctos/tenants/{tenant_id}/attachments/
+
 範例：
 - ctos://knowledge/kb-001/file.pdf
 - ctos://linebot/groups/C123/images/2026-01-05/abc.jpg
@@ -23,6 +28,9 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional
 import re
+
+# 預設租戶 UUID（用於單租戶模式和向後相容）
+DEFAULT_TENANT_ID = "00000000-0000-0000-0000-000000000000"
 
 
 class StorageZone(Enum):
@@ -215,11 +223,14 @@ class PathManager:
             raw=path
         )
 
-    def to_filesystem(self, path: str) -> str:
+    def to_filesystem(
+        self, path: str, tenant_id: str | None = None
+    ) -> str:
         """轉換為實際檔案系統路徑
 
         Args:
             path: 輸入路徑（任何格式）
+            tenant_id: 租戶 ID（用於 CTOS zone 的租戶隔離）
 
         Returns:
             實際的檔案系統絕對路徑
@@ -237,6 +248,12 @@ class PathManager:
         # 特殊處理 linebot 暫存檔案：temp://linebot/xxx → /tmp/linebot-files/xxx
         if parsed.zone == StorageZone.TEMP and parsed.path.startswith("linebot/"):
             return f"/tmp/linebot-files/{parsed.path[8:]}"
+
+        # CTOS zone 支援租戶隔離
+        if parsed.zone == StorageZone.CTOS and tenant_id:
+            # 映射到租戶專屬目錄
+            # ctos://knowledge/... → /mnt/nas/ctos/tenants/{tenant_id}/knowledge/...
+            return f"{self._settings.ctos_mount_path}/tenants/{tenant_id}/{parsed.path}"
 
         return f"{mount_path}/{parsed.path}"
 
@@ -271,11 +288,12 @@ class PathManager:
         """
         return self.to_storage(path)
 
-    def exists(self, path: str) -> bool:
+    def exists(self, path: str, tenant_id: str | None = None) -> bool:
         """檢查檔案是否存在
 
         Args:
             path: 輸入路徑（任何格式）
+            tenant_id: 租戶 ID（用於 CTOS zone 的租戶隔離）
 
         Returns:
             檔案是否存在
@@ -287,7 +305,7 @@ class PathManager:
         if parsed.zone == StorageZone.NAS:
             # NAS zone 無法直接檢查，回傳 True（由 API 層處理實際檢查）
             return True
-        fs_path = self.to_filesystem(path)
+        fs_path = self.to_filesystem(path, tenant_id)
         return Path(fs_path).exists()
 
     def get_zone(self, path: str) -> StorageZone:
@@ -312,6 +330,74 @@ class PathManager:
         """
         zone = self.get_zone(path)
         return zone in (StorageZone.SHARED, StorageZone.NAS)
+
+    # ========================
+    # 租戶路徑相關方法
+    # ========================
+
+    def get_tenant_base_path(self, tenant_id: str | None = None) -> str:
+        """取得租戶的基礎路徑
+
+        Args:
+            tenant_id: 租戶 ID，None 則使用預設租戶
+
+        Returns:
+            租戶基礎路徑，如 /mnt/nas/ctos/tenants/{tenant_id}
+        """
+        tid = tenant_id or DEFAULT_TENANT_ID
+        return f"{self._settings.ctos_mount_path}/tenants/{tid}"
+
+    def get_tenant_knowledge_path(self, tenant_id: str | None = None) -> str:
+        """取得租戶的知識庫路徑"""
+        return f"{self.get_tenant_base_path(tenant_id)}/knowledge"
+
+    def get_tenant_linebot_path(self, tenant_id: str | None = None) -> str:
+        """取得租戶的 Line Bot 檔案路徑"""
+        return f"{self.get_tenant_base_path(tenant_id)}/linebot"
+
+    def get_tenant_attachments_path(self, tenant_id: str | None = None) -> str:
+        """取得租戶的附件路徑"""
+        return f"{self.get_tenant_base_path(tenant_id)}/attachments"
+
+    def get_tenant_ai_generated_path(self, tenant_id: str | None = None) -> str:
+        """取得租戶的 AI 生成檔案路徑"""
+        return f"{self.get_tenant_base_path(tenant_id)}/ai-generated"
+
+    def validate_tenant_path(
+        self, path: str, tenant_id: str, require_exists: bool = False
+    ) -> bool:
+        """驗證路徑是否屬於指定租戶
+
+        Args:
+            path: 檔案路徑（URI 或絕對路徑）
+            tenant_id: 租戶 ID
+            require_exists: 是否要求檔案存在
+
+        Returns:
+            True 如果路徑屬於該租戶，False 否則
+        """
+        try:
+            parsed = self.parse(path)
+        except ValueError:
+            return False
+
+        # 只有 CTOS zone 有租戶隔離
+        if parsed.zone != StorageZone.CTOS:
+            return True  # 其他 zone 不做租戶驗證
+
+        # 取得租戶的檔案系統路徑
+        fs_path = self.to_filesystem(path, tenant_id)
+
+        # 驗證路徑是否在租戶目錄下
+        tenant_base = self.get_tenant_base_path(tenant_id)
+        if not fs_path.startswith(tenant_base):
+            return False
+
+        # 檢查檔案是否存在
+        if require_exists and not Path(fs_path).exists():
+            return False
+
+        return True
 
 
 # 全域單例

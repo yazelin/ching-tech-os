@@ -1,6 +1,7 @@
 """使用者相關資料模型"""
 
 from datetime import datetime
+from uuid import UUID
 from pydantic import BaseModel
 
 
@@ -21,6 +22,9 @@ class UserInfo(BaseModel):
     last_login_at: datetime | None
     is_admin: bool = False
     permissions: UserPermissions | None = None
+    # 多租戶欄位
+    tenant_id: UUID | None = None
+    role: str = "user"  # user, tenant_admin, platform_admin
 
 
 class UpdateUserRequest(BaseModel):
@@ -39,6 +43,9 @@ class AdminUserInfo(BaseModel):
     permissions: UserPermissions
     created_at: datetime
     last_login_at: datetime | None
+    # 多租戶欄位
+    tenant_id: UUID | None = None
+    role: str = "user"
 
 
 class AdminUserListResponse(BaseModel):

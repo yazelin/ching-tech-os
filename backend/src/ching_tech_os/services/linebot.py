@@ -54,6 +54,96 @@ logger = logging.getLogger("linebot")
 
 
 # ============================================================
+# 租戶處理
+# ============================================================
+
+
+def _get_tenant_id(tenant_id: UUID | str | None) -> UUID:
+    """處理 tenant_id 參數"""
+    if tenant_id is None:
+        return UUID(settings.default_tenant_id)
+    if isinstance(tenant_id, str):
+        return UUID(tenant_id)
+    return tenant_id
+
+
+async def get_group_tenant_id(line_group_id: str) -> UUID | None:
+    """從 Line 群組 ID 取得 tenant_id
+
+    Args:
+        line_group_id: Line 群組 ID
+
+    Returns:
+        租戶 UUID，若群組不存在則回傳 None
+    """
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            "SELECT tenant_id FROM line_groups WHERE line_group_id = $1",
+            line_group_id,
+        )
+        return row["tenant_id"] if row else None
+
+
+async def get_user_tenant_id(line_user_id: str) -> UUID | None:
+    """從 Line 用戶 ID 取得 tenant_id
+
+    透過用戶的 CTOS 帳號綁定來判斷租戶。
+    如果用戶已綁定 CTOS 帳號，從 users 表取得 tenant_id。
+
+    Args:
+        line_user_id: Line 用戶 ID
+
+    Returns:
+        租戶 UUID，若用戶未綁定或找不到則回傳 None
+    """
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT u.tenant_id
+            FROM line_users lu
+            JOIN users u ON lu.user_id = u.id
+            WHERE lu.line_user_id = $1 AND lu.user_id IS NOT NULL
+            """,
+            line_user_id,
+        )
+        return row["tenant_id"] if row else None
+
+
+async def resolve_tenant_for_message(
+    line_group_id: str | None,
+    line_user_id: str | None,
+) -> UUID:
+    """解析訊息的租戶 ID
+
+    優先順序：
+    1. 群組訊息：使用群組的 tenant_id
+    2. 個人訊息：使用用戶綁定的 CTOS 帳號的 tenant_id
+    3. 都找不到：使用預設租戶
+
+    Args:
+        line_group_id: Line 群組 ID（群組訊息）
+        line_user_id: Line 用戶 ID
+
+    Returns:
+        租戶 UUID
+    """
+    # 群組訊息：使用群組的租戶
+    if line_group_id:
+        tenant_id = await get_group_tenant_id(line_group_id)
+        if tenant_id:
+            return tenant_id
+
+    # 個人訊息：使用用戶綁定的租戶
+    if line_user_id:
+        tenant_id = await get_user_tenant_id(line_user_id)
+        if tenant_id:
+            return tenant_id
+
+    # 預設租戶
+    return UUID(settings.default_tenant_id)
+
+
+# ============================================================
 # 常數定義
 # ============================================================
 
@@ -127,6 +217,7 @@ async def get_or_create_user(
     line_user_id: str,
     profile: dict | None = None,
     is_friend: bool | None = None,
+    tenant_id: UUID | str | None = None,
 ) -> UUID:
     """取得或建立 Line 用戶，回傳內部 UUID
 
@@ -134,12 +225,15 @@ async def get_or_create_user(
         line_user_id: Line 用戶 ID
         profile: 用戶資料（displayName, pictureUrl, statusMessage）
         is_friend: 是否為好友（僅在建立新用戶時使用）
+        tenant_id: 租戶 ID
     """
+    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
-        # 查詢現有用戶
+        # 查詢現有用戶（同一租戶內）
         row = await conn.fetchrow(
-            "SELECT id FROM line_users WHERE line_user_id = $1",
+            "SELECT id FROM line_users WHERE line_user_id = $1 AND tenant_id = $2",
             line_user_id,
+            tid,
         )
         if row:
             # 更新用戶資訊（如果有 profile）
@@ -152,20 +246,21 @@ async def get_or_create_user(
                         picture_url = COALESCE($3, picture_url),
                         status_message = COALESCE($4, status_message),
                         updated_at = NOW()
-                    WHERE line_user_id = $1
+                    WHERE line_user_id = $1 AND tenant_id = $5
                     """,
                     line_user_id,
                     profile.get("displayName"),
                     profile.get("pictureUrl"),
                     profile.get("statusMessage"),
+                    tid,
                 )
             return row["id"]
 
         # 建立新用戶
         row = await conn.fetchrow(
             """
-            INSERT INTO line_users (line_user_id, display_name, picture_url, status_message, is_friend)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO line_users (line_user_id, display_name, picture_url, status_message, is_friend, tenant_id)
+            VALUES ($1, $2, $3, $4, $5, $6)
             RETURNING id
             """,
             line_user_id,
@@ -173,29 +268,37 @@ async def get_or_create_user(
             profile.get("pictureUrl") if profile else None,
             profile.get("statusMessage") if profile else None,
             is_friend if is_friend is not None else False,  # 預設為非好友
+            tid,
         )
         return row["id"]
 
 
-async def update_user_friend_status(line_user_id: str, is_friend: bool) -> bool:
+async def update_user_friend_status(
+    line_user_id: str,
+    is_friend: bool,
+    tenant_id: UUID | str | None = None,
+) -> bool:
     """更新用戶的好友狀態
 
     Args:
         line_user_id: Line 用戶 ID
         is_friend: 是否為好友
+        tenant_id: 租戶 ID
 
     Returns:
         是否更新成功
     """
+    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         result = await conn.execute(
             """
             UPDATE line_users
             SET is_friend = $2, updated_at = NOW()
-            WHERE line_user_id = $1
+            WHERE line_user_id = $1 AND tenant_id = $3
             """,
             line_user_id,
             is_friend,
+            tid,
         )
         return result == "UPDATE 1"
 
@@ -248,13 +351,25 @@ async def get_group_member_profile(line_group_id: str, line_user_id: str) -> dic
 # 群組管理
 # ============================================================
 
-async def get_or_create_group(line_group_id: str, profile: dict | None = None) -> UUID:
-    """取得或建立 Line 群組，回傳內部 UUID"""
+async def get_or_create_group(
+    line_group_id: str,
+    profile: dict | None = None,
+    tenant_id: UUID | str | None = None,
+) -> UUID:
+    """取得或建立 Line 群組，回傳內部 UUID
+
+    Args:
+        line_group_id: Line 群組 ID
+        profile: 群組資料（groupName, pictureUrl, memberCount）
+        tenant_id: 租戶 ID
+    """
+    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
-        # 查詢現有群組
+        # 查詢現有群組（同一租戶內）
         row = await conn.fetchrow(
-            "SELECT id FROM line_groups WHERE line_group_id = $1",
+            "SELECT id FROM line_groups WHERE line_group_id = $1 AND tenant_id = $2",
             line_group_id,
+            tid,
         )
         if row:
             # 更新群組資訊（如果有 profile）
@@ -266,26 +381,28 @@ async def get_or_create_group(line_group_id: str, profile: dict | None = None) -
                         picture_url = COALESCE($3, picture_url),
                         member_count = COALESCE($4, member_count),
                         updated_at = NOW()
-                    WHERE line_group_id = $1
+                    WHERE line_group_id = $1 AND tenant_id = $5
                     """,
                     line_group_id,
                     profile.get("groupName"),
                     profile.get("pictureUrl"),
                     profile.get("memberCount"),
+                    tid,
                 )
             return row["id"]
 
         # 建立新群組
         row = await conn.fetchrow(
             """
-            INSERT INTO line_groups (line_group_id, name, picture_url, member_count)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO line_groups (line_group_id, name, picture_url, member_count, tenant_id)
+            VALUES ($1, $2, $3, $4, $5)
             RETURNING id
             """,
             line_group_id,
             profile.get("groupName") if profile else None,
             profile.get("pictureUrl") if profile else None,
             profile.get("memberCount") if profile else 0,
+            tid,
         )
         return row["id"]
 
@@ -306,10 +423,18 @@ async def get_group_profile(line_group_id: str) -> dict | None:
         return None
 
 
-async def handle_join_event(line_group_id: str) -> None:
-    """處理加入群組事件（包含重新加入）"""
+async def handle_join_event(
+    line_group_id: str,
+    tenant_id: UUID | str | None = None,
+) -> None:
+    """處理加入群組事件（包含重新加入）
+
+    Args:
+        line_group_id: Line 群組 ID
+        tenant_id: 租戶 ID（新群組會使用此租戶）
+    """
     profile = await get_group_profile(line_group_id)
-    group_uuid = await get_or_create_group(line_group_id, profile)
+    group_uuid = await get_or_create_group(line_group_id, profile, tenant_id=tenant_id)
 
     # 確保群組狀態為活躍（處理重新加入的情況）
     async with get_connection() as conn:
@@ -330,16 +455,26 @@ async def handle_join_event(line_group_id: str) -> None:
     logger.info(f"Bot 加入群組: {line_group_id}")
 
 
-async def handle_leave_event(line_group_id: str) -> None:
-    """處理離開群組事件"""
+async def handle_leave_event(
+    line_group_id: str,
+    tenant_id: UUID | str | None = None,
+) -> None:
+    """處理離開群組事件
+
+    Args:
+        line_group_id: Line 群組 ID
+        tenant_id: 租戶 ID
+    """
+    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         await conn.execute(
             """
             UPDATE line_groups
             SET is_active = false, left_at = NOW(), updated_at = NOW()
-            WHERE line_group_id = $1
+            WHERE line_group_id = $1 AND tenant_id = $2
             """,
             line_group_id,
+            tid,
         )
     logger.info(f"Bot 離開群組: {line_group_id}")
 
@@ -356,8 +491,22 @@ async def save_message(
     content: str | None,
     reply_token: str | None = None,
     is_from_bot: bool = False,
+    tenant_id: UUID | str | None = None,
 ) -> UUID:
-    """儲存訊息到資料庫，回傳訊息 UUID"""
+    """儲存訊息到資料庫，回傳訊息 UUID
+
+    Args:
+        message_id: Line 訊息 ID
+        line_user_id: Line 用戶 ID
+        line_group_id: Line 群組 ID（群組訊息時使用）
+        message_type: 訊息類型（text, image, video, audio, file）
+        content: 訊息內容
+        reply_token: Line 回覆 token
+        is_from_bot: 是否為 Bot 發送的訊息
+        tenant_id: 租戶 ID
+    """
+    tid = _get_tenant_id(tenant_id)
+
     # 取得或建立用戶
     # 群組訊息使用 get_group_member_profile（可取得非好友用戶資料）
     # 個人對話使用 get_user_profile（用戶必定與 Bot 有好友關係）
@@ -370,13 +519,13 @@ async def save_message(
         else:
             user_profile = await get_user_profile(line_user_id)
             is_friend = True  # 個人對話必定是好友
-    user_uuid = await get_or_create_user(line_user_id, user_profile, is_friend)
+    user_uuid = await get_or_create_user(line_user_id, user_profile, is_friend, tenant_id=tid)
 
     # 取得或建立群組（如果是群組訊息）
     group_uuid = None
     if line_group_id:
         group_profile = await get_group_profile(line_group_id)
-        group_uuid = await get_or_create_group(line_group_id, group_profile)
+        group_uuid = await get_or_create_group(line_group_id, group_profile, tenant_id=tid)
 
     # 儲存訊息
     async with get_connection() as conn:
@@ -384,9 +533,9 @@ async def save_message(
             """
             INSERT INTO line_messages (
                 message_id, line_user_id, line_group_id,
-                message_type, content, reply_token, is_from_bot
+                message_type, content, reply_token, is_from_bot, tenant_id
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING id
             """,
             message_id,
@@ -396,6 +545,7 @@ async def save_message(
             content,
             reply_token,
             is_from_bot,
+            tid,
         )
         logger.info(f"儲存訊息: {message_id} (type={message_type})")
         return row["id"]
@@ -410,15 +560,21 @@ async def mark_message_ai_processed(message_uuid: UUID) -> None:
         )
 
 
-async def get_or_create_bot_user() -> UUID:
-    """取得或建立 Bot 用戶，回傳用戶 UUID"""
+async def get_or_create_bot_user(tenant_id: UUID | str | None = None) -> UUID:
+    """取得或建立 Bot 用戶，回傳用戶 UUID
+
+    Args:
+        tenant_id: 租戶 ID
+    """
+    tid = _get_tenant_id(tenant_id)
     bot_line_id = "BOT_CHINGTECH"
 
     async with get_connection() as conn:
-        # 查詢現有 Bot 用戶
+        # 查詢現有 Bot 用戶（同一租戶內）
         row = await conn.fetchrow(
-            "SELECT id, is_friend FROM line_users WHERE line_user_id = $1",
+            "SELECT id, is_friend FROM line_users WHERE line_user_id = $1 AND tenant_id = $2",
             bot_line_id,
+            tid,
         )
         if row:
             # 確保 Bot 用戶的 is_friend 為 false 且名稱正確
@@ -435,12 +591,13 @@ async def get_or_create_bot_user() -> UUID:
         # 建立 Bot 用戶（is_friend = false）
         row = await conn.fetchrow(
             """
-            INSERT INTO line_users (line_user_id, display_name, is_friend)
-            VALUES ($1, $2, false)
+            INSERT INTO line_users (line_user_id, display_name, is_friend, tenant_id)
+            VALUES ($1, $2, false, $3)
             RETURNING id
             """,
             bot_line_id,
             "ChingTech AI (Bot)",
+            tid,
         )
         logger.info("已建立 Bot 用戶")
         return row["id"]
@@ -451,6 +608,7 @@ async def save_bot_response(
     content: str,
     responding_to_line_user_id: str | None = None,
     line_message_id: str | None = None,
+    tenant_id: UUID | str | None = None,
 ) -> UUID:
     """儲存 Bot 回應訊息到資料庫
 
@@ -459,11 +617,14 @@ async def save_bot_response(
         content: 回應內容
         responding_to_line_user_id: 回應的對象用戶 Line ID（個人對話用）
         line_message_id: Line 回傳的訊息 ID（用於回覆觸發）
+        tenant_id: 租戶 ID
 
     Returns:
         訊息 UUID
     """
     import uuid as uuid_module
+
+    tid = _get_tenant_id(tenant_id)
 
     # 使用 Line 回傳的 message_id，或產生唯一的 ID
     message_id = line_message_id or f"bot_{uuid_module.uuid4().hex[:16]}"
@@ -471,28 +632,29 @@ async def save_bot_response(
     # 決定使用哪個用戶 ID
     if group_uuid:
         # 群組對話：使用 Bot 用戶 ID
-        user_uuid = await get_or_create_bot_user()
+        user_uuid = await get_or_create_bot_user(tenant_id=tid)
     elif responding_to_line_user_id:
         # 個人對話：使用對話對象的用戶 ID（這樣查詢歷史時可以一起取得）
-        user_uuid = await get_or_create_user(responding_to_line_user_id, None)
+        user_uuid = await get_or_create_user(responding_to_line_user_id, None, tenant_id=tid)
     else:
         # Fallback：使用 Bot 用戶 ID
-        user_uuid = await get_or_create_bot_user()
+        user_uuid = await get_or_create_bot_user(tenant_id=tid)
 
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
             INSERT INTO line_messages (
                 message_id, line_user_id, line_group_id,
-                message_type, content, is_from_bot
+                message_type, content, is_from_bot, tenant_id
             )
-            VALUES ($1, $2, $3, 'text', $4, true)
+            VALUES ($1, $2, $3, 'text', $4, true, $5)
             RETURNING id
             """,
             message_id,
             user_uuid,
             group_uuid,
             content,
+            tid,
         )
         logger.info(f"儲存 Bot 回應: {message_id}")
         return row["id"]
@@ -510,16 +672,29 @@ async def save_file_record(
     mime_type: str | None = None,
     nas_path: str | None = None,
     duration: int | None = None,
+    tenant_id: UUID | str | None = None,
 ) -> UUID:
-    """儲存檔案記錄，回傳檔案 UUID"""
+    """儲存檔案記錄，回傳檔案 UUID
+
+    Args:
+        message_uuid: 訊息的 UUID
+        file_type: 檔案類型（image, video, audio, file）
+        file_name: 原始檔案名稱
+        file_size: 檔案大小
+        mime_type: MIME 類型
+        nas_path: NAS 儲存路徑
+        duration: 音訊/影片長度（毫秒）
+        tenant_id: 租戶 ID
+    """
+    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
             INSERT INTO line_files (
                 message_id, file_type, file_name,
-                file_size, mime_type, nas_path, duration
+                file_size, mime_type, nas_path, duration, tenant_id
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING id
             """,
             message_uuid,
@@ -529,6 +704,7 @@ async def save_file_record(
             mime_type,
             nas_path,
             duration,
+            tid,
         )
 
         # 更新訊息的 file_id
@@ -976,13 +1152,23 @@ async def list_groups(
     project_id: UUID | None = None,
     limit: int = 50,
     offset: int = 0,
+    tenant_id: UUID | str | None = None,
 ) -> tuple[list[dict], int]:
-    """列出群組"""
+    """列出群組
+
+    Args:
+        is_active: 是否活躍過濾
+        project_id: 專案 ID 過濾
+        limit: 最大數量
+        offset: 偏移量
+        tenant_id: 租戶 ID
+    """
+    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         # 建構查詢條件
-        conditions = []
-        params = []
-        param_idx = 1
+        conditions = [f"g.tenant_id = ${1}"]
+        params = [tid]
+        param_idx = 2
 
         if is_active is not None:
             conditions.append(f"g.is_active = ${param_idx}")
@@ -994,7 +1180,7 @@ async def list_groups(
             params.append(project_id)
             param_idx += 1
 
-        where_clause = " AND ".join(conditions) if conditions else "1=1"
+        where_clause = " AND ".join(conditions)
 
         # 查詢總數
         count_query = f"SELECT COUNT(*) FROM line_groups g WHERE {where_clause}"
@@ -1020,12 +1206,22 @@ async def list_messages(
     line_user_id: UUID | None = None,
     limit: int = 50,
     offset: int = 0,
+    tenant_id: UUID | str | None = None,
 ) -> tuple[list[dict], int]:
-    """列出訊息"""
+    """列出訊息
+
+    Args:
+        line_group_id: 群組 UUID 過濾
+        line_user_id: 用戶 UUID 過濾
+        limit: 最大數量
+        offset: 偏移量
+        tenant_id: 租戶 ID
+    """
+    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
-        conditions = []
-        params = []
-        param_idx = 1
+        conditions = [f"m.tenant_id = ${1}"]
+        params = [tid]
+        param_idx = 2
 
         if line_group_id is not None:
             conditions.append(f"m.line_group_id = ${param_idx}")
@@ -1040,7 +1236,7 @@ async def list_messages(
             params.append(line_user_id)
             param_idx += 1
 
-        where_clause = " AND ".join(conditions) if conditions else "1=1"
+        where_clause = " AND ".join(conditions)
 
         # 查詢總數
         count_query = f"SELECT COUNT(*) FROM line_messages m WHERE {where_clause}"
@@ -1061,85 +1257,148 @@ async def list_messages(
         return [dict(row) for row in rows], total
 
 
-async def list_users(limit: int = 50, offset: int = 0) -> tuple[list[dict], int]:
-    """列出用戶"""
+async def list_users(
+    limit: int = 50,
+    offset: int = 0,
+    tenant_id: UUID | str | None = None,
+) -> tuple[list[dict], int]:
+    """列出用戶
+
+    Args:
+        limit: 最大數量
+        offset: 偏移量
+        tenant_id: 租戶 ID
+    """
+    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
-        total = await conn.fetchval("SELECT COUNT(*) FROM line_users")
+        total = await conn.fetchval(
+            "SELECT COUNT(*) FROM line_users WHERE tenant_id = $1",
+            tid,
+        )
         rows = await conn.fetch(
             """
             SELECT * FROM line_users
+            WHERE tenant_id = $1
             ORDER BY updated_at DESC
-            LIMIT $1 OFFSET $2
+            LIMIT $2 OFFSET $3
             """,
+            tid,
             limit,
             offset,
         )
         return [dict(row) for row in rows], total
 
 
-async def get_group_by_id(group_id: UUID) -> dict | None:
-    """取得群組詳情"""
+async def get_group_by_id(
+    group_id: UUID,
+    tenant_id: UUID | str | None = None,
+) -> dict | None:
+    """取得群組詳情
+
+    Args:
+        group_id: 群組 UUID
+        tenant_id: 租戶 ID
+    """
+    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
             SELECT g.*, p.name as project_name
             FROM line_groups g
             LEFT JOIN projects p ON g.project_id = p.id
-            WHERE g.id = $1
+            WHERE g.id = $1 AND g.tenant_id = $2
             """,
             group_id,
+            tid,
         )
         return dict(row) if row else None
 
 
-async def get_user_by_id(user_id: UUID) -> dict | None:
-    """取得用戶詳情"""
+async def get_user_by_id(
+    user_id: UUID,
+    tenant_id: UUID | str | None = None,
+) -> dict | None:
+    """取得用戶詳情
+
+    Args:
+        user_id: 用戶 UUID
+        tenant_id: 租戶 ID
+    """
+    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         row = await conn.fetchrow(
-            "SELECT * FROM line_users WHERE id = $1",
+            "SELECT * FROM line_users WHERE id = $1 AND tenant_id = $2",
             user_id,
+            tid,
         )
         return dict(row) if row else None
 
 
-async def bind_group_to_project(group_id: UUID, project_id: UUID) -> bool:
-    """綁定群組到專案"""
+async def bind_group_to_project(
+    group_id: UUID,
+    project_id: UUID,
+    tenant_id: UUID | str | None = None,
+) -> bool:
+    """綁定群組到專案
+
+    Args:
+        group_id: 群組 UUID
+        project_id: 專案 UUID
+        tenant_id: 租戶 ID
+    """
+    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         result = await conn.execute(
             """
             UPDATE line_groups
             SET project_id = $2, updated_at = NOW()
-            WHERE id = $1
+            WHERE id = $1 AND tenant_id = $3
             """,
             group_id,
             project_id,
+            tid,
         )
         return result == "UPDATE 1"
 
 
-async def unbind_group_from_project(group_id: UUID) -> bool:
-    """解除群組與專案的綁定"""
+async def unbind_group_from_project(
+    group_id: UUID,
+    tenant_id: UUID | str | None = None,
+) -> bool:
+    """解除群組與專案的綁定
+
+    Args:
+        group_id: 群組 UUID
+        tenant_id: 租戶 ID
+    """
+    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         result = await conn.execute(
             """
             UPDATE line_groups
             SET project_id = NULL, updated_at = NOW()
-            WHERE id = $1
+            WHERE id = $1 AND tenant_id = $2
             """,
             group_id,
+            tid,
         )
         return result == "UPDATE 1"
 
 
-async def delete_group(group_id: UUID) -> dict | None:
+async def delete_group(
+    group_id: UUID,
+    tenant_id: UUID | str | None = None,
+) -> dict | None:
     """刪除群組及其相關資料
 
     Args:
         group_id: 群組 UUID
+        tenant_id: 租戶 ID
 
     Returns:
         刪除結果（含訊息數量）或 None（群組不存在）
     """
+    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         # 先查詢群組是否存在及訊息數量
         row = await conn.fetchrow(
@@ -1147,9 +1406,10 @@ async def delete_group(group_id: UUID) -> dict | None:
             SELECT g.id, g.name,
                    (SELECT COUNT(*) FROM line_messages WHERE line_group_id = g.id) as message_count
             FROM line_groups g
-            WHERE g.id = $1
+            WHERE g.id = $1 AND g.tenant_id = $2
             """,
             group_id,
+            tid,
         )
 
         if not row:
@@ -1160,8 +1420,9 @@ async def delete_group(group_id: UUID) -> dict | None:
 
         # 刪除群組（訊息和檔案記錄會級聯刪除）
         await conn.execute(
-            "DELETE FROM line_groups WHERE id = $1",
+            "DELETE FROM line_groups WHERE id = $1 AND tenant_id = $2",
             group_id,
+            tid,
         )
 
         return {
@@ -1182,6 +1443,7 @@ async def list_files(
     file_type: str | None = None,
     limit: int = 50,
     offset: int = 0,
+    tenant_id: UUID | str | None = None,
 ) -> tuple[list[dict], int]:
     """列出檔案
 
@@ -1191,14 +1453,16 @@ async def list_files(
         file_type: 檔案類型過濾（image, video, audio, file）
         limit: 最大數量
         offset: 偏移量
+        tenant_id: 租戶 ID
 
     Returns:
         (檔案列表, 總數)
     """
+    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
-        conditions = []
-        params = []
-        param_idx = 1
+        conditions = [f"f.tenant_id = ${1}"]
+        params = [tid]
+        param_idx = 2
 
         if line_group_id is not None:
             conditions.append(f"m.line_group_id = ${param_idx}")
@@ -1215,7 +1479,7 @@ async def list_files(
             params.append(file_type)
             param_idx += 1
 
-        where_clause = " AND ".join(conditions) if conditions else "1=1"
+        where_clause = " AND ".join(conditions)
 
         # 查詢總數
         count_query = f"""
@@ -1247,15 +1511,20 @@ async def list_files(
         return [dict(row) for row in rows], total
 
 
-async def get_file_by_id(file_id: UUID) -> dict | None:
+async def get_file_by_id(
+    file_id: UUID,
+    tenant_id: UUID | str | None = None,
+) -> dict | None:
     """取得單一檔案詳情
 
     Args:
         file_id: 檔案 UUID
+        tenant_id: 租戶 ID
 
     Returns:
         檔案詳情（含關聯資訊）
     """
+    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
@@ -1269,9 +1538,10 @@ async def get_file_by_id(file_id: UUID) -> dict | None:
             JOIN line_messages m ON f.message_id = m.id
             LEFT JOIN line_users u ON m.line_user_id = u.id
             LEFT JOIN line_groups g ON m.line_group_id = g.id
-            WHERE f.id = $1
+            WHERE f.id = $1 AND f.tenant_id = $2
             """,
             file_id,
+            tid,
         )
         return dict(row) if row else None
 
@@ -1294,17 +1564,23 @@ async def read_file_from_nas(nas_path: str) -> bytes | None:
         return None
 
 
-async def delete_file(file_id: UUID) -> bool:
+async def delete_file(
+    file_id: UUID,
+    tenant_id: UUID | str | None = None,
+) -> bool:
     """刪除檔案（從 NAS 和資料庫）
 
     Args:
         file_id: 檔案 UUID
+        tenant_id: 租戶 ID
 
     Returns:
         是否成功刪除
     """
+    tid = _get_tenant_id(tenant_id)
+
     # 取得檔案資訊
-    file_info = await get_file_by_id(file_id)
+    file_info = await get_file_by_id(file_id, tenant_id=tid)
     if not file_info:
         logger.warning(f"找不到檔案: {file_id}")
         return False
@@ -1328,8 +1604,9 @@ async def delete_file(file_id: UUID) -> bool:
 
         # 刪除檔案記錄
         await conn.execute(
-            "DELETE FROM line_files WHERE id = $1",
+            "DELETE FROM line_files WHERE id = $1 AND tenant_id = $2",
             file_id,
+            tid,
         )
         logger.info(f"已從資料庫刪除檔案記錄: {file_id}")
 
@@ -1348,16 +1625,21 @@ async def delete_file(file_id: UUID) -> bool:
 # ============================================================
 
 
-async def generate_binding_code(user_id: int) -> tuple[str, datetime]:
+async def generate_binding_code(
+    user_id: int,
+    tenant_id: UUID | str | None = None,
+) -> tuple[str, datetime]:
     """
     產生 6 位數字綁定驗證碼
 
     Args:
         user_id: CTOS 用戶 ID
+        tenant_id: 租戶 ID
 
     Returns:
         (驗證碼, 過期時間)
     """
+    tid = _get_tenant_id(tenant_id)
     # 產生 6 位數字驗證碼
     code = f"{random.randint(0, 999999):06d}"
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
@@ -1367,37 +1649,45 @@ async def generate_binding_code(user_id: int) -> tuple[str, datetime]:
         await conn.execute(
             """
             DELETE FROM line_binding_codes
-            WHERE user_id = $1 AND used_at IS NULL
+            WHERE user_id = $1 AND used_at IS NULL AND tenant_id = $2
             """,
             user_id,
+            tid,
         )
 
         # 建立新驗證碼
         await conn.execute(
             """
-            INSERT INTO line_binding_codes (user_id, code, expires_at)
-            VALUES ($1, $2, $3)
+            INSERT INTO line_binding_codes (user_id, code, expires_at, tenant_id)
+            VALUES ($1, $2, $3, $4)
             """,
             user_id,
             code,
             expires_at,
+            tid,
         )
 
     logger.info(f"已產生綁定驗證碼: user_id={user_id}")
     return code, expires_at
 
 
-async def verify_binding_code(line_user_uuid: UUID, code: str) -> tuple[bool, str]:
+async def verify_binding_code(
+    line_user_uuid: UUID,
+    code: str,
+    tenant_id: UUID | str | None = None,
+) -> tuple[bool, str]:
     """
     驗證綁定驗證碼並完成綁定
 
     Args:
         line_user_uuid: Line 用戶內部 UUID
         code: 驗證碼
+        tenant_id: 租戶 ID
 
     Returns:
         (是否成功, 訊息)
     """
+    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         # 查詢有效的驗證碼
         row = await conn.fetchrow(
@@ -1407,8 +1697,10 @@ async def verify_binding_code(line_user_uuid: UUID, code: str) -> tuple[bool, st
             WHERE code = $1
               AND used_at IS NULL
               AND expires_at > NOW()
+              AND tenant_id = $2
             """,
             code,
+            tid,
         )
 
         if not row:
@@ -1421,9 +1713,10 @@ async def verify_binding_code(line_user_uuid: UUID, code: str) -> tuple[bool, st
         existing = await conn.fetchrow(
             """
             SELECT user_id FROM line_users
-            WHERE id = $1 AND user_id IS NOT NULL
+            WHERE id = $1 AND user_id IS NOT NULL AND tenant_id = $2
             """,
             line_user_uuid,
+            tid,
         )
         if existing and existing["user_id"]:
             return False, "此 Line 帳號已綁定其他 CTOS 帳號"
@@ -1432,9 +1725,10 @@ async def verify_binding_code(line_user_uuid: UUID, code: str) -> tuple[bool, st
         existing_line = await conn.fetchrow(
             """
             SELECT id FROM line_users
-            WHERE user_id = $1
+            WHERE user_id = $1 AND tenant_id = $2
             """,
             ctos_user_id,
+            tid,
         )
         if existing_line:
             return False, "此 CTOS 帳號已綁定其他 Line 帳號"
@@ -1444,10 +1738,11 @@ async def verify_binding_code(line_user_uuid: UUID, code: str) -> tuple[bool, st
             """
             UPDATE line_users
             SET user_id = $2, updated_at = NOW()
-            WHERE id = $1
+            WHERE id = $1 AND tenant_id = $3
             """,
             line_user_uuid,
             ctos_user_id,
+            tid,
         )
 
         # 標記驗證碼已使用
@@ -1465,24 +1760,30 @@ async def verify_binding_code(line_user_uuid: UUID, code: str) -> tuple[bool, st
         return True, "綁定成功！您現在可以使用 Line Bot 了。"
 
 
-async def unbind_line_user(user_id: int) -> bool:
+async def unbind_line_user(
+    user_id: int,
+    tenant_id: UUID | str | None = None,
+) -> bool:
     """
     解除 CTOS 用戶的 Line 綁定
 
     Args:
         user_id: CTOS 用戶 ID
+        tenant_id: 租戶 ID
 
     Returns:
         是否成功解除綁定
     """
+    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         result = await conn.execute(
             """
             UPDATE line_users
             SET user_id = NULL, updated_at = NOW()
-            WHERE user_id = $1
+            WHERE user_id = $1 AND tenant_id = $2
             """,
             user_id,
+            tid,
         )
         if result == "UPDATE 1":
             logger.info(f"已解除綁定: ctos_user={user_id}")
@@ -1490,27 +1791,33 @@ async def unbind_line_user(user_id: int) -> bool:
         return False
 
 
-async def get_binding_status(user_id: int) -> dict:
+async def get_binding_status(
+    user_id: int,
+    tenant_id: UUID | str | None = None,
+) -> dict:
     """
     取得 CTOS 用戶的 Line 綁定狀態
 
     Args:
         user_id: CTOS 用戶 ID
+        tenant_id: 租戶 ID
 
     Returns:
         綁定狀態資訊
     """
+    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
             SELECT lu.display_name, lu.picture_url, bc.used_at as bound_at
             FROM line_users lu
             LEFT JOIN line_binding_codes bc ON bc.used_by_line_user_id = lu.id
-            WHERE lu.user_id = $1
+            WHERE lu.user_id = $1 AND lu.tenant_id = $2
             ORDER BY bc.used_at DESC NULLS LAST
             LIMIT 1
             """,
             user_id,
+            tid,
         )
 
         if row:
@@ -1550,6 +1857,7 @@ async def is_binding_code_format(content: str) -> bool:
 async def check_line_access(
     line_user_uuid: UUID,
     line_group_uuid: UUID | None = None,
+    tenant_id: UUID | str | None = None,
 ) -> tuple[bool, str | None]:
     """
     檢查 Line 用戶是否有權限使用 Bot
@@ -1561,15 +1869,18 @@ async def check_line_access(
     Args:
         line_user_uuid: Line 用戶內部 UUID
         line_group_uuid: Line 群組內部 UUID（個人對話為 None）
+        tenant_id: 租戶 ID
 
     Returns:
         (是否有權限, 拒絕原因)
     """
+    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         # 檢查用戶綁定
         user_row = await conn.fetchrow(
-            "SELECT user_id FROM line_users WHERE id = $1",
+            "SELECT user_id FROM line_users WHERE id = $1 AND tenant_id = $2",
             line_user_uuid,
+            tid,
         )
 
         if not user_row or not user_row["user_id"]:
@@ -1578,8 +1889,9 @@ async def check_line_access(
         # 如果是群組，檢查群組設定
         if line_group_uuid:
             group_row = await conn.fetchrow(
-                "SELECT allow_ai_response FROM line_groups WHERE id = $1",
+                "SELECT allow_ai_response FROM line_groups WHERE id = $1 AND tenant_id = $2",
                 line_group_uuid,
+                tid,
             )
             if not group_row or not group_row["allow_ai_response"]:
                 return False, "group_not_allowed"
@@ -1587,44 +1899,109 @@ async def check_line_access(
         return True, None
 
 
-async def update_group_settings(group_id: UUID, allow_ai_response: bool) -> bool:
+async def update_group_settings(
+    group_id: UUID,
+    allow_ai_response: bool,
+    tenant_id: UUID | str | None = None,
+) -> bool:
     """
     更新群組設定
 
     Args:
         group_id: 群組 UUID
         allow_ai_response: 是否允許 AI 回應
+        tenant_id: 租戶 ID
 
     Returns:
         是否成功更新
     """
+    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         result = await conn.execute(
             """
             UPDATE line_groups
             SET allow_ai_response = $2, updated_at = NOW()
-            WHERE id = $1
+            WHERE id = $1 AND tenant_id = $3
             """,
             group_id,
             allow_ai_response,
+            tid,
+        )
+        return result == "UPDATE 1"
+
+
+async def update_group_tenant(
+    group_id: UUID,
+    new_tenant_id: UUID,
+    current_tenant_id: UUID | str | None = None,
+) -> bool:
+    """
+    更新群組的租戶
+
+    將群組從一個租戶移動到另一個租戶。
+    此操作需要管理員權限，且會影響群組內所有訊息的可見性。
+
+    Args:
+        group_id: 群組 UUID
+        new_tenant_id: 新的租戶 ID
+        current_tenant_id: 當前租戶 ID（用於驗證權限）
+
+    Returns:
+        是否成功更新
+    """
+    tid = _get_tenant_id(current_tenant_id)
+    async with get_connection() as conn:
+        # 確認群組存在且屬於當前租戶
+        existing = await conn.fetchrow(
+            "SELECT id FROM line_groups WHERE id = $1 AND tenant_id = $2",
+            group_id,
+            tid,
+        )
+        if not existing:
+            return False
+
+        # 更新群組的租戶
+        result = await conn.execute(
+            """
+            UPDATE line_groups
+            SET tenant_id = $2, updated_at = NOW()
+            WHERE id = $1 AND tenant_id = $3
+            """,
+            group_id,
+            new_tenant_id,
+            tid,
         )
         return result == "UPDATE 1"
 
 
 async def list_users_with_binding(
-    limit: int = 50, offset: int = 0
+    limit: int = 50,
+    offset: int = 0,
+    tenant_id: UUID | str | None = None,
 ) -> tuple[list[dict], int]:
-    """列出用戶（包含 CTOS 綁定資訊）"""
+    """列出用戶（包含 CTOS 綁定資訊）
+
+    Args:
+        limit: 最大數量
+        offset: 偏移量
+        tenant_id: 租戶 ID
+    """
+    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
-        total = await conn.fetchval("SELECT COUNT(*) FROM line_users")
+        total = await conn.fetchval(
+            "SELECT COUNT(*) FROM line_users WHERE tenant_id = $1",
+            tid,
+        )
         rows = await conn.fetch(
             """
             SELECT lu.*, u.username as bound_username, u.display_name as bound_display_name
             FROM line_users lu
             LEFT JOIN users u ON lu.user_id = u.id
+            WHERE lu.tenant_id = $1
             ORDER BY lu.updated_at DESC
-            LIMIT $1 OFFSET $2
+            LIMIT $2 OFFSET $3
             """,
+            tid,
             limit,
             offset,
         )
@@ -1636,7 +2013,10 @@ async def list_users_with_binding(
 # ============================================================
 
 
-async def reset_conversation(line_user_id: str) -> bool:
+async def reset_conversation(
+    line_user_id: str,
+    tenant_id: UUID | str | None = None,
+) -> bool:
     """重置用戶的對話歷史
 
     設定 conversation_reset_at 為當前時間，
@@ -1644,18 +2024,21 @@ async def reset_conversation(line_user_id: str) -> bool:
 
     Args:
         line_user_id: Line 用戶 ID
+        tenant_id: 租戶 ID
 
     Returns:
         是否成功
     """
+    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         result = await conn.execute(
             """
             UPDATE line_users
             SET conversation_reset_at = NOW()
-            WHERE line_user_id = $1
+            WHERE line_user_id = $1 AND tenant_id = $2
             """,
             line_user_id,
+            tid,
         )
         success = result == "UPDATE 1"
         if success:
@@ -1810,15 +2193,20 @@ async def ensure_temp_image(line_message_id: str, nas_path: str) -> str | None:
         return None
 
 
-async def get_image_info_by_line_message_id(line_message_id: str) -> dict | None:
+async def get_image_info_by_line_message_id(
+    line_message_id: str,
+    tenant_id: UUID | str | None = None,
+) -> dict | None:
     """透過 Line 訊息 ID 取得圖片資訊
 
     Args:
         line_message_id: Line 訊息 ID
+        tenant_id: 租戶 ID
 
     Returns:
         包含 nas_path 等資訊的字典，找不到回傳 None
     """
+    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
@@ -1827,8 +2215,10 @@ async def get_image_info_by_line_message_id(line_message_id: str) -> dict | None
             JOIN line_messages m ON f.message_id = m.id
             WHERE m.message_id = $1
               AND f.file_type = 'image'
+              AND f.tenant_id = $2
             """,
             line_message_id,
+            tid,
         )
         return dict(row) if row else None
 
@@ -2007,15 +2397,20 @@ async def ensure_temp_file(
             return None
 
 
-async def get_file_info_by_line_message_id(line_message_id: str) -> dict | None:
+async def get_file_info_by_line_message_id(
+    line_message_id: str,
+    tenant_id: UUID | str | None = None,
+) -> dict | None:
     """透過 Line 訊息 ID 取得檔案資訊（非圖片）
 
     Args:
         line_message_id: Line 訊息 ID
+        tenant_id: 租戶 ID
 
     Returns:
         包含 nas_path, file_name, file_size 等資訊的字典，找不到回傳 None
     """
+    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
@@ -2025,8 +2420,10 @@ async def get_file_info_by_line_message_id(line_message_id: str) -> dict | None:
             JOIN line_messages m ON f.message_id = m.id
             WHERE m.message_id = $1
               AND f.file_type = 'file'
+              AND f.tenant_id = $2
             """,
             line_message_id,
+            tid,
         )
         return dict(row) if row else None
 

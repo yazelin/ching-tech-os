@@ -2,8 +2,9 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from ching_tech_os.models.auth import SessionData
 from ching_tech_os.models.inventory import (
     InventoryItemCreate,
     InventoryItemUpdate,
@@ -44,6 +45,7 @@ from ching_tech_os.services.inventory import (
     InventoryTransactionNotFoundError,
     InventoryOrderNotFoundError,
 )
+from .auth import get_current_session
 
 router = APIRouter(prefix="/api/inventory", tags=["inventory"])
 
@@ -62,10 +64,16 @@ async def api_list_inventory_items(
     q: str | None = Query(None, description="關鍵字搜尋（名稱、規格）"),
     category: str | None = Query(None, description="類別過濾"),
     low_stock: bool = Query(False, description="只顯示庫存不足的物料"),
+    session: SessionData = Depends(get_current_session),
 ) -> InventoryItemListResponse:
     """列出物料"""
     try:
-        return await list_inventory_items(query=q, category=category, low_stock=low_stock)
+        return await list_inventory_items(
+            query=q,
+            category=category,
+            low_stock=low_stock,
+            tenant_id=session.tenant_id,
+        )
     except InventoryError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -75,10 +83,13 @@ async def api_list_inventory_items(
     response_model=InventoryItemResponse,
     summary="取得物料詳情",
 )
-async def api_get_inventory_item(item_id: UUID) -> InventoryItemResponse:
+async def api_get_inventory_item(
+    item_id: UUID,
+    session: SessionData = Depends(get_current_session),
+) -> InventoryItemResponse:
     """取得物料詳情"""
     try:
-        return await get_inventory_item(item_id)
+        return await get_inventory_item(item_id, tenant_id=session.tenant_id)
     except InventoryItemNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except InventoryError as e:
@@ -91,10 +102,17 @@ async def api_get_inventory_item(item_id: UUID) -> InventoryItemResponse:
     status_code=status.HTTP_201_CREATED,
     summary="建立物料",
 )
-async def api_create_inventory_item(data: InventoryItemCreate) -> InventoryItemResponse:
+async def api_create_inventory_item(
+    data: InventoryItemCreate,
+    session: SessionData = Depends(get_current_session),
+) -> InventoryItemResponse:
     """建立物料"""
     try:
-        return await create_inventory_item(data)
+        return await create_inventory_item(
+            data,
+            created_by=session.username,
+            tenant_id=session.tenant_id,
+        )
     except InventoryError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -107,10 +125,11 @@ async def api_create_inventory_item(data: InventoryItemCreate) -> InventoryItemR
 async def api_update_inventory_item(
     item_id: UUID,
     data: InventoryItemUpdate,
+    session: SessionData = Depends(get_current_session),
 ) -> InventoryItemResponse:
     """更新物料"""
     try:
-        return await update_inventory_item(item_id, data)
+        return await update_inventory_item(item_id, data, tenant_id=session.tenant_id)
     except InventoryItemNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except InventoryError as e:
@@ -122,10 +141,13 @@ async def api_update_inventory_item(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="刪除物料",
 )
-async def api_delete_inventory_item(item_id: UUID) -> None:
+async def api_delete_inventory_item(
+    item_id: UUID,
+    session: SessionData = Depends(get_current_session),
+) -> None:
     """刪除物料"""
     try:
-        await delete_inventory_item(item_id)
+        await delete_inventory_item(item_id, tenant_id=session.tenant_id)
     except InventoryItemNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except InventoryError as e:
@@ -145,10 +167,15 @@ async def api_delete_inventory_item(item_id: UUID) -> None:
 async def api_list_inventory_transactions(
     item_id: UUID,
     limit: int = Query(50, ge=1, le=200, description="最大筆數"),
+    session: SessionData = Depends(get_current_session),
 ) -> InventoryTransactionListResponse:
     """列出物料的進出貨記錄"""
     try:
-        return await list_inventory_transactions(item_id, limit=limit)
+        return await list_inventory_transactions(
+            item_id,
+            limit=limit,
+            tenant_id=session.tenant_id,
+        )
     except InventoryItemNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except InventoryError as e:
@@ -164,10 +191,16 @@ async def api_list_inventory_transactions(
 async def api_create_inventory_transaction(
     item_id: UUID,
     data: InventoryTransactionCreate,
+    session: SessionData = Depends(get_current_session),
 ) -> InventoryTransactionResponse:
     """建立進出貨記錄"""
     try:
-        return await create_inventory_transaction(item_id, data)
+        return await create_inventory_transaction(
+            item_id,
+            data,
+            created_by=session.username,
+            tenant_id=session.tenant_id,
+        )
     except InventoryItemNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except InventoryError as e:
@@ -181,10 +214,14 @@ async def api_create_inventory_transaction(
 )
 async def api_get_inventory_transaction(
     transaction_id: UUID,
+    session: SessionData = Depends(get_current_session),
 ) -> InventoryTransactionResponse:
     """取得進出貨記錄詳情"""
     try:
-        return await get_inventory_transaction(transaction_id)
+        return await get_inventory_transaction(
+            transaction_id,
+            tenant_id=session.tenant_id,
+        )
     except InventoryTransactionNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except InventoryError as e:
@@ -196,10 +233,16 @@ async def api_get_inventory_transaction(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="刪除進出貨記錄",
 )
-async def api_delete_inventory_transaction(transaction_id: UUID) -> None:
+async def api_delete_inventory_transaction(
+    transaction_id: UUID,
+    session: SessionData = Depends(get_current_session),
+) -> None:
     """刪除進出貨記錄"""
     try:
-        await delete_inventory_transaction(transaction_id)
+        await delete_inventory_transaction(
+            transaction_id,
+            tenant_id=session.tenant_id,
+        )
     except InventoryTransactionNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except InventoryError as e:
@@ -307,9 +350,11 @@ async def api_delete_inventory_order(order_id: UUID) -> None:
     response_model=list[str],
     summary="取得所有類別",
 )
-async def api_get_categories() -> list[str]:
+async def api_get_categories(
+    session: SessionData = Depends(get_current_session),
+) -> list[str]:
     """取得所有類別"""
-    return await get_categories()
+    return await get_categories(tenant_id=session.tenant_id)
 
 
 @router.get(
@@ -317,6 +362,8 @@ async def api_get_categories() -> list[str]:
     response_model=int,
     summary="取得庫存不足數量",
 )
-async def api_get_low_stock_count() -> int:
+async def api_get_low_stock_count(
+    session: SessionData = Depends(get_current_session),
+) -> int:
     """取得庫存不足的物料數量"""
-    return await get_low_stock_count()
+    return await get_low_stock_count(tenant_id=session.tenant_id)

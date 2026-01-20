@@ -91,12 +91,45 @@ const PermissionsModule = (function() {
   }
 
   /**
+   * 檢查是否為平台管理員
+   * @returns {boolean}
+   */
+  function isPlatformAdmin() {
+    const session = typeof LoginModule !== 'undefined' ? LoginModule.getSession() : null;
+    return session?.role === 'platform_admin';
+  }
+
+  /**
+   * 檢查是否為租戶管理員
+   * @returns {boolean}
+   */
+  function isTenantAdmin() {
+    const session = typeof LoginModule !== 'undefined' ? LoginModule.getSession() : null;
+    return session?.role === 'tenant_admin' || session?.role === 'platform_admin';
+  }
+
+  /**
    * 取得可存取的應用程式列表
    * @param {Array} allApps - 所有應用程式列表
    * @returns {Array}
    */
   function getAccessibleApps(allApps) {
-    return allApps.filter(app => canAccessApp(app.id));
+    const session = typeof LoginModule !== 'undefined' ? LoginModule.getSession() : null;
+    const userRole = session?.role;
+
+    return allApps.filter(app => {
+      // 檢查角色要求
+      if (app.requireRole) {
+        if (app.requireRole === 'platform_admin' && userRole !== 'platform_admin') {
+          return false;
+        }
+        if (app.requireRole === 'tenant_admin' && userRole !== 'tenant_admin' && userRole !== 'platform_admin') {
+          return false;
+        }
+      }
+      // 檢查一般權限
+      return canAccessApp(app.id);
+    });
   }
 
   /**
@@ -113,6 +146,8 @@ const PermissionsModule = (function() {
     loadCurrentUser,
     getCurrentUser,
     isAdmin,
+    isPlatformAdmin,
+    isTenantAdmin,
     canAccessApp,
     canAccessKnowledge,
     getAccessibleApps,

@@ -4,9 +4,11 @@ import mimetypes
 from urllib.parse import quote
 from uuid import UUID
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response
 
+from ..models.auth import SessionData
+from ..api.auth import get_current_session
 from ching_tech_os.models.project import (
     ProjectCreate,
     ProjectUpdate,
@@ -90,12 +92,17 @@ router = APIRouter(prefix="/api/projects", tags=["projects"])
     summary="列出專案",
 )
 async def api_list_projects(
-    status: str | None = Query(None, description="狀態過濾"),
+    status_filter: str | None = Query(None, alias="status", description="狀態過濾"),
     q: str | None = Query(None, description="關鍵字搜尋"),
+    session: SessionData = Depends(get_current_session),
 ) -> ProjectListResponse:
     """列出專案"""
     try:
-        return await list_projects(status=status, query=q)
+        return await list_projects(
+            status=status_filter,
+            query=q,
+            tenant_id=session.tenant_id,
+        )
     except ProjectError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -108,10 +115,13 @@ async def api_list_projects(
     response_model=ProjectDetailResponse,
     summary="取得專案詳情",
 )
-async def api_get_project(project_id: UUID) -> ProjectDetailResponse:
+async def api_get_project(
+    project_id: UUID,
+    session: SessionData = Depends(get_current_session),
+) -> ProjectDetailResponse:
     """取得專案詳情（含成員、會議、附件、連結）"""
     try:
-        return await get_project(project_id)
+        return await get_project(project_id, tenant_id=session.tenant_id)
     except ProjectNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -130,10 +140,17 @@ async def api_get_project(project_id: UUID) -> ProjectDetailResponse:
     status_code=status.HTTP_201_CREATED,
     summary="建立專案",
 )
-async def api_create_project(data: ProjectCreate) -> ProjectResponse:
+async def api_create_project(
+    data: ProjectCreate,
+    session: SessionData = Depends(get_current_session),
+) -> ProjectResponse:
     """建立新專案"""
     try:
-        return await create_project(data)
+        return await create_project(
+            data,
+            created_by=session.username,
+            tenant_id=session.tenant_id,
+        )
     except ProjectError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -146,10 +163,14 @@ async def api_create_project(data: ProjectCreate) -> ProjectResponse:
     response_model=ProjectResponse,
     summary="更新專案",
 )
-async def api_update_project(project_id: UUID, data: ProjectUpdate) -> ProjectResponse:
+async def api_update_project(
+    project_id: UUID,
+    data: ProjectUpdate,
+    session: SessionData = Depends(get_current_session),
+) -> ProjectResponse:
     """更新專案"""
     try:
-        return await update_project(project_id, data)
+        return await update_project(project_id, data, tenant_id=session.tenant_id)
     except ProjectNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -167,10 +188,13 @@ async def api_update_project(project_id: UUID, data: ProjectUpdate) -> ProjectRe
     status_code=status.HTTP_204_NO_CONTENT,
     summary="刪除專案",
 )
-async def api_delete_project(project_id: UUID) -> None:
+async def api_delete_project(
+    project_id: UUID,
+    session: SessionData = Depends(get_current_session),
+) -> None:
     """刪除專案（包含所有關聯資料）"""
     try:
-        await delete_project(project_id)
+        await delete_project(project_id, tenant_id=session.tenant_id)
     except ProjectNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

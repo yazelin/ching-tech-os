@@ -77,7 +77,7 @@ async def list_users_simple(
     session: SessionData = Depends(get_current_session),
 ) -> SimpleUserListResponse:
     """取得所有用戶列表（簡化版，供下拉選單使用）"""
-    users = await get_all_users()
+    users = await get_all_users(tenant_id=session.tenant_id)
 
     result = [
         SimpleUserInfo(
@@ -96,7 +96,7 @@ async def get_current_user(
     session: SessionData = Depends(get_current_session),
 ) -> UserInfo:
     """取得目前登入使用者的資訊，包含權限"""
-    user = await get_user_by_username(session.username)
+    user = await get_user_by_username(session.username, tenant_id=session.tenant_id)
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -115,6 +115,8 @@ async def get_current_user(
         last_login_at=user["last_login_at"],
         is_admin=is_admin(user["username"]),
         permissions=UserPermissions(**permissions),
+        tenant_id=session.tenant_id,
+        role=session.role,
     )
 
 
@@ -125,16 +127,33 @@ async def update_current_user(
 ) -> UserInfo:
     """更新目前登入使用者的資訊"""
     if request.display_name is not None:
-        user = await update_user_display_name(session.username, request.display_name)
+        user = await update_user_display_name(
+            session.username, request.display_name, tenant_id=session.tenant_id
+        )
     else:
-        user = await get_user_by_username(session.username)
+        user = await get_user_by_username(session.username, tenant_id=session.tenant_id)
 
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="使用者不存在",
         )
-    return UserInfo(**user)
+
+    # 取得權限資訊
+    preferences = _parse_preferences(user.get("preferences"))
+    permissions = get_user_permissions_for_admin(user["username"], preferences)
+
+    return UserInfo(
+        id=user["id"],
+        username=user["username"],
+        display_name=user["display_name"],
+        created_at=user["created_at"],
+        last_login_at=user["last_login_at"],
+        is_admin=is_admin(user["username"]),
+        permissions=UserPermissions(**permissions),
+        tenant_id=session.tenant_id,
+        role=session.role,
+    )
 
 
 # === 偏好設定 API ===
@@ -210,7 +229,7 @@ async def list_users(
     session: SessionData = Depends(require_admin),
 ) -> AdminUserListResponse:
     """取得所有使用者列表（管理員限定）"""
-    users = await get_all_users()
+    users = await get_all_users(tenant_id=session.tenant_id)
 
     result = []
     for user in users:
@@ -225,6 +244,8 @@ async def list_users(
             permissions=UserPermissions(**permissions),
             created_at=user["created_at"],
             last_login_at=user["last_login_at"],
+            tenant_id=user.get("tenant_id"),
+            role=user.get("role", "user"),
         ))
 
     return AdminUserListResponse(users=result)

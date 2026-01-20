@@ -59,6 +59,9 @@ async def create_link(
 
     只有資源擁有者或有編輯權限的人可以建立連結。
     """
+    # 取得租戶 ID
+    tenant_id = getattr(session, "tenant_id", None)
+
     # 權限檢查
     if data.resource_type == "knowledge":
         try:
@@ -80,7 +83,7 @@ async def create_link(
     elif data.resource_type == "nas_file":
         # 驗證 NAS 檔案存在且在允許範圍內
         try:
-            validate_nas_file_path(data.resource_id)
+            validate_nas_file_path(data.resource_id, tenant_id)
         except NasFileNotFoundError as e:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -96,7 +99,7 @@ async def create_link(
     # 後續可以加入專案權限檢查
 
     try:
-        return await create_share_link(data, session.username)
+        return await create_share_link(data, session.username, tenant_id)
     except ResourceNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -125,13 +128,14 @@ async def list_links(
     """
     try:
         user_is_admin = is_admin(session.username)
+        tenant_id = getattr(session, "tenant_id", None)
 
         # 管理員可以選擇查看全部
         if view == "all" and user_is_admin:
-            result = await list_all_links()
+            result = await list_all_links(tenant_id)
         else:
             # 非管理員或選擇「我的」
-            result = await list_my_links(session.username)
+            result = await list_my_links(session.username, tenant_id)
 
         # 設定管理員標誌（讓前端知道可以切換視圖）
         result.is_admin = user_is_admin
