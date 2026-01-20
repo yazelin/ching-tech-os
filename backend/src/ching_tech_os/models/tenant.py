@@ -14,11 +14,17 @@ class TenantSettings(BaseModel):
     enable_knowledge_base: bool = True
     enable_project_management: bool = True
     enable_inventory: bool = True
+    enable_vendor_management: bool = True  # 廠商管理
 
     # 配額設定
     max_users: int | None = None  # None 表示無限制
     max_projects: int | None = None
     max_ai_calls_per_day: int | None = None
+
+    # Line Bot 設定（多租戶支援）
+    line_channel_id: str | None = None  # Line Channel ID
+    line_channel_secret: str | None = None  # 加密儲存
+    line_channel_access_token: str | None = None  # 加密儲存
 
     # 自訂設定
     custom: dict = Field(default_factory=dict)
@@ -139,3 +145,30 @@ class TenantImportRequest(BaseModel):
 
     source_file_path: str  # 上傳的 ZIP 檔案路徑
     merge_mode: str = "replace"  # replace: 取代現有資料, merge: 合併
+
+
+# === Line Bot 設定模型 ===
+
+
+class LineBotSettingsUpdate(BaseModel):
+    """更新 Line Bot 設定請求"""
+
+    channel_id: str | None = Field(None, description="Line Channel ID")
+    channel_secret: str | None = Field(None, description="Line Channel Secret（明文）")
+    access_token: str | None = Field(None, description="Line Channel Access Token（明文）")
+
+
+class LineBotSettingsResponse(BaseModel):
+    """Line Bot 設定回應（不包含敏感資訊）"""
+
+    configured: bool = Field(..., description="是否已設定 Line Bot")
+    channel_id: str | None = Field(None, description="Line Channel ID")
+    # 不回傳 channel_secret 和 access_token
+
+
+class LineBotTestResponse(BaseModel):
+    """Line Bot 測試回應"""
+
+    success: bool
+    bot_info: dict | None = None  # 包含 bot 名稱等資訊
+    error: str | None = None

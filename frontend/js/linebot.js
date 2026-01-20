@@ -351,13 +351,8 @@ const LineBotApp = (function () {
     // 載入專案列表
     async function loadProjects() {
         try {
-            const response = await fetch('/api/projects?limit=100', {
-                credentials: 'include',
-            });
-            if (response.ok) {
-                const data = await response.json();
-                state.projects = data.items || [];
-            }
+            const data = await APIClient.request('/projects?limit=100');
+            state.projects = data.items || [];
         } catch (error) {
             console.error('載入專案失敗:', error);
         }

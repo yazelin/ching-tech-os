@@ -416,6 +416,11 @@ const TenantAdminApp = (function () {
               <span class="icon">${getIcon('package-variant')}</span>
               <span>物料管理</span>
             </label>
+            <label class="feature-toggle">
+              <input type="checkbox" id="enableVendorManagement" ${settings.enable_vendor_management !== false ? 'checked' : ''} />
+              <span class="icon">${getIcon('store')}</span>
+              <span>廠商管理</span>
+            </label>
           </div>
         </div>
 
@@ -426,11 +431,258 @@ const TenantAdminApp = (function () {
           </button>
         </div>
       </div>
+
+      <!-- Line Bot 設定區塊（僅平台管理員可見） -->
+      <div class="tenant-settings-form linebot-settings-section" id="linebotSettingsSection" style="display: none;">
+        <div class="settings-group">
+          <h3 class="settings-group-title">
+            <span class="icon">${getIcon('message-text')}</span>
+            Line Bot 設定
+          </h3>
+          <p class="settings-description">
+            設定獨立的 Line Bot 憑證，讓此租戶擁有專屬的 Line Bot。<br>
+            如果不設定，將使用平台預設的共用 Bot。
+          </p>
+
+          <div class="linebot-status" id="linebotStatus">
+            <div class="linebot-status-loading">
+              <span class="icon">${getIcon('loading', 'mdi-spin')}</span>
+              <span>載入中...</span>
+            </div>
+          </div>
+
+          <div class="linebot-form" id="linebotForm" style="display: none;">
+            <div class="form-group">
+              <label for="lineChannelId">Channel ID</label>
+              <input type="text" id="lineChannelId" class="input" placeholder="Line Channel ID" />
+              <span class="form-hint">從 Line Developers Console 取得</span>
+            </div>
+            <div class="form-group">
+              <label for="lineChannelSecret">Channel Secret</label>
+              <input type="password" id="lineChannelSecret" class="input" placeholder="留空表示不更新" />
+              <span class="form-hint">用於驗證 Webhook 請求</span>
+            </div>
+            <div class="form-group">
+              <label for="lineAccessToken">Access Token</label>
+              <input type="password" id="lineAccessToken" class="input" placeholder="留空表示不更新" />
+              <span class="form-hint">用於發送訊息給用戶</span>
+            </div>
+
+            <div class="linebot-actions">
+              <button class="btn btn-secondary" id="testLinebotBtn">
+                <span class="icon">${getIcon('connection')}</span>
+                <span>測試連線</span>
+              </button>
+              <button class="btn btn-primary" id="saveLinebotBtn">
+                <span class="icon">${getIcon('content-save')}</span>
+                <span>儲存設定</span>
+              </button>
+              <button class="btn btn-text-danger" id="clearLinebotBtn">
+                <span class="icon">${getIcon('delete')}</span>
+                <span>清除設定</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="linebot-test-result" id="linebotTestResult" style="display: none;"></div>
+        </div>
+      </div>
     `;
 
     // 綁定儲存按鈕
     const saveBtn = container.querySelector('#saveSettingsBtn');
     saveBtn.addEventListener('click', () => saveSettings(windowEl, container));
+
+    // 檢查是否為平台管理員，若是則顯示 Line Bot 設定
+    if (PermissionsModule.isPlatformAdmin?.()) {
+      const linebotSection = container.querySelector('#linebotSettingsSection');
+      linebotSection.style.display = '';
+      loadLinebotSettings(container, true);  // 首次載入，綁定事件
+    }
+  }
+
+  /**
+   * 載入 Line Bot 設定
+   * @param {HTMLElement} container
+   * @param {boolean} bindEvents - 是否綁定事件（首次載入時為 true）
+   */
+  async function loadLinebotSettings(container, bindEvents = false) {
+    const statusEl = container.querySelector('#linebotStatus');
+    const formEl = container.querySelector('#linebotForm');
+
+    try {
+      const response = await APIClient.get(`/admin/tenants/${tenantInfo.id}/linebot`);
+
+      // 更新狀態顯示
+      if (response.configured) {
+        statusEl.innerHTML = `
+          <div class="linebot-status-configured">
+            <span class="icon">${getIcon('check-circle')}</span>
+            <span>已設定獨立 Line Bot</span>
+            <span class="linebot-channel-id">Channel ID: ${response.channel_id}</span>
+          </div>
+        `;
+        container.querySelector('#lineChannelId').value = response.channel_id || '';
+      } else {
+        statusEl.innerHTML = `
+          <div class="linebot-status-unconfigured">
+            <span class="icon">${getIcon('information-outline')}</span>
+            <span>使用平台共用 Bot</span>
+          </div>
+        `;
+      }
+
+      // 顯示表單
+      formEl.style.display = '';
+
+      // 只在首次載入時綁定按鈕事件
+      if (bindEvents) {
+        container.querySelector('#testLinebotBtn').addEventListener('click', () => testLinebotConnection(container));
+        container.querySelector('#saveLinebotBtn').addEventListener('click', () => saveLinebotSettings(container));
+        container.querySelector('#clearLinebotBtn').addEventListener('click', () => clearLinebotSettings(container));
+      }
+
+    } catch (error) {
+      statusEl.innerHTML = `
+        <div class="linebot-status-error">
+          <span class="icon">${getIcon('alert-circle')}</span>
+          <span>載入失敗：${error.message}</span>
+        </div>
+      `;
+    }
+  }
+
+  /**
+   * 測試 Line Bot 連線
+   * @param {HTMLElement} container
+   */
+  async function testLinebotConnection(container) {
+    const testBtn = container.querySelector('#testLinebotBtn');
+    const resultEl = container.querySelector('#linebotTestResult');
+
+    testBtn.disabled = true;
+    testBtn.innerHTML = `<span class="icon">${getIcon('loading', 'mdi-spin')}</span><span>測試中...</span>`;
+    resultEl.style.display = 'none';
+
+    try {
+      const response = await APIClient.post(`/admin/tenants/${tenantInfo.id}/linebot/test`);
+
+      if (response.success) {
+        resultEl.className = 'linebot-test-result success';
+        resultEl.innerHTML = `
+          <span class="icon">${getIcon('check-circle')}</span>
+          <div class="linebot-test-info">
+            <strong>連線成功</strong>
+            <span>Bot 名稱：${response.bot_info?.display_name || 'N/A'}</span>
+            <span>Basic ID：${response.bot_info?.basic_id || 'N/A'}</span>
+          </div>
+        `;
+      } else {
+        resultEl.className = 'linebot-test-result error';
+        resultEl.innerHTML = `
+          <span class="icon">${getIcon('alert-circle')}</span>
+          <div class="linebot-test-info">
+            <strong>連線失敗</strong>
+            <span>${response.error || '未知錯誤'}</span>
+          </div>
+        `;
+      }
+      resultEl.style.display = '';
+
+    } catch (error) {
+      resultEl.className = 'linebot-test-result error';
+      resultEl.innerHTML = `
+        <span class="icon">${getIcon('alert-circle')}</span>
+        <div class="linebot-test-info">
+          <strong>測試失敗</strong>
+          <span>${error.message}</span>
+        </div>
+      `;
+      resultEl.style.display = '';
+    } finally {
+      testBtn.disabled = false;
+      testBtn.innerHTML = `<span class="icon">${getIcon('connection')}</span><span>測試連線</span>`;
+    }
+  }
+
+  /**
+   * 儲存 Line Bot 設定
+   * @param {HTMLElement} container
+   */
+  async function saveLinebotSettings(container) {
+    const saveBtn = container.querySelector('#saveLinebotBtn');
+    const channelId = container.querySelector('#lineChannelId').value.trim();
+    const channelSecret = container.querySelector('#lineChannelSecret').value;
+    const accessToken = container.querySelector('#lineAccessToken').value;
+
+    // 如果都沒填，提示用戶
+    if (!channelId && !channelSecret && !accessToken) {
+      alert('請至少填寫 Channel ID');
+      return;
+    }
+
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = `<span class="icon">${getIcon('loading', 'mdi-spin')}</span><span>儲存中...</span>`;
+
+    try {
+      const data = {};
+      if (channelId) data.channel_id = channelId;
+      if (channelSecret) data.channel_secret = channelSecret;
+      if (accessToken) data.access_token = accessToken;
+
+      await APIClient.put(`/admin/tenants/${tenantInfo.id}/linebot`, data);
+
+      // 清空密碼欄位
+      container.querySelector('#lineChannelSecret').value = '';
+      container.querySelector('#lineAccessToken').value = '';
+
+      // 重新載入設定
+      await loadLinebotSettings(container);
+
+      if (typeof DesktopModule !== 'undefined') {
+        DesktopModule.showToast('Line Bot 設定已儲存', 'check');
+      }
+    } catch (error) {
+      alert(`儲存失敗：${error.message}`);
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.innerHTML = `<span class="icon">${getIcon('content-save')}</span><span>儲存設定</span>`;
+    }
+  }
+
+  /**
+   * 清除 Line Bot 設定
+   * @param {HTMLElement} container
+   */
+  async function clearLinebotSettings(container) {
+    if (!confirm('確定要清除 Line Bot 設定嗎？\n清除後將使用平台共用 Bot。')) {
+      return;
+    }
+
+    const clearBtn = container.querySelector('#clearLinebotBtn');
+    clearBtn.disabled = true;
+    clearBtn.innerHTML = `<span class="icon">${getIcon('loading', 'mdi-spin')}</span><span>清除中...</span>`;
+
+    try {
+      await APIClient.delete(`/admin/tenants/${tenantInfo.id}/linebot`);
+
+      // 清空表單
+      container.querySelector('#lineChannelId').value = '';
+      container.querySelector('#lineChannelSecret').value = '';
+      container.querySelector('#lineAccessToken').value = '';
+
+      // 重新載入設定
+      await loadLinebotSettings(container);
+
+      if (typeof DesktopModule !== 'undefined') {
+        DesktopModule.showToast('Line Bot 設定已清除', 'check');
+      }
+    } catch (error) {
+      alert(`清除失敗：${error.message}`);
+    } finally {
+      clearBtn.disabled = false;
+      clearBtn.innerHTML = `<span class="icon">${getIcon('delete')}</span><span>清除設定</span>`;
+    }
   }
 
   /**
@@ -450,7 +702,8 @@ const TenantAdminApp = (function () {
         enable_ai_assistant: container.querySelector('#enableAiAssistant').checked,
         enable_knowledge_base: container.querySelector('#enableKnowledgeBase').checked,
         enable_project_management: container.querySelector('#enableProjectManagement').checked,
-        enable_inventory: container.querySelector('#enableInventory').checked
+        enable_inventory: container.querySelector('#enableInventory').checked,
+        enable_vendor_management: container.querySelector('#enableVendorManagement').checked
       };
 
       await APIClient.updateTenantSettings({ name, settings });
