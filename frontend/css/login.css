@@ -316,3 +316,143 @@
   background: radial-gradient(circle, rgba(255, 160, 80, 0.08) 0%, transparent 70%);
 }
 */
+
+/* ==========================================================================
+   Change Password Dialog
+   ========================================================================== */
+
+.change-password-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--bg-overlay-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: var(--spacing-lg);
+}
+
+.change-password-dialog {
+  width: 100%;
+  max-width: 400px;
+  background-color: rgba(26, 26, 26, 0.95);
+  border: 1px solid var(--interactive-border);
+  border-radius: var(--radius-xl);
+  padding: var(--spacing-xl);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(6px);
+}
+
+:root[data-theme="light"] .change-password-dialog {
+  background-color: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+}
+
+.change-password-header {
+  text-align: center;
+  margin-bottom: var(--spacing-lg);
+}
+
+.change-password-header h2 {
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-xs) 0;
+}
+
+.change-password-header p {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.change-password-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+/* 變更密碼表單的輸入框樣式 */
+.change-password-form .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.change-password-form .form-group label {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.change-password-form .form-group .input {
+  width: 100%;
+  height: 44px;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--color-gray-dark);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: var(--font-size-base);
+  line-height: 1.5;
+  transition: all var(--transition-fast);
+}
+
+.change-password-form .form-group .input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  background-color: var(--bg-surface-darker);
+}
+
+.change-password-form .form-group .input::placeholder {
+  color: var(--text-muted);
+}
+
+/* 覆蓋瀏覽器自動填入樣式 */
+.change-password-form .form-group .input:-webkit-autofill,
+.change-password-form .form-group .input:-webkit-autofill:hover,
+.change-password-form .form-group .input:-webkit-autofill:focus,
+.change-password-form .form-group .input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #1a1a1a inset !important;
+  -webkit-text-fill-color: var(--text-primary) !important;
+  caret-color: var(--text-primary);
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+:root[data-theme="light"] .change-password-form .form-group .input:-webkit-autofill,
+:root[data-theme="light"] .change-password-form .form-group .input:-webkit-autofill:hover,
+:root[data-theme="light"] .change-password-form .form-group .input:-webkit-autofill:focus,
+:root[data-theme="light"] .change-password-form .form-group .input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #f5f5f5 inset !important;
+  -webkit-text-fill-color: var(--text-primary) !important;
+}
+
+.change-password-error {
+  display: none;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: rgba(230, 80, 80, 0.1);
+  border: 1px solid rgba(230, 80, 80, 0.3);
+  border-radius: var(--radius-md);
+  color: var(--color-error);
+  font-size: var(--font-size-sm);
+  text-align: center;
+}
+
+.change-password-error.show {
+  display: block;
+}
+
+.change-password-actions {
+  margin-top: var(--spacing-sm);
+}
+
+.change-password-actions .btn {
+  width: 100%;
+  height: 48px;
+  font-size: var(--font-size-base);
+  font-weight: 600;
+}

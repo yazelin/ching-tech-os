@@ -200,6 +200,150 @@ const LoginModule = (function() {
   }
 
   /**
+   * Call change password API
+   * @param {string} token - Auth token
+   * @param {string} currentPassword
+   * @param {string} newPassword
+   * @returns {Promise<{success: boolean, error?: string}>}
+   */
+  async function callChangePasswordAPI(token, currentPassword, newPassword) {
+    try {
+      const response = await fetch(`${API_BASE}/api/auth/change-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          current_password: currentPassword,
+          new_password: newPassword,
+        }),
+      });
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Change password API error:', error);
+      return {
+        success: false,
+        error: '無法連線至伺服器',
+      };
+    }
+  }
+
+  /**
+   * Show change password dialog
+   * @param {string} token - Auth token
+   * @param {string} currentPassword - The password used to login
+   * @returns {Promise<boolean>} true if password was changed successfully
+   */
+  async function showChangePasswordDialog(token, currentPassword) {
+    return new Promise((resolve) => {
+      // 建立對話框 HTML
+      const dialogHTML = `
+        <div class="change-password-overlay" id="changePasswordOverlay">
+          <div class="change-password-dialog">
+            <div class="change-password-header">
+              <h2>變更密碼</h2>
+              <p>您需要設定新的密碼才能繼續使用</p>
+            </div>
+            <form id="changePasswordForm" class="change-password-form">
+              <div class="change-password-error" id="changePasswordError"></div>
+              <div class="form-group">
+                <label for="newPassword">新密碼</label>
+                <input
+                  type="password"
+                  id="newPassword"
+                  name="newPassword"
+                  class="input"
+                  placeholder="請輸入新密碼（至少 8 個字元）"
+                  required
+                  minlength="8"
+                >
+              </div>
+              <div class="form-group">
+                <label for="confirmPassword">確認新密碼</label>
+                <input
+                  type="password"
+                  id="confirmPassword"
+                  name="confirmPassword"
+                  class="input"
+                  placeholder="請再次輸入新密碼"
+                  required
+                >
+              </div>
+              <div class="change-password-actions">
+                <button type="submit" class="btn btn-accent" id="changePasswordSubmit">
+                  確認變更
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      `;
+
+      // 加入頁面
+      document.body.insertAdjacentHTML('beforeend', dialogHTML);
+
+      const overlay = document.getElementById('changePasswordOverlay');
+      const form = document.getElementById('changePasswordForm');
+      const errorDiv = document.getElementById('changePasswordError');
+      const submitBtn = document.getElementById('changePasswordSubmit');
+      const newPasswordInput = document.getElementById('newPassword');
+      const confirmPasswordInput = document.getElementById('confirmPassword');
+
+      // Focus 新密碼輸入框
+      newPasswordInput.focus();
+
+      // 處理表單提交
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const newPassword = newPasswordInput.value;
+        const confirmPassword = confirmPasswordInput.value;
+
+        // 驗證密碼
+        if (newPassword.length < 8) {
+          errorDiv.textContent = '密碼至少需要 8 個字元';
+          errorDiv.classList.add('show');
+          return;
+        }
+
+        if (newPassword !== confirmPassword) {
+          errorDiv.textContent = '兩次輸入的密碼不一致';
+          errorDiv.classList.add('show');
+          return;
+        }
+
+        // 禁用按鈕
+        submitBtn.disabled = true;
+        submitBtn.textContent = '變更中...';
+        errorDiv.classList.remove('show');
+
+        try {
+          const result = await callChangePasswordAPI(token, currentPassword, newPassword);
+
+          if (result.success) {
+            // 移除對話框
+            overlay.remove();
+            resolve(true);
+          } else {
+            errorDiv.textContent = result.error || '變更密碼失敗';
+            errorDiv.classList.add('show');
+            submitBtn.disabled = false;
+            submitBtn.textContent = '確認變更';
+          }
+        } catch (error) {
+          errorDiv.textContent = '發生錯誤，請稍後再試';
+          errorDiv.classList.add('show');
+          submitBtn.disabled = false;
+          submitBtn.textContent = '確認變更';
+        }
+      });
+    });
+  }
+
+  /**
    * Handle login form submission
    * @param {Event} event
    */
@@ -248,9 +392,34 @@ const LoginModule = (function() {
       const result = await callLoginAPI(username, password, deviceInfo, tenantCode);
 
       if (result.success && result.token) {
-        createSession(result.username, result.token, result.tenant, result.role);
-        // Redirect to desktop
-        window.location.href = 'index.html';
+        // 檢查是否需要變更密碼
+        if (result.must_change_password) {
+          // 先建立 session（需要 token 來呼叫變更密碼 API）
+          createSession(result.username, result.token, result.tenant, result.role);
+
+          // 還原按鈕狀態
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = '<span class="icon" id="iconLogin2"></span> 登入';
+          if (document.getElementById('iconLogin2')) {
+            document.getElementById('iconLogin2').innerHTML = typeof getIcon === 'function' ? getIcon('login') : '';
+          }
+
+          // 顯示變更密碼對話框
+          const changed = await showChangePasswordDialog(result.token, password);
+          if (changed) {
+            // 密碼已變更，導向桌面
+            window.location.href = 'index.html';
+          } else {
+            // 使用者未完成密碼變更（不應該發生，因為對話框沒有取消按鈕）
+            clearSession();
+            errorDiv.textContent = '請完成密碼變更才能繼續使用';
+            errorDiv.classList.add('show');
+          }
+        } else {
+          // 不需要變更密碼，直接建立 session 並導向桌面
+          createSession(result.username, result.token, result.tenant, result.role);
+          window.location.href = 'index.html';
+        }
       } else {
         errorDiv.textContent = result.error || '登入失敗';
         errorDiv.classList.add('show');
@@ -260,7 +429,10 @@ const LoginModule = (function() {
       errorDiv.classList.add('show');
     } finally {
       submitBtn.disabled = false;
-      submitBtn.innerHTML = '<span class="mdi mdi-login"></span> 登入';
+      submitBtn.innerHTML = '<span class="icon" id="iconLoginFinal"></span> 登入';
+      if (document.getElementById('iconLoginFinal')) {
+        document.getElementById('iconLoginFinal').innerHTML = typeof getIcon === 'function' ? getIcon('login') : '';
+      }
     }
   }
 

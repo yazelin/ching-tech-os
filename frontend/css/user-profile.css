@@ -242,3 +242,67 @@
     justify-content: center;
   }
 }
+
+/* ==========================================================================
+   Password Status
+   ========================================================================== */
+.password-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background-color: var(--bg-surface);
+  border-radius: var(--radius-sm);
+}
+
+.password-status .status-text {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.password-status .btn {
+  flex-shrink: 0;
+}
+
+/* ==========================================================================
+   Change Password Modal
+   ========================================================================== */
+.change-password-modal {
+  max-width: 400px;
+  width: 90%;
+}
+
+.change-password-modal .form-group {
+  margin-bottom: var(--spacing-md);
+}
+
+.change-password-modal .form-group:last-of-type {
+  margin-bottom: 0;
+}
+
+.change-password-modal .form-group label {
+  display: block;
+  margin-bottom: var(--spacing-xs);
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.change-password-modal .form-group .input {
+  width: 100%;
+  padding: var(--spacing-sm);
+  background-color: var(--bg-surface-dark);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+}
+
+.change-password-modal .form-group .input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.change-password-modal #changePasswordMessage {
+  margin-top: var(--spacing-md);
+}

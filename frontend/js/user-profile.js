@@ -44,6 +44,11 @@ const UserProfileModule = (function() {
    * @param {Object} user
    */
   function renderUserInfo(contentEl, user) {
+    // 判斷是否已設定密碼
+    const hasPassword = user.has_password || false;
+    const passwordBtnText = hasPassword ? '變更密碼' : '設定密碼';
+    const passwordBtnIcon = hasPassword ? 'lock-reset' : 'lock-plus';
+
     contentEl.innerHTML = `
       <div class="user-profile-main">
         <div class="user-profile-left">
@@ -69,6 +74,17 @@ const UserProfileModule = (function() {
             <div class="info-text">${formatDateTime(user.last_login_at)}</div>
           </div>
 
+          <div class="form-group">
+            <label>密碼</label>
+            <div class="password-status">
+              <span class="status-text">${hasPassword ? '已設定' : '尚未設定（使用 NAS 認證）'}</span>
+              <button class="btn btn-sm btn-ghost" id="changePasswordBtn">
+                <span class="icon">${getIcon(passwordBtnIcon)}</span>
+                ${passwordBtnText}
+              </button>
+            </div>
+          </div>
+
           <div id="userProfileMessage"></div>
         </div>
       </div>
@@ -81,6 +97,148 @@ const UserProfileModule = (function() {
     // Bind save button
     const saveBtn = contentEl.querySelector('#saveProfileBtn');
     saveBtn.addEventListener('click', () => handleSave(contentEl));
+
+    // Bind change password button
+    const changePasswordBtn = contentEl.querySelector('#changePasswordBtn');
+    changePasswordBtn.addEventListener('click', () => openChangePasswordDialog(hasPassword));
+  }
+
+  /**
+   * Open change password dialog
+   * @param {boolean} hasPassword - 是否已有密碼
+   */
+  function openChangePasswordDialog(hasPassword) {
+    const dialog = document.createElement('div');
+    dialog.className = 'modal-overlay';
+    dialog.innerHTML = `
+      <div class="modal change-password-modal">
+        <div class="modal-header">
+          <h3>${hasPassword ? '變更密碼' : '設定密碼'}</h3>
+          <button class="btn btn-ghost btn-sm modal-close-btn">
+            <span class="icon">${getIcon('close')}</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          ${hasPassword ? `
+            <div class="form-group">
+              <label for="currentPassword">目前密碼</label>
+              <input type="password" id="currentPassword" class="input" placeholder="輸入目前密碼">
+            </div>
+          ` : `
+            <p class="form-hint" style="margin-bottom: var(--spacing-md);">
+              <span class="icon">${getIcon('information')}</span>
+              設定密碼後，您可以使用密碼登入，不再依賴 NAS 認證。
+            </p>
+          `}
+          <div class="form-group">
+            <label for="newPassword">新密碼</label>
+            <input type="password" id="newPassword" class="input" placeholder="至少 8 個字元">
+          </div>
+          <div class="form-group">
+            <label for="confirmPassword">確認新密碼</label>
+            <input type="password" id="confirmPassword" class="input" placeholder="再次輸入新密碼">
+          </div>
+          <div id="changePasswordMessage"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost modal-cancel-btn">取消</button>
+          <button class="btn btn-primary modal-confirm-btn">${hasPassword ? '變更密碼' : '設定密碼'}</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(dialog);
+
+    // Close handlers
+    const closeDialog = () => dialog.remove();
+    dialog.querySelector('.modal-close-btn').addEventListener('click', closeDialog);
+    dialog.querySelector('.modal-cancel-btn').addEventListener('click', closeDialog);
+    dialog.addEventListener('click', (e) => {
+      if (e.target === dialog) closeDialog();
+    });
+
+    // Confirm handler
+    dialog.querySelector('.modal-confirm-btn').addEventListener('click', async () => {
+      const currentPassword = hasPassword ? dialog.querySelector('#currentPassword').value : null;
+      const newPassword = dialog.querySelector('#newPassword').value;
+      const confirmPassword = dialog.querySelector('#confirmPassword').value;
+      const messageEl = dialog.querySelector('#changePasswordMessage');
+      const confirmBtn = dialog.querySelector('.modal-confirm-btn');
+
+      // Validation
+      if (hasPassword && !currentPassword) {
+        messageEl.className = 'user-profile-message error';
+        messageEl.textContent = '請輸入目前密碼';
+        return;
+      }
+      if (!newPassword || newPassword.length < 8) {
+        messageEl.className = 'user-profile-message error';
+        messageEl.textContent = '新密碼至少需要 8 個字元';
+        return;
+      }
+      if (newPassword !== confirmPassword) {
+        messageEl.className = 'user-profile-message error';
+        messageEl.textContent = '兩次輸入的密碼不一致';
+        return;
+      }
+
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = '處理中...';
+
+      try {
+        const result = await changePassword(currentPassword, newPassword);
+        if (result.success) {
+          closeDialog();
+          showToast(hasPassword ? '密碼已變更' : '密碼已設定', 'check');
+          // 重新載入使用者資訊以更新狀態
+          if (currentWindowId) {
+            const windowEl = document.getElementById(currentWindowId);
+            if (windowEl) {
+              initWindow(windowEl);
+            }
+          }
+        } else {
+          messageEl.className = 'user-profile-message error';
+          messageEl.textContent = result.error || '操作失敗';
+          confirmBtn.disabled = false;
+          confirmBtn.textContent = hasPassword ? '變更密碼' : '設定密碼';
+        }
+      } catch (error) {
+        messageEl.className = 'user-profile-message error';
+        messageEl.textContent = error.message || '操作失敗';
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = hasPassword ? '變更密碼' : '設定密碼';
+      }
+    });
+
+    // Focus first input
+    setTimeout(() => {
+      const firstInput = dialog.querySelector(hasPassword ? '#currentPassword' : '#newPassword');
+      if (firstInput) firstInput.focus();
+    }, 100);
+  }
+
+  /**
+   * Call change password API
+   * @param {string|null} currentPassword
+   * @param {string} newPassword
+   * @returns {Promise<Object>}
+   */
+  async function changePassword(currentPassword, newPassword) {
+    const token = LoginModule.getToken();
+    const response = await fetch('/api/auth/change-password', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword
+      })
+    });
+
+    return response.json();
   }
 
   /**
