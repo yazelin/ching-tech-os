@@ -1,7 +1,7 @@
 """建立 password_reset_tokens 表
 
-Revision ID: 047
-Revises: 046
+Revision ID: 058
+Revises: 057
 Create Date: 2026-01-21
 
 用於 Email 密碼重設的 token 管理
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers
-revision = "047"
-down_revision = "046"
+revision = "058"
+down_revision = "057"
 branch_labels = None
 depends_on = None
 

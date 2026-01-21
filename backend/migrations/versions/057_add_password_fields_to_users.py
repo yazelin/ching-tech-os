@@ -1,7 +1,7 @@
 """為 users 表新增密碼相關欄位
 
-Revision ID: 046
-Revises: 045
+Revision ID: 057
+Revises: 056
 Create Date: 2026-01-21
 
 支援獨立會員系統的密碼欄位：
@@ -16,8 +16,8 @@ from alembic import op
 import sqlalchemy as sa
 
 # revision identifiers
-revision = "046"
-down_revision = "045"
+revision = "057"
+down_revision = "056"
 branch_labels = None
 depends_on = None
 

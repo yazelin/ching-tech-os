@@ -1,7 +1,7 @@
 """為庫存管理相關表新增 tenant_id 欄位
 
-Revision ID: 042
-Revises: 041
+Revision ID: 053
+Revises: 052
 Create Date: 2026-01-20
 
 影響表格：
@@ -15,8 +15,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers
-revision = "042"
-down_revision = "041"
+revision = "053"
+down_revision = "052"
 branch_labels = None
 depends_on = None
 

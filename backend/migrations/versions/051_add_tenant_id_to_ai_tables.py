@@ -1,7 +1,7 @@
 """為 AI 相關表新增 tenant_id 欄位
 
-Revision ID: 040
-Revises: 039
+Revision ID: 051
+Revises: 050
 Create Date: 2026-01-20
 
 影響表格：
@@ -16,8 +16,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers
-revision = "040"
-down_revision = "039"
+revision = "051"
+down_revision = "050"
 branch_labels = None
 depends_on = None
 

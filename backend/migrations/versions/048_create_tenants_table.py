@@ -1,7 +1,7 @@
 """建立租戶（Tenant）相關資料表
 
-Revision ID: 037
-Revises: 036
+Revision ID: 048
+Revises: 038
 Create Date: 2026-01-20
 """
 
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers
-revision = "037"
-down_revision = "036"
+revision = "048"
+down_revision = "038"
 branch_labels = None
 depends_on = None
 

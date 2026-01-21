@@ -2,16 +2,16 @@
 
 原本的唯一約束只在 name 欄位，多租戶模式需要改為 (name, tenant_id) 組合唯一。
 
-Revision ID: 045
-Revises: 044
+Revision ID: 056
+Revises: 055
 Create Date: 2025-01-20
 """
 
 from alembic import op
 
 # revision identifiers
-revision = "045"
-down_revision = "044"
+revision = "056"
+down_revision = "055"
 branch_labels = None
 depends_on = None
 

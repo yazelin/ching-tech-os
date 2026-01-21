@@ -1,7 +1,7 @@
 """為 Line Bot 相關表新增 tenant_id 欄位
 
-Revision ID: 041
-Revises: 040
+Revision ID: 052
+Revises: 051
 Create Date: 2026-01-20
 
 影響表格：
@@ -17,8 +17,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers
-revision = "041"
-down_revision = "040"
+revision = "052"
+down_revision = "051"
 branch_labels = None
 depends_on = None
 

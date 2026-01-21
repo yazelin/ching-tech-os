@@ -1,7 +1,7 @@
 """為 users 表新增 tenant_id 欄位
 
-Revision ID: 038
-Revises: 037
+Revision ID: 049
+Revises: 048
 Create Date: 2026-01-20
 """
 
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers
-revision = "038"
-down_revision = "037"
+revision = "049"
+down_revision = "048"
 branch_labels = None
 depends_on = None
 

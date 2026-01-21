@@ -1,7 +1,7 @@
 """為專案相關表新增 tenant_id 欄位
 
-Revision ID: 039
-Revises: 038
+Revision ID: 050
+Revises: 049
 Create Date: 2026-01-20
 
 影響表格：
@@ -19,8 +19,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers
-revision = "039"
-down_revision = "038"
+revision = "050"
+down_revision = "049"
 branch_labels = None
 depends_on = None
 

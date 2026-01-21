@@ -1,7 +1,7 @@
 """設定 tenant_id 欄位的 NOT NULL 約束
 
-Revision ID: 044
-Revises: 043
+Revision ID: 055
+Revises: 054
 Create Date: 2026-01-20
 
 此 migration 應在確認所有現有資料都已遷移到預設租戶後執行。
@@ -17,8 +17,8 @@ Create Date: 2026-01-20
 from alembic import op
 
 # revision identifiers
-revision = "044"
-down_revision = "043"
+revision = "055"
+down_revision = "054"
 branch_labels = None
 depends_on = None
 
