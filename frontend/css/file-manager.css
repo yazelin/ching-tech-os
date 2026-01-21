@@ -1023,3 +1023,263 @@
     color: var(--text-primary);
   }
 }
+
+/* ==========================================================================
+   NAS 連線對話框
+   ========================================================================== */
+.fm-nas-connect-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--bg-overlay-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1002;
+}
+
+.fm-nas-connect-dialog {
+  background-color: var(--bg-glass-heavy);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  min-width: 380px;
+  max-width: 440px;
+}
+
+.fm-nas-connect-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-md);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.fm-nas-connect-title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: var(--font-size-md);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.fm-nas-connect-title .icon svg {
+  width: 20px;
+  height: 20px;
+  color: var(--color-primary);
+}
+
+.fm-nas-connect-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.fm-nas-connect-close:hover {
+  background-color: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+.fm-nas-connect-close .icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.fm-nas-connect-body {
+  padding: var(--spacing-lg);
+}
+
+.fm-nas-connect-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.fm-nas-connect-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.fm-nas-connect-field label {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.fm-nas-connect-field input {
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: var(--bg-surface-darker);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.fm-nas-connect-field input:focus {
+  border-color: var(--color-accent);
+}
+
+.fm-nas-connect-field input::placeholder {
+  color: var(--text-muted);
+}
+
+.fm-nas-connect-error {
+  display: none;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: rgba(230, 80, 80, 0.1);
+  border: 1px solid rgba(230, 80, 80, 0.3);
+  border-radius: var(--radius-md);
+  color: var(--color-error);
+  font-size: var(--font-size-sm);
+  text-align: center;
+}
+
+.fm-nas-connect-error.show {
+  display: block;
+}
+
+.fm-nas-connect-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.fm-nas-connect-btn {
+  padding: var(--spacing-sm) var(--spacing-lg);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.fm-nas-connect-btn-cancel {
+  background-color: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-strong);
+}
+
+.fm-nas-connect-btn-cancel:hover {
+  background-color: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+.fm-nas-connect-btn-connect {
+  background-color: var(--color-primary);
+  color: white;
+  border: none;
+}
+
+.fm-nas-connect-btn-connect:hover {
+  background-color: var(--color-primary-hover);
+}
+
+.fm-nas-connect-btn-connect:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 已連線狀態指示 */
+.fm-nas-status {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  background-color: var(--bg-surface-dark);
+  border-radius: var(--radius-sm);
+  margin-left: auto;
+}
+
+.fm-nas-status.connected {
+  color: var(--color-success);
+}
+
+.fm-nas-status .icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* 已儲存的連線列表 */
+.fm-nas-saved-connections {
+  margin-top: var(--spacing-md);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.fm-nas-saved-label {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  margin-bottom: var(--spacing-sm);
+}
+
+.fm-nas-saved-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.fm-nas-saved-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm);
+  background-color: var(--bg-surface-darker);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.fm-nas-saved-item:hover {
+  background-color: var(--hover-bg);
+}
+
+.fm-nas-saved-item .icon svg {
+  width: 16px;
+  height: 16px;
+  color: var(--color-primary);
+}
+
+.fm-nas-saved-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.fm-nas-saved-item-host {
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fm-nas-saved-item-user {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}
+
+/* RWD 調整 */
+@media (max-width: 480px) {
+  .fm-nas-connect-dialog {
+    min-width: 0;
+    max-width: none;
+    width: calc(100% - 32px);
+    margin: var(--spacing-md);
+  }
+}

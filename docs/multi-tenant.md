@@ -222,17 +222,85 @@ merge_mode: "replace" | "merge"  // 取代或合併
 
 ## Line Bot 整合
 
-### 群組綁定
+系統支援兩種 Line Bot 部署模式：
+
+### 獨立 Bot 模式
+
+租戶可設定自己的 Line Bot，Bot 加入群組時自動歸屬到該租戶。
+
+**設定步驟**：
+1. 租戶在 Line Developers Console 申請 Messaging API Channel
+2. 設定 Webhook URL：`https://your-domain/api/linebot/webhook`
+3. 平台管理員在租戶管理介面設定憑證：
+   - Channel ID
+   - Channel Secret（加密儲存）
+   - Channel Access Token（加密儲存）
+
+**API 端點**：
+
+| 端點 | 方法 | 說明 |
+|------|------|------|
+| `/api/admin/tenants/{id}/linebot` | GET | 取得設定狀態 |
+| `/api/admin/tenants/{id}/linebot` | PUT | 設定憑證 |
+| `/api/admin/tenants/{id}/linebot/test` | POST | 測試憑證 |
+| `/api/admin/tenants/{id}/linebot` | DELETE | 清除設定 |
+
+**設定環境變數**：
+```bash
+# Line Bot 憑證加密金鑰（必須設定，32 bytes）
+TENANT_SECRET_KEY=your-32-byte-secret-key-here
+```
+
+### 共用 Bot 模式
+
+多個租戶共用平台提供的 Line Bot。
+
+**群組綁定**：
 
 Line 群組需要綁定到租戶才能使用 AI 功能：
 
 1. 將 Bot 加入群組
-2. 在群組中輸入：`@CTOS 綁定 {租戶代碼}`
+2. 在群組中輸入：`/綁定 {租戶代碼}` 或 `/bind {租戶代碼}`
 3. Bot 確認綁定成功
+
+**自動租戶判定**：
+
+未綁定群組的訊息處理優先順序：
+1. 群組綁定的租戶
+2. 發送者 CTOS 帳號綁定的租戶
+3. 預設租戶
 
 ### 解除綁定
 
 租戶管理員可在 Line Bot 管理介面解除群組綁定。
+
+### Webhook 多租戶驗證
+
+Webhook 收到訊息時的驗證流程：
+
+```
+收到 Webhook 請求
+        │
+        ▼
+遍歷各租戶 channel_secret 驗證
+        │
+    ┌───┴───┐
+    │       │
+  成功    全部失敗
+    │       │
+    ▼       ▼
+使用該租戶  嘗試環境變數 secret
+    │       │
+    │   ┌───┴───┐
+    │   │       │
+    │ 成功    失敗
+    │   │       │
+    │   ▼       ▼
+    │ 從群組綁定  拒絕請求
+    │ 判斷租戶
+    │   │
+    └───┴─── 繼續處理訊息
+```
 
 ## MCP 工具
 

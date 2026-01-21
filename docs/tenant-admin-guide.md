@@ -163,17 +163,90 @@ export.zip
 
 ## Line Bot 管理
 
-### 綁定群組
+ChingTech OS 支援兩種 Line Bot 模式：
 
-要在 Line 群組中使用 AI 功能，需要先綁定群組到租戶：
+| 模式 | 說明 |
+|------|------|
+| **獨立 Bot** | 租戶使用自己申請的 Line Bot，品牌識別清晰 |
+| **共用 Bot** | 使用平台提供的 Bot，需透過指令綁定群組 |
+
+### 設定獨立 Line Bot（推薦）
+
+如果您的組織希望使用自己的 Line Bot（自訂 Bot 名稱和頭像），請依照以下步驟設定：
+
+#### 步驟一：建立 Line Bot
+
+1. 前往 [Line Developers Console](https://developers.line.biz/console/)
+2. 建立新的 Provider（或使用現有的）
+3. 建立新的 **Messaging API Channel**
+4. 填寫基本資訊：
+   - Channel name：您的 Bot 名稱
+   - Channel description：Bot 描述
+   - Category：選擇適合的類別
+5. 同意條款並建立
+
+#### 步驟二：設定 Webhook
+
+1. 在 Channel 的 **Messaging API** 標籤頁
+2. 找到 **Webhook URL** 欄位
+3. 設定為：`https://your-domain/api/linebot/webhook`
+   - 將 `your-domain` 替換為實際的平台網址
+4. 開啟 **Use webhook** 開關
+5. 關閉 **Auto-reply messages**（讓 AI 處理回覆）
+
+#### 步驟三：取得憑證
+
+在 Line Developers Console 複製以下資訊：
+
+| 項目 | 位置 |
+|------|------|
+| **Channel ID** | Basic settings > Channel ID |
+| **Channel Secret** | Basic settings > Channel secret |
+| **Channel Access Token** | Messaging API > Channel access token（點擊 Issue 產生） |
+
+#### 步驟四：提交憑證給平台管理員
+
+將以下資訊提供給平台管理員：
+- Channel ID
+- Channel Secret
+- Channel Access Token
+
+> **安全提醒**：這些憑證非常敏感，請透過安全管道傳送，不要使用公開的通訊方式。
+
+平台管理員設定完成後，您的 Line Bot 就會自動連接到 ChingTech OS。
+
+#### 步驟五：驗證設定
+
+1. 將您的 Line Bot 加入測試群組
+2. 在群組中輸入 `@{您的 Bot 名稱} 你好`
+3. 如果 Bot 回應，表示設定成功
+
+### 使用共用 Bot
+
+如果使用平台提供的共用 Bot，需要將群組綁定到您的租戶。
+
+#### 綁定群組
 
 1. 將 ChingTech Bot 加入 Line 群組
-2. 在群組中輸入：`@CTOS 綁定 {您的租戶代碼}`
+2. 在群組中輸入綁定指令：
+   ```
+   /綁定 {您的租戶代碼}
+   ```
+   或
+   ```
+   /bind {您的租戶代碼}
+   ```
 3. Bot 會確認綁定成功
+
+> **提示**：租戶代碼可在租戶管理應用程式中查看，或詢問平台管理員。
 
 ### 查看綁定的群組
 
-在 Line Bot 管理應用程式中可以查看所有綁定的群組。
+在 Line Bot 管理應用程式中可以查看所有綁定的群組：
+
+1. 開啟「Line Bot」應用程式
+2. 在「群組」標籤頁查看已綁定的群組
+3. 可以看到群組名稱、成員數、最後活動時間
 
 ### 解除綁定
 
@@ -181,6 +254,22 @@ export.zip
 2. 找到要解除綁定的群組
 3. 點擊「解除綁定」
 4. 確認操作
+
+> **注意**：解除綁定後，該群組的歷史訊息會保留，但新訊息不再歸屬於您的租戶。
+
+### Line Bot 功能說明
+
+綁定成功後，您可以在 Line 群組中使用以下功能：
+
+| 功能 | 使用方式 |
+|------|----------|
+| AI 對話 | @ 提及 Bot 或回覆 Bot 訊息 |
+| 專案管理 | 「建立專案 XXX」、「查詢專案」 |
+| 知識庫 | 「記錄一下 XXX」、「搜尋 XXX」 |
+| NAS 搜尋 | 「找 XXX 檔案」、「給我 XXX 圖」 |
+| 清除對話 | `/新對話` 或 `/reset` |
+
+詳細功能說明請參考 [Line Bot 整合文件](linebot.md)。
 
 ## 常見問題
 
