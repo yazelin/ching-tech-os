@@ -103,6 +103,7 @@
 
 ## 8. 文件更新
 
-- [ ] 8.1 更新 `docs/linebot.md` 說明多租戶架構
-- [ ] 8.2 更新 `docs/multi-tenant.md` 說明 Line Bot 設定
-- [ ] 8.3 建立租戶 Line Bot 設定指南（給租戶管理員看）
+- [x] 8.1 更新 `docs/linebot.md` 說明多租戶架構
+- [x] 8.2 更新 `docs/multi-tenant.md` 說明 Line Bot 設定
+- [x] 8.3 建立租戶 Line Bot 設定指南（給租戶管理員看）
+  - 更新 `docs/tenant-admin-guide.md` 的「Line Bot 管理」章節
