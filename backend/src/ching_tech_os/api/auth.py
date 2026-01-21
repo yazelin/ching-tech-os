@@ -140,7 +140,9 @@ def can_manage_user(operator_role: str | None, target_role: str | None) -> bool:
     return operator_level > target_level
 
 
-async def require_platform_admin(session: SessionData) -> SessionData:
+async def require_platform_admin(
+    session: SessionData = Depends(get_current_session),
+) -> SessionData:
     """要求平台管理員權限
 
     Raises:
@@ -154,7 +156,9 @@ async def require_platform_admin(session: SessionData) -> SessionData:
     return session
 
 
-async def require_tenant_admin_or_above(session: SessionData) -> SessionData:
+async def require_tenant_admin_or_above(
+    session: SessionData = Depends(get_current_session),
+) -> SessionData:
     """要求租戶管理員或更高權限
 
     Raises:
