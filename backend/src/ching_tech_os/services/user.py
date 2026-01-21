@@ -199,13 +199,16 @@ async def create_user(
 
     async with get_connection() as conn:
         try:
+            # 判斷是否設定 password_changed_at
+            password_changed_at = datetime.now() if password_hash else None
+
             row = await conn.fetchrow(
                 """
                 INSERT INTO users (
                     username, tenant_id, password_hash, display_name, email,
                     role, must_change_password, password_changed_at
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, CASE WHEN $3 IS NOT NULL THEN NOW() ELSE NULL END)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                 RETURNING id
                 """,
                 username,
@@ -215,6 +218,7 @@ async def create_user(
                 email,
                 role,
                 must_change_password,
+                password_changed_at,
             )
             return row["id"]
         except Exception as e:
@@ -484,6 +488,36 @@ async def get_user_preferences(user_id: int) -> dict:
         if row and row["preferences"]:
             return _parse_preferences(row["preferences"])
         return {"theme": "dark"}
+
+
+async def get_user_role_and_permissions(user_id: int) -> dict:
+    """取得使用者的角色和權限設定
+
+    Args:
+        user_id: 使用者 ID
+
+    Returns:
+        包含 role、permissions 和 user_data 的 dict
+        - role: 使用者角色（user/tenant_admin/platform_admin）
+        - permissions: 從 preferences 中提取的 permissions 設定
+        - user_data: 完整的使用者資料（供 get_user_app_permissions_sync 使用）
+    """
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            "SELECT role, preferences FROM users WHERE id = $1",
+            user_id,
+        )
+        if not row:
+            return {"role": "user", "permissions": None, "user_data": None}
+
+        role = row["role"] or "user"
+        preferences = row["preferences"] or {}
+        permissions = preferences.get("permissions")
+
+        # 建立 user_data 供 get_user_app_permissions_sync 使用
+        user_data = {"preferences": preferences}
+
+        return {"role": role, "permissions": permissions, "user_data": user_data}
 
 
 async def update_user_preferences(user_id: int, preferences: dict) -> dict:

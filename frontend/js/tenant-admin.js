@@ -498,6 +498,9 @@ const TenantAdminApp = (function () {
                   <button class="btn btn-ghost btn-sm user-detail-btn" data-user-id="${user.id}" title="編輯">
                     <span class="icon">${getIcon('pencil')}</span>
                   </button>
+                  <button class="btn btn-ghost btn-sm user-permissions-btn" data-user-id="${user.id}" data-username="${escapeHtml(user.display_name || user.username)}" data-role="${user.role}" title="設定權限">
+                    <span class="icon">${getIcon('shield-edit')}</span>
+                  </button>
                   <button class="btn btn-ghost btn-sm user-password-btn" data-user-id="${user.id}" data-username="${escapeHtml(user.display_name || user.username)}" title="重設密碼">
                     <span class="icon">${getIcon('lock-reset')}</span>
                   </button>
@@ -523,6 +526,10 @@ const TenantAdminApp = (function () {
       btn.addEventListener('click', () => openUserDetailDialog(windowEl, btn.dataset.userId));
     });
 
+    container.querySelectorAll('.user-permissions-btn').forEach(btn => {
+      btn.addEventListener('click', () => openUserPermissionsDialog(windowEl, btn.dataset.userId, btn.dataset.username, btn.dataset.role));
+    });
+
     container.querySelectorAll('.user-password-btn').forEach(btn => {
       btn.addEventListener('click', () => openResetPasswordDialog(windowEl, btn.dataset.userId, btn.dataset.username));
     });
@@ -534,6 +541,162 @@ const TenantAdminApp = (function () {
     container.querySelectorAll('.user-activate-btn').forEach(btn => {
       btn.addEventListener('click', () => activateUser(windowEl, btn.dataset.userId, btn.dataset.username));
     });
+  }
+
+  /**
+   * 開啟使用者權限設定對話框
+   * @param {HTMLElement} windowEl
+   * @param {string} userId
+   * @param {string} username
+   * @param {string} userRole - 目標使用者的角色
+   */
+  async function openUserPermissionsDialog(windowEl, userId, username, userRole) {
+    // 取得目前登入者資訊
+    const session = LoginModule.getSession();
+    const currentUserId = session?.user_id;
+    const currentRole = session?.role;
+
+    // 檢查是否嘗試修改自己的權限
+    if (String(currentUserId) === String(userId)) {
+      showToast('無法修改自己的權限', 'alert');
+      return;
+    }
+
+    // 檢查權限階層：租戶管理員只能管理一般使用者
+    if (currentRole === 'tenant_admin' && userRole !== 'user') {
+      showToast('無法修改管理員的權限', 'alert');
+      return;
+    }
+
+    const permDialog = document.createElement('div');
+    permDialog.className = 'tenant-admin-dialog-overlay';
+    permDialog.innerHTML = `
+      <div class="tenant-admin-dialog" style="max-width: 500px;">
+        <div class="tenant-admin-dialog-header">
+          <h3>
+            <span class="icon">${getIcon('shield-edit')}</span>
+            設定 App 權限
+          </h3>
+          <button class="btn btn-ghost btn-sm dialog-close-btn">
+            <span class="icon">${getIcon('close')}</span>
+          </button>
+        </div>
+        <div class="tenant-admin-dialog-body">
+          <p class="user-perm-target">使用者：<strong>${escapeHtml(username)}</strong></p>
+          <div class="tenant-admin-loading" id="perm-loading">
+            <span class="icon">${getIcon('loading', 'mdi-spin')}</span>
+            <span>載入中...</span>
+          </div>
+          <div id="perm-content" style="display: none;"></div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(permDialog);
+
+    // 關閉對話框
+    const closeDialog = () => permDialog.remove();
+    permDialog.querySelector('.dialog-close-btn').addEventListener('click', closeDialog);
+    permDialog.addEventListener('click', (e) => {
+      if (e.target === permDialog) closeDialog();
+    });
+
+    // 載入使用者權限和預設權限
+    const loading = permDialog.querySelector('#perm-loading');
+    const content = permDialog.querySelector('#perm-content');
+
+    try {
+      const [defaultPerms, userInfo] = await Promise.all([
+        APIClient.get('/admin/default-permissions'),
+        APIClient.get('/tenant/users?include_inactive=true')
+      ]);
+
+      // 找到目標使用者
+      const targetUser = (userInfo.users || []).find(u => String(u.id) === String(userId));
+      if (!targetUser) {
+        throw new Error('找不到使用者');
+      }
+
+      const currentPerms = targetUser.permissions?.apps || {};
+      const appNames = defaultPerms.app_names || {};
+
+      // 渲染權限設定表單
+      content.innerHTML = `
+        <p class="perm-hint">
+          <span class="icon">${getIcon('information-outline')}</span>
+          控制此使用者可以使用的應用程式功能（Web 介面和 Line Bot）
+        </p>
+        <div class="perm-app-list">
+          ${Object.keys(defaultPerms.apps).filter(appId => appId !== 'platform-admin' && appId !== 'tenant-admin').map(appId => {
+            // 一般使用者的預設值是 false（除非明確開啟）
+            const isEnabled = currentPerms[appId] === true;
+            const appName = appNames[appId] || appId;
+            return `
+              <label class="perm-app-item">
+                <input type="checkbox" name="app_${appId}" ${isEnabled ? 'checked' : ''} />
+                <span class="perm-app-name">${escapeHtml(appName)}</span>
+              </label>
+            `;
+          }).join('')}
+        </div>
+      `;
+
+      // 添加操作按鈕
+      const footer = document.createElement('div');
+      footer.className = 'tenant-admin-dialog-footer';
+      footer.innerHTML = `
+        <button class="btn btn-ghost dialog-cancel-btn">取消</button>
+        <button class="btn btn-primary dialog-save-btn">
+          <span class="icon">${getIcon('content-save')}</span>
+          <span>儲存權限</span>
+        </button>
+      `;
+      permDialog.querySelector('.tenant-admin-dialog').appendChild(footer);
+
+      footer.querySelector('.dialog-cancel-btn').addEventListener('click', closeDialog);
+
+      // 儲存權限
+      footer.querySelector('.dialog-save-btn').addEventListener('click', async () => {
+        const saveBtn = footer.querySelector('.dialog-save-btn');
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = `<span class="icon">${getIcon('loading', 'mdi-spin')}</span><span>儲存中...</span>`;
+
+        try {
+          const apps = {};
+          Object.keys(defaultPerms.apps).filter(appId => appId !== 'platform-admin' && appId !== 'tenant-admin').forEach(appId => {
+            const checkbox = content.querySelector(`input[name="app_${appId}"]`);
+            if (checkbox) {
+              apps[appId] = checkbox.checked;
+            }
+          });
+
+          await APIClient.request(`/admin/users/${userId}/permissions`, {
+            method: 'PATCH',
+            body: JSON.stringify({ apps })
+          });
+
+          closeDialog();
+          showToast('權限設定已儲存', 'check');
+          // 重新載入使用者列表
+          loadUsers(windowEl);
+        } catch (error) {
+          saveBtn.disabled = false;
+          saveBtn.innerHTML = `<span class="icon">${getIcon('content-save')}</span><span>儲存權限</span>`;
+          alert(`儲存失敗：${error.message}`);
+        }
+      });
+
+      loading.style.display = 'none';
+      content.style.display = '';
+
+    } catch (error) {
+      loading.innerHTML = `
+        <div class="tenant-admin-error">
+          <span class="icon">${getIcon('alert-circle')}</span>
+          <span>載入失敗：${error.message}</span>
+        </div>
+      `;
+    }
   }
 
   /**
@@ -651,6 +814,14 @@ const TenantAdminApp = (function () {
         }
 
         const result = await APIClient.post('/tenant/users', requestBody);
+
+        // 檢查建立是否成功
+        if (!result.success) {
+          alert(`建立失敗：${result.error || '未知錯誤'}`);
+          confirmBtn.disabled = false;
+          confirmBtn.innerHTML = '建立帳號';
+          return;
+        }
 
         closeDialog();
         loadUsers(windowEl);
@@ -924,10 +1095,18 @@ const TenantAdminApp = (function () {
       confirmBtn.innerHTML = `<span class="icon">${getIcon('loading', 'mdi-spin')}</span> 重設中...`;
 
       try {
-        await APIClient.post(`/tenant/users/${userId}/reset-password`, {
+        const result = await APIClient.post(`/tenant/users/${userId}/reset-password`, {
           new_password: newPassword,
           must_change_password: mustChange
         });
+
+        // 檢查重設是否成功
+        if (!result.success) {
+          alert(`重設失敗：${result.error || '未知錯誤'}`);
+          confirmBtn.disabled = false;
+          confirmBtn.innerHTML = '重設密碼';
+          return;
+        }
 
         closeDialog();
         showToast('密碼已重設', 'check');
@@ -954,7 +1133,11 @@ const TenantAdminApp = (function () {
     }
 
     try {
-      await APIClient.post(`/tenant/users/${userId}/deactivate`);
+      const result = await APIClient.post(`/tenant/users/${userId}/deactivate`);
+      if (!result.success) {
+        alert(`停用失敗：${result.message || '未知錯誤'}`);
+        return;
+      }
       loadUsers(windowEl);
       showToast('使用者已停用', 'check');
     } catch (error) {
@@ -974,7 +1157,11 @@ const TenantAdminApp = (function () {
     }
 
     try {
-      await APIClient.post(`/tenant/users/${userId}/activate`);
+      const result = await APIClient.post(`/tenant/users/${userId}/activate`);
+      if (!result.success) {
+        alert(`啟用失敗：${result.message || '未知錯誤'}`);
+        return;
+      }
       loadUsers(windowEl);
       showToast('使用者已啟用', 'check');
     } catch (error) {
