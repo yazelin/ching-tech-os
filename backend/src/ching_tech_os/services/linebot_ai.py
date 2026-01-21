@@ -590,8 +590,35 @@ async def process_message_with_ai(
                 await reply_text(reply_token, error_msg)
             return error_msg
 
-        # 建立系統提示（加入群組資訊和內建工具說明）
-        system_prompt = await build_system_prompt(line_group_id, line_user_id, base_prompt, agent_tools, tenant_id)
+        # 先取得使用者權限（用於動態生成工具說明和過濾工具）
+        from .user import get_user_role_and_permissions
+        from .permissions import get_mcp_tools_for_user, get_user_app_permissions_sync
+        ctos_user_id = None
+        user_role = "user"
+        user_permissions = None
+        app_permissions: dict[str, bool] = {}
+        if line_user_id:
+            async with get_connection() as conn:
+                user_row = await conn.fetchrow(
+                    "SELECT user_id FROM line_users WHERE line_user_id = $1",
+                    line_user_id,
+                )
+                if user_row and user_row["user_id"]:
+                    ctos_user_id = user_row["user_id"]
+                    user_info = await get_user_role_and_permissions(ctos_user_id)
+                    user_role = user_info["role"]
+                    user_permissions = user_info["permissions"]
+                    # 計算 App 權限供 prompt 動態生成
+                    app_permissions = get_user_app_permissions_sync(user_role, user_info.get("user_data"))
+
+        # 若未關聯 CTOS 帳號，使用預設權限（一般使用者）
+        if not app_permissions:
+            app_permissions = get_user_app_permissions_sync("user", None)
+
+        # 建立系統提示（加入群組資訊、內建工具說明和動態 MCP 工具說明）
+        system_prompt = await build_system_prompt(
+            line_group_id, line_user_id, base_prompt, agent_tools, tenant_id, app_permissions
+        )
 
         # 取得對話歷史（20 則提供更好的上下文理解，包含圖片和檔案）
         # 排除當前訊息，避免重複（compose_prompt_with_history 會再加一次）
@@ -675,6 +702,10 @@ async def process_message_with_ai(
         # MCP 工具列表（動態取得）
         from .mcp_server import get_mcp_tool_names
         mcp_tools = await get_mcp_tool_names(exclude_group_only=not is_group)
+
+        # 過濾 MCP 工具（根據使用者權限，使用前面已取得的 user_role 和 user_permissions）
+        mcp_tools = get_mcp_tools_for_user(user_role, user_permissions, mcp_tools)
+        logger.info(f"使用者權限過濾後的 MCP 工具數量: {len(mcp_tools)}, role={user_role}")
 
         # 合併內建工具（從 Agent 設定）、MCP 工具和 Read（用於讀取圖片）
         # 加入 nanobanana 圖片生成/編輯工具
@@ -846,12 +877,14 @@ async def process_message_with_ai(
                 )
 
                 # 儲存圖片檔案記錄（讓用戶可以回覆 Bot 的圖片進行編輯）
+                # 傳遞 tenant_id 以支援租戶隔離
                 if nas_path:
                     await save_file_record(
                         message_uuid=bot_message_uuid,
                         file_type="image",
                         file_name=file_name,
                         nas_path=nas_path,
+                        tenant_id=tenant_id,
                     )
                     logger.debug(f"已儲存 Bot 圖片記錄: {file_name} -> {nas_path}")
 
@@ -1134,6 +1167,7 @@ async def build_system_prompt(
     base_prompt: str,
     builtin_tools: list[str] | None = None,
     tenant_id: UUID | None = None,
+    app_permissions: dict[str, bool] | None = None,
 ) -> str:
     """
     建立系統提示
@@ -1144,6 +1178,7 @@ async def build_system_prompt(
         base_prompt: 從 Agent 取得的基礎 prompt
         builtin_tools: 內建工具列表（如 WebSearch, WebFetch）
         tenant_id: 租戶 ID
+        app_permissions: 使用者的 App 權限設定（用於動態生成工具說明）
 
     Returns:
         系統提示文字
@@ -1214,6 +1249,18 @@ async def build_system_prompt(
 
     if tool_sections:
         base_prompt += "\n\n" + "\n\n".join(tool_sections)
+
+    # 動態生成 MCP 工具說明（根據使用者權限）
+    if app_permissions:
+        from .linebot_agents import generate_tools_prompt, generate_usage_tips_prompt
+        is_group = line_group_id is not None
+        tools_prompt = generate_tools_prompt(app_permissions, is_group)
+        if tools_prompt:
+            base_prompt += "\n\n你可以使用以下工具：\n\n" + tools_prompt
+        # 加入使用說明
+        usage_tips = generate_usage_tips_prompt(app_permissions, is_group)
+        if usage_tips:
+            base_prompt += "\n\n" + usage_tips
 
     # 加入對話識別資訊（供 MCP 工具使用）
     # 查詢用戶的 CTOS user_id（用於權限檢查）

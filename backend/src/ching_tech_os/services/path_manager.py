@@ -249,6 +249,13 @@ class PathManager:
         if parsed.zone == StorageZone.TEMP and parsed.path.startswith("linebot/"):
             return f"/tmp/linebot-files/{parsed.path[8:]}"
 
+        # 特殊處理 LOCAL zone 的舊格式知識庫圖片路徑
+        # local://knowledge/images/... → data/knowledge/assets/images/...
+        if parsed.zone == StorageZone.LOCAL and parsed.path.startswith("knowledge/images/"):
+            # 將 knowledge/images/ 轉換為 knowledge/assets/images/
+            new_path = "knowledge/assets/images/" + parsed.path[len("knowledge/images/"):]
+            return f"{mount_path}/{new_path}"
+
         # CTOS zone 支援租戶隔離
         if parsed.zone == StorageZone.CTOS and tenant_id:
             # 映射到租戶專屬目錄

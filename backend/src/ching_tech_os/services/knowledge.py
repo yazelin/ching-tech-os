@@ -684,7 +684,9 @@ def delete_knowledge(kb_id: str, tenant_id: str | None = None) -> None:
     # 刪除所有附件（忽略錯誤，確保知識可以被刪除）
     from .path_manager import path_manager, StorageZone
     _, _, assets_path, _ = _get_tenant_paths(tenant_id)
-    file_service = create_knowledge_file_service()
+    # 傳遞 tenant_id 以支援租戶隔離
+    tid_str = str(tenant_id) if tenant_id else None
+    file_service = create_knowledge_file_service(tid_str)
     for attachment in attachments:
         attachment_path = attachment.get("path", "")
         try:
@@ -991,7 +993,9 @@ def upload_attachment(
         nas_path = f"attachments/{kb_id}/{filename}"
 
         try:
-            file_service = create_knowledge_file_service()
+            # 傳遞 tenant_id 以支援租戶隔離
+            tid_str = str(tenant_id) if tenant_id else None
+            file_service = create_knowledge_file_service(tid_str)
             # 確保目錄存在並寫入檔案
             file_service.write_file(nas_path, data)
         except LocalFileError as e:
@@ -1064,8 +1068,10 @@ def copy_linebot_attachment_to_knowledge(
     filename = Path(relative_path).name
 
     # 從 Line Bot NAS 讀取檔案（透過掛載路徑）
+    # 傳遞 tenant_id 以支援租戶隔離
+    tid_str = str(tenant_id) if tenant_id else None
     try:
-        linebot_file_service = create_linebot_file_service()
+        linebot_file_service = create_linebot_file_service(tid_str)
         data = linebot_file_service.read_file(relative_path)
     except LocalFileError as e:
         raise KnowledgeError(f"讀取 Line Bot 附件失敗 ({relative_path})：{e}") from e
@@ -1074,17 +1080,18 @@ def copy_linebot_attachment_to_knowledge(
     return upload_attachment(kb_id, filename, data, description, tenant_id=tenant_id)
 
 
-def get_nas_attachment(path: str) -> bytes:
+def get_nas_attachment(path: str, tenant_id: str | None = None) -> bytes:
     """從 NAS 讀取附件
 
     Args:
         path: 附件路徑（不含 nas://knowledge/ 前綴）
+        tenant_id: 租戶 ID，用於租戶隔離
 
     Returns:
         檔案內容
     """
     try:
-        file_service = create_knowledge_file_service()
+        file_service = create_knowledge_file_service(tenant_id)
         return file_service.read_file(f"attachments/{path}")
     except LocalFileError as e:
         raise KnowledgeError(f"讀取 NAS 附件失敗：{e}") from e
@@ -1187,7 +1194,9 @@ def delete_attachment(kb_id: str, attachment_idx: int, tenant_id: str | None = N
                 # CTOS 區的知識庫檔案
                 nas_path = parsed.path.replace("knowledge/", "", 1)
                 try:
-                    file_service = create_knowledge_file_service()
+                    # 傳遞 tenant_id 以支援租戶隔離
+                    tid_str = str(tenant_id) if tenant_id else None
+                    file_service = create_knowledge_file_service(tid_str)
                     file_service.delete_file(nas_path)
                 except Exception:
                     # 檔案可能已不存在，忽略錯誤繼續刪除參考

@@ -935,8 +935,8 @@ async def download_and_save_file(
             content=content,
         )
 
-        # 3. 儲存到 NAS
-        success = await save_to_nas(nas_path, content)
+        # 3. 儲存到 NAS（傳遞 tenant_id 以支援租戶隔離）
+        success = await save_to_nas(nas_path, content, tenant_id=tenant_id)
         if not success:
             logger.error(f"儲存檔案到 NAS 失敗: {nas_path}")
             return None
@@ -1077,18 +1077,25 @@ def guess_mime_type(content: bytes) -> str:
     return "application/octet-stream"
 
 
-async def save_to_nas(relative_path: str, content: bytes) -> bool:
+async def save_to_nas(
+    relative_path: str,
+    content: bytes,
+    tenant_id: UUID | str | None = None,
+) -> bool:
     """儲存檔案到 NAS（透過掛載路徑）
 
     Args:
         relative_path: 相對路徑（不含共享資料夾和基本路徑）
         content: 檔案內容
+        tenant_id: 租戶 ID，用於租戶隔離
 
     Returns:
         是否成功
     """
     try:
-        file_service = create_linebot_file_service()
+        # 傳遞 tenant_id 以支援租戶隔離
+        tid_str = str(tenant_id) if tenant_id else None
+        file_service = create_linebot_file_service(tid_str)
         # write_file 會自動建立目錄
         file_service.write_file(relative_path, content)
         return True
@@ -1760,17 +1767,23 @@ async def get_file_by_id(
         return dict(row) if row else None
 
 
-async def read_file_from_nas(nas_path: str) -> bytes | None:
+async def read_file_from_nas(
+    nas_path: str,
+    tenant_id: UUID | str | None = None,
+) -> bytes | None:
     """從 NAS 讀取檔案（透過掛載路徑）
 
     Args:
         nas_path: 相對於 linebot files 根目錄的路徑
+        tenant_id: 租戶 ID，用於租戶隔離
 
     Returns:
         檔案內容 bytes，失敗回傳 None
     """
     try:
-        file_service = create_linebot_file_service()
+        # 傳遞 tenant_id 以支援租戶隔離
+        tid_str = str(tenant_id) if tenant_id else None
+        file_service = create_linebot_file_service(tid_str)
         content = file_service.read_file(nas_path)
         return content
     except LocalFileError as e:
@@ -1804,7 +1817,8 @@ async def delete_file(
     # 從 NAS 刪除檔案
     if nas_path:
         try:
-            file_service = create_linebot_file_service()
+            # 傳遞 tenant_id 以支援租戶隔離
+            file_service = create_linebot_file_service(str(tid))
             file_service.delete_file(nas_path)
             logger.info(f"已從 NAS 刪除檔案: {nas_path}")
         except LocalFileError as e:
