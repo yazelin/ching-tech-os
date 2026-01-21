@@ -25,6 +25,8 @@ class UserInfo(BaseModel):
     # 多租戶欄位
     tenant_id: UUID | None = None
     role: str = "user"  # user, tenant_admin, platform_admin
+    # 密碼狀態
+    has_password: bool = False  # 是否已設定密碼（用於顯示變更/設定密碼按鈕）
 
 
 class UpdateUserRequest(BaseModel):
@@ -43,9 +45,11 @@ class AdminUserInfo(BaseModel):
     permissions: UserPermissions
     created_at: datetime
     last_login_at: datetime | None
+    is_active: bool = True
     # 多租戶欄位
     tenant_id: UUID | None = None
     role: str = "user"
+    tenant_name: str | None = None  # 租戶名稱（平台管理員查詢時顯示）
 
 
 class AdminUserListResponse(BaseModel):

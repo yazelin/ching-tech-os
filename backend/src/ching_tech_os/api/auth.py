@@ -9,7 +9,8 @@ from ..models.login_record import DeviceInfo as LoginRecordDeviceInfo, DeviceTyp
 from ..models.message import MessageSeverity, MessageSource
 from ..services.session import session_manager, SessionData
 from ..services.smb import create_smb_service, SMBAuthError, SMBConnectionError
-from ..services.user import upsert_user, get_user_by_username
+from ..services.user import upsert_user, get_user_by_username, get_user_for_auth, update_last_login
+from ..services.password import verify_password
 from ..services.login_record import record_login
 from ..services.message import log_message
 from ..services.geoip import resolve_ip_location, parse_device_info
@@ -103,6 +104,99 @@ def get_session_from_token_or_query(
     return session
 
 
+# ============================================================
+# 統一權限檢查函數
+# ============================================================
+
+# 角色權限階層（數字越大權限越高）
+ROLE_HIERARCHY = {
+    "user": 1,
+    "tenant_admin": 2,
+    "platform_admin": 3,
+}
+
+
+def get_role_level(role: str | None) -> int:
+    """取得角色的權限等級"""
+    return ROLE_HIERARCHY.get(role or "user", 1)
+
+
+def can_manage_user(operator_role: str | None, target_role: str | None) -> bool:
+    """檢查操作者是否可以管理目標使用者
+
+    規則：
+    - platform_admin 可管理所有人（包括其他 platform_admin）
+    - tenant_admin 只能管理 user
+    - user 不能管理任何人
+    """
+    operator_level = get_role_level(operator_role)
+    target_level = get_role_level(target_role)
+
+    # platform_admin 可管理所有人
+    if operator_role == "platform_admin":
+        return True
+
+    # 其他角色只能管理比自己低的角色
+    return operator_level > target_level
+
+
+async def require_platform_admin(session: SessionData) -> SessionData:
+    """要求平台管理員權限
+
+    Raises:
+        HTTPException: 若不是平台管理員
+    """
+    if session.role != "platform_admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="需要平台管理員權限",
+        )
+    return session
+
+
+async def require_tenant_admin_or_above(session: SessionData) -> SessionData:
+    """要求租戶管理員或更高權限
+
+    Raises:
+        HTTPException: 若不是租戶管理員或平台管理員
+    """
+    if session.role not in ("tenant_admin", "platform_admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="需要租戶管理員或更高權限",
+        )
+    return session
+
+
+async def require_can_manage_target(
+    session: SessionData, target_role: str | None, target_tenant_id: str | None = None
+) -> None:
+    """檢查是否可以管理目標使用者
+
+    Args:
+        session: 操作者的 session
+        target_role: 目標使用者的角色
+        target_tenant_id: 目標使用者的租戶 ID（可選）
+
+    Raises:
+        HTTPException: 若無權限
+    """
+    # 檢查角色階層
+    if not can_manage_user(session.role, target_role):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="無權限操作此使用者",
+        )
+
+    # 非平台管理員需要檢查租戶隔離
+    if session.role != "platform_admin" and target_tenant_id is not None:
+        if str(session.tenant_id) != str(target_tenant_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="無權限操作其他租戶的使用者",
+            )
+
+
 def get_client_ip(req: Request) -> str:
     """取得客戶端真實 IP"""
     # 檢查 X-Forwarded-For 標頭
@@ -128,7 +222,10 @@ def get_client_ip(req: Request) -> str:
 async def login(request: LoginRequest, req: Request) -> LoginResponse:
     """登入並建立 session
 
-    使用 NAS SMB 認證驗證使用者身份。
+    支援兩種認證方式：
+    1. 密碼認證：使用者已設定密碼（password_hash 不為 NULL）
+    2. SMB 認證：使用者尚未設定密碼，fallback 到 NAS SMB 驗證（過渡期）
+
     多租戶模式下需要提供 tenant_code 參數。
     """
     # 取得客戶端資訊
@@ -157,19 +254,50 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
         os=request.device.os if request.device and request.device.os else (ua_device.os if ua_device else None),
     )
 
-    smb = create_smb_service(request.username, request.password)
+    # 先嘗試從資料庫查找使用者
+    user_data = await get_user_for_auth(request.username, tenant_id)
 
-    try:
-        # 測試 SMB 認證
-        smb.test_auth()
-    except SMBAuthError:
+    auth_success = False
+    use_password_auth = False
+    must_change_password = False
+
+    # 認證邏輯
+    if user_data and user_data.get("password_hash"):
+        # 使用密碼認證
+        use_password_auth = True
+
+        # 檢查帳號是否停用
+        if not user_data.get("is_active", True):
+            return LoginResponse(success=False, error="此帳號已被停用")
+
+        # 驗證密碼
+        if verify_password(request.password, user_data["password_hash"]):
+            auth_success = True
+            must_change_password = user_data.get("must_change_password", False)
+        else:
+            auth_success = False
+    else:
+        # 使用者沒有密碼，fallback 到 SMB 認證（過渡期）
+        smb = create_smb_service(request.username, request.password)
+        try:
+            smb.test_auth()
+            auth_success = True
+        except SMBAuthError:
+            auth_success = False
+        except SMBConnectionError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="無法連線至檔案伺服器",
+            )
+
+    if not auth_success:
         # 登入失敗：記錄失敗的登入嘗試
         try:
             await record_login(
                 username=request.username,
                 success=False,
                 ip_address=ip_address,
-                user_id=None,
+                user_id=user_data["id"] if user_data else None,
                 failure_reason="帳號或密碼錯誤",
                 user_agent=user_agent,
                 geo=geo,
@@ -202,39 +330,41 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
             pass  # 記錄失敗不影響回應
 
         return LoginResponse(success=False, error="帳號或密碼錯誤")
-    except SMBConnectionError:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="無法連線至檔案伺服器",
-        )
 
-    # 記錄使用者並取得 user_id
+    # 認證成功
     user_id = None
     user_role = "user"
-    try:
-        user_id = await upsert_user(request.username, tenant_id=tenant_id)
-        # 檢查是否為平台管理員（ADMIN_USERNAME 或 users.role = 'platform_admin'）
-        if request.username == settings.admin_username:
-            user_role = "platform_admin"
-        elif user_id:
-            # 先從 users 表讀取 role
-            user_data = await get_user_by_username(request.username, tenant_id=tenant_id)
-            if user_data and user_data.get("role") == "platform_admin":
-                user_role = "platform_admin"
-            elif user_data and user_data.get("role") == "tenant_admin":
-                user_role = "tenant_admin"
-            else:
-                # 檢查是否在 tenant_admins 表中
-                admin_role = await get_tenant_admin_role(tenant_id, user_id)
-                if admin_role:
-                    user_role = "tenant_admin"
-    except Exception:
-        pass
 
-    # 認證成功，建立 session（包含 user_id、tenant_id、role）
+    if user_data:
+        # 使用者已存在
+        user_id = user_data["id"]
+        user_role = user_data.get("role", "user")
+        # 更新最後登入時間
+        await update_last_login(user_id)
+    else:
+        # 使用者不存在（SMB 認證但尚未建立用戶記錄）
+        try:
+            user_id = await upsert_user(request.username, tenant_id=tenant_id)
+        except Exception:
+            pass
+
+    # 檢查是否為平台管理員
+    if request.username == settings.admin_username:
+        user_role = "platform_admin"
+    elif user_role == "user" and user_id:
+        # 檢查是否在 tenant_admins 表中
+        admin_role = await get_tenant_admin_role(tenant_id, user_id)
+        if admin_role:
+            user_role = "tenant_admin"
+
+    # 建立 session
+    # 注意：密碼認證時，session 不儲存密碼（password 欄位為空字串）
+    # SMB 認證時仍需保留密碼（過渡期，供檔案操作使用）
+    session_password = "" if use_password_auth else request.password
+
     token = session_manager.create_session(
         request.username,
-        request.password,
+        session_password,
         user_id=user_id,
         tenant_id=tenant_id,
         role=user_role,
@@ -259,11 +389,12 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
         elif geo and geo.country:
             location_str = f"（{geo.country}）"
 
+        auth_method = "密碼" if use_password_auth else "SMB"
         msg_id = await log_message(
             severity=MessageSeverity.INFO,
             source=MessageSource.SECURITY,
             title=f"登入成功：{request.username}",
-            content=f"使用者 {request.username} 從 {ip_address} {location_str}登入",
+            content=f"使用者 {request.username} 從 {ip_address} {location_str}登入（{auth_method}認證）",
             category="auth",
             user_id=user_id,
             session_id=token,
@@ -272,6 +403,7 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
                 "username": request.username,
                 "geo": {"country": geo.country, "city": geo.city} if geo else None,
                 "device_type": device_info.device_type.value if device_info else None,
+                "auth_method": auth_method,
             },
         )
         # 推送未讀數量更新
@@ -300,6 +432,7 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
         username=request.username,
         tenant=tenant_brief,
         role=user_role,
+        must_change_password=must_change_password,
     )
 
 
@@ -308,3 +441,72 @@ async def logout(token: str = Depends(get_token)) -> LogoutResponse:
     """登出並清除 session"""
     session_manager.delete_session(token)
     return LogoutResponse(success=True)
+
+
+# 密碼變更相關 models
+from pydantic import BaseModel
+
+
+class ChangePasswordRequest(BaseModel):
+    """變更密碼請求"""
+    current_password: str | None = None  # 首次設定密碼時可為空
+    new_password: str
+
+
+class ChangePasswordResponse(BaseModel):
+    """變更密碼回應"""
+    success: bool
+    error: str | None = None
+
+
+@router.post("/change-password", response_model=ChangePasswordResponse)
+async def change_password(
+    request: ChangePasswordRequest,
+    session: SessionData = Depends(get_current_session),
+) -> ChangePasswordResponse:
+    """變更密碼
+
+    使用者必須已登入。
+    - 若已有密碼：需提供目前密碼
+    - 若尚未設定密碼（NAS 認證使用者）：可直接設定新密碼
+    變更成功後會清除 must_change_password 標記。
+    """
+    from ..services.password import verify_password, hash_password, validate_password_strength
+    from ..services.user import get_user_for_auth, set_user_password, upsert_user
+
+    # 確保使用者存在於資料庫（NAS 使用者可能尚未建立記錄）
+    user_id = session.user_id
+    if user_id is None:
+        # 嘗試建立使用者記錄
+        try:
+            user_id = await upsert_user(session.username, session.tenant_id)
+        except Exception:
+            return ChangePasswordResponse(success=False, error="無法建立使用者記錄")
+
+    # 取得使用者資料
+    user_data = await get_user_for_auth(session.username, session.tenant_id)
+
+    # 判斷是否為首次設定密碼
+    has_password = user_data and user_data.get("password_hash")
+
+    if has_password:
+        # 已有密碼，需驗證目前密碼
+        if not request.current_password:
+            return ChangePasswordResponse(success=False, error="請輸入目前密碼")
+        if not verify_password(request.current_password, user_data["password_hash"]):
+            return ChangePasswordResponse(success=False, error="目前密碼錯誤")
+    # 若沒有密碼，允許直接設定（首次設定）
+
+    # 驗證新密碼強度
+    is_valid, error_msg = validate_password_strength(request.new_password)
+    if not is_valid:
+        return ChangePasswordResponse(success=False, error=error_msg)
+
+    # 更新密碼
+    new_hash = hash_password(request.new_password)
+    success = await set_user_password(user_id, new_hash, must_change=False)
+
+    if not success:
+        return ChangePasswordResponse(success=False, error="密碼更新失敗")
+
+    return ChangePasswordResponse(success=True)

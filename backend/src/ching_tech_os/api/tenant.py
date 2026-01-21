@@ -36,12 +36,22 @@ from ..services.tenant import (
     is_tenant_admin,
     TenantNotFoundError,
 )
+from ..services.user import (
+    create_user,
+    list_tenant_users,
+    get_user_detail,
+    update_user_info,
+    reset_user_password,
+    deactivate_user,
+    activate_user,
+)
+from ..services.password import hash_password, generate_temporary_password
 from ..services.tenant_data import (
     export_tenant_data,
     import_tenant_data,
     validate_tenant_data,
 )
-from .auth import get_current_session
+from .auth import get_current_session, can_manage_user
 
 router = APIRouter(prefix="/api/tenant", tags=["tenant"])
 
@@ -441,3 +451,432 @@ async def validate_data(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"驗證失敗: {str(e)}",
         )
+
+
+# === 使用者管理 API（需要租戶管理員權限）===
+
+
+class UserInfo(BaseModel):
+    """使用者資訊"""
+    id: int
+    username: str
+    display_name: str | None = None
+    email: str | None = None
+    role: str
+    is_active: bool
+    must_change_password: bool
+    created_at: datetime
+    last_login_at: datetime | None = None
+    password_changed_at: datetime | None = None
+    # 允許額外欄位（preferences, tenant_id 等）被忽略
+    model_config = {"extra": "ignore"}
+
+
+class CreateUserRequest(BaseModel):
+    """建立使用者請求"""
+    username: str
+    display_name: str | None = None
+    email: str | None = None
+    role: str = "user"  # user 或 tenant_admin
+    password: str | None = None  # 若不提供，會自動產生臨時密碼
+    must_change_password: bool = True  # 首次登入是否需變更密碼
+
+
+class CreateUserResponse(BaseModel):
+    """建立使用者回應"""
+    success: bool
+    user: UserInfo | None = None
+    temporary_password: str | None = None  # 自動產生的臨時密碼
+    error: str | None = None
+
+
+class UpdateUserRequest(BaseModel):
+    """更新使用者請求"""
+    display_name: str | None = None
+    email: str | None = None
+    role: str | None = None  # user 或 tenant_admin
+
+
+class UserListResponse(BaseModel):
+    """使用者列表回應"""
+    users: list[UserInfo]
+    total: int
+
+
+class ResetPasswordRequest(BaseModel):
+    """重設密碼請求"""
+    new_password: str | None = None  # 若不提供，會自動產生
+
+
+class ResetPasswordResponse(BaseModel):
+    """重設密碼回應"""
+    success: bool
+    temporary_password: str | None = None
+    error: str | None = None
+
+
+class ToggleUserResponse(BaseModel):
+    """啟用/停用使用者回應"""
+    success: bool
+    message: str
+
+
+@router.get("/users", response_model=UserListResponse)
+async def list_users(
+    include_inactive: bool = False,
+    session: SessionData = Depends(get_current_session),
+) -> UserListResponse:
+    """列出租戶的所有使用者
+
+    僅租戶管理員可操作。
+
+    Args:
+        include_inactive: 是否包含停用的使用者
+    """
+    await require_tenant_admin(session)
+
+    if session.tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="未關聯租戶",
+        )
+
+    users = await list_tenant_users(session.tenant_id, include_inactive)
+
+    return UserListResponse(
+        users=[UserInfo(**u) for u in users],
+        total=len(users),
+    )
+
+
+@router.post("/users", response_model=CreateUserResponse, status_code=status.HTTP_201_CREATED)
+async def create_new_user(
+    request: CreateUserRequest,
+    session: SessionData = Depends(get_current_session),
+) -> CreateUserResponse:
+    """建立新使用者
+
+    僅租戶管理員可操作。
+    若未提供密碼，會自動產生臨時密碼，使用者首次登入時需要變更。
+
+    Args:
+        request: 建立使用者請求
+    """
+    await require_tenant_admin(session)
+
+    if session.tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="未關聯租戶",
+        )
+
+    # 驗證角色
+    if request.role not in ("user", "tenant_admin"):
+        return CreateUserResponse(
+            success=False,
+            error="角色必須是 user 或 tenant_admin",
+        )
+
+    # 處理密碼
+    temporary_password = None
+    if request.password:
+        password_hash = hash_password(request.password)
+        must_change = request.must_change_password
+    else:
+        temporary_password = generate_temporary_password()
+        password_hash = hash_password(temporary_password)
+        must_change = True  # 自動產生的密碼一定要變更
+
+    try:
+        user_id = await create_user(
+            username=request.username,
+            tenant_id=session.tenant_id,
+            password_hash=password_hash,
+            display_name=request.display_name,
+            email=request.email,
+            role=request.role,
+            must_change_password=must_change,
+        )
+
+        # 取得完整使用者資料
+        user_data = await get_user_detail(user_id, session.tenant_id)
+        if user_data is None:
+            return CreateUserResponse(
+                success=False,
+                error="建立使用者失敗",
+            )
+
+        return CreateUserResponse(
+            success=True,
+            user=UserInfo(**user_data),
+            temporary_password=temporary_password,
+        )
+
+    except ValueError as e:
+        return CreateUserResponse(
+            success=False,
+            error=str(e),
+        )
+    except Exception as e:
+        # 記錄詳細錯誤以便除錯
+        import logging
+        logging.exception(f"建立使用者失敗: {e}")
+        return CreateUserResponse(
+            success=False,
+            error=f"建立使用者失敗: {str(e)}",
+        )
+
+
+@router.get("/users/{user_id}", response_model=UserInfo)
+async def get_user(
+    user_id: int,
+    session: SessionData = Depends(get_current_session),
+) -> UserInfo:
+    """取得使用者詳細資料
+
+    僅租戶管理員可操作。
+    """
+    await require_tenant_admin(session)
+
+    if session.tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="未關聯租戶",
+        )
+
+    user_data = await get_user_detail(user_id, session.tenant_id)
+    if user_data is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="使用者不存在",
+        )
+
+    return UserInfo(**user_data)
+
+
+@router.patch("/users/{user_id}", response_model=UserInfo)
+async def update_user(
+    user_id: int,
+    request: UpdateUserRequest,
+    session: SessionData = Depends(get_current_session),
+) -> UserInfo:
+    """更新使用者資料
+
+    僅租戶管理員可操作。
+    權限階層：platform_admin > tenant_admin > user
+    租戶管理員只能修改一般使用者的資料。
+    """
+    await require_tenant_admin(session)
+
+    if session.tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="未關聯租戶",
+        )
+
+    # 先取得目標使用者資料，檢查權限階層
+    target_user = await get_user_detail(user_id, session.tenant_id)
+    if target_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="使用者不存在",
+        )
+
+    # 權限階層檢查
+    target_role = target_user.get("role", "user")
+    if not can_manage_user(session.role, target_role):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="無權限操作此使用者",
+        )
+
+    # 如果要變更角色，檢查新角色是否在允許範圍內
+    if request.role is not None:
+        # 租戶管理員不能將使用者設為 platform_admin
+        if request.role == "platform_admin" and session.role != "platform_admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="無權限設定此角色",
+            )
+        # 租戶管理員不能將使用者設為 tenant_admin（除非自己是 platform_admin）
+        if request.role == "tenant_admin" and session.role == "tenant_admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="租戶管理員無法指派新的租戶管理員，請使用租戶管理員新增功能",
+            )
+
+    try:
+        user_data = await update_user_info(
+            user_id=user_id,
+            tenant_id=session.tenant_id,
+            display_name=request.display_name,
+            email=request.email,
+            role=request.role,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+    if user_data is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="使用者不存在",
+        )
+
+    return UserInfo(**user_data)
+
+
+@router.post("/users/{user_id}/reset-password", response_model=ResetPasswordResponse)
+async def reset_password(
+    user_id: int,
+    request: ResetPasswordRequest,
+    session: SessionData = Depends(get_current_session),
+) -> ResetPasswordResponse:
+    """重設使用者密碼
+
+    僅租戶管理員可操作。
+    若未提供新密碼，會自動產生臨時密碼。
+    權限階層：租戶管理員只能重設一般使用者的密碼。
+    """
+    await require_tenant_admin(session)
+
+    if session.tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="未關聯租戶",
+        )
+
+    # 先取得目標使用者資料，檢查權限階層
+    target_user = await get_user_detail(user_id, session.tenant_id)
+    if target_user is None:
+        return ResetPasswordResponse(
+            success=False,
+            error="使用者不存在",
+        )
+
+    # 權限階層檢查
+    target_role = target_user.get("role", "user")
+    if not can_manage_user(session.role, target_role):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="無權限操作此使用者",
+        )
+
+    # 處理密碼
+    temporary_password = None
+    if request.new_password:
+        password_hash = hash_password(request.new_password)
+        must_change = False
+    else:
+        temporary_password = generate_temporary_password()
+        password_hash = hash_password(temporary_password)
+        must_change = True
+
+    success = await reset_user_password(
+        user_id=user_id,
+        tenant_id=session.tenant_id,
+        new_password_hash=password_hash,
+        must_change=must_change,
+    )
+
+    if not success:
+        return ResetPasswordResponse(
+            success=False,
+            error="使用者不存在",
+        )
+
+    return ResetPasswordResponse(
+        success=True,
+        temporary_password=temporary_password,
+    )
+
+
+@router.post("/users/{user_id}/deactivate", response_model=ToggleUserResponse)
+async def deactivate_user_endpoint(
+    user_id: int,
+    session: SessionData = Depends(get_current_session),
+) -> ToggleUserResponse:
+    """停用使用者帳號
+
+    僅租戶管理員可操作。不能停用自己。
+    權限階層：租戶管理員只能停用一般使用者。
+    """
+    await require_tenant_admin(session)
+
+    if session.tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="未關聯租戶",
+        )
+
+    # 不能停用自己
+    if session.user_id == user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="不能停用自己的帳號",
+        )
+
+    # 驗證使用者屬於該租戶
+    user_data = await get_user_detail(user_id, session.tenant_id)
+    if user_data is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="使用者不存在",
+        )
+
+    # 權限階層檢查
+    target_role = user_data.get("role", "user")
+    if not can_manage_user(session.role, target_role):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="無權限操作此使用者",
+        )
+
+    success = await deactivate_user(user_id)
+    if success:
+        return ToggleUserResponse(success=True, message="帳號已停用")
+    else:
+        return ToggleUserResponse(success=False, message="停用失敗")
+
+
+@router.post("/users/{user_id}/activate", response_model=ToggleUserResponse)
+async def activate_user_endpoint(
+    user_id: int,
+    session: SessionData = Depends(get_current_session),
+) -> ToggleUserResponse:
+    """啟用使用者帳號
+
+    僅租戶管理員可操作。
+    權限階層：租戶管理員只能啟用一般使用者。
+    """
+    await require_tenant_admin(session)
+
+    if session.tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="未關聯租戶",
+        )
+
+    # 驗證使用者屬於該租戶
+    user_data = await get_user_detail(user_id, session.tenant_id)
+    if user_data is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="使用者不存在",
+        )
+
+    # 權限階層檢查
+    target_role = user_data.get("role", "user")
+    if not can_manage_user(session.role, target_role):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="無權限操作此使用者",
+        )
+
+    success = await activate_user(user_id)
+    if success:
+        return ToggleUserResponse(success=True, message="帳號已啟用")
+    else:
+        return ToggleUserResponse(success=False, message="啟用失敗")

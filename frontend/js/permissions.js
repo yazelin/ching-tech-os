@@ -51,12 +51,15 @@ const PermissionsModule = (function() {
   }
 
   /**
-   * 檢查是否為管理員
+   * 檢查是否為管理員（租戶管理員或平台管理員）
    * @returns {boolean}
    */
   function isAdmin() {
     const user = getCurrentUser();
-    return user?.is_admin || false;
+    const session = typeof LoginModule !== 'undefined' ? LoginModule.getSession() : null;
+    // 優先使用 session 的 role，因為它更準確
+    const role = session?.role || user?.role;
+    return role === 'tenant_admin' || role === 'platform_admin';
   }
 
   /**
@@ -66,13 +69,24 @@ const PermissionsModule = (function() {
    */
   function canAccessApp(appId) {
     const user = getCurrentUser();
-    if (!user) return false;
+    const session = typeof LoginModule !== 'undefined' ? LoginModule.getSession() : null;
+    if (!user && !session) return false;
 
-    // 管理員擁有所有權限
-    if (user.is_admin) return true;
+    const role = session?.role || user?.role;
 
-    // 檢查權限設定
-    return user.permissions?.apps?.[appId] ?? true;
+    // 平台管理員擁有所有權限
+    if (role === 'platform_admin') return true;
+
+    // 租戶管理員擁有所有權限（除了平台管理）
+    if (role === 'tenant_admin') {
+      const platformOnlyApps = ['platform-admin'];
+      if (platformOnlyApps.includes(appId)) return false;
+      return true;
+    }
+
+    // 一般使用者：檢查權限設定，預設為 false
+    if (!user?.permissions?.apps) return false;
+    return user.permissions.apps[appId] === true;
   }
 
   /**

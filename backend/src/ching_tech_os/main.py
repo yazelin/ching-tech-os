@@ -89,6 +89,7 @@ app.include_router(login_records.router)
 app.include_router(nas.router)
 app.include_router(user.router)
 app.include_router(user.admin_router)  # 管理員 API
+app.include_router(user.tenant_router)  # 租戶管理員 API
 app.include_router(ai_router.router)
 app.include_router(ai_management.router)
 app.include_router(project.router)
