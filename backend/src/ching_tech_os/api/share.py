@@ -218,9 +218,12 @@ async def get_public_attachment(token: str, path: str) -> Response:
 
     僅限知識庫附件，無需登入。
     path 格式可能是：
-    - nas://knowledge/attachments/{kb_id}/{filename} (NAS 附件)
+    - local://knowledge/assets/images/{kb_id}-{filename} (本機附件，新格式)
+    - local://knowledge/images/{kb_id}-{filename} (本機附件，舊格式)
+    - local/images/{kb_id}-{filename} (本機附件，正規化格式)
+    - ctos://knowledge/attachments/{kb_id}/{filename} (NAS 附件，新格式)
+    - nas://knowledge/attachments/{kb_id}/{filename} (NAS 附件，舊格式)
     - attachments/{kb_id}/{filename} (NAS 附件)
-    - local/images/{kb_id}-{filename} (本機附件，正規化後的格式)
     """
     from pathlib import Path as FilePath
 
@@ -238,9 +241,50 @@ async def get_public_attachment(token: str, path: str) -> Response:
         kb_id = link_info["resource_id"]
         filename = path.split("/")[-1]
 
-        # 判斷是本機附件還是 NAS 附件
-        # local/ 開頭是正規化後的本機附件路徑
-        is_local_asset = path.startswith("local/")
+        # 安全檢查：防止路徑穿越
+        if ".." in path:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="無效的路徑",
+            )
+
+        # 判斷附件類型並正規化路徑
+        # 注意：nginx 預設會把 // 合併成 /，所以需要同時支援 :// 和 :/ 格式
+        # 1. 本機附件：local://knowledge/... 或 local:/knowledge/... 格式
+        is_local_asset = False
+        if path.startswith("local://knowledge/assets/images/"):
+            # 新格式：local://knowledge/assets/images/...
+            path = "local/images/" + path[len("local://knowledge/assets/images/"):]
+            is_local_asset = True
+        elif path.startswith("local:/knowledge/assets/images/"):
+            # 新格式（nginx 合併後）：local:/knowledge/assets/images/...
+            path = "local/images/" + path[len("local:/knowledge/assets/images/"):]
+            is_local_asset = True
+        elif path.startswith("local://knowledge/images/"):
+            # 舊格式：local://knowledge/images/...
+            path = "local/images/" + path[len("local://knowledge/images/"):]
+            is_local_asset = True
+        elif path.startswith("local:/knowledge/images/"):
+            # 舊格式（nginx 合併後）：local:/knowledge/images/...
+            path = "local/images/" + path[len("local:/knowledge/images/"):]
+            is_local_asset = True
+        elif path.startswith("local/"):
+            # 正規化格式：local/images/...
+            is_local_asset = True
+
+        # 2. NAS 附件：ctos://knowledge/... 或 nas://knowledge/... 格式
+        if path.startswith("ctos://knowledge/attachments/"):
+            # 新格式：ctos://knowledge/attachments/...
+            path = "attachments/" + path[len("ctos://knowledge/attachments/"):]
+        elif path.startswith("ctos:/knowledge/attachments/"):
+            # 新格式（nginx 合併後）：ctos:/knowledge/attachments/...
+            path = "attachments/" + path[len("ctos:/knowledge/attachments/"):]
+        elif path.startswith("nas://knowledge/"):
+            # 舊格式：nas://knowledge/...
+            path = path[len("nas://knowledge/"):]
+        elif path.startswith("nas:/knowledge/"):
+            # 舊格式（nginx 合併後）：nas:/knowledge/...
+            path = path[len("nas:/knowledge/"):]
 
         if is_local_asset:
             # 本機附件：驗證檔名包含 kb_id
@@ -248,13 +292,6 @@ async def get_public_attachment(token: str, path: str) -> Response:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="無權存取此附件",
-                )
-
-            # 安全檢查：防止路徑穿越
-            if ".." in path:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="無效的路徑",
                 )
 
             # 將 local/ 轉換為 assets/
@@ -273,11 +310,6 @@ async def get_public_attachment(token: str, path: str) -> Response:
             content = file_path.read_bytes()
         else:
             # NAS 附件
-            # 移除 nas://knowledge/ 前綴（如果有的話）
-            nas_prefix = "nas://knowledge/"
-            if path.startswith(nas_prefix):
-                path = path[len(nas_prefix):]
-
             # 驗證附件路徑是否屬於該知識庫
             if not path.startswith(f"attachments/{kb_id}/"):
                 raise HTTPException(
@@ -323,7 +355,7 @@ async def download_shared_file(token: str) -> Response:
     """
     from urllib.parse import quote
     from ..services.share import get_project_attachment_info
-    from ..services.project import get_attachment_content
+    from ..services.project import get_attachment_content, ProjectError
 
     try:
         # 驗證 token 有效
@@ -391,6 +423,11 @@ async def download_shared_file(token: str) -> Response:
             detail=str(e),
         )
     except ResourceNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except ProjectError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),

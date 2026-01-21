@@ -963,7 +963,9 @@ def copy_linebot_attachment_to_knowledge(
 
     Args:
         kb_id: 知識 ID
-        linebot_nas_path: Line Bot NAS 相對路徑（如 groups/xxx/images/2026-01-05/abc.jpg）
+        linebot_nas_path: Line Bot NAS 路徑，支援以下格式：
+            - 相對路徑：groups/xxx/images/2026-01-05/abc.jpg
+            - URI 格式：ctos://linebot/files/groups/xxx/images/2026-01-05/abc.jpg
         description: 附件說明
 
     Returns:
@@ -972,15 +974,20 @@ def copy_linebot_attachment_to_knowledge(
     Raises:
         KnowledgeError: 複製失敗
     """
+    # 處理 URI 格式，移除 ctos://linebot/files/ 前綴
+    relative_path = linebot_nas_path
+    if relative_path.startswith("ctos://linebot/files/"):
+        relative_path = relative_path.replace("ctos://linebot/files/", "", 1)
+
     # 從路徑取得檔名
-    filename = Path(linebot_nas_path).name
+    filename = Path(relative_path).name
 
     # 從 Line Bot NAS 讀取檔案（透過掛載路徑）
     try:
         linebot_file_service = create_linebot_file_service()
-        data = linebot_file_service.read_file(linebot_nas_path)
+        data = linebot_file_service.read_file(relative_path)
     except LocalFileError as e:
-        raise KnowledgeError(f"讀取 Line Bot 附件失敗 ({linebot_nas_path})：{e}") from e
+        raise KnowledgeError(f"讀取 Line Bot 附件失敗 ({relative_path})：{e}") from e
 
     # 使用現有的 upload_attachment 函數處理儲存邏輯
     return upload_attachment(kb_id, filename, data, description)
