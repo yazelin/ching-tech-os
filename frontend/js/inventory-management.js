@@ -15,6 +15,7 @@ const InventoryManagementModule = (function() {
   let isEditing = false;
   let editingData = null;
   let listWidth = 320;
+  let activeTab = 'detail'; // 'detail' or 'orders'
 
   // Filters
   let searchQuery = '';
@@ -121,6 +122,7 @@ const InventoryManagementModule = (function() {
     selectedItem = null;
     isEditing = false;
     editingData = null;
+    activeTab = 'detail';
   }
 
   /**
@@ -360,12 +362,14 @@ const InventoryManagementModule = (function() {
       <div class="inv-list-item ${selectedItem?.id === item.id ? 'selected' : ''} ${item.is_low_stock ? 'low-stock' : ''}" data-id="${item.id}">
         <div class="inv-list-item-main">
           <div class="inv-list-item-name">${escapeHtml(item.name)}</div>
+          ${item.model ? `<div class="inv-list-item-model">${escapeHtml(item.model)}</div>` : ''}
           ${item.specification ? `<div class="inv-list-item-spec">${escapeHtml(item.specification)}</div>` : ''}
         </div>
         <div class="inv-list-item-info">
           <div class="inv-list-item-stock ${item.is_low_stock ? 'warning' : ''}">
             ${formatNumber(item.current_stock)} ${item.unit || ''}
           </div>
+          ${item.storage_location ? `<div class="inv-list-item-location">${escapeHtml(item.storage_location)}</div>` : ''}
           ${item.category ? `<div class="inv-list-item-category">${escapeHtml(item.category)}</div>` : ''}
         </div>
       </div>
@@ -393,6 +397,7 @@ const InventoryManagementModule = (function() {
       selectedItem = await apiRequest(`/items/${itemId}`);
       isEditing = false;
       editingData = null;
+      activeTab = 'detail';
       showMobileDetail();
       renderContentView(windowEl);
     } catch (error) {
@@ -420,6 +425,7 @@ const InventoryManagementModule = (function() {
         </button>
         <div class="inv-detail-title">
           <h2>${escapeHtml(item.name)}</h2>
+          ${item.model ? `<span class="inv-detail-model">${escapeHtml(item.model)}</span>` : ''}
           ${item.specification ? `<span class="inv-detail-spec">${escapeHtml(item.specification)}</span>` : ''}
         </div>
         <div class="inv-detail-actions">
@@ -432,56 +438,20 @@ const InventoryManagementModule = (function() {
         </div>
       </div>
 
-      <div class="inv-detail-body">
-        <div class="inv-detail-section">
-          <h3>庫存資訊</h3>
-          <div class="inv-stock-display ${item.is_low_stock ? 'warning' : ''}">
-            <div class="inv-stock-number">${formatNumber(item.current_stock)}</div>
-            <div class="inv-stock-unit">${item.unit || '單位'}</div>
-            ${item.is_low_stock ? `<div class="inv-stock-warning"><span class="icon">${getIcon('alert')}</span> 低於安全庫存</div>` : ''}
-          </div>
-          <div class="inv-detail-grid">
-            <div class="inv-detail-item">
-              <label>安全庫存</label>
-              <span>${item.min_stock !== null ? formatNumber(item.min_stock) : '-'}</span>
-            </div>
-            <div class="inv-detail-item">
-              <label>類別</label>
-              <span>${item.category || '-'}</span>
-            </div>
-            <div class="inv-detail-item">
-              <label>預設廠商</label>
-              <span>${item.default_vendor || '-'}</span>
-            </div>
-            <div class="inv-detail-item">
-              <label>更新時間</label>
-              <span>${formatDate(item.updated_at)}</span>
-            </div>
-          </div>
-          ${item.notes ? `<div class="inv-detail-notes"><label>備註</label><p>${escapeHtml(item.notes)}</p></div>` : ''}
-        </div>
+      <div class="inv-tabs">
+        <button class="inv-tab ${activeTab === 'detail' ? 'active' : ''}" data-tab="detail">
+          <span class="icon">${getIcon('information')}</span>
+          <span>詳情</span>
+        </button>
+        <button class="inv-tab ${activeTab === 'orders' ? 'active' : ''}" data-tab="orders">
+          <span class="icon">${getIcon('clipboard-list')}</span>
+          <span>訂購記錄</span>
+        </button>
+      </div>
 
-        <div class="inv-detail-section">
-          <div class="inv-section-header">
-            <h3>進出貨記錄</h3>
-            <div class="inv-section-actions">
-              <button class="inv-action-btn" id="invBtnIn">
-                <span class="icon">${getIcon('arrow-down-bold')}</span>
-                <span>進貨</span>
-              </button>
-              <button class="inv-action-btn" id="invBtnOut">
-                <span class="icon">${getIcon('arrow-up-bold')}</span>
-                <span>出貨</span>
-              </button>
-            </div>
-          </div>
-          <div class="inv-transactions" id="invTransactions">
-            <div class="inv-loading">
-              <span class="icon spinning">${getIcon('refresh')}</span>
-              <span>載入中...</span>
-            </div>
-          </div>
-        </div>
+      <div class="inv-detail-body">
+        ${activeTab === 'detail' ? renderDetailTab(item) : ''}
+        ${activeTab === 'orders' ? renderOrdersTab() : ''}
       </div>
     `;
 
@@ -491,11 +461,110 @@ const InventoryManagementModule = (function() {
     });
     viewEl.querySelector('#invBtnEdit').addEventListener('click', startEditItem);
     viewEl.querySelector('#invBtnDelete').addEventListener('click', confirmDeleteItem);
-    viewEl.querySelector('#invBtnIn').addEventListener('click', () => showTransactionModal('in'));
-    viewEl.querySelector('#invBtnOut').addEventListener('click', () => showTransactionModal('out'));
 
-    // Load transactions
-    loadTransactions();
+    // Tab switching
+    viewEl.querySelectorAll('.inv-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        activeTab = tab.dataset.tab;
+        renderContentView(windowEl);
+      });
+    });
+
+    // Load tab-specific data
+    if (activeTab === 'detail') {
+      viewEl.querySelector('#invBtnIn')?.addEventListener('click', () => showTransactionModal('in'));
+      viewEl.querySelector('#invBtnOut')?.addEventListener('click', () => showTransactionModal('out'));
+      loadTransactions();
+    } else if (activeTab === 'orders') {
+      viewEl.querySelector('#invBtnNewOrder')?.addEventListener('click', () => showOrderModal());
+      loadOrders();
+    }
+  }
+
+  /**
+   * Render detail tab content
+   */
+  function renderDetailTab(item) {
+    return `
+      <div class="inv-detail-section">
+        <h3>庫存資訊</h3>
+        <div class="inv-stock-display ${item.is_low_stock ? 'warning' : ''}">
+          <div class="inv-stock-number">${formatNumber(item.current_stock)}</div>
+          <div class="inv-stock-unit">${item.unit || '單位'}</div>
+          ${item.is_low_stock ? `<div class="inv-stock-warning"><span class="icon">${getIcon('alert')}</span> 低於安全庫存</div>` : ''}
+        </div>
+        <div class="inv-detail-grid">
+          <div class="inv-detail-item">
+            <label>安全庫存</label>
+            <span>${item.min_stock !== null ? formatNumber(item.min_stock) : '-'}</span>
+          </div>
+          <div class="inv-detail-item">
+            <label>類別</label>
+            <span>${item.category || '-'}</span>
+          </div>
+          <div class="inv-detail-item">
+            <label>預設廠商</label>
+            <span>${item.default_vendor || '-'}</span>
+          </div>
+          <div class="inv-detail-item">
+            <label>存放庫位</label>
+            <span>${item.storage_location || '-'}</span>
+          </div>
+          <div class="inv-detail-item">
+            <label>更新時間</label>
+            <span>${formatDate(item.updated_at)}</span>
+          </div>
+        </div>
+        ${item.notes ? `<div class="inv-detail-notes"><label>備註</label><p>${escapeHtml(item.notes)}</p></div>` : ''}
+      </div>
+
+      <div class="inv-detail-section">
+        <div class="inv-section-header">
+          <h3>進出貨記錄</h3>
+          <div class="inv-section-actions">
+            <button class="inv-action-btn" id="invBtnIn">
+              <span class="icon">${getIcon('arrow-down-bold')}</span>
+              <span>進貨</span>
+            </button>
+            <button class="inv-action-btn" id="invBtnOut">
+              <span class="icon">${getIcon('arrow-up-bold')}</span>
+              <span>出貨</span>
+            </button>
+          </div>
+        </div>
+        <div class="inv-transactions" id="invTransactions">
+          <div class="inv-loading">
+            <span class="icon spinning">${getIcon('refresh')}</span>
+            <span>載入中...</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Render orders tab content
+   */
+  function renderOrdersTab() {
+    return `
+      <div class="inv-detail-section">
+        <div class="inv-section-header">
+          <h3>訂購記錄</h3>
+          <div class="inv-section-actions">
+            <button class="inv-action-btn primary" id="invBtnNewOrder">
+              <span class="icon">${getIcon('plus')}</span>
+              <span>新增訂購</span>
+            </button>
+          </div>
+        </div>
+        <div class="inv-orders" id="invOrders">
+          <div class="inv-loading">
+            <span class="icon spinning">${getIcon('refresh')}</span>
+            <span>載入中...</span>
+          </div>
+        </div>
+      </div>
+    `;
   }
 
   /**
@@ -582,11 +651,13 @@ const InventoryManagementModule = (function() {
     isEditing = true;
     editingData = {
       name: '',
+      model: '',
       specification: '',
       unit: '',
       category: '',
       default_vendor: '',
       default_vendor_id: '',
+      storage_location: '',
       min_stock: null,
       notes: '',
     };
@@ -601,11 +672,13 @@ const InventoryManagementModule = (function() {
     isEditing = true;
     editingData = {
       name: selectedItem.name,
+      model: selectedItem.model || '',
       specification: selectedItem.specification || '',
       unit: selectedItem.unit || '',
       category: selectedItem.category || '',
       default_vendor: selectedItem.default_vendor || '',
       default_vendor_id: selectedItem.default_vendor_id || '',
+      storage_location: selectedItem.storage_location || '',
       min_stock: selectedItem.min_stock,
       notes: selectedItem.notes || '',
     };
@@ -649,23 +722,33 @@ const InventoryManagementModule = (function() {
         </div>
         <div class="inv-form-row">
           <div class="inv-form-group">
+            <label>型號</label>
+            <input type="text" id="invEditModel" value="${escapeHtml(editingData.model)}" placeholder="產品型號">
+          </div>
+          <div class="inv-form-group">
             <label>規格</label>
             <input type="text" id="invEditSpec" value="${escapeHtml(editingData.specification)}">
           </div>
+        </div>
+        <div class="inv-form-row">
           <div class="inv-form-group">
             <label>單位</label>
             <input type="text" id="invEditUnit" value="${escapeHtml(editingData.unit)}" placeholder="如：個、台、公斤">
           </div>
-        </div>
-        <div class="inv-form-row">
           <div class="inv-form-group">
             <label>類別</label>
             <input type="text" id="invEditCategory" value="${escapeHtml(editingData.category)}" list="invCategoryList">
             <datalist id="invCategoryList"></datalist>
           </div>
+        </div>
+        <div class="inv-form-row">
           <div class="inv-form-group">
             <label>安全庫存</label>
             <input type="number" id="invEditMinStock" value="${editingData.min_stock !== null ? editingData.min_stock : ''}" step="0.001" min="0">
+          </div>
+          <div class="inv-form-group">
+            <label>存放庫位</label>
+            <input type="text" id="invEditStorageLocation" value="${escapeHtml(editingData.storage_location)}" placeholder="如：A-1-2">
           </div>
         </div>
         <div class="inv-form-group">
@@ -748,11 +831,13 @@ const InventoryManagementModule = (function() {
     const vendorIdValue = windowEl.querySelector('#invEditVendorId').value;
     const data = {
       name,
+      model: windowEl.querySelector('#invEditModel').value.trim() || null,
       specification: windowEl.querySelector('#invEditSpec').value.trim() || null,
       unit: windowEl.querySelector('#invEditUnit').value.trim() || null,
       category: windowEl.querySelector('#invEditCategory').value.trim() || null,
       default_vendor: windowEl.querySelector('#invEditVendor').value.trim() || null,
       default_vendor_id: vendorIdValue || null,
+      storage_location: windowEl.querySelector('#invEditStorageLocation').value.trim() || null,
       min_stock: minStockValue !== '' ? parseFloat(minStockValue) : null,
       notes: windowEl.querySelector('#invEditNotes').value.trim() || null,
     };
@@ -929,6 +1014,260 @@ const InventoryManagementModule = (function() {
       }
 
       NotificationModule.show({ title: '成功', message: '記錄已刪除', icon: 'check-circle' });
+    } catch (error) {
+      NotificationModule.show({ title: '刪除失敗', message: error.message, icon: 'alert-circle' });
+    }
+  }
+
+  // ============================================
+  // Orders (訂購記錄)
+  // ============================================
+
+  const ORDER_STATUS_MAP = {
+    pending: { label: '待下單', color: 'gray' },
+    ordered: { label: '已下單', color: 'blue' },
+    delivered: { label: '已交貨', color: 'green' },
+    cancelled: { label: '已取消', color: 'red' },
+  };
+
+  /**
+   * Load orders for selected item
+   */
+  async function loadOrders() {
+    const windowEl = document.getElementById(windowId);
+    if (!windowEl || !selectedItem) return;
+
+    const container = windowEl.querySelector('#invOrders');
+    if (!container) return;
+
+    try {
+      const response = await apiRequest(`/items/${selectedItem.id}/orders`);
+      const orders = response.items || [];
+
+      if (orders.length === 0) {
+        container.innerHTML = `
+          <div class="inv-empty-transactions">
+            <span>尚無訂購記錄</span>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = `
+        <table class="inv-orders-table">
+          <thead>
+            <tr>
+              <th>下單日期</th>
+              <th>數量</th>
+              <th>廠商</th>
+              <th>預計交貨</th>
+              <th>實際交貨</th>
+              <th>狀態</th>
+              <th>備註</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${orders.map(order => `
+              <tr class="inv-order-row">
+                <td>${formatDate(order.order_date)}</td>
+                <td>${formatNumber(order.order_quantity)}</td>
+                <td>${escapeHtml(order.vendor || '-')}</td>
+                <td>${formatDate(order.expected_delivery_date)}</td>
+                <td>${formatDate(order.actual_delivery_date)}</td>
+                <td>
+                  <span class="inv-order-status ${order.status}">
+                    ${ORDER_STATUS_MAP[order.status]?.label || order.status}
+                  </span>
+                </td>
+                <td>${order.notes ? escapeHtml(order.notes) : '-'}</td>
+                <td>
+                  <div class="inv-order-actions">
+                    <button class="inv-order-edit" data-id="${order.id}" title="編輯">
+                      <span class="icon">${getIcon('pencil')}</span>
+                    </button>
+                    <button class="inv-order-delete" data-id="${order.id}" title="刪除">
+                      <span class="icon">${getIcon('delete')}</span>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+
+      // Bind edit/delete events
+      container.querySelectorAll('.inv-order-edit').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const order = orders.find(o => o.id === btn.dataset.id);
+          if (order) showOrderModal(order);
+        });
+      });
+      container.querySelectorAll('.inv-order-delete').forEach(btn => {
+        btn.addEventListener('click', () => confirmDeleteOrder(btn.dataset.id));
+      });
+    } catch (error) {
+      container.innerHTML = `
+        <div class="inv-error">
+          <span>載入失敗：${error.message}</span>
+        </div>
+      `;
+    }
+  }
+
+  /**
+   * Show order modal (create or edit)
+   */
+  async function showOrderModal(existingOrder = null) {
+    if (!selectedItem) return;
+
+    const windowEl = document.getElementById(windowId);
+    if (!windowEl) return;
+
+    const isEdit = !!existingOrder;
+
+    // 載入廠商列表
+    let vendors = [];
+    try {
+      const token = getToken();
+      const resp = await fetch('/api/vendors?active=true&limit=500', {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        vendors = data.items || [];
+      }
+    } catch (e) {
+      console.error('載入廠商列表失敗:', e);
+    }
+
+    const modal = document.createElement('div');
+    modal.className = 'inv-modal-overlay';
+    modal.innerHTML = `
+      <div class="inv-modal inv-modal-wide">
+        <div class="inv-modal-header">
+          <h3>${isEdit ? '編輯訂購' : '新增訂購'} - ${escapeHtml(selectedItem.name)}</h3>
+          <button class="inv-modal-close">
+            <span class="icon">${getIcon('close')}</span>
+          </button>
+        </div>
+        <div class="inv-modal-body">
+          <div class="inv-form-row">
+            <div class="inv-form-group">
+              <label>訂購數量 *</label>
+              <div class="inv-input-with-unit">
+                <input type="number" id="orderQuantity" step="0.001" min="0.001" value="${existingOrder?.order_quantity || ''}" required>
+                <span class="inv-input-unit">${selectedItem.unit || '單位'}</span>
+              </div>
+            </div>
+            <div class="inv-form-group">
+              <label>狀態</label>
+              <select id="orderStatus">
+                ${Object.entries(ORDER_STATUS_MAP).map(([value, { label }]) =>
+                  `<option value="${value}" ${existingOrder?.status === value ? 'selected' : ''}>${label}</option>`
+                ).join('')}
+              </select>
+            </div>
+          </div>
+          <div class="inv-form-group">
+            <label>廠商</label>
+            <input type="text" id="orderVendor" value="${escapeHtml(existingOrder?.vendor || selectedItem.default_vendor || '')}" list="orderVendorList" placeholder="輸入或選擇廠商">
+            <datalist id="orderVendorList">
+              ${vendors.map(v => `<option value="${escapeHtml(v.name)}">${v.erp_code ? `[${escapeHtml(v.erp_code)}] ` : ''}${escapeHtml(v.name)}</option>`).join('')}
+            </datalist>
+          </div>
+          <div class="inv-form-row">
+            <div class="inv-form-group">
+              <label>下單日期</label>
+              <input type="date" id="orderDate" value="${existingOrder?.order_date || ''}">
+            </div>
+            <div class="inv-form-group">
+              <label>預計交貨日期</label>
+              <input type="date" id="orderExpectedDate" value="${existingOrder?.expected_delivery_date || ''}">
+            </div>
+          </div>
+          ${isEdit ? `
+          <div class="inv-form-group">
+            <label>實際交貨日期</label>
+            <input type="date" id="orderActualDate" value="${existingOrder?.actual_delivery_date || ''}">
+          </div>
+          ` : ''}
+          <div class="inv-form-group">
+            <label>備註</label>
+            <textarea id="orderNotes" rows="2">${escapeHtml(existingOrder?.notes || '')}</textarea>
+          </div>
+        </div>
+        <div class="inv-modal-footer">
+          <button class="inv-btn" id="orderCancel">取消</button>
+          <button class="inv-btn primary" id="orderSave">${isEdit ? '儲存' : '建立'}</button>
+        </div>
+      </div>
+    `;
+
+    windowEl.appendChild(modal);
+
+    const closeModal = () => modal.remove();
+    modal.querySelector('.inv-modal-close').addEventListener('click', closeModal);
+    modal.querySelector('#orderCancel').addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+
+    modal.querySelector('#orderSave').addEventListener('click', async () => {
+      const quantity = parseFloat(modal.querySelector('#orderQuantity').value);
+      if (!quantity || quantity <= 0) {
+        NotificationModule.show({ title: '提醒', message: '請輸入有效訂購數量', icon: 'alert' });
+        return;
+      }
+
+      const data = {
+        order_quantity: quantity,
+        vendor: modal.querySelector('#orderVendor').value.trim() || null,
+        order_date: modal.querySelector('#orderDate').value || null,
+        expected_delivery_date: modal.querySelector('#orderExpectedDate').value || null,
+        notes: modal.querySelector('#orderNotes').value.trim() || null,
+      };
+
+      if (isEdit) {
+        data.status = modal.querySelector('#orderStatus').value;
+        data.actual_delivery_date = modal.querySelector('#orderActualDate')?.value || null;
+      }
+
+      try {
+        if (isEdit) {
+          await apiRequest(`/orders/${existingOrder.id}`, {
+            method: 'PUT',
+            body: JSON.stringify(data),
+          });
+          NotificationModule.show({ title: '成功', message: '訂購記錄已更新', icon: 'check-circle' });
+        } else {
+          await apiRequest(`/items/${selectedItem.id}/orders`, {
+            method: 'POST',
+            body: JSON.stringify(data),
+          });
+          NotificationModule.show({ title: '成功', message: '訂購記錄已建立', icon: 'check-circle' });
+        }
+
+        closeModal();
+        loadOrders();
+      } catch (error) {
+        NotificationModule.show({ title: '失敗', message: error.message, icon: 'alert-circle' });
+      }
+    });
+
+    // Focus quantity input
+    setTimeout(() => modal.querySelector('#orderQuantity').focus(), 100);
+  }
+
+  /**
+   * Confirm and delete order
+   */
+  async function confirmDeleteOrder(orderId) {
+    if (!confirm('確定要刪除此訂購記錄嗎？')) return;
+
+    try {
+      await apiRequest(`/orders/${orderId}`, { method: 'DELETE' });
+      NotificationModule.show({ title: '成功', message: '訂購記錄已刪除', icon: 'check-circle' });
+      loadOrders();
     } catch (error) {
       NotificationModule.show({ title: '刪除失敗', message: error.message, icon: 'alert-circle' });
     }

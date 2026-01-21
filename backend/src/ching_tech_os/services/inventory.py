@@ -16,6 +16,12 @@ from ..models.inventory import (
     InventoryTransactionResponse,
     InventoryTransactionListItem,
     InventoryTransactionListResponse,
+    InventoryOrderCreate,
+    InventoryOrderUpdate,
+    InventoryOrderResponse,
+    InventoryOrderListItem,
+    InventoryOrderListResponse,
+    OrderStatus,
     TransactionType,
     calculate_is_low_stock,
 )
@@ -36,6 +42,11 @@ class InventoryTransactionNotFoundError(InventoryError):
     pass
 
 
+class InventoryOrderNotFoundError(InventoryError):
+    """訂購記錄不存在"""
+    pass
+
+
 # ============================================
 # 物料主檔 CRUD
 # ============================================
@@ -44,14 +55,15 @@ class InventoryTransactionNotFoundError(InventoryError):
 async def list_inventory_items(
     query: str | None = None,
     category: str | None = None,
+    vendor: str | None = None,
     low_stock: bool = False,
 ) -> InventoryItemListResponse:
     """列出物料"""
     async with get_connection() as conn:
         sql = """
             SELECT
-                id, name, specification, unit, category,
-                current_stock, min_stock, updated_at
+                id, name, model, specification, unit, category,
+                storage_location, default_vendor, current_stock, min_stock, updated_at
             FROM inventory_items
             WHERE 1=1
         """
@@ -59,13 +71,26 @@ async def list_inventory_items(
         param_idx = 1
 
         if query:
-            sql += f" AND (name ILIKE ${param_idx} OR specification ILIKE ${param_idx})"
-            params.append(f"%{query}%")
+            # 正規化搜尋：移除連字符和空格後再比較
+            # 讓 "kv7500" 可以匹配到 "PLC KV-7500"
+            normalized_query = query.replace('-', '').replace(' ', '').lower()
+            sql += f""" AND (
+                REPLACE(REPLACE(LOWER(name), '-', ''), ' ', '') LIKE ${param_idx}
+                OR REPLACE(REPLACE(LOWER(COALESCE(specification, '')), '-', ''), ' ', '') LIKE ${param_idx}
+                OR REPLACE(REPLACE(LOWER(COALESCE(model, '')), '-', ''), ' ', '') LIKE ${param_idx}
+            )"""
+            params.append(f"%{normalized_query}%")
             param_idx += 1
 
         if category:
             sql += f" AND category = ${param_idx}"
             params.append(category)
+            param_idx += 1
+
+        if vendor:
+            # 廠商名稱模糊搜尋
+            sql += f" AND default_vendor ILIKE ${param_idx}"
+            params.append(f"%{vendor}%")
             param_idx += 1
 
         if low_stock:
@@ -79,9 +104,12 @@ async def list_inventory_items(
             InventoryItemListItem(
                 id=row["id"],
                 name=row["name"],
+                model=row["model"],
                 specification=row["specification"],
                 unit=row["unit"],
                 category=row["category"],
+                storage_location=row["storage_location"],
+                default_vendor=row["default_vendor"],
                 current_stock=row["current_stock"] or Decimal("0"),
                 min_stock=row["min_stock"],
                 is_low_stock=calculate_is_low_stock(row["current_stock"], row["min_stock"]),
@@ -105,10 +133,12 @@ async def get_inventory_item(item_id: UUID) -> InventoryItemResponse:
         return InventoryItemResponse(
             id=row["id"],
             name=row["name"],
+            model=row["model"],
             specification=row["specification"],
             unit=row["unit"],
             category=row["category"],
             default_vendor=row["default_vendor"],
+            storage_location=row["storage_location"],
             min_stock=row["min_stock"],
             current_stock=row["current_stock"] or Decimal("0"),
             notes=row["notes"],
@@ -131,10 +161,12 @@ async def get_inventory_item_by_name(name: str) -> InventoryItemResponse | None:
         return InventoryItemResponse(
             id=row["id"],
             name=row["name"],
+            model=row["model"],
             specification=row["specification"],
             unit=row["unit"],
             category=row["category"],
             default_vendor=row["default_vendor"],
+            storage_location=row["storage_location"],
             min_stock=row["min_stock"],
             current_stock=row["current_stock"] or Decimal("0"),
             notes=row["notes"],
@@ -150,9 +182,10 @@ async def search_inventory_items(keyword: str, limit: int = 10) -> list[Inventor
     async with get_connection() as conn:
         rows = await conn.fetch(
             """
-            SELECT id, name, specification, unit, category, current_stock, min_stock, updated_at
+            SELECT id, name, model, specification, unit, category, storage_location,
+                   current_stock, min_stock, updated_at
             FROM inventory_items
-            WHERE name ILIKE $1 OR specification ILIKE $1
+            WHERE name ILIKE $1 OR specification ILIKE $1 OR model ILIKE $1
             ORDER BY
                 CASE WHEN name ILIKE $2 THEN 0 ELSE 1 END,
                 name ASC
@@ -167,9 +200,11 @@ async def search_inventory_items(keyword: str, limit: int = 10) -> list[Inventor
             InventoryItemListItem(
                 id=row["id"],
                 name=row["name"],
+                model=row["model"],
                 specification=row["specification"],
                 unit=row["unit"],
                 category=row["category"],
+                storage_location=row["storage_location"],
                 current_stock=row["current_stock"] or Decimal("0"),
                 min_stock=row["min_stock"],
                 is_low_stock=calculate_is_low_stock(row["current_stock"], row["min_stock"]),
@@ -195,16 +230,18 @@ async def create_inventory_item(
         row = await conn.fetchrow(
             """
             INSERT INTO inventory_items (
-                name, specification, unit, category, default_vendor,
-                min_stock, notes, created_by
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                name, model, specification, unit, category, default_vendor,
+                storage_location, min_stock, notes, created_by
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             RETURNING *
             """,
             data.name,
+            data.model,
             data.specification,
             data.unit,
             data.category,
             data.default_vendor,
+            data.storage_location,
             data.min_stock,
             data.notes,
             created_by,
@@ -213,10 +250,12 @@ async def create_inventory_item(
         return InventoryItemResponse(
             id=row["id"],
             name=row["name"],
+            model=row["model"],
             specification=row["specification"],
             unit=row["unit"],
             category=row["category"],
             default_vendor=row["default_vendor"],
+            storage_location=row["storage_location"],
             min_stock=row["min_stock"],
             current_stock=row["current_stock"] or Decimal("0"),
             notes=row["notes"],
@@ -278,10 +317,12 @@ async def update_inventory_item(
         return InventoryItemResponse(
             id=row["id"],
             name=row["name"],
+            model=row["model"],
             specification=row["specification"],
             unit=row["unit"],
             category=row["category"],
             default_vendor=row["default_vendor"],
+            storage_location=row["storage_location"],
             min_stock=row["min_stock"],
             current_stock=row["current_stock"] or Decimal("0"),
             notes=row["notes"],
@@ -729,3 +770,272 @@ async def create_inventory_transaction_mcp(
             item_id,
         )
         return new_stock or Decimal("0")
+
+
+# ============================================
+# 訂購記錄 CRUD
+# ============================================
+
+
+async def list_inventory_orders(
+    item_id: UUID | None = None,
+    status: str | None = None,
+    limit: int = 50,
+) -> InventoryOrderListResponse:
+    """列出訂購記錄"""
+    async with get_connection() as conn:
+        sql = """
+            SELECT
+                o.id, o.item_id, o.order_quantity, o.order_date,
+                o.expected_delivery_date, o.actual_delivery_date, o.status,
+                o.vendor, o.project_id, o.notes, o.created_at, o.updated_at, o.created_by,
+                i.name as item_name, p.name as project_name
+            FROM inventory_orders o
+            LEFT JOIN inventory_items i ON o.item_id = i.id
+            LEFT JOIN projects p ON o.project_id = p.id
+            WHERE 1=1
+        """
+        params = []
+        param_idx = 1
+
+        if item_id:
+            sql += f" AND o.item_id = ${param_idx}"
+            params.append(item_id)
+            param_idx += 1
+
+        if status:
+            sql += f" AND o.status = ${param_idx}"
+            params.append(status)
+            param_idx += 1
+
+        sql += " ORDER BY o.order_date DESC NULLS LAST, o.created_at DESC"
+        sql += f" LIMIT ${param_idx}"
+        params.append(limit)
+
+        rows = await conn.fetch(sql, *params)
+
+        items = [
+            InventoryOrderListItem(
+                id=row["id"],
+                item_id=row["item_id"],
+                item_name=row["item_name"],
+                order_quantity=row["order_quantity"],
+                order_date=row["order_date"],
+                expected_delivery_date=row["expected_delivery_date"],
+                actual_delivery_date=row["actual_delivery_date"],
+                status=row["status"],
+                vendor=row["vendor"],
+                project_id=row["project_id"],
+                project_name=row["project_name"],
+                notes=row["notes"],
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
+                created_by=row["created_by"],
+            )
+            for row in rows
+        ]
+
+        # 取得總數
+        count_sql = "SELECT COUNT(*) FROM inventory_orders WHERE 1=1"
+        count_params = []
+        param_idx = 1
+
+        if item_id:
+            count_sql += f" AND item_id = ${param_idx}"
+            count_params.append(item_id)
+            param_idx += 1
+
+        if status:
+            count_sql += f" AND status = ${param_idx}"
+            count_params.append(status)
+
+        total = await conn.fetchval(count_sql, *count_params)
+
+        return InventoryOrderListResponse(items=items, total=total or 0)
+
+
+async def get_inventory_order(order_id: UUID) -> InventoryOrderResponse:
+    """取得訂購記錄詳情"""
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT
+                o.*, i.name as item_name, p.name as project_name
+            FROM inventory_orders o
+            LEFT JOIN inventory_items i ON o.item_id = i.id
+            LEFT JOIN projects p ON o.project_id = p.id
+            WHERE o.id = $1
+            """,
+            order_id,
+        )
+        if not row:
+            raise InventoryOrderNotFoundError(f"訂購記錄 {order_id} 不存在")
+
+        return InventoryOrderResponse(
+            id=row["id"],
+            item_id=row["item_id"],
+            order_quantity=row["order_quantity"],
+            order_date=row["order_date"],
+            expected_delivery_date=row["expected_delivery_date"],
+            actual_delivery_date=row["actual_delivery_date"],
+            status=row["status"],
+            vendor=row["vendor"],
+            project_id=row["project_id"],
+            notes=row["notes"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+            created_by=row["created_by"],
+            item_name=row["item_name"],
+            project_name=row["project_name"],
+        )
+
+
+async def create_inventory_order(
+    item_id: UUID,
+    data: InventoryOrderCreate,
+    created_by: str | None = None,
+) -> InventoryOrderResponse:
+    """建立訂購記錄"""
+    async with get_connection() as conn:
+        # 檢查物料是否存在
+        item = await conn.fetchrow(
+            "SELECT id, name FROM inventory_items WHERE id = $1", item_id
+        )
+        if not item:
+            raise InventoryItemNotFoundError(f"物料 {item_id} 不存在")
+
+        # 驗證專案是否存在（如果有指定）
+        project_name = None
+        if data.project_id:
+            project = await conn.fetchrow(
+                "SELECT id, name FROM projects WHERE id = $1", data.project_id
+            )
+            if not project:
+                raise InventoryError(f"專案 {data.project_id} 不存在")
+            project_name = project["name"]
+
+        row = await conn.fetchrow(
+            """
+            INSERT INTO inventory_orders (
+                item_id, order_quantity, order_date, expected_delivery_date,
+                vendor, project_id, notes, created_by
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            RETURNING *
+            """,
+            item_id,
+            data.order_quantity,
+            data.order_date,
+            data.expected_delivery_date,
+            data.vendor,
+            data.project_id,
+            data.notes,
+            created_by,
+        )
+
+        return InventoryOrderResponse(
+            id=row["id"],
+            item_id=row["item_id"],
+            order_quantity=row["order_quantity"],
+            order_date=row["order_date"],
+            expected_delivery_date=row["expected_delivery_date"],
+            actual_delivery_date=row["actual_delivery_date"],
+            status=row["status"],
+            vendor=row["vendor"],
+            project_id=row["project_id"],
+            notes=row["notes"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+            created_by=row["created_by"],
+            item_name=item["name"],
+            project_name=project_name,
+        )
+
+
+async def update_inventory_order(
+    order_id: UUID,
+    data: InventoryOrderUpdate,
+) -> InventoryOrderResponse:
+    """更新訂購記錄"""
+    async with get_connection() as conn:
+        # 檢查訂購記錄是否存在
+        existing = await conn.fetchrow(
+            "SELECT * FROM inventory_orders WHERE id = $1", order_id
+        )
+        if not existing:
+            raise InventoryOrderNotFoundError(f"訂購記錄 {order_id} 不存在")
+
+        # 驗證專案是否存在（如果有指定）
+        if data.project_id:
+            project = await conn.fetchrow(
+                "SELECT id FROM projects WHERE id = $1", data.project_id
+            )
+            if not project:
+                raise InventoryError(f"專案 {data.project_id} 不存在")
+
+        # 建立動態更新 SQL
+        update_fields = []
+        params = []
+        param_idx = 1
+
+        update_data = data.model_dump(exclude_unset=True)
+        for field, value in update_data.items():
+            if value is not None:
+                # 處理 Enum 類型
+                if isinstance(value, OrderStatus):
+                    value = value.value
+                update_fields.append(f"{field} = ${param_idx}")
+                params.append(value)
+                param_idx += 1
+
+        if not update_fields:
+            return await get_inventory_order(order_id)
+
+        params.append(order_id)
+        sql = f"""
+            UPDATE inventory_orders
+            SET {', '.join(update_fields)}
+            WHERE id = ${param_idx}
+            RETURNING *
+        """
+
+        row = await conn.fetchrow(sql, *params)
+
+        # 取得關聯資訊
+        item = await conn.fetchrow(
+            "SELECT name FROM inventory_items WHERE id = $1", row["item_id"]
+        )
+        project_name = None
+        if row["project_id"]:
+            project = await conn.fetchrow(
+                "SELECT name FROM projects WHERE id = $1", row["project_id"]
+            )
+            if project:
+                project_name = project["name"]
+
+        return InventoryOrderResponse(
+            id=row["id"],
+            item_id=row["item_id"],
+            order_quantity=row["order_quantity"],
+            order_date=row["order_date"],
+            expected_delivery_date=row["expected_delivery_date"],
+            actual_delivery_date=row["actual_delivery_date"],
+            status=row["status"],
+            vendor=row["vendor"],
+            project_id=row["project_id"],
+            notes=row["notes"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+            created_by=row["created_by"],
+            item_name=item["name"] if item else None,
+            project_name=project_name,
+        )
+
+
+async def delete_inventory_order(order_id: UUID) -> None:
+    """刪除訂購記錄"""
+    async with get_connection() as conn:
+        result = await conn.execute(
+            "DELETE FROM inventory_orders WHERE id = $1", order_id
+        )
+        if result == "DELETE 0":
+            raise InventoryOrderNotFoundError(f"訂購記錄 {order_id} 不存在")

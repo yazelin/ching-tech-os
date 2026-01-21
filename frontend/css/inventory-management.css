@@ -230,6 +230,15 @@
   text-overflow: ellipsis;
 }
 
+.inv-list-item-model {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .inv-list-item-spec {
   font-size: 12px;
   color: var(--text-muted);
@@ -256,6 +265,14 @@
 
 .inv-list-item-stock.warning {
   color: var(--color-warning);
+}
+
+.inv-list-item-location {
+  font-size: 11px;
+  padding: 2px 6px;
+  background: var(--tag-bg-purple);
+  color: var(--tag-text-purple);
+  border-radius: 4px;
 }
 
 .inv-list-item-category {
@@ -360,9 +377,50 @@
   text-overflow: ellipsis;
 }
 
+.inv-detail-model {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-right: 8px;
+}
+
 .inv-detail-spec {
   font-size: 13px;
   color: var(--text-muted);
+}
+
+/* Tabs */
+.inv-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 16px;
+  background: var(--bg-surface-dark);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.inv-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-bottom: -1px;
+}
+
+.inv-tab:hover {
+  color: var(--text-primary);
+  background: var(--hover-bg);
+}
+
+.inv-tab.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
 }
 
 .inv-detail-actions {
@@ -573,6 +631,103 @@
   padding: 24px;
   text-align: center;
   color: var(--text-muted);
+}
+
+/* Orders table */
+.inv-orders {
+  background: var(--bg-surface-dark);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.inv-orders-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.inv-orders-table th,
+.inv-orders-table td {
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.inv-orders-table th {
+  background: var(--bg-surface-darker);
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: 12px;
+}
+
+.inv-orders-table td {
+  color: var(--text-primary);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.inv-order-status {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.inv-order-status.pending {
+  background: var(--tag-bg-gray);
+  color: var(--tag-text-gray);
+}
+
+.inv-order-status.ordered {
+  background: var(--tag-bg-blue);
+  color: var(--tag-text-blue);
+}
+
+.inv-order-status.delivered {
+  background: var(--tag-bg-green);
+  color: var(--tag-text-green);
+}
+
+.inv-order-status.cancelled {
+  background: var(--tag-bg-red);
+  color: var(--tag-text-red);
+}
+
+.inv-order-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.inv-order-edit,
+.inv-order-delete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0.5;
+  transition: all 0.15s;
+}
+
+.inv-order-edit:hover {
+  opacity: 1;
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+.inv-order-delete:hover {
+  opacity: 1;
+  background: var(--tag-bg-red);
+  color: var(--color-error);
+}
+
+/* Wider modal for orders */
+.inv-modal-wide {
+  width: 520px;
 }
 
 /* Editor */

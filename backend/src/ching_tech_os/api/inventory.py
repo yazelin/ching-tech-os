@@ -12,6 +12,10 @@ from ching_tech_os.models.inventory import (
     InventoryTransactionCreate,
     InventoryTransactionResponse,
     InventoryTransactionListResponse,
+    InventoryOrderCreate,
+    InventoryOrderUpdate,
+    InventoryOrderResponse,
+    InventoryOrderListResponse,
 )
 from ching_tech_os.services.inventory import (
     # 物料
@@ -25,6 +29,12 @@ from ching_tech_os.services.inventory import (
     get_inventory_transaction,
     create_inventory_transaction,
     delete_inventory_transaction,
+    # 訂購記錄
+    list_inventory_orders,
+    get_inventory_order,
+    create_inventory_order,
+    update_inventory_order,
+    delete_inventory_order,
     # 統計
     get_categories,
     get_low_stock_count,
@@ -32,6 +42,7 @@ from ching_tech_os.services.inventory import (
     InventoryError,
     InventoryItemNotFoundError,
     InventoryTransactionNotFoundError,
+    InventoryOrderNotFoundError,
 )
 
 router = APIRouter(prefix="/api/inventory", tags=["inventory"])
@@ -190,6 +201,97 @@ async def api_delete_inventory_transaction(transaction_id: UUID) -> None:
     try:
         await delete_inventory_transaction(transaction_id)
     except InventoryTransactionNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except InventoryError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+# ============================================
+# 訂購記錄 CRUD
+# ============================================
+
+
+@router.get(
+    "/items/{item_id}/orders",
+    response_model=InventoryOrderListResponse,
+    summary="列出物料訂購記錄",
+)
+async def api_list_inventory_orders(
+    item_id: UUID,
+    status: str | None = Query(None, description="狀態過濾（pending/ordered/delivered/cancelled）"),
+    limit: int = Query(50, ge=1, le=200, description="最大筆數"),
+) -> InventoryOrderListResponse:
+    """列出物料的訂購記錄"""
+    try:
+        return await list_inventory_orders(item_id=item_id, status=status, limit=limit)
+    except InventoryItemNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except InventoryError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post(
+    "/items/{item_id}/orders",
+    response_model=InventoryOrderResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="建立訂購記錄",
+)
+async def api_create_inventory_order(
+    item_id: UUID,
+    data: InventoryOrderCreate,
+) -> InventoryOrderResponse:
+    """建立訂購記錄"""
+    try:
+        return await create_inventory_order(item_id, data)
+    except InventoryItemNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except InventoryError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.get(
+    "/orders/{order_id}",
+    response_model=InventoryOrderResponse,
+    summary="取得訂購記錄詳情",
+)
+async def api_get_inventory_order(order_id: UUID) -> InventoryOrderResponse:
+    """取得訂購記錄詳情"""
+    try:
+        return await get_inventory_order(order_id)
+    except InventoryOrderNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except InventoryError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.put(
+    "/orders/{order_id}",
+    response_model=InventoryOrderResponse,
+    summary="更新訂購記錄",
+)
+async def api_update_inventory_order(
+    order_id: UUID,
+    data: InventoryOrderUpdate,
+) -> InventoryOrderResponse:
+    """更新訂購記錄"""
+    try:
+        return await update_inventory_order(order_id, data)
+    except InventoryOrderNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except InventoryError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.delete(
+    "/orders/{order_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="刪除訂購記錄",
+)
+async def api_delete_inventory_order(order_id: UUID) -> None:
+    """刪除訂購記錄"""
+    try:
+        await delete_inventory_order(order_id)
+    except InventoryOrderNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except InventoryError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

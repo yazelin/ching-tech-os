@@ -3575,6 +3575,7 @@ async def query_inventory(
     keyword: str | None = None,
     item_id: str | None = None,
     category: str | None = None,
+    vendor: str | None = None,
     low_stock: bool = False,
     limit: int = 20,
 ) -> str:
@@ -3582,9 +3583,10 @@ async def query_inventory(
     查詢物料/庫存
 
     Args:
-        keyword: 搜尋關鍵字（名稱或規格）
+        keyword: 搜尋關鍵字（名稱、型號或規格）
         item_id: 物料 ID（查詢特定物料詳情）
         category: 類別過濾
+        vendor: 廠商名稱過濾（模糊搜尋）
         low_stock: 只顯示庫存不足的物料
         limit: 最大回傳數量，預設 20
     """
@@ -3613,9 +3615,11 @@ async def query_inventory(
             is_low = calculate_is_low_stock(current_stock, min_stock)
 
             result = f"""📦 **{row['name']}**
+型號：{row['model'] or '-'}
 規格：{row['specification'] or '-'}
 單位：{row['unit'] or '-'}
 類別：{row['category'] or '-'}
+存放庫位：{row['storage_location'] or '-'}
 預設廠商：{row['default_vendor'] or '-'}
 目前庫存：{current_stock} {row['unit'] or ''}{'⚠️ 庫存不足' if is_low else ''}
 最低庫存：{min_stock or '-'}
@@ -3637,7 +3641,7 @@ async def query_inventory(
             return result
 
         # 查詢物料列表（使用 Service 層）
-        response = await list_inventory_items(query=keyword, category=category, low_stock=low_stock)
+        response = await list_inventory_items(query=keyword, category=category, vendor=vendor, low_stock=low_stock)
         items = response.items[:limit]
 
         if not items:
@@ -3646,8 +3650,11 @@ async def query_inventory(
         result = f"📦 物料列表（共 {len(items)} 筆）：\n"
         for item in items:
             low_mark = " ⚠️" if item.is_low_stock else ""
+            model_info = f"[{item.model}]" if item.model else ""
             spec = f"（{item.specification}）" if item.specification else ""
-            result += f"\n• {item.name}{spec}：{item.current_stock} {item.unit or ''}{low_mark}"
+            location = f" @{item.storage_location}" if item.storage_location else ""
+            vendor_info = f" 廠商:{item.default_vendor}" if item.default_vendor else ""
+            result += f"\n• {item.name}{model_info}{spec}：{item.current_stock} {item.unit or ''}{vendor_info}{location}{low_mark}"
 
         return result
 
@@ -3659,10 +3666,12 @@ async def query_inventory(
 @mcp.tool()
 async def add_inventory_item(
     name: str,
+    model: str | None = None,
     specification: str | None = None,
     unit: str | None = None,
     category: str | None = None,
     default_vendor: str | None = None,
+    storage_location: str | None = None,
     min_stock: float | None = None,
     notes: str | None = None,
 ) -> str:
@@ -3671,10 +3680,12 @@ async def add_inventory_item(
 
     Args:
         name: 物料名稱（必填）
+        model: 型號
         specification: 規格
         unit: 單位（如：個、台、公斤）
         category: 類別
         default_vendor: 預設廠商
+        storage_location: 存放庫位（如 A-1-3 表示 A 區 1 排 3 號）
         min_stock: 最低庫存量（低於此數量會警告）
         notes: 備註
     """
@@ -3687,22 +3698,129 @@ async def add_inventory_item(
     try:
         data = InventoryItemCreate(
             name=name,
+            model=model,
             specification=specification,
             unit=unit,
             category=category,
             default_vendor=default_vendor,
+            storage_location=storage_location,
             min_stock=Decimal(str(min_stock)) if min_stock else None,
             notes=notes,
         )
         result = await create_inventory_item(data, created_by="linebot")
 
-        return f"✅ 已新增物料「{result.name}」\nID：{result.id}\n\n💡 提示：使用「進貨」指令來增加庫存"
+        location_info = f"\n存放庫位：{result.storage_location}" if result.storage_location else ""
+        model_info = f"\n型號：{result.model}" if result.model else ""
+        return f"✅ 已新增物料「{result.name}」{model_info}{location_info}\nID：{result.id}\n\n💡 提示：使用「進貨」指令來增加庫存"
 
     except InventoryError as e:
         return f"❌ {str(e)}"
     except Exception as e:
         logger.error(f"新增物料失敗: {e}")
         return f"❌ 新增失敗：{str(e)}"
+
+
+@mcp.tool()
+async def update_inventory_item(
+    item_id: str | None = None,
+    item_name: str | None = None,
+    name: str | None = None,
+    model: str | None = None,
+    specification: str | None = None,
+    unit: str | None = None,
+    category: str | None = None,
+    default_vendor: str | None = None,
+    storage_location: str | None = None,
+    min_stock: float | None = None,
+    notes: str | None = None,
+) -> str:
+    """
+    更新物料資訊
+
+    Args:
+        item_id: 物料 ID（與 item_name 擇一提供）
+        item_name: 物料名稱（與 item_id 擇一，會模糊搜尋）
+        name: 新的物料名稱
+        model: 型號
+        specification: 規格
+        unit: 單位
+        category: 類別
+        default_vendor: 預設廠商
+        storage_location: 存放庫位
+        min_stock: 最低庫存量
+        notes: 備註
+    """
+    from decimal import Decimal
+    from ..services.inventory import (
+        update_inventory_item as update_item,
+        list_inventory_items,
+        InventoryError,
+    )
+    from ..models.inventory import InventoryItemUpdate
+
+    await ensure_db_connection()
+
+    try:
+        # 找到物料
+        target_id = None
+        if item_id:
+            target_id = UUID(item_id)
+        elif item_name:
+            # 用名稱搜尋
+            response = await list_inventory_items(query=item_name)
+            if not response.items:
+                return f"❌ 找不到物料：{item_name}"
+            if len(response.items) > 1:
+                items_list = "\n".join([f"• {i.name}（ID: {i.id}）" for i in response.items[:5]])
+                return f"找到多個物料，請指定 item_id：\n{items_list}"
+            target_id = response.items[0].id
+        else:
+            return "❌ 請提供 item_id 或 item_name"
+
+        # 建立更新資料
+        update_data = InventoryItemUpdate(
+            name=name,
+            model=model,
+            specification=specification,
+            unit=unit,
+            category=category,
+            default_vendor=default_vendor,
+            storage_location=storage_location,
+            min_stock=Decimal(str(min_stock)) if min_stock is not None else None,
+            notes=notes,
+        )
+
+        result = await update_item(target_id, update_data)
+
+        # 列出更新的欄位
+        updated_fields = []
+        if name:
+            updated_fields.append(f"名稱：{name}")
+        if model:
+            updated_fields.append(f"型號：{model}")
+        if specification:
+            updated_fields.append(f"規格：{specification}")
+        if unit:
+            updated_fields.append(f"單位：{unit}")
+        if category:
+            updated_fields.append(f"類別：{category}")
+        if default_vendor:
+            updated_fields.append(f"預設廠商：{default_vendor}")
+        if storage_location:
+            updated_fields.append(f"存放庫位：{storage_location}")
+        if min_stock is not None:
+            updated_fields.append(f"最低庫存：{min_stock}")
+        if notes:
+            updated_fields.append(f"備註：{notes}")
+
+        fields_str = "\n".join(updated_fields) if updated_fields else "（無變更）"
+        return f"✅ 已更新物料「{result.name}」\n{fields_str}"
+
+    except InventoryError as e:
+        return f"❌ {str(e)}"
+    except Exception as e:
+        logger.error(f"更新物料失敗: {e}")
+        return f"❌ 更新失敗：{str(e)}"
 
 
 @mcp.tool()
@@ -3957,6 +4075,302 @@ async def adjust_inventory(
     except Exception as e:
         logger.error(f"調整庫存失敗: {e}")
         return f"❌ 調整失敗：{str(e)}"
+
+
+@mcp.tool()
+async def add_inventory_order(
+    order_quantity: float,
+    item_id: str | None = None,
+    item_name: str | None = None,
+    order_date: str | None = None,
+    expected_delivery_date: str | None = None,
+    vendor: str | None = None,
+    project_id: str | None = None,
+    project_name: str | None = None,
+    notes: str | None = None,
+) -> str:
+    """
+    新增訂購記錄
+
+    Args:
+        order_quantity: 訂購數量（必填）
+        item_id: 物料 ID（與 item_name 擇一提供）
+        item_name: 物料名稱（與 item_id 擇一提供，會模糊匹配）
+        order_date: 下單日期（格式：YYYY-MM-DD）
+        expected_delivery_date: 預計交貨日期（格式：YYYY-MM-DD）
+        vendor: 訂購廠商
+        project_id: 關聯專案 ID
+        project_name: 關聯專案名稱（會搜尋匹配）
+        notes: 備註
+    """
+    from datetime import date
+    from decimal import Decimal
+    from ..services.inventory import (
+        find_item_by_id_or_name,
+        find_project_by_id_or_name,
+        create_inventory_order,
+        InventoryError,
+    )
+    from ..models.inventory import InventoryOrderCreate
+
+    await ensure_db_connection()
+
+    if order_quantity <= 0:
+        return "❌ 訂購數量必須大於 0"
+
+    try:
+        # 查詢物料
+        item_result = await find_item_by_id_or_name(item_id=item_id, item_name=item_name)
+        if not item_result.found:
+            if item_result.has_multiple:
+                candidates = "\n".join([f"• {i['name']}（ID: {i['id']}）" for i in item_result.candidates])
+                return f"⚠️ 找到多個匹配的物料，請指定：\n{candidates}"
+            return f"❌ {item_result.error}"
+        item = item_result.item
+
+        # 查詢專案（如果有指定）
+        project_result = await find_project_by_id_or_name(project_id=project_id, project_name=project_name)
+        if project_result.error:
+            if project_result.has_multiple:
+                candidates = "\n".join([f"• {p['name']}（ID: {p['id']}）" for p in project_result.candidates])
+                return f"⚠️ 找到多個匹配的專案，請指定專案 ID：\n{candidates}"
+            return f"❌ {project_result.error}"
+
+        actual_project_id = project_result.project["id"] if project_result.found else None
+
+        # 解析日期
+        parsed_order_date = None
+        if order_date:
+            try:
+                parsed_order_date = date.fromisoformat(order_date)
+            except ValueError:
+                return f"❌ 無效的下單日期格式：{order_date}（應為 YYYY-MM-DD）"
+
+        parsed_delivery_date = None
+        if expected_delivery_date:
+            try:
+                parsed_delivery_date = date.fromisoformat(expected_delivery_date)
+            except ValueError:
+                return f"❌ 無效的交貨日期格式：{expected_delivery_date}（應為 YYYY-MM-DD）"
+
+        # 建立訂購記錄
+        data = InventoryOrderCreate(
+            order_quantity=Decimal(str(order_quantity)),
+            order_date=parsed_order_date,
+            expected_delivery_date=parsed_delivery_date,
+            vendor=vendor,
+            project_id=UUID(str(actual_project_id)) if actual_project_id else None,
+            notes=notes,
+        )
+        result = await create_inventory_order(UUID(str(item["id"])), data, created_by="linebot")
+
+        project_info = f"\n關聯專案：{result.project_name}" if result.project_name else ""
+        delivery_info = f"\n預計交貨：{result.expected_delivery_date}" if result.expected_delivery_date else ""
+        vendor_info = f"\n廠商：{result.vendor}" if result.vendor else ""
+
+        return f"✅ 已新增訂購記錄\n物料：{result.item_name}\n訂購數量：{result.order_quantity} {item['unit'] or ''}{vendor_info}{delivery_info}{project_info}\n\n💡 提示：交貨後請更新訂購狀態為「delivered」，並使用「進貨」指令記錄入庫"
+
+    except InventoryError as e:
+        return f"❌ {str(e)}"
+    except Exception as e:
+        logger.error(f"新增訂購記錄失敗: {e}")
+        return f"❌ 新增失敗：{str(e)}"
+
+
+@mcp.tool()
+async def update_inventory_order(
+    order_id: str,
+    order_quantity: float | None = None,
+    order_date: str | None = None,
+    expected_delivery_date: str | None = None,
+    actual_delivery_date: str | None = None,
+    status: str | None = None,
+    vendor: str | None = None,
+    project_id: str | None = None,
+    notes: str | None = None,
+) -> str:
+    """
+    更新訂購記錄
+
+    Args:
+        order_id: 訂購記錄 ID（必填）
+        order_quantity: 訂購數量
+        order_date: 下單日期（格式：YYYY-MM-DD）
+        expected_delivery_date: 預計交貨日期（格式：YYYY-MM-DD）
+        actual_delivery_date: 實際交貨日期（格式：YYYY-MM-DD）
+        status: 狀態，可選：pending（待下單）、ordered（已下單）、delivered（已交貨）、cancelled（已取消）
+        vendor: 訂購廠商
+        project_id: 關聯專案 ID
+        notes: 備註
+    """
+    from datetime import date
+    from decimal import Decimal
+    from ..services.inventory import (
+        update_inventory_order as update_order,
+        InventoryOrderNotFoundError,
+        InventoryError,
+    )
+    from ..models.inventory import InventoryOrderUpdate, OrderStatus
+
+    await ensure_db_connection()
+
+    # 驗證狀態值
+    valid_statuses = ["pending", "ordered", "delivered", "cancelled"]
+    if status and status not in valid_statuses:
+        return f"❌ 無效的狀態值：{status}\n可用值：pending（待下單）、ordered（已下單）、delivered（已交貨）、cancelled（已取消）"
+
+    try:
+        # 解析日期
+        parsed_order_date = None
+        if order_date:
+            try:
+                parsed_order_date = date.fromisoformat(order_date)
+            except ValueError:
+                return f"❌ 無效的下單日期格式：{order_date}（應為 YYYY-MM-DD）"
+
+        parsed_expected_date = None
+        if expected_delivery_date:
+            try:
+                parsed_expected_date = date.fromisoformat(expected_delivery_date)
+            except ValueError:
+                return f"❌ 無效的預計交貨日期格式：{expected_delivery_date}（應為 YYYY-MM-DD）"
+
+        parsed_actual_date = None
+        if actual_delivery_date:
+            try:
+                parsed_actual_date = date.fromisoformat(actual_delivery_date)
+            except ValueError:
+                return f"❌ 無效的實際交貨日期格式：{actual_delivery_date}（應為 YYYY-MM-DD）"
+
+        # 建立更新資料
+        data = InventoryOrderUpdate(
+            order_quantity=Decimal(str(order_quantity)) if order_quantity else None,
+            order_date=parsed_order_date,
+            expected_delivery_date=parsed_expected_date,
+            actual_delivery_date=parsed_actual_date,
+            status=OrderStatus(status) if status else None,
+            vendor=vendor,
+            project_id=UUID(project_id) if project_id else None,
+            notes=notes,
+        )
+
+        result = await update_order(UUID(order_id), data)
+
+        status_display = {
+            "pending": "待下單",
+            "ordered": "已下單",
+            "delivered": "已交貨",
+            "cancelled": "已取消",
+        }
+        status_text = status_display.get(result.status.value, result.status.value)
+
+        hint = ""
+        if result.status == OrderStatus.DELIVERED:
+            hint = "\n\n💡 提示：已交貨，請使用「進貨」指令記錄入庫"
+
+        return f"✅ 已更新訂購記錄\n物料：{result.item_name}\n訂購數量：{result.order_quantity}\n狀態：{status_text}{hint}"
+
+    except InventoryOrderNotFoundError as e:
+        return f"❌ {str(e)}"
+    except InventoryError as e:
+        return f"❌ {str(e)}"
+    except Exception as e:
+        logger.error(f"更新訂購記錄失敗: {e}")
+        return f"❌ 更新失敗：{str(e)}"
+
+
+@mcp.tool()
+async def get_inventory_orders(
+    item_id: str | None = None,
+    item_name: str | None = None,
+    status: str | None = None,
+    limit: int = 20,
+) -> str:
+    """
+    查詢訂購記錄
+
+    Args:
+        item_id: 物料 ID（與 item_name 擇一提供）
+        item_name: 物料名稱（與 item_id 擇一提供，會模糊匹配）
+        status: 狀態過濾，可選：pending（待下單）、ordered（已下單）、delivered（已交貨）、cancelled（已取消）
+        limit: 最大回傳數量，預設 20
+    """
+    from ..services.inventory import (
+        find_item_by_id_or_name,
+        list_inventory_orders,
+    )
+
+    await ensure_db_connection()
+
+    # 驗證狀態值
+    valid_statuses = ["pending", "ordered", "delivered", "cancelled"]
+    if status and status not in valid_statuses:
+        return f"❌ 無效的狀態值：{status}\n可用值：pending（待下單）、ordered（已下單）、delivered（已交貨）、cancelled（已取消）"
+
+    try:
+        # 如果指定了物料，先查詢物料 ID
+        actual_item_id = None
+        item_name_display = None
+        if item_id or item_name:
+            item_result = await find_item_by_id_or_name(item_id=item_id, item_name=item_name)
+            if not item_result.found:
+                if item_result.has_multiple:
+                    candidates = "\n".join([f"• {i['name']}（ID: {i['id']}）" for i in item_result.candidates])
+                    return f"⚠️ 找到多個匹配的物料，請指定：\n{candidates}"
+                return f"❌ {item_result.error}"
+            actual_item_id = UUID(str(item_result.item["id"]))
+            item_name_display = item_result.item["name"]
+
+        # 查詢訂購記錄
+        response = await list_inventory_orders(
+            item_id=actual_item_id,
+            status=status,
+            limit=limit,
+        )
+        orders = response.items
+
+        if not orders:
+            filter_info = ""
+            if item_name_display:
+                filter_info += f"物料「{item_name_display}」"
+            if status:
+                status_display = {
+                    "pending": "待下單",
+                    "ordered": "已下單",
+                    "delivered": "已交貨",
+                    "cancelled": "已取消",
+                }
+                filter_info += f"狀態「{status_display.get(status, status)}」"
+            return f"📋 找不到{filter_info or '符合條件的'}訂購記錄"
+
+        status_display = {
+            "pending": "⏳待下單",
+            "ordered": "🔵已下單",
+            "delivered": "✅已交貨",
+            "cancelled": "❌已取消",
+        }
+
+        title = f"📋 訂購記錄（共 {len(orders)} 筆）"
+        if item_name_display:
+            title = f"📋 {item_name_display} 的訂購記錄（共 {len(orders)} 筆）"
+
+        result = f"{title}：\n"
+        for o in orders:
+            status_text = status_display.get(o.status.value, o.status.value)
+            date_info = f"下單：{o.order_date}" if o.order_date else "待下單"
+            delivery_info = f"→ 預計：{o.expected_delivery_date}" if o.expected_delivery_date else ""
+            if o.actual_delivery_date:
+                delivery_info = f"→ 已交：{o.actual_delivery_date}"
+            vendor_info = f" [{o.vendor}]" if o.vendor else ""
+            project_info = f" ({o.project_name})" if o.project_name else ""
+
+            result += f"\n• {o.item_name}：{o.order_quantity}{vendor_info}\n  {status_text} | {date_info} {delivery_info}{project_info}"
+
+        return result
+
+    except Exception as e:
+        logger.error(f"查詢訂購記錄失敗: {e}")
+        return f"❌ 查詢失敗：{str(e)}"
 
 
 # ============================================================
