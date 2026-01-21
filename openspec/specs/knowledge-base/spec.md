@@ -190,16 +190,18 @@ TBD - created by archiving change add-knowledge-base. Update Purpose after archi
 - **WHEN** 使用者上傳小於 1MB 的圖片
 - **THEN** 系統將圖片存放於 `data/knowledge/assets/images/`
 - **AND** 圖片隨 Git 追蹤
+- **AND** 附件路徑記錄為 `local://knowledge/assets/images/{kb_id}-{filename}`
 
 #### Scenario: 大型附件 NAS 儲存
 - **WHEN** 使用者上傳大於或等於 1MB 的附件
 - **THEN** 系統將附件存放於 NAS `//192.168.11.50/擎添開發/ching-tech-os/knowledge/attachments/{kb-id}/`
 - **AND** 附件不進入 Git
+- **AND** 附件路徑記錄為 `ctos://knowledge/attachments/{kb_id}/{filename}`
 
 #### Scenario: NAS 附件引用
 - **WHEN** 知識包含 NAS 附件
 - **THEN** 元資料 attachments 欄位記錄附件資訊
-- **AND** 使用 `nas://knowledge/attachments/{kb-id}/{filename}` 協定引用
+- **AND** 使用 `ctos://knowledge/attachments/{kb-id}/{filename}` 協定引用
 
 #### Scenario: 顯示 NAS 附件
 - **WHEN** 使用者檢視包含 NAS 附件的知識
@@ -231,7 +233,14 @@ TBD - created by archiving change add-knowledge-base. Update Purpose after archi
 - **AND** 刪除知識檔案與索引記錄
 - **AND** 若 NAS 附件目錄為空則一併刪除
 
----
+#### Scenario: 公開分享頁面下載附件
+- **WHEN** 使用者透過公開分享連結存取知識
+- **AND** 知識包含附件
+- **THEN** 前端可透過 `/api/public/{token}/attachments/{path}` 下載附件
+- **AND** API 支援 `local://knowledge/assets/images/...` 格式（新）
+- **AND** API 支援 `local://knowledge/images/...` 格式（舊，向後相容）
+- **AND** API 支援 `ctos://knowledge/attachments/...` 格式（NAS）
+- **AND** API 正確轉換路徑並回傳檔案內容
 
 ### Requirement: CSS 設計系統
 知識庫 SHALL 使用全域 CSS 變數確保設計一致性。

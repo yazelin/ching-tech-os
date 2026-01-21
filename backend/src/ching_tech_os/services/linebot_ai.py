@@ -4,6 +4,7 @@
 整合 AI Log 記錄功能
 """
 
+import asyncio
 import json
 import logging
 import re
@@ -11,6 +12,7 @@ import time
 from uuid import UUID
 
 from .claude_agent import call_claude, compose_prompt_with_history
+from .huggingface_image import generate_image_fallback
 from .linebot import (
     reply_text,
     reply_messages,
@@ -75,6 +77,172 @@ def parse_pdf_temp_path(temp_path: str) -> tuple[str, str]:
 # ============================================================
 
 
+def extract_nanobanana_error(tool_calls: list) -> str | None:
+    """
+    從 tool_calls 中提取 nanobanana 的錯誤訊息
+
+    Args:
+        tool_calls: Claude response 的 tool_calls 列表
+
+    Returns:
+        錯誤訊息字串，如果沒有錯誤則回傳 None
+    """
+    if not tool_calls:
+        return None
+
+    nanobanana_tools = {
+        "mcp__nanobanana__generate_image",
+        "mcp__nanobanana__edit_image",
+    }
+
+    for tc in tool_calls:
+        if tc.name not in nanobanana_tools:
+            continue
+
+        try:
+            output = tc.output
+            if isinstance(output, str):
+                output_data = json.loads(output)
+            else:
+                output_data = output
+
+            if isinstance(output_data, list) and len(output_data) > 0:
+                inner_text = output_data[0].get("text", "")
+                if inner_text:
+                    inner_data = json.loads(inner_text)
+                    if not inner_data.get("success") and inner_data.get("error"):
+                        return inner_data["error"]
+        except (json.JSONDecodeError, KeyError, TypeError):
+            pass
+
+    return None
+
+
+def extract_nanobanana_prompt(tool_calls: list) -> str | None:
+    """
+    從 tool_calls 中提取 nanobanana 的 prompt
+
+    Args:
+        tool_calls: Claude response 的 tool_calls 列表
+
+    Returns:
+        prompt 字串，如果沒有則回傳 None
+    """
+    if not tool_calls:
+        return None
+
+    # 只支援 generate_image，edit_image 需要參考圖片無法用備用服務
+    for tc in tool_calls:
+        if tc.name != "mcp__nanobanana__generate_image":
+            continue
+
+        try:
+            # tc.input 是 dict，包含 prompt 等參數
+            if hasattr(tc, "input") and isinstance(tc.input, dict):
+                return tc.input.get("prompt")
+        except (AttributeError, TypeError):
+            pass
+
+    return None
+
+
+def check_nanobanana_timeout(tool_calls: list) -> bool:
+    """
+    檢測是否有 nanobanana 工具被呼叫但 output 為空（timeout）
+
+    當 Gemini API hang 住時，Claude CLI 會 timeout 並強制終止，
+    導致 nanobanana 的 output 為空。
+
+    Args:
+        tool_calls: Claude response 的 tool_calls 列表
+
+    Returns:
+        True 如果有 nanobanana 呼叫但 output 為空
+    """
+    if not tool_calls:
+        return False
+
+    for tc in tool_calls:
+        if tc.name != "mcp__nanobanana__generate_image":
+            continue
+
+        # 檢查 output 是否為空
+        output = tc.output
+        if output is None or output == "" or output == "null":
+            return True
+
+        # 檢查是否為空字串或空 list
+        if isinstance(output, str):
+            try:
+                parsed = json.loads(output)
+                if not parsed:
+                    return True
+            except json.JSONDecodeError:
+                if not output.strip():
+                    return True
+
+    return False
+
+
+def should_retry_nanobanana(tool_calls: list) -> tuple[bool, str]:
+    """
+    檢測是否應該重試 nanobanana 請求
+
+    可重試的情況：
+    1. timeout（output 為空）
+    2. overloaded 錯誤（Gemini 伺服器過載）
+
+    Args:
+        tool_calls: Claude response 的 tool_calls 列表
+
+    Returns:
+        (should_retry, reason) - 是否應重試及原因
+    """
+    # 檢查 timeout
+    if check_nanobanana_timeout(tool_calls):
+        return True, "timeout"
+
+    # 檢查 overloaded 錯誤
+    error = extract_nanobanana_error(tool_calls)
+    if error:
+        error_lower = error.lower()
+        # 可重試的錯誤關鍵字
+        retry_keywords = ["overloaded", "overload", "503", "try again", "temporarily"]
+        if any(keyword in error_lower for keyword in retry_keywords):
+            return True, f"overloaded: {error[:50]}"
+
+    return False, ""
+
+
+def get_user_friendly_nanobanana_error(error: str) -> str:
+    """
+    將 nanobanana 錯誤轉換為用戶友善的訊息
+
+    Args:
+        error: 原始錯誤訊息
+
+    Returns:
+        用戶友善的錯誤訊息
+    """
+    if "overloaded" in error.lower():
+        return (
+            "⚠️ 圖片生成服務暫時無法使用\n\n"
+            "原因：Google Gemini 伺服器過載（503 錯誤）\n"
+            "這是 Google 那邊太忙，不是你用太多！\n\n"
+            "建議：等 1-2 分鐘後再試"
+        )
+    elif "api key" in error.lower():
+        return "⚠️ 圖片生成服務設定錯誤，請聯繫管理員檢查 API 金鑰。"
+    elif "quota" in error.lower() or "limit" in error.lower():
+        return (
+            "⚠️ 圖片生成已達使用限制（429 錯誤）\n\n"
+            "免費版限制：每分鐘 2 張、每天 100 張\n"
+            "每日限制在台灣時間下午 3-4 點重置"
+        )
+    else:
+        return f"⚠️ 圖片生成失敗：{error}"
+
+
 def extract_generated_images_from_tool_calls(tool_calls: list) -> list[str]:
     """
     從 tool_calls 中提取 nanobanana 生成的圖片路徑
@@ -131,13 +299,42 @@ async def auto_prepare_generated_images(
     如果 AI 呼叫了 generate_image 但沒有呼叫 prepare_file_message，
     自動補上 FILE_MESSAGE 標記。
 
+    如果圖片生成失敗（如 overloaded），會在回應中加入明確的錯誤提示。
+
     Args:
         ai_response: AI 回應文字
         tool_calls: Claude response 的 tool_calls 列表
 
     Returns:
-        處理後的 AI 回應（可能包含新增的 FILE_MESSAGE 標記）
+        處理後的 AI 回應（可能包含新增的 FILE_MESSAGE 標記或錯誤提示）
     """
+    # 先檢查是否有 nanobanana 錯誤
+    # 注意：overloaded 等可重試錯誤的重試已在 handle_linebot_message() 中處理
+    # 這裡只處理無法重試或重試後仍失敗的情況
+    nanobanana_error = extract_nanobanana_error(tool_calls)
+    if nanobanana_error:
+        logger.warning(f"Nanobanana 錯誤: {nanobanana_error}")
+        # 顯示用戶友善的錯誤訊息
+        user_error = get_user_friendly_nanobanana_error(nanobanana_error)
+        if "overload" not in ai_response.lower() and "失敗" not in ai_response:
+            ai_response = ai_response.rstrip() + "\n\n" + user_error
+        return ai_response
+
+    # 檢查是否有 nanobanana timeout（呼叫了但 output 為空）
+    # 注意：timeout 的重試已在 handle_linebot_message() 中處理
+    # 這裡只處理最後一次重試仍失敗的情況
+    if check_nanobanana_timeout(tool_calls):
+        logger.warning("Nanobanana timeout 偵測到（output 為空）")
+        # 顯示 timeout 提示（重試邏輯已在外層處理）
+        if "timeout" not in ai_response.lower() and "超時" not in ai_response:
+            timeout_error = (
+                "⚠️ 圖片生成服務暫時無法使用\n\n"
+                "原因：請求超時（Gemini 伺服器無回應）\n\n"
+                "建議：請稍後再試"
+            )
+            ai_response = ai_response.rstrip() + "\n\n" + timeout_error
+        return ai_response
+
     # 提取生成的圖片
     generated_files = extract_generated_images_from_tool_calls(tool_calls)
 
@@ -518,37 +715,115 @@ async def process_message_with_ai(
         ]
         all_tools = agent_tools + mcp_tools + nanobanana_tools + ["Read"]
 
-        # 計時開始
-        start_time = time.time()
+        # nanobanana 重試設定
+        max_retries = 2  # 最多重試 2 次（共 3 次嘗試）
+        retry_count = 0
+        response = None
 
-        # 呼叫 Claude CLI
-        response = await call_claude(
-            prompt=user_message,
-            model=model,
-            history=history,
-            system_prompt=system_prompt,
-            timeout=300,  # MCP 工具可能需要較長時間（延長至 5 分鐘，圖片生成可能較慢）
-            tools=all_tools,
-        )
+        while retry_count <= max_retries:
+            # 計時開始
+            start_time = time.time()
 
-        # 計算耗時
-        duration_ms = int((time.time() - start_time) * 1000)
+            # 呼叫 Claude CLI
+            response = await call_claude(
+                prompt=user_message,
+                model=model,
+                history=history,
+                system_prompt=system_prompt,
+                timeout=120,  # 正常圖片生成約 30-90 秒，超過 120 秒視為 hang 住
+                tools=all_tools,
+            )
 
-        # 記錄 AI Log
-        await log_linebot_ai_call(
-            message_uuid=message_uuid,
-            line_group_id=line_group_id,
-            is_group=is_group,
-            input_prompt=user_message,
-            history=history,
-            system_prompt=system_prompt,
-            allowed_tools=all_tools,
-            model=model,
-            response=response,
-            duration_ms=duration_ms,
-        )
+            # 計算耗時
+            duration_ms = int((time.time() - start_time) * 1000)
 
-        if not response.success:
+            # 記錄 AI Log
+            await log_linebot_ai_call(
+                message_uuid=message_uuid,
+                line_group_id=line_group_id,
+                is_group=is_group,
+                input_prompt=user_message,
+                history=history,
+                system_prompt=system_prompt,
+                allowed_tools=all_tools,
+                model=model,
+                response=response,
+                duration_ms=duration_ms,
+            )
+
+            # 檢查是否需要重試（nanobanana timeout 或 overloaded）
+            # 注意：即使 response.success=True，nanobanana 內部也可能有 overloaded 錯誤
+            should_retry, retry_reason = should_retry_nanobanana(response.tool_calls)
+            if should_retry:
+                retry_count += 1
+                if retry_count <= max_retries:
+                    logger.warning(
+                        f"Nanobanana 錯誤（{retry_reason}），嘗試重試 ({retry_count}/{max_retries})"
+                    )
+                    # 等待一小段時間讓 Gemini 伺服器恢復
+                    await asyncio.sleep(3)
+                    continue
+                else:
+                    logger.error(f"Nanobanana 重試 {max_retries} 次後仍失敗: {retry_reason}")
+                    break
+            elif response.success:
+                # 成功且沒有可重試的錯誤，跳出迴圈
+                break
+            else:
+                # 其他錯誤（非可重試），跳出迴圈
+                break
+
+        # 檢查是否有可重試的 nanobanana 錯誤（即使 response.success=True）
+        final_should_retry, final_retry_reason = should_retry_nanobanana(response.tool_calls)
+
+        if final_should_retry and retry_count > 0:
+            # 所有重試都失敗了，嘗試 Hugging Face fallback
+            logger.error(f"Nanobanana 重試 {retry_count} 次後仍失敗: {final_retry_reason}")
+
+            # 提取原始 prompt，嘗試 fallback
+            original_prompt = extract_nanobanana_prompt(response.tool_calls)
+            fallback_path = None
+            fallback_error = None
+
+            if original_prompt:
+                logger.info(f"嘗試 Hugging Face fallback: {original_prompt[:50]}...")
+                fallback_path, used_fallback, fallback_error = await generate_image_fallback(
+                    original_prompt, final_retry_reason
+                )
+
+                if fallback_path:
+                    # Fallback 成功，準備圖片訊息
+                    logger.info(f"Hugging Face fallback 成功: {fallback_path}")
+                    from .mcp_server import prepare_file_message
+                    file_msg = await prepare_file_message(fallback_path)
+                    ai_response = f"圖片已生成（使用備用服務）：\n\n{file_msg}"
+                elif used_fallback:
+                    # Fallback 被觸發但失敗
+                    logger.error(f"Hugging Face fallback 失敗: {fallback_error}")
+
+            # 如果沒有 fallback 或 fallback 也失敗，顯示錯誤訊息
+            if not fallback_path:
+                if "timeout" in final_retry_reason:
+                    error_detail = "Gemini 伺服器無回應"
+                else:
+                    error_detail = "Gemini 伺服器過載（503 錯誤）"
+
+                # 組合錯誤訊息（包含 fallback 狀態）
+                if fallback_error:
+                    ai_response = (
+                        "⚠️ 圖片生成服務暫時無法使用\n\n"
+                        f"主服務：{error_detail}（已重試 {retry_count} 次）\n"
+                        f"備用服務：{fallback_error}\n\n"
+                        "建議：請稍後再試"
+                    )
+                else:
+                    ai_response = (
+                        "⚠️ 圖片生成服務暫時無法使用\n\n"
+                        f"原因：{error_detail}\n"
+                        f"已重試 {retry_count} 次\n\n"
+                        "建議：請稍後再試"
+                    )
+        elif not response.success:
             logger.error(f"Claude CLI 失敗: {response.error}")
 
             # 即使失敗（如 timeout），檢查是否有已完成的圖片生成
@@ -556,9 +831,9 @@ async def process_message_with_ai(
             if response.tool_calls:
                 generated_images = extract_generated_images_from_tool_calls(response.tool_calls)
                 if generated_images:
-                    logger.info(f"Timeout 但有已生成的圖片: {generated_images}")
+                    logger.info(f"失敗但有已生成的圖片: {generated_images}")
                     # 嘗試發送已生成的圖片
-                    ai_response = f"抱歉，處理時間較長導致超時，但圖片已經生成好了："
+                    ai_response = f"抱歉，處理過程遇到問題，但圖片已經生成好了："
                     ai_response = await auto_prepare_generated_images(
                         ai_response, response.tool_calls
                     )
