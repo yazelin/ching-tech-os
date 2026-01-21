@@ -1000,3 +1000,74 @@
     height: 14px;
   }
 }
+
+/* ==========================================================================
+   權限設定對話框樣式
+   ========================================================================== */
+
+.admin-perm-target {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin: 0 0 var(--spacing-md);
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.admin-perm-target strong {
+  color: var(--text-primary);
+}
+
+.perm-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-xs);
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  margin: 0 0 var(--spacing-md);
+  padding: var(--spacing-sm);
+  background-color: var(--bg-surface-dark);
+  border-radius: var(--radius-md);
+}
+
+.perm-hint .icon svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.perm-app-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.perm-app-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.perm-app-item:hover {
+  border-color: var(--border-medium);
+  background-color: var(--interactive-hover);
+}
+
+.perm-app-item input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
+.perm-app-name {
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  flex: 1;
+}

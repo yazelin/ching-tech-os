@@ -28,6 +28,7 @@ class SessionManager:
         user_id: int | None = None,
         tenant_id: UUID | str | None = None,
         role: str = "user",
+        app_permissions: dict[str, bool] | None = None,
     ) -> str:
         """建立新 session
 
@@ -38,6 +39,7 @@ class SessionManager:
             user_id: 資料庫中的使用者 ID
             tenant_id: 租戶 UUID（多租戶模式）
             role: 用戶角色（user, tenant_admin, platform_admin）
+            app_permissions: App 權限設定（可選，若為 None 則根據 role 使用預設值）
 
         Returns:
             session token (UUID)
@@ -62,6 +64,7 @@ class SessionManager:
             expires_at=expires_at,
             tenant_id=tenant_id,
             role=role,
+            app_permissions=app_permissions or {},
         )
 
         return token

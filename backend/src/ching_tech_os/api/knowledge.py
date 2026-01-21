@@ -36,7 +36,7 @@ from ching_tech_os.services.knowledge import (
     KnowledgeError,
     KnowledgeNotFoundError,
 )
-from ching_tech_os.services.permissions import check_knowledge_permission_async
+from ching_tech_os.services.permissions import check_knowledge_permission_async, require_app_permission
 from ching_tech_os.services.user import get_user_preferences, _parse_preferences
 from ching_tech_os.api.auth import get_current_session
 from ching_tech_os.models.auth import SessionData
@@ -58,7 +58,7 @@ async def list_knowledge(
     level: str | None = Query(None, description="層級過濾"),
     topics: list[str] | None = Query(None, description="主題過濾"),
     scope: str | None = Query(None, description="範圍過濾（global、personal）"),
-    session: SessionData = Depends(get_current_session),
+    session: SessionData = Depends(require_app_permission("knowledge-base")),
 ) -> KnowledgeListResponse:
     """搜尋或列出知識
 
@@ -91,7 +91,7 @@ async def list_knowledge(
     summary="取得標籤列表",
 )
 async def get_tags(
-    session: SessionData = Depends(get_current_session),
+    session: SessionData = Depends(require_app_permission("knowledge-base")),
 ) -> TagsResponse:
     """取得所有可用標籤（按類型分組，專案從資料庫動態載入）"""
     try:
@@ -108,7 +108,7 @@ async def get_tags(
     summary="重建索引",
 )
 async def rebuild_knowledge_index(
-    session: SessionData = Depends(get_current_session),
+    session: SessionData = Depends(require_app_permission("knowledge-base")),
 ) -> dict:
     """重建知識庫索引
 
@@ -154,7 +154,7 @@ async def get_attachment(path: str) -> Response:
 )
 async def get_local_asset(
     path: str,
-    session: SessionData = Depends(get_current_session),
+    session: SessionData = Depends(require_app_permission("knowledge-base")),
 ) -> Response:
     """取得本機知識庫附件
 
@@ -203,7 +203,7 @@ async def get_local_asset(
 )
 async def get_single_knowledge(
     kb_id: str,
-    session: SessionData = Depends(get_current_session),
+    session: SessionData = Depends(require_app_permission("knowledge-base")),
 ) -> KnowledgeResponse:
     """取得單一知識的完整內容與元資料
 
@@ -232,7 +232,7 @@ async def get_single_knowledge(
 )
 async def create_new_knowledge(
     data: KnowledgeCreate,
-    session: SessionData = Depends(get_current_session),
+    session: SessionData = Depends(require_app_permission("knowledge-base")),
 ) -> KnowledgeResponse:
     """建立新知識
 
@@ -285,7 +285,7 @@ async def create_new_knowledge(
 async def update_existing_knowledge(
     kb_id: str,
     data: KnowledgeUpdate,
-    session: SessionData = Depends(get_current_session),
+    session: SessionData = Depends(require_app_permission("knowledge-base")),
 ) -> KnowledgeResponse:
     """更新知識內容或元資料
 
@@ -343,7 +343,7 @@ async def update_existing_knowledge(
 )
 async def delete_existing_knowledge(
     kb_id: str,
-    session: SessionData = Depends(get_current_session),
+    session: SessionData = Depends(require_app_permission("knowledge-base")),
 ) -> None:
     """刪除知識
 
@@ -400,7 +400,7 @@ async def delete_existing_knowledge(
 )
 async def get_knowledge_history(
     kb_id: str,
-    session: SessionData = Depends(get_current_session),
+    session: SessionData = Depends(require_app_permission("knowledge-base")),
 ) -> HistoryResponse:
     """取得知識的 Git 版本歷史
 
@@ -428,7 +428,7 @@ async def get_knowledge_history(
 async def get_knowledge_version(
     kb_id: str,
     commit: str,
-    session: SessionData = Depends(get_current_session),
+    session: SessionData = Depends(require_app_permission("knowledge-base")),
 ) -> VersionResponse:
     """取得知識的特定版本內容
 
@@ -456,7 +456,7 @@ async def upload_knowledge_attachment(
     kb_id: str,
     file: UploadFile = File(...),
     description: Annotated[str | None, Form()] = None,
-    session: SessionData = Depends(get_current_session),
+    session: SessionData = Depends(require_app_permission("knowledge-base")),
 ) -> dict:
     """上傳附件
 
@@ -494,7 +494,7 @@ async def upload_knowledge_attachment(
 async def delete_knowledge_attachment(
     kb_id: str,
     attachment_idx: int,
-    session: SessionData = Depends(get_current_session),
+    session: SessionData = Depends(require_app_permission("knowledge-base")),
 ) -> None:
     """刪除附件
 
@@ -529,7 +529,7 @@ async def update_knowledge_attachment(
     kb_id: str,
     attachment_idx: int,
     data: AttachmentUpdate,
-    session: SessionData = Depends(get_current_session),
+    session: SessionData = Depends(require_app_permission("knowledge-base")),
 ) -> KnowledgeAttachment:
     """更新附件資訊（說明、類型）
 

@@ -715,6 +715,9 @@ const PlatformAdminApp = (function () {
               </div>
             </div>
             <div class="tenant-admin-actions">
+              <button class="btn btn-ghost btn-sm admin-permissions-btn" data-user-id="${admin.user_id}" data-username="${escapeHtml(admin.display_name || admin.username)}" title="設定 App 權限">
+                <span class="icon">${getIcon('shield-edit')}</span>
+              </button>
               <button class="btn btn-ghost btn-sm remove-admin-btn" data-user-id="${admin.user_id}" data-username="${escapeHtml(admin.display_name || admin.username)}" title="移除管理員">
                 <span class="icon">${getIcon('account-remove')}</span>
               </button>
@@ -724,6 +727,15 @@ const PlatformAdminApp = (function () {
       </div>
     `;
 
+    // 綁定權限設定按鈕
+    container.querySelectorAll('.admin-permissions-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const userId = btn.dataset.userId;
+        const username = btn.dataset.username;
+        openAdminPermissionsDialog(dialog, tenantId, userId, username);
+      });
+    });
+
     // 綁定移除按鈕
     container.querySelectorAll('.remove-admin-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -732,6 +744,146 @@ const PlatformAdminApp = (function () {
         removeTenantAdmin(dialog, tenantId, userId, username);
       });
     });
+  }
+
+  /**
+   * 開啟租戶管理員權限設定對話框
+   * @param {HTMLElement} parentDialog - 父對話框（租戶詳情）
+   * @param {string} tenantId
+   * @param {string} userId
+   * @param {string} username
+   */
+  async function openAdminPermissionsDialog(parentDialog, tenantId, userId, username) {
+    const permDialog = document.createElement('div');
+    permDialog.className = 'platform-admin-dialog-overlay';
+    permDialog.innerHTML = `
+      <div class="platform-admin-dialog" style="max-width: 500px;">
+        <div class="platform-admin-dialog-header">
+          <h3>
+            <span class="icon">${getIcon('shield-edit')}</span>
+            設定 App 權限
+          </h3>
+          <button class="btn btn-ghost btn-sm dialog-close-btn">
+            <span class="icon">${getIcon('close')}</span>
+          </button>
+        </div>
+        <div class="platform-admin-dialog-body">
+          <p class="admin-perm-target">管理員：<strong>${escapeHtml(username)}</strong></p>
+          <div class="platform-admin-loading" id="perm-loading">
+            <span class="icon">${getIcon('loading', 'mdi-spin')}</span>
+            <span>載入中...</span>
+          </div>
+          <div id="perm-content" style="display: none;"></div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(permDialog);
+
+    // 關閉對話框
+    const closeDialog = () => permDialog.remove();
+    permDialog.querySelector('.dialog-close-btn').addEventListener('click', closeDialog);
+    permDialog.addEventListener('click', (e) => {
+      if (e.target === permDialog) closeDialog();
+    });
+
+    // 載入使用者權限和預設權限
+    const loading = permDialog.querySelector('#perm-loading');
+    const content = permDialog.querySelector('#perm-content');
+
+    try {
+      const [defaultPerms, userInfo] = await Promise.all([
+        APIClient.get('/admin/default-permissions'),
+        APIClient.get(`/admin/users?tenant_id=${tenantId}`)
+      ]);
+
+      // 找到目標使用者
+      const targetUser = (userInfo.users || []).find(u => String(u.id) === String(userId));
+      if (!targetUser) {
+        throw new Error('找不到使用者');
+      }
+
+      const currentPerms = targetUser.permissions?.apps || {};
+      const appNames = defaultPerms.app_names || {};
+
+      // 渲染權限設定表單
+      content.innerHTML = `
+        <p class="perm-hint">
+          <span class="icon">${getIcon('information-outline')}</span>
+          控制此租戶管理員可以使用的應用程式功能（Web 介面和 Line Bot）
+        </p>
+        <div class="perm-app-list">
+          ${Object.keys(defaultPerms.apps).filter(appId => appId !== 'platform-admin' && appId !== 'tenant-admin').map(appId => {
+            // 租戶管理員的預設值是 true（除非明確禁止）
+            const isEnabled = currentPerms[appId] !== false;
+            const appName = appNames[appId] || appId;
+            return `
+              <label class="perm-app-item">
+                <input type="checkbox" name="app_${appId}" ${isEnabled ? 'checked' : ''} />
+                <span class="perm-app-name">${escapeHtml(appName)}</span>
+              </label>
+            `;
+          }).join('')}
+        </div>
+      `;
+
+      // 添加操作按鈕
+      const footer = document.createElement('div');
+      footer.className = 'platform-admin-dialog-footer';
+      footer.innerHTML = `
+        <button class="btn btn-ghost dialog-cancel-btn">取消</button>
+        <button class="btn btn-primary dialog-save-btn">
+          <span class="icon">${getIcon('content-save')}</span>
+          <span>儲存權限</span>
+        </button>
+      `;
+      permDialog.querySelector('.platform-admin-dialog').appendChild(footer);
+
+      footer.querySelector('.dialog-cancel-btn').addEventListener('click', closeDialog);
+
+      // 儲存權限
+      footer.querySelector('.dialog-save-btn').addEventListener('click', async () => {
+        const saveBtn = footer.querySelector('.dialog-save-btn');
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = `<span class="icon">${getIcon('loading', 'mdi-spin')}</span><span>儲存中...</span>`;
+
+        try {
+          const apps = {};
+          Object.keys(defaultPerms.apps).filter(appId => appId !== 'platform-admin' && appId !== 'tenant-admin').forEach(appId => {
+            const checkbox = content.querySelector(`input[name="app_${appId}"]`);
+            if (checkbox) {
+              // 租戶管理員預設是全開，所以只記錄被關閉的
+              apps[appId] = checkbox.checked;
+            }
+          });
+
+          await APIClient.request(`/admin/users/${userId}/permissions`, {
+            method: 'PATCH',
+            body: JSON.stringify({ apps })
+          });
+
+          closeDialog();
+          showToast('權限設定已儲存', 'check');
+          // 重新載入管理員列表
+          loadTenantAdmins(parentDialog, tenantId);
+        } catch (error) {
+          saveBtn.disabled = false;
+          saveBtn.innerHTML = `<span class="icon">${getIcon('content-save')}</span><span>儲存權限</span>`;
+          alert(`儲存失敗：${error.message}`);
+        }
+      });
+
+      loading.style.display = 'none';
+      content.style.display = '';
+
+    } catch (error) {
+      loading.innerHTML = `
+        <div class="platform-admin-error">
+          <span class="icon">${getIcon('alert-circle')}</span>
+          <span>載入失敗：${error.message}</span>
+        </div>
+      `;
+    }
   }
 
   /**

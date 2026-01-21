@@ -9,6 +9,7 @@ from fastapi.responses import Response
 
 from ..models.auth import SessionData
 from ..api.auth import get_current_session
+from ..services.permissions import require_app_permission
 from ching_tech_os.models.project import (
     ProjectCreate,
     ProjectUpdate,
@@ -94,7 +95,7 @@ router = APIRouter(prefix="/api/projects", tags=["projects"])
 async def api_list_projects(
     status_filter: str | None = Query(None, alias="status", description="狀態過濾"),
     q: str | None = Query(None, description="關鍵字搜尋"),
-    session: SessionData = Depends(get_current_session),
+    session: SessionData = Depends(require_app_permission("project-management")),
 ) -> ProjectListResponse:
     """列出專案"""
     try:
@@ -117,7 +118,7 @@ async def api_list_projects(
 )
 async def api_get_project(
     project_id: UUID,
-    session: SessionData = Depends(get_current_session),
+    session: SessionData = Depends(require_app_permission("project-management")),
 ) -> ProjectDetailResponse:
     """取得專案詳情（含成員、會議、附件、連結）"""
     try:
@@ -142,7 +143,7 @@ async def api_get_project(
 )
 async def api_create_project(
     data: ProjectCreate,
-    session: SessionData = Depends(get_current_session),
+    session: SessionData = Depends(require_app_permission("project-management")),
 ) -> ProjectResponse:
     """建立新專案"""
     try:
@@ -166,7 +167,7 @@ async def api_create_project(
 async def api_update_project(
     project_id: UUID,
     data: ProjectUpdate,
-    session: SessionData = Depends(get_current_session),
+    session: SessionData = Depends(require_app_permission("project-management")),
 ) -> ProjectResponse:
     """更新專案"""
     try:
@@ -190,7 +191,7 @@ async def api_update_project(
 )
 async def api_delete_project(
     project_id: UUID,
-    session: SessionData = Depends(get_current_session),
+    session: SessionData = Depends(require_app_permission("project-management")),
 ) -> None:
     """刪除專案（包含所有關聯資料）"""
     try:

@@ -361,6 +361,10 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
         if admin_role:
             user_role = "tenant_admin"
 
+    # 取得使用者的 App 權限（供 session 快取使用）
+    from ..services.permissions import get_user_app_permissions_sync
+    app_permissions = get_user_app_permissions_sync(user_role, user_data)
+
     # 建立 session
     # 注意：密碼認證時，session 不儲存密碼（password 欄位為空字串）
     # SMB 認證時仍需保留密碼（過渡期，供檔案操作使用）
@@ -372,6 +376,7 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
         user_id=user_id,
         tenant_id=tenant_id,
         role=user_role,
+        app_permissions=app_permissions,
     )
 
     # 記錄成功登入

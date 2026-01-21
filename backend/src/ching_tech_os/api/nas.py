@@ -24,6 +24,7 @@ from ..models.nas import (
 )
 from ..services.smb import create_smb_service, SMBError, SMBConnectionError, SMBAuthError, SMBService
 from ..services.nas_connection import nas_connection_manager, NASConnection
+from ..services.permissions import require_app_permission
 from .auth import get_current_session, get_session_from_token_or_query
 
 router = APIRouter(prefix="/api/nas", tags=["nas"])
@@ -78,7 +79,7 @@ class NASConnectionsResponse(BaseModel):
 )
 async def nas_connect(
     request: NASConnectRequest,
-    session: SessionData = Depends(get_current_session),
+    session: SessionData = Depends(require_app_permission("file-manager")),
 ) -> NASConnectResponse:
     """建立 NAS 連線
 
@@ -115,7 +116,7 @@ async def nas_connect(
 )
 async def nas_disconnect(
     x_nas_token: str = Header(..., alias="X-NAS-Token"),
-    session: SessionData = Depends(get_current_session),
+    session: SessionData = Depends(require_app_permission("file-manager")),
 ) -> NASDisconnectResponse:
     """斷開 NAS 連線
 
@@ -130,7 +131,7 @@ async def nas_disconnect(
     response_model=NASConnectionsResponse,
 )
 async def list_nas_connections(
-    session: SessionData = Depends(get_current_session),
+    session: SessionData = Depends(require_app_permission("file-manager")),
 ) -> NASConnectionsResponse:
     """列出使用者的 NAS 連線"""
     if session.user_id is None:
@@ -144,7 +145,7 @@ async def list_nas_connections(
 
 def get_nas_connection(
     x_nas_token: str | None = Header(None, alias="X-NAS-Token"),
-    session: SessionData = Depends(get_current_session),
+    session: SessionData = Depends(require_app_permission("file-manager")),
 ) -> tuple[SMBService, str]:
     """取得 NAS 連線（支援 Token 或 Session 密碼）
 
@@ -495,7 +496,7 @@ async def upload_file(
     path: Annotated[str, Form(description="目標資料夾路徑")],
     file: UploadFile = File(...),
     nas_conn: tuple[SMBService, str] = Depends(get_nas_connection),
-    session: SessionData = Depends(get_current_session),
+    session: SessionData = Depends(require_app_permission("file-manager")),
 ) -> OperationResponse:
     """上傳檔案
 
@@ -563,7 +564,7 @@ async def upload_file(
 async def delete_file(
     request: DeleteRequest,
     nas_conn: tuple[SMBService, str] = Depends(get_nas_connection),
-    session: SessionData = Depends(get_current_session),
+    session: SessionData = Depends(require_app_permission("file-manager")),
 ) -> OperationResponse:
     """刪除檔案或資料夾
 

@@ -68,6 +68,8 @@ class SessionData(BaseModel):
     # 多租戶欄位
     tenant_id: UUID | None = None  # 租戶 UUID
     role: str = "user"  # user, tenant_admin, platform_admin
+    # App 權限（登入時載入，避免每次 API 都查資料庫）
+    app_permissions: dict[str, bool] = {}
 
 
 class ErrorResponse(BaseModel):

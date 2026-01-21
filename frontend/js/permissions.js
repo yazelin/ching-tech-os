@@ -77,11 +77,17 @@ const PermissionsModule = (function() {
     // 平台管理員擁有所有權限
     if (role === 'platform_admin') return true;
 
-    // 租戶管理員擁有所有權限（除了平台管理）
+    // 平台管理僅限平台管理員
+    if (appId === 'platform-admin') return false;
+
+    // 租戶管理員：檢查權限設定
+    // 注意：租戶管理員的 App 權限由平台管理員控制
     if (role === 'tenant_admin') {
-      const platformOnlyApps = ['platform-admin'];
-      if (platformOnlyApps.includes(appId)) return false;
-      return true;
+      // 租戶管理功能對租戶管理員總是開放
+      if (appId === 'tenant-admin') return true;
+      // 其他 App 需要檢查權限設定
+      if (!user?.permissions?.apps) return true;  // 舊資料預設全開
+      return user.permissions.apps[appId] !== false;  // 除非明確禁止
     }
 
     // 一般使用者：檢查權限設定，預設為 false

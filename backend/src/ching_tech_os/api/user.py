@@ -349,9 +349,17 @@ async def update_user_permissions_api(
     """更新使用者權限（管理員限定）
 
     權限階層：platform_admin > tenant_admin > user
-    - 平台管理員可修改所有人的權限
+    - 平台管理員可修改所有人的權限（包括其他 platform_admin 和 tenant_admin）
     - 租戶管理員只能修改同租戶的一般使用者權限
+    - 不能修改自己的權限
     """
+    # 不能修改自己的權限
+    if session.user_id == user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="無法修改自己的權限",
+        )
+
     # 檢查目標使用者是否存在
     target_user = await get_user_by_id(user_id)
     if target_user is None:

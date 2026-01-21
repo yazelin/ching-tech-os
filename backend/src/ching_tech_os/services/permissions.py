@@ -4,15 +4,103 @@
 - 預設權限常數
 - 權限檢查函數
 - 權限合併邏輯
+- MCP 工具與 App 權限對應
+- FastAPI 權限檢查 dependency
 """
 
 import logging
-from typing import Any
+from typing import Any, Callable
+
+from fastapi import Depends, HTTPException, status
 
 from ..config import settings
 from ..database import get_connection
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================
+# MCP 工具與 App 權限對應
+# ============================================================
+
+# 工具名稱對應需要的 App 權限
+# None 表示不需要特定權限（基礎功能）
+TOOL_APP_MAPPING: dict[str, str | None] = {
+    # 專案管理工具
+    "query_project": "project-management",
+    "create_project": "project-management",
+    "update_project": "project-management",
+    "add_project_member": "project-management",
+    "update_project_member": "project-management",
+    "get_project_members": "project-management",
+    "add_project_milestone": "project-management",
+    "update_milestone": "project-management",
+    "get_project_milestones": "project-management",
+    "add_project_meeting": "project-management",
+    "update_project_meeting": "project-management",
+    "get_project_meetings": "project-management",
+    "add_delivery_schedule": "project-management",
+    "update_delivery_schedule": "project-management",
+    "get_delivery_schedules": "project-management",
+    "add_project_link": "project-management",
+    "update_project_link": "project-management",
+    "delete_project_link": "project-management",
+    "get_project_links": "project-management",
+    "add_project_attachment": "project-management",
+    "update_project_attachment": "project-management",
+    "delete_project_attachment": "project-management",
+    "get_project_attachments": "project-management",
+
+    # 知識庫工具
+    "search_knowledge": "knowledge-base",
+    "get_knowledge_item": "knowledge-base",
+    "update_knowledge_item": "knowledge-base",
+    "delete_knowledge_item": "knowledge-base",
+    "add_attachments_to_knowledge": "knowledge-base",
+    "get_knowledge_attachments": "knowledge-base",
+    "update_knowledge_attachment": "knowledge-base",
+    "read_knowledge_attachment": "knowledge-base",
+    "add_note": "knowledge-base",
+    "add_note_with_attachments": "knowledge-base",
+
+    # 檔案管理工具
+    "search_nas_files": "file-manager",
+    "get_nas_file_info": "file-manager",
+    "read_document": "file-manager",
+    "send_nas_file": "file-manager",
+    "prepare_file_message": "file-manager",
+    "convert_pdf_to_images": "file-manager",
+
+    # 庫存管理工具
+    "query_inventory": "inventory",
+    "add_inventory_item": "inventory",
+    "update_inventory_item": "inventory",
+    "record_inventory_in": "inventory",
+    "record_inventory_out": "inventory",
+    "adjust_inventory": "inventory",
+    "add_inventory_order": "inventory",
+    "update_inventory_order": "inventory",
+    "get_inventory_orders": "inventory",
+
+    # 廠商管理工具（與庫存一起）
+    "query_vendors": "inventory",
+    "add_vendor": "inventory",
+    "update_vendor": "inventory",
+
+    # 通用工具（不需要特定權限）
+    "get_message_attachments": None,  # 基礎訊息功能
+    "summarize_chat": None,           # 群組對話摘要
+    "create_share_link": None,        # 分享連結
+}
+
+# API 路徑前綴對應需要的 App 權限
+API_APP_MAPPING: dict[str, str] = {
+    "/api/project": "project-management",
+    "/api/knowledge": "knowledge-base",
+    "/api/nas": "file-manager",
+    "/api/inventory": "inventory",
+    "/api/vendor": "inventory",
+}
 
 
 # ============================================================
@@ -60,6 +148,35 @@ APP_DISPLAY_NAMES: dict[str, str] = {
     "knowledge-base": "知識庫",
     "linebot": "Line Bot",
     "settings": "系統設定",
+    "inventory": "庫存管理",
+    "platform-admin": "平台管理",
+}
+
+# 租戶管理員預設權限
+# 租戶管理員預設開啟大部分功能，但高風險功能預設關閉
+DEFAULT_TENANT_ADMIN_APP_PERMISSIONS: dict[str, bool] = {
+    "file-manager": True,
+    "terminal": False,          # 高風險，預設關閉
+    "code-editor": False,       # 高風險，預設關閉
+    "project-management": True,
+    "ai-assistant": True,
+    "prompt-editor": True,
+    "agent-settings": True,
+    "ai-log": True,
+    "knowledge-base": True,
+    "linebot": True,
+    "settings": True,
+    "inventory": True,
+    "platform-admin": False,    # 永遠禁止
+}
+
+# 完整租戶管理員預設權限結構
+DEFAULT_TENANT_ADMIN_PERMISSIONS: dict[str, dict[str, bool]] = {
+    "apps": DEFAULT_TENANT_ADMIN_APP_PERMISSIONS.copy(),
+    "knowledge": {
+        "global_write": True,   # 租戶管理員預設可編輯全域知識
+        "global_delete": True,  # 租戶管理員預設可刪除全域知識
+    },
 }
 
 
@@ -147,6 +264,199 @@ def check_app_permission(username: str, preferences: dict | None, app_id: str) -
 
     perms = get_user_permissions(preferences)
     return perms.get("apps", {}).get(app_id, True)
+
+
+def has_app_permission(
+    role: str,
+    permissions: dict[str, dict[str, bool]] | None,
+    app_id: str,
+) -> bool:
+    """基於角色和權限設定檢查 App 權限
+
+    這是新版的權限檢查函數，支援角色階層。
+
+    Args:
+        role: 使用者角色（platform_admin, tenant_admin, user）
+        permissions: 使用者的 permissions 設定
+        app_id: 應用程式 ID
+
+    Returns:
+        是否有權限使用該應用程式
+    """
+    # 平台管理員擁有所有權限
+    if role == "platform_admin":
+        return True
+
+    # 租戶管理員：除了 platform-admin 外，檢查 permissions
+    if role == "tenant_admin":
+        if app_id == "platform-admin":
+            return False  # 永遠禁止
+
+        # 如果有明確設定，使用設定值
+        if permissions and "apps" in permissions:
+            app_perms = permissions["apps"]
+            if app_id in app_perms:
+                return app_perms[app_id]
+
+        # 否則使用租戶管理員預設值
+        return DEFAULT_TENANT_ADMIN_APP_PERMISSIONS.get(app_id, True)
+
+    # 一般使用者：檢查 permissions，預設使用 DEFAULT_APP_PERMISSIONS
+    if permissions and "apps" in permissions:
+        app_perms = permissions["apps"]
+        if app_id in app_perms:
+            return app_perms[app_id]
+
+    return DEFAULT_APP_PERMISSIONS.get(app_id, False)
+
+
+async def get_user_app_permissions(user_id: int) -> dict[str, bool]:
+    """從資料庫取得使用者的 App 權限
+
+    Args:
+        user_id: 使用者 ID
+
+    Returns:
+        App 權限設定 dict
+    """
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT role, preferences
+            FROM users
+            WHERE id = $1
+            """,
+            user_id,
+        )
+
+    if not row:
+        return DEFAULT_APP_PERMISSIONS.copy()
+
+    role = row["role"] or "user"
+    preferences = row["preferences"] or {}
+    permissions = preferences.get("permissions", {})
+
+    # 根據角色決定基礎權限
+    if role == "platform_admin":
+        return {app_id: True for app_id in DEFAULT_APP_PERMISSIONS}
+
+    if role == "tenant_admin":
+        base_perms = DEFAULT_TENANT_ADMIN_APP_PERMISSIONS.copy()
+    else:
+        base_perms = DEFAULT_APP_PERMISSIONS.copy()
+
+    # 合併使用者自訂權限
+    user_app_perms = permissions.get("apps", {})
+    base_perms.update(user_app_perms)
+
+    return base_perms
+
+
+def get_user_app_permissions_sync(
+    role: str,
+    user_data: dict | None,
+) -> dict[str, bool]:
+    """同步版本：根據角色和使用者資料取得 App 權限
+
+    用於登入流程（不需要額外查詢資料庫）
+
+    Args:
+        role: 使用者角色（user, tenant_admin, platform_admin）
+        user_data: 使用者資料（包含 preferences）
+
+    Returns:
+        App 權限設定 dict
+    """
+    # 平台管理員擁有所有權限
+    if role == "platform_admin":
+        return {app_id: True for app_id in DEFAULT_APP_PERMISSIONS}
+
+    # 取得基礎權限
+    if role == "tenant_admin":
+        base_perms = DEFAULT_TENANT_ADMIN_APP_PERMISSIONS.copy()
+    else:
+        base_perms = DEFAULT_APP_PERMISSIONS.copy()
+
+    # 合併使用者自訂權限（如果有的話）
+    if user_data:
+        preferences = user_data.get("preferences") or {}
+        permissions = preferences.get("permissions", {})
+        user_app_perms = permissions.get("apps", {})
+        base_perms.update(user_app_perms)
+
+    return base_perms
+
+
+def get_mcp_tools_for_user(
+    role: str,
+    permissions: dict[str, dict[str, bool]] | None,
+    all_tool_names: list[str],
+) -> list[str]:
+    """根據使用者權限過濾可用的 MCP 工具
+
+    Args:
+        role: 使用者角色（platform_admin, tenant_admin, user）
+        permissions: 使用者的 permissions 設定
+        all_tool_names: 所有可用的工具名稱列表
+
+    Returns:
+        過濾後的工具名稱列表
+    """
+    # 平台管理員可以使用所有工具
+    if role == "platform_admin":
+        return all_tool_names
+
+    allowed_tools = []
+    for tool in all_tool_names:
+        # 移除 MCP 前綴（如果有的話）
+        tool_name = tool.replace("mcp__ching-tech-os__", "")
+
+        # 查詢工具需要的 App 權限
+        required_app = TOOL_APP_MAPPING.get(tool_name)
+
+        # 不需要特定權限的工具
+        if required_app is None:
+            allowed_tools.append(tool)
+            continue
+
+        # 檢查使用者是否有對應 App 權限
+        if has_app_permission(role, permissions, required_app):
+            allowed_tools.append(tool)
+
+    return allowed_tools
+
+
+def check_tool_permission(
+    tool_name: str,
+    role: str,
+    permissions: dict[str, dict[str, bool]] | None,
+) -> bool:
+    """檢查使用者是否有權限使用特定 MCP 工具
+
+    Args:
+        tool_name: 工具名稱（可含或不含 MCP 前綴）
+        role: 使用者角色
+        permissions: 使用者權限設定
+
+    Returns:
+        是否有權限使用該工具
+    """
+    # 平台管理員可以使用所有工具
+    if role == "platform_admin":
+        return True
+
+    # 移除 MCP 前綴
+    clean_name = tool_name.replace("mcp__ching-tech-os__", "")
+
+    # 查詢工具需要的 App 權限
+    required_app = TOOL_APP_MAPPING.get(clean_name)
+
+    # 不需要特定權限的工具
+    if required_app is None:
+        return True
+
+    # 檢查 App 權限
+    return has_app_permission(role, permissions, required_app)
 
 
 def check_knowledge_permission(
@@ -312,3 +622,72 @@ def get_default_permissions() -> dict[str, dict[str, bool]]:
 def get_app_display_names() -> dict[str, str]:
     """取得應用程式顯示名稱對照表"""
     return APP_DISPLAY_NAMES.copy()
+
+
+# ============================================================
+# FastAPI 權限檢查 Dependency
+# ============================================================
+
+
+def require_app_permission(app_id: str) -> Callable:
+    """建立要求特定 App 權限的 FastAPI dependency
+
+    使用方式：
+    ```python
+    @router.get("/projects")
+    async def list_projects(
+        session: SessionData = Depends(require_app_permission("project-management"))
+    ):
+        ...
+    ```
+
+    Args:
+        app_id: 應用程式 ID（如 "project-management"、"knowledge-base"）
+
+    Returns:
+        FastAPI Depends 用的函數
+    """
+    # 延遲 import 避免循環依賴
+    from ..api.auth import get_current_session
+    from ..models.auth import SessionData
+
+    async def checker(session: SessionData = Depends(get_current_session)) -> SessionData:
+        """檢查使用者是否有指定的 App 權限"""
+        # 平台管理員擁有所有權限
+        if session.role == "platform_admin":
+            return session
+
+        # 檢查 session 中的權限快取
+        if session.app_permissions:
+            if session.app_permissions.get(app_id, False):
+                return session
+        else:
+            # Session 沒有權限快取，使用 has_app_permission 函數計算
+            # 將 session.app_permissions 轉換為 permissions 格式
+            permissions = {"apps": session.app_permissions} if session.app_permissions else None
+            if has_app_permission(session.role, permissions, app_id):
+                return session
+
+        # 無權限
+        app_name = APP_DISPLAY_NAMES.get(app_id, app_id)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"無「{app_name}」功能權限",
+        )
+
+    return checker
+
+
+def get_api_required_app(path: str) -> str | None:
+    """根據 API 路徑取得需要的 App 權限
+
+    Args:
+        path: API 路徑（如 "/api/project/123"）
+
+    Returns:
+        需要的 App ID，或 None（不需要特定權限）
+    """
+    for prefix, app_id in API_APP_MAPPING.items():
+        if path.startswith(prefix):
+            return app_id
+    return None
