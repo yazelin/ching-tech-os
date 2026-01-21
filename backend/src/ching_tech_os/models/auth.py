@@ -46,6 +46,8 @@ class LoginResponse(BaseModel):
     # 多租戶欄位
     tenant: TenantBriefInfo | None = None
     role: str | None = None  # user, tenant_admin, platform_admin
+    # 密碼認證欄位
+    must_change_password: bool = False  # 是否需要強制變更密碼
 
 
 class LogoutResponse(BaseModel):

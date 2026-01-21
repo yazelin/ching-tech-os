@@ -15,9 +15,13 @@ from ..models.tenant import (
     TenantSettings,
     TenantUsage,
     TenantAdminCreate,
+    TenantAdminCreateResponse,
     TenantAdminInfo,
+    TenantUserBrief,
+    TenantUserListResponse,
 )
 from ..utils.crypto import encrypt_credential, decrypt_credential
+from .password import hash_password, generate_temporary_password
 
 logger = logging.getLogger(__name__)
 
@@ -400,38 +404,99 @@ async def get_tenant_usage(tenant_id: UUID | str) -> TenantUsage:
 async def add_tenant_admin(
     tenant_id: UUID | str,
     data: TenantAdminCreate,
-) -> TenantAdminInfo:
+) -> TenantAdminCreateResponse:
     """新增租戶管理員
+
+    支援兩種模式：
+    1. 選擇現有使用者（提供 user_id）
+    2. 建立新帳號（提供 username，password 可選）
 
     Args:
         tenant_id: 租戶 UUID
         data: 管理員資料
 
     Returns:
-        管理員資訊
+        建立結果（包含可能的臨時密碼）
     """
     if isinstance(tenant_id, str):
         tenant_id = UUID(tenant_id)
 
+    temporary_password = None
+    user_id = data.user_id
+    username = None
+    display_name = None
+
     async with get_connection() as conn:
-        # 檢查使用者是否存在且屬於該租戶
-        user = await conn.fetchrow(
-            "SELECT id, username, display_name FROM users WHERE id = $1 AND tenant_id = $2",
-            data.user_id,
-            tenant_id,
-        )
-        if user is None:
-            raise ValueError(f"使用者 {data.user_id} 不存在或不屬於此租戶")
+        # 模式一：選擇現有使用者
+        if user_id is not None:
+            user = await conn.fetchrow(
+                "SELECT id, username, display_name FROM users WHERE id = $1 AND tenant_id = $2",
+                user_id,
+                tenant_id,
+            )
+            if user is None:
+                raise ValueError(f"使用者 {user_id} 不存在或不屬於此租戶")
+            username = user["username"]
+            display_name = user["display_name"]
+
+        # 模式二：建立新帳號
+        elif data.username:
+            username = data.username
+            display_name = data.display_name or data.username
+
+            # 檢查帳號是否已存在
+            existing_user = await conn.fetchrow(
+                "SELECT id FROM users WHERE username = $1 AND tenant_id = $2",
+                data.username,
+                tenant_id,
+            )
+            if existing_user:
+                raise ValueError(f"帳號 {data.username} 已存在")
+
+            # 處理密碼
+            if data.password:
+                password_hash = hash_password(data.password)
+                must_change = data.must_change_password
+            else:
+                # 自動產生臨時密碼
+                temporary_password = generate_temporary_password()
+                password_hash = hash_password(temporary_password)
+                must_change = True
+
+            # 建立使用者
+            now = datetime.now()
+            user_row = await conn.fetchrow(
+                """
+                INSERT INTO users (
+                    username, display_name, password_hash, must_change_password,
+                    tenant_id, role, created_at
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                RETURNING id
+                """,
+                data.username,
+                display_name,
+                password_hash,
+                must_change,
+                tenant_id,
+                "tenant_admin",
+                now,
+            )
+            user_id = user_row["id"]
+
+        else:
+            raise ValueError("必須提供 user_id 或 username")
 
         # 檢查是否已是管理員
         existing = await conn.fetchrow(
             "SELECT id FROM tenant_admins WHERE tenant_id = $1 AND user_id = $2",
             tenant_id,
-            data.user_id,
+            user_id,
         )
         if existing:
-            raise ValueError(f"使用者 {data.user_id} 已是此租戶的管理員")
+            raise ValueError(f"使用者已是此租戶的管理員")
 
+        # 新增管理員記錄
         now = datetime.now()
         row = await conn.fetchrow(
             """
@@ -440,28 +505,37 @@ async def add_tenant_admin(
             RETURNING id, tenant_id, user_id, role, created_at
             """,
             tenant_id,
-            data.user_id,
+            user_id,
             data.role,
             now,
         )
 
-        return TenantAdminInfo(
+        admin_info = TenantAdminInfo(
             id=row["id"],
             tenant_id=row["tenant_id"],
             user_id=row["user_id"],
             role=row["role"],
-            username=user["username"],
-            display_name=user["display_name"],
+            username=username,
+            display_name=display_name,
             created_at=row["created_at"],
         )
 
+        return TenantAdminCreateResponse(
+            success=True,
+            admin=admin_info,
+            temporary_password=temporary_password,
+        )
 
-async def remove_tenant_admin(tenant_id: UUID | str, user_id: int) -> bool:
+
+async def remove_tenant_admin(
+    tenant_id: UUID | str, user_id: int, delete_user: bool = False
+) -> bool:
     """移除租戶管理員
 
     Args:
         tenant_id: 租戶 UUID
         user_id: 使用者 ID
+        delete_user: 是否同時刪除使用者帳號
 
     Returns:
         是否成功移除
@@ -470,12 +544,27 @@ async def remove_tenant_admin(tenant_id: UUID | str, user_id: int) -> bool:
         tenant_id = UUID(tenant_id)
 
     async with get_connection() as conn:
+        # 先刪除 tenant_admins 記錄
         result = await conn.execute(
             "DELETE FROM tenant_admins WHERE tenant_id = $1 AND user_id = $2",
             tenant_id,
             user_id,
         )
-        return "DELETE 1" in result
+        admin_deleted = "DELETE 1" in result
+
+        if not admin_deleted:
+            return False
+
+        # 如果需要同時刪除使用者帳號
+        if delete_user:
+            await conn.execute(
+                "DELETE FROM users WHERE id = $1 AND tenant_id = $2",
+                user_id,
+                tenant_id,
+            )
+            logger.info(f"已刪除使用者帳號 user_id={user_id}, tenant_id={tenant_id}")
+
+        return True
 
 
 async def list_tenant_admins(tenant_id: UUID | str) -> list[TenantAdminInfo]:
@@ -515,6 +604,52 @@ async def list_tenant_admins(tenant_id: UUID | str) -> list[TenantAdminInfo]:
             )
             for row in rows
         ]
+
+
+async def list_tenant_users(
+    tenant_id: UUID | str, include_inactive: bool = False
+) -> TenantUserListResponse:
+    """列出租戶內的所有使用者
+
+    供平台管理員查詢，用於選擇要指派為管理員的使用者。
+
+    Args:
+        tenant_id: 租戶 UUID
+        include_inactive: 是否包含已停用的使用者
+
+    Returns:
+        使用者列表
+    """
+    if isinstance(tenant_id, str):
+        tenant_id = UUID(tenant_id)
+
+    async with get_connection() as conn:
+        # 查詢使用者，同時檢查是否已是管理員
+        query = """
+            SELECT u.id, u.username, u.display_name, u.role, u.is_active,
+                   CASE WHEN ta.id IS NOT NULL THEN true ELSE false END as is_admin
+            FROM users u
+            LEFT JOIN tenant_admins ta ON u.id = ta.user_id AND ta.tenant_id = $1
+            WHERE u.tenant_id = $1
+        """
+        if not include_inactive:
+            query += " AND u.is_active = true"
+        query += " ORDER BY u.username"
+
+        rows = await conn.fetch(query, tenant_id)
+
+        users = [
+            TenantUserBrief(
+                id=row["id"],
+                username=row["username"],
+                display_name=row["display_name"],
+                role=row["role"] or "user",
+                is_admin=row["is_admin"],
+            )
+            for row in rows
+        ]
+
+        return TenantUserListResponse(users=users)
 
 
 async def is_tenant_admin(tenant_id: UUID | str, user_id: int) -> bool:

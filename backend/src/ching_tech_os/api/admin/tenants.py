@@ -14,7 +14,9 @@ from ...models.tenant import (
     TenantUsage,
     TenantListResponse,
     TenantAdminCreate,
+    TenantAdminCreateResponse,
     TenantAdminInfo,
+    TenantUserListResponse,
     LineBotSettingsUpdate,
     LineBotSettingsResponse,
     LineBotTestResponse,
@@ -28,6 +30,7 @@ from ...services.tenant import (
     add_tenant_admin,
     remove_tenant_admin,
     list_tenant_admins,
+    list_tenant_users,
     TenantNotFoundError,
     TenantCodeExistsError,
     get_tenant_line_credentials,
@@ -462,15 +465,42 @@ async def get_tenant_admins(
     return await list_tenant_admins(tenant_id)
 
 
-@router.post("/{tenant_id}/admins", response_model=TenantAdminInfo, status_code=status.HTTP_201_CREATED)
+@router.get("/{tenant_id}/users", response_model=TenantUserListResponse)
+async def list_tenant_users_by_platform(
+    tenant_id: str,
+    include_inactive: bool = Query(False, description="是否包含已停用的使用者"),
+    session: SessionData = Depends(get_current_session),
+) -> TenantUserListResponse:
+    """列出租戶內的所有使用者
+
+    僅平台管理員可操作。
+    用於選擇要指派為管理員的使用者。
+    """
+    await require_platform_admin(session)
+
+    # 確認租戶存在
+    tenant = await get_tenant_by_id(tenant_id)
+    if tenant is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="租戶不存在",
+        )
+
+    return await list_tenant_users(tenant_id, include_inactive)
+
+
+@router.post("/{tenant_id}/admins", response_model=TenantAdminCreateResponse, status_code=status.HTTP_201_CREATED)
 async def add_tenant_admin_by_platform(
     tenant_id: str,
     request: TenantAdminCreate,
     session: SessionData = Depends(get_current_session),
-) -> TenantAdminInfo:
+) -> TenantAdminCreateResponse:
     """新增租戶管理員
 
     僅平台管理員可操作。
+    支援兩種模式：
+    - 選擇現有使用者（提供 user_id）
+    - 建立新帳號（提供 username，password 可選，不提供則自動產生）
     """
     await require_platform_admin(session)
 
@@ -485,9 +515,9 @@ async def add_tenant_admin_by_platform(
     try:
         return await add_tenant_admin(tenant_id, request)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
+        return TenantAdminCreateResponse(
+            success=False,
+            error=str(e),
         )
 
 
@@ -495,11 +525,15 @@ async def add_tenant_admin_by_platform(
 async def remove_tenant_admin_by_platform(
     tenant_id: str,
     user_id: int,
+    delete_user: bool = Query(False, description="是否同時刪除使用者帳號"),
     session: SessionData = Depends(get_current_session),
 ) -> SuspendResponse:
     """移除租戶管理員
 
     僅平台管理員可操作。
+
+    Query Parameters:
+        delete_user: 是否同時刪除使用者帳號（預設 False）
     """
     await require_platform_admin(session)
 
@@ -511,9 +545,10 @@ async def remove_tenant_admin_by_platform(
             detail="租戶不存在",
         )
 
-    success = await remove_tenant_admin(tenant_id, user_id)
+    success = await remove_tenant_admin(tenant_id, user_id, delete_user=delete_user)
     if success:
-        return SuspendResponse(success=True, message="已移除管理員")
+        message = "已移除管理員並刪除帳號" if delete_user else "已移除管理員"
+        return SuspendResponse(success=True, message=message)
     else:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

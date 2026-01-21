@@ -498,80 +498,153 @@ const PlatformAdminApp = (function () {
       : 0;
 
     dialog.querySelector('.platform-admin-dialog-body').innerHTML = `
-      <div class="tenant-details-grid">
-        <!-- 基本資訊 -->
-        <div class="tenant-details-card">
-          <h4>基本資訊</h4>
-          <div class="tenant-details-row">
-            <span class="label">代碼</span>
-            <code class="platform-admin-code">${escapeHtml(tenant.code)}</code>
-          </div>
-          <div class="tenant-details-row">
-            <span class="label">名稱</span>
-            <span>${escapeHtml(tenant.name)}</span>
-          </div>
-          <div class="tenant-details-row">
-            <span class="label">狀態</span>
-            <span>${statusLabels[tenant.status] || tenant.status}</span>
-          </div>
-          <div class="tenant-details-row">
-            <span class="label">方案</span>
-            <span>${planLabels[tenant.plan] || tenant.plan}</span>
-          </div>
-          ${tenant.trial_ends_at ? `
-          <div class="tenant-details-row">
-            <span class="label">試用到期</span>
-            <span>${formatDate(tenant.trial_ends_at)}</span>
-          </div>
-          ` : ''}
-          <div class="tenant-details-row">
-            <span class="label">建立時間</span>
-            <span>${formatDate(tenant.created_at)}</span>
-          </div>
-        </div>
+      <!-- Tab 導航 -->
+      <div class="tenant-detail-tabs">
+        <button class="tenant-detail-tab active" data-tab="info">
+          <span class="icon">${getIcon('information-outline')}</span>
+          <span>基本資訊</span>
+        </button>
+        <button class="tenant-detail-tab" data-tab="admins">
+          <span class="icon">${getIcon('account-group')}</span>
+          <span>管理員</span>
+        </button>
+        <button class="tenant-detail-tab" data-tab="linebot">
+          <span class="icon">${getIcon('message-text')}</span>
+          <span>Line Bot</span>
+        </button>
+      </div>
 
-        <!-- 使用量統計 -->
-        <div class="tenant-details-card">
-          <h4>使用量統計</h4>
-          <div class="tenant-details-stats">
-            <div class="tenant-stat">
-              <span class="tenant-stat-value">${usage.user_count || 0}</span>
-              <span class="tenant-stat-label">使用者</span>
+      <!-- Tab 內容：基本資訊 -->
+      <div class="tenant-detail-tab-content active" id="tab-info">
+        <div class="tenant-details-grid">
+          <!-- 基本資訊 -->
+          <div class="tenant-details-card">
+            <h4>基本資訊</h4>
+            <div class="tenant-details-row">
+              <span class="label">代碼</span>
+              <code class="platform-admin-code">${escapeHtml(tenant.code)}</code>
             </div>
-            <div class="tenant-stat">
-              <span class="tenant-stat-value">${usage.project_count || 0}</span>
-              <span class="tenant-stat-label">專案</span>
+            <div class="tenant-details-row">
+              <span class="label">名稱</span>
+              <span>${escapeHtml(tenant.name)}</span>
             </div>
-            <div class="tenant-stat">
-              <span class="tenant-stat-value">${usage.knowledge_count || 0}</span>
-              <span class="tenant-stat-label">知識庫</span>
+            <div class="tenant-details-row">
+              <span class="label">狀態</span>
+              <span>${statusLabels[tenant.status] || tenant.status}</span>
+            </div>
+            <div class="tenant-details-row">
+              <span class="label">方案</span>
+              <span>${planLabels[tenant.plan] || tenant.plan}</span>
+            </div>
+            ${tenant.trial_ends_at ? `
+            <div class="tenant-details-row">
+              <span class="label">試用到期</span>
+              <span>${formatDate(tenant.trial_ends_at)}</span>
+            </div>
+            ` : ''}
+            <div class="tenant-details-row">
+              <span class="label">建立時間</span>
+              <span>${formatDate(tenant.created_at)}</span>
             </div>
           </div>
-          <div class="tenant-storage-bar-container">
-            <div class="tenant-storage-label">儲存空間 (${storagePercentage}%)</div>
-            <div class="tenant-storage-bar">
-              <div class="tenant-storage-bar-fill" style="width: ${Math.min(storagePercentage, 100)}%"></div>
-            </div>
-            <div class="tenant-storage-text">${formatStorageSize(usage.storage_used_mb)} / ${formatStorageSize(tenant.storage_quota_mb)}</div>
-          </div>
-        </div>
 
-        <!-- AI 使用量 -->
-        <div class="tenant-details-card">
-          <h4>AI 使用量</h4>
-          <div class="tenant-details-stats">
-            <div class="tenant-stat">
-              <span class="tenant-stat-value">${usage.ai_calls_today || 0}</span>
-              <span class="tenant-stat-label">今日呼叫</span>
+          <!-- 使用量統計 -->
+          <div class="tenant-details-card">
+            <h4>使用量統計</h4>
+            <div class="tenant-details-stats">
+              <div class="tenant-stat">
+                <span class="tenant-stat-value">${usage.user_count || 0}</span>
+                <span class="tenant-stat-label">使用者</span>
+              </div>
+              <div class="tenant-stat">
+                <span class="tenant-stat-value">${usage.project_count || 0}</span>
+                <span class="tenant-stat-label">專案</span>
+              </div>
+              <div class="tenant-stat">
+                <span class="tenant-stat-value">${usage.knowledge_count || 0}</span>
+                <span class="tenant-stat-label">知識庫</span>
+              </div>
             </div>
-            <div class="tenant-stat">
-              <span class="tenant-stat-value">${usage.ai_calls_this_month || 0}</span>
-              <span class="tenant-stat-label">本月呼叫</span>
+            <div class="tenant-storage-bar-container">
+              <div class="tenant-storage-label">儲存空間 (${storagePercentage}%)</div>
+              <div class="tenant-storage-bar">
+                <div class="tenant-storage-bar-fill" style="width: ${Math.min(storagePercentage, 100)}%"></div>
+              </div>
+              <div class="tenant-storage-text">${formatStorageSize(usage.storage_used_mb)} / ${formatStorageSize(tenant.storage_quota_mb)}</div>
+            </div>
+          </div>
+
+          <!-- AI 使用量 -->
+          <div class="tenant-details-card">
+            <h4>AI 使用量</h4>
+            <div class="tenant-details-stats">
+              <div class="tenant-stat">
+                <span class="tenant-stat-value">${usage.ai_calls_today || 0}</span>
+                <span class="tenant-stat-label">今日呼叫</span>
+              </div>
+              <div class="tenant-stat">
+                <span class="tenant-stat-value">${usage.ai_calls_this_month || 0}</span>
+                <span class="tenant-stat-label">本月呼叫</span>
+              </div>
             </div>
           </div>
         </div>
       </div>
+
+      <!-- Tab 內容：管理員 -->
+      <div class="tenant-detail-tab-content" id="tab-admins">
+        <div class="tenant-admins-header">
+          <p class="tenant-admins-hint">管理員可以管理此租戶內的使用者和設定</p>
+          <button class="btn btn-primary btn-sm" id="addTenantAdminBtn">
+            <span class="icon">${getIcon('plus')}</span>
+            <span>新增管理員</span>
+          </button>
+        </div>
+        <div class="tenant-admins-loading" id="tenant-admins-loading">
+          <span class="icon">${getIcon('loading', 'mdi-spin')}</span>
+          <span>載入中...</span>
+        </div>
+        <div id="tenant-admins-content" style="display: none;"></div>
+      </div>
+
+      <!-- Tab 內容：Line Bot -->
+      <div class="tenant-detail-tab-content" id="tab-linebot">
+        <div class="tenant-linebot-loading" id="tenant-linebot-loading">
+          <span class="icon">${getIcon('loading', 'mdi-spin')}</span>
+          <span>載入中...</span>
+        </div>
+        <div id="tenant-linebot-content" style="display: none;"></div>
+      </div>
     `;
+
+    // 綁定 Tab 切換
+    const tabs = dialog.querySelectorAll('.tenant-detail-tab');
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        // 切換 Tab 狀態
+        tabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+
+        // 切換內容
+        const tabContents = dialog.querySelectorAll('.tenant-detail-tab-content');
+        tabContents.forEach(c => c.classList.remove('active'));
+        const targetContent = dialog.querySelector(`#tab-${tab.dataset.tab}`);
+        if (targetContent) {
+          targetContent.classList.add('active');
+
+          // 載入對應資料
+          if (tab.dataset.tab === 'admins') {
+            loadTenantAdmins(dialog, tenant.id);
+          } else if (tab.dataset.tab === 'linebot') {
+            loadTenantLineBotSettings(dialog, tenant.id);
+          }
+        }
+      });
+    });
+
+    // 綁定新增管理員按鈕
+    const addAdminBtn = dialog.querySelector('#addTenantAdminBtn');
+    addAdminBtn?.addEventListener('click', () => openAddTenantAdminDialog(dialog, windowEl, tenant.id));
 
     // 添加操作按鈕
     const footer = document.createElement('div');
@@ -582,6 +655,671 @@ const PlatformAdminApp = (function () {
     dialog.querySelector('.platform-admin-dialog').appendChild(footer);
 
     footer.querySelector('.dialog-close-btn').addEventListener('click', () => dialog.remove());
+  }
+
+  /**
+   * 載入租戶管理員列表
+   * @param {HTMLElement} dialog
+   * @param {string} tenantId
+   */
+  async function loadTenantAdmins(dialog, tenantId) {
+    const loading = dialog.querySelector('#tenant-admins-loading');
+    const content = dialog.querySelector('#tenant-admins-content');
+
+    loading.style.display = '';
+    content.style.display = 'none';
+
+    try {
+      const admins = await APIClient.get(`/admin/tenants/${tenantId}/admins`);
+
+      renderTenantAdmins(dialog, content, admins || [], tenantId);
+      loading.style.display = 'none';
+      content.style.display = '';
+    } catch (error) {
+      loading.innerHTML = `
+        <div class="platform-admin-error">
+          <span class="icon">${getIcon('alert-circle')}</span>
+          <span>載入失敗：${error.message}</span>
+        </div>
+      `;
+    }
+  }
+
+  /**
+   * 渲染租戶管理員列表
+   * @param {HTMLElement} dialog
+   * @param {HTMLElement} container
+   * @param {Array} admins
+   * @param {string} tenantId
+   */
+  function renderTenantAdmins(dialog, container, admins, tenantId) {
+    if (admins.length === 0) {
+      container.innerHTML = `
+        <div class="tenant-admins-empty">
+          <span class="icon">${getIcon('account-question')}</span>
+          <span>尚無管理員，請新增一位管理員</span>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="tenant-admins-list">
+        ${admins.map(admin => `
+          <div class="tenant-admin-item" data-user-id="${admin.user_id}">
+            <div class="tenant-admin-info">
+              <span class="icon">${getIcon('account')}</span>
+              <div class="tenant-admin-details">
+                <span class="tenant-admin-name">${escapeHtml(admin.display_name || admin.username)}</span>
+                <span class="tenant-admin-username">@${escapeHtml(admin.username)}</span>
+              </div>
+            </div>
+            <div class="tenant-admin-actions">
+              <button class="btn btn-ghost btn-sm remove-admin-btn" data-user-id="${admin.user_id}" data-username="${escapeHtml(admin.display_name || admin.username)}" title="移除管理員">
+                <span class="icon">${getIcon('account-remove')}</span>
+              </button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+
+    // 綁定移除按鈕
+    container.querySelectorAll('.remove-admin-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const userId = btn.dataset.userId;
+        const username = btn.dataset.username;
+        removeTenantAdmin(dialog, tenantId, userId, username);
+      });
+    });
+  }
+
+  /**
+   * 開啟新增租戶管理員對話框
+   * @param {HTMLElement} parentDialog
+   * @param {HTMLElement} windowEl
+   * @param {string} tenantId
+   */
+  function openAddTenantAdminDialog(parentDialog, windowEl, tenantId) {
+    const dialog = document.createElement('div');
+    dialog.className = 'platform-admin-dialog-overlay';
+    dialog.innerHTML = `
+      <div class="platform-admin-dialog" style="max-width: 480px;">
+        <div class="platform-admin-dialog-header">
+          <h3>新增租戶管理員</h3>
+          <button class="btn btn-ghost btn-sm dialog-close-btn">
+            <span class="icon">${getIcon('close')}</span>
+          </button>
+        </div>
+        <div class="platform-admin-dialog-body">
+          <!-- 模式選擇 -->
+          <div class="admin-mode-tabs">
+            <button class="admin-mode-tab active" data-mode="existing">
+              <span class="icon">${getIcon('account-search')}</span>
+              從現有使用者選擇
+            </button>
+            <button class="admin-mode-tab" data-mode="new">
+              <span class="icon">${getIcon('account-plus')}</span>
+              建立新帳號
+            </button>
+          </div>
+
+          <!-- 模式一：從現有使用者選擇 -->
+          <div class="admin-mode-content active" id="existingUserMode">
+            <p class="form-hint" style="margin-bottom: 16px;">
+              從此租戶的現有使用者中選擇，指派為管理員。
+            </p>
+            <div class="form-group">
+              <label for="existingUserSelect">選擇使用者 *</label>
+              <select id="existingUserSelect" class="input">
+                <option value="">載入中...</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- 模式二：建立新帳號 -->
+          <div class="admin-mode-content" id="newAccountMode">
+            <p class="form-hint" style="margin-bottom: 16px;">
+              建立新的管理員帳號，該帳號將擁有管理此租戶使用者的權限。
+            </p>
+            <div class="form-group">
+              <label for="adminUsername">使用者名稱 *</label>
+              <input type="text" id="adminUsername" class="input" placeholder="登入用的帳號名稱" pattern="[a-zA-Z0-9_\\-]+" />
+              <span class="form-hint">只能使用英文字母、數字、底線和連字號</span>
+            </div>
+            <div class="form-group">
+              <label for="adminDisplayName">顯示名稱</label>
+              <input type="text" id="adminDisplayName" class="input" placeholder="顯示在介面上的名稱" />
+            </div>
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="adminAutoGenPassword" checked />
+                <span>自動產生臨時密碼</span>
+              </label>
+            </div>
+            <div class="form-group" id="adminPasswordGroup" style="display: none;">
+              <label for="adminPassword">初始密碼 *</label>
+              <input type="password" id="adminPassword" class="input" placeholder="至少 8 個字元" minlength="8" />
+            </div>
+            <div class="form-group" id="adminMustChangeGroup" style="display: none;">
+              <label class="checkbox-label">
+                <input type="checkbox" id="adminMustChangePassword" checked />
+                <span>首次登入需變更密碼</span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="platform-admin-dialog-footer">
+          <button class="btn btn-ghost dialog-cancel-btn">取消</button>
+          <button class="btn btn-primary dialog-confirm-btn">指派為管理員</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(dialog);
+
+    // 載入租戶使用者列表
+    loadTenantUsersForSelect(dialog, tenantId);
+
+    // 模式切換
+    let currentMode = 'existing';
+    const modeTabs = dialog.querySelectorAll('.admin-mode-tab');
+    const existingUserMode = dialog.querySelector('#existingUserMode');
+    const newAccountMode = dialog.querySelector('#newAccountMode');
+    const confirmBtn = dialog.querySelector('.dialog-confirm-btn');
+
+    modeTabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const mode = tab.dataset.mode;
+        currentMode = mode;
+
+        // 更新 Tab 樣式
+        modeTabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+
+        // 切換內容（使用 active class）
+        if (mode === 'existing') {
+          existingUserMode.classList.add('active');
+          newAccountMode.classList.remove('active');
+          confirmBtn.textContent = '指派為管理員';
+        } else {
+          existingUserMode.classList.remove('active');
+          newAccountMode.classList.add('active');
+          confirmBtn.textContent = '建立帳號';
+        }
+      });
+    });
+
+    // 自動產生密碼勾選框切換
+    const autoGenCheckbox = dialog.querySelector('#adminAutoGenPassword');
+    const passwordGroup = dialog.querySelector('#adminPasswordGroup');
+    const mustChangeGroup = dialog.querySelector('#adminMustChangeGroup');
+
+    autoGenCheckbox.addEventListener('change', () => {
+      const isAuto = autoGenCheckbox.checked;
+      passwordGroup.style.display = isAuto ? 'none' : 'block';
+      mustChangeGroup.style.display = isAuto ? 'none' : 'block';
+    });
+
+    // 關閉對話框
+    const closeDialog = () => dialog.remove();
+    dialog.querySelector('.dialog-close-btn').addEventListener('click', closeDialog);
+    dialog.querySelector('.dialog-cancel-btn').addEventListener('click', closeDialog);
+    dialog.addEventListener('click', (e) => {
+      if (e.target === dialog) closeDialog();
+    });
+
+    // 確認建立
+    confirmBtn.addEventListener('click', async () => {
+      confirmBtn.disabled = true;
+      const originalText = confirmBtn.textContent;
+      confirmBtn.innerHTML = `<span class="icon">${getIcon('loading', 'mdi-spin')}</span> 處理中...`;
+
+      try {
+        let result;
+
+        if (currentMode === 'existing') {
+          // 模式一：從現有使用者選擇
+          const userId = dialog.querySelector('#existingUserSelect').value;
+          if (!userId) {
+            alert('請選擇一位使用者');
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = originalText;
+            return;
+          }
+
+          result = await APIClient.post(`/admin/tenants/${tenantId}/admins`, {
+            user_id: parseInt(userId),
+            role: 'admin'
+          });
+        } else {
+          // 模式二：建立新帳號
+          const username = dialog.querySelector('#adminUsername').value.trim();
+          const displayName = dialog.querySelector('#adminDisplayName').value.trim();
+          const autoGenPassword = dialog.querySelector('#adminAutoGenPassword').checked;
+          const password = autoGenPassword ? null : dialog.querySelector('#adminPassword').value;
+          const mustChangePassword = autoGenPassword ? true : dialog.querySelector('#adminMustChangePassword').checked;
+
+          // 驗證
+          if (!username) {
+            alert('請輸入使用者名稱');
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = originalText;
+            return;
+          }
+          if (!/^[a-zA-Z0-9_-]+$/.test(username)) {
+            alert('使用者名稱只能包含英文字母、數字、底線和連字號');
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = originalText;
+            return;
+          }
+          if (!autoGenPassword && (!password || password.length < 8)) {
+            alert('密碼至少需要 8 個字元');
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = originalText;
+            return;
+          }
+
+          const requestData = {
+            username,
+            display_name: displayName || username,
+            must_change_password: mustChangePassword
+          };
+          if (password) {
+            requestData.password = password;
+          }
+
+          result = await APIClient.post(`/admin/tenants/${tenantId}/admins`, requestData);
+        }
+
+        if (result.success === false) {
+          alert(`操作失敗：${result.error}`);
+          confirmBtn.disabled = false;
+          confirmBtn.textContent = originalText;
+          return;
+        }
+
+        closeDialog();
+        loadTenantAdmins(parentDialog, tenantId);
+
+        // 如果有臨時密碼，顯示給使用者
+        if (result.temporary_password) {
+          showTemporaryPasswordDialog(result.admin?.username || '', result.temporary_password);
+        } else {
+          showToast('管理員已新增', 'check');
+        }
+      } catch (error) {
+        alert(`操作失敗：${error.message}`);
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = originalText;
+      }
+    });
+  }
+
+  /**
+   * 載入租戶使用者列表供選擇
+   * @param {HTMLElement} dialog
+   * @param {string} tenantId
+   */
+  async function loadTenantUsersForSelect(dialog, tenantId) {
+    const select = dialog.querySelector('#existingUserSelect');
+
+    try {
+      const response = await APIClient.get(`/admin/tenants/${tenantId}/users`);
+      const users = response.users || [];
+
+      // 篩選出尚未是管理員的使用者
+      const availableUsers = users.filter(u => !u.is_admin);
+
+      if (availableUsers.length === 0) {
+        select.innerHTML = '<option value="">沒有可選擇的使用者（所有使用者都已是管理員）</option>';
+        return;
+      }
+
+      select.innerHTML = '<option value="">請選擇使用者...</option>' +
+        availableUsers.map(u => `
+          <option value="${u.id}">${escapeHtml(u.display_name || u.username)} (@${escapeHtml(u.username)})</option>
+        `).join('');
+    } catch (error) {
+      select.innerHTML = `<option value="">載入失敗：${error.message}</option>`;
+    }
+  }
+
+  /**
+   * 顯示臨時密碼對話框
+   * @param {string} username
+   * @param {string} password
+   */
+  function showTemporaryPasswordDialog(username, password) {
+    const dialog = document.createElement('div');
+    dialog.className = 'platform-admin-dialog-overlay';
+    dialog.innerHTML = `
+      <div class="platform-admin-dialog" style="max-width: 400px;">
+        <div class="platform-admin-dialog-header">
+          <h3><span class="icon">${getIcon('check-circle')}</span> 管理員已建立</h3>
+        </div>
+        <div class="platform-admin-dialog-body">
+          <p style="margin-bottom: var(--spacing-md);">管理員 <strong>${username}</strong> 的臨時密碼如下：</p>
+          <div class="temp-password-box">
+            <code id="tempPassword">${password}</code>
+            <button class="btn btn-ghost btn-sm copy-password-btn" title="複製密碼">
+              <span class="icon">${getIcon('content-copy')}</span>
+            </button>
+          </div>
+          <p class="form-hint" style="margin-top: var(--spacing-sm);">
+            <span class="icon">${getIcon('alert-circle')}</span>
+            請將此密碼告知管理員，此密碼僅顯示一次，關閉後無法再查看。
+          </p>
+        </div>
+        <div class="platform-admin-dialog-footer">
+          <button class="btn btn-primary dialog-close-btn">我已記下密碼</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(dialog);
+
+    // 複製密碼
+    dialog.querySelector('.copy-password-btn').addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(password);
+        showToast('密碼已複製', 'check');
+      } catch (error) {
+        // fallback
+        const tempInput = document.createElement('input');
+        tempInput.value = password;
+        document.body.appendChild(tempInput);
+        tempInput.select();
+        document.execCommand('copy');
+        document.body.removeChild(tempInput);
+        showToast('密碼已複製', 'check');
+      }
+    });
+
+    // 關閉對話框
+    const closeDialog = () => dialog.remove();
+    dialog.querySelector('.dialog-close-btn').addEventListener('click', closeDialog);
+  }
+
+  /**
+   * 移除租戶管理員
+   * @param {HTMLElement} parentDialog - 父對話框（租戶詳情）
+   * @param {string} tenantId
+   * @param {number} userId
+   * @param {string} username
+   */
+  async function removeTenantAdmin(parentDialog, tenantId, userId, username) {
+    // 建立確認對話框
+    const confirmDialog = document.createElement('div');
+    confirmDialog.className = 'platform-admin-dialog-overlay';
+    confirmDialog.innerHTML = `
+      <div class="platform-admin-dialog" style="width: 400px;">
+        <div class="platform-admin-dialog-header">
+          <h3>移除管理員</h3>
+          <button class="btn btn-icon btn-ghost close-btn">
+            <span class="icon">${getIcon('close')}</span>
+          </button>
+        </div>
+        <div class="platform-admin-dialog-body">
+          <p style="margin-bottom: var(--spacing-md); color: var(--text-primary);">
+            確定要移除管理員「<strong>${username}</strong>」嗎？
+          </p>
+
+          <div class="platform-admin-warning">
+            <span class="icon">${getIcon('alert')}</span>
+            <span>移除後該帳號將無法管理此租戶。</span>
+          </div>
+
+          <div class="form-group" style="margin-top: var(--spacing-md);">
+            <label class="checkbox-label">
+              <input type="checkbox" id="deleteUserCheckbox" />
+              <span>同時刪除使用者帳號</span>
+            </label>
+            <span class="form-hint" style="margin-left: 24px;">勾選此選項將完全刪除該使用者帳號，無法復原</span>
+          </div>
+        </div>
+        <div class="platform-admin-dialog-footer">
+          <button class="btn btn-ghost cancel-btn">取消</button>
+          <button class="btn btn-danger confirm-btn">
+            <span class="icon">${getIcon('account-remove')}</span>
+            <span>移除</span>
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(confirmDialog);
+
+    // 事件處理
+    const closeBtn = confirmDialog.querySelector('.close-btn');
+    const cancelBtn = confirmDialog.querySelector('.cancel-btn');
+    const confirmBtn = confirmDialog.querySelector('.confirm-btn');
+    const deleteUserCheckbox = confirmDialog.querySelector('#deleteUserCheckbox');
+
+    const closeDialog = () => {
+      confirmDialog.remove();
+    };
+
+    closeBtn.addEventListener('click', closeDialog);
+    cancelBtn.addEventListener('click', closeDialog);
+    confirmDialog.addEventListener('click', (e) => {
+      if (e.target === confirmDialog) closeDialog();
+    });
+
+    confirmBtn.addEventListener('click', async () => {
+      const deleteUser = deleteUserCheckbox.checked;
+
+      confirmBtn.disabled = true;
+      confirmBtn.innerHTML = `
+        <span class="icon">${getIcon('loading', 'mdi-spin')}</span>
+        <span>處理中...</span>
+      `;
+
+      try {
+        const url = `/admin/tenants/${tenantId}/admins/${userId}${deleteUser ? '?delete_user=true' : ''}`;
+        await APIClient.request(url, { method: 'DELETE' });
+
+        closeDialog();
+        loadTenantAdmins(parentDialog, tenantId);
+
+        if (deleteUser) {
+          showToast('管理員已移除，帳號已刪除', 'check');
+        } else {
+          showToast('管理員已移除', 'check');
+        }
+      } catch (error) {
+        confirmBtn.disabled = false;
+        confirmBtn.innerHTML = `
+          <span class="icon">${getIcon('account-remove')}</span>
+          <span>移除</span>
+        `;
+        alert(`移除失敗：${error.message}`);
+      }
+    });
+  }
+
+  /**
+   * 載入租戶 Line Bot 設定
+   * @param {HTMLElement} dialog
+   * @param {string} tenantId
+   */
+  async function loadTenantLineBotSettings(dialog, tenantId) {
+    const loading = dialog.querySelector('#tenant-linebot-loading');
+    const content = dialog.querySelector('#tenant-linebot-content');
+
+    loading.style.display = '';
+    content.style.display = 'none';
+
+    try {
+      const response = await APIClient.get(`/admin/tenants/${tenantId}/linebot`);
+      renderTenantLineBotSettings(dialog, content, response, tenantId);
+      loading.style.display = 'none';
+      content.style.display = '';
+    } catch (error) {
+      loading.innerHTML = `
+        <div class="platform-admin-error">
+          <span class="icon">${getIcon('alert-circle')}</span>
+          <span>載入失敗：${error.message}</span>
+        </div>
+      `;
+    }
+  }
+
+  /**
+   * 渲染租戶 Line Bot 設定
+   * @param {HTMLElement} dialog
+   * @param {HTMLElement} container
+   * @param {Object} settings
+   * @param {string} tenantId
+   */
+  function renderTenantLineBotSettings(dialog, container, settings, tenantId) {
+    const isConfigured = settings.configured;
+
+    container.innerHTML = `
+      <div class="tenant-linebot-status ${isConfigured ? 'configured' : 'unconfigured'}">
+        <span class="icon">${getIcon(isConfigured ? 'check-circle' : 'information-outline')}</span>
+        <span>${isConfigured ? '已設定獨立 Line Bot' : '使用平台共用 Bot'}</span>
+        ${isConfigured ? `<span class="linebot-channel-id">Channel ID: ${settings.channel_id}</span>` : ''}
+      </div>
+
+      <div class="tenant-linebot-form">
+        <div class="form-group">
+          <label for="tenantLineChannelId">Channel ID</label>
+          <input type="text" id="tenantLineChannelId" class="input" placeholder="Line Channel ID" value="${settings.channel_id || ''}" />
+          <span class="form-hint">從 Line Developers Console 取得</span>
+        </div>
+        <div class="form-group">
+          <label for="tenantLineChannelSecret">Channel Secret</label>
+          <input type="password" id="tenantLineChannelSecret" class="input" placeholder="留空表示不更新" />
+          <span class="form-hint">用於驗證 Webhook 請求</span>
+        </div>
+        <div class="form-group">
+          <label for="tenantLineAccessToken">Access Token</label>
+          <input type="password" id="tenantLineAccessToken" class="input" placeholder="留空表示不更新" />
+          <span class="form-hint">用於發送訊息給用戶</span>
+        </div>
+
+        <div class="tenant-linebot-actions">
+          <button class="btn btn-secondary" id="testTenantLinebotBtn">
+            <span class="icon">${getIcon('connection')}</span>
+            <span>測試連線</span>
+          </button>
+          <button class="btn btn-primary" id="saveTenantLinebotBtn">
+            <span class="icon">${getIcon('content-save')}</span>
+            <span>儲存設定</span>
+          </button>
+          ${isConfigured ? `
+          <button class="btn btn-text-danger" id="clearTenantLinebotBtn">
+            <span class="icon">${getIcon('delete')}</span>
+            <span>清除設定</span>
+          </button>
+          ` : ''}
+        </div>
+      </div>
+
+      <div class="tenant-linebot-test-result" id="tenantLinebotTestResult" style="display: none;"></div>
+    `;
+
+    // 綁定測試按鈕
+    container.querySelector('#testTenantLinebotBtn')?.addEventListener('click', async () => {
+      const btn = container.querySelector('#testTenantLinebotBtn');
+      const resultEl = container.querySelector('#tenantLinebotTestResult');
+
+      btn.disabled = true;
+      btn.innerHTML = `<span class="icon">${getIcon('loading', 'mdi-spin')}</span><span>測試中...</span>`;
+      resultEl.style.display = 'none';
+
+      try {
+        const response = await APIClient.post(`/admin/tenants/${tenantId}/linebot/test`);
+
+        if (response.success) {
+          resultEl.className = 'tenant-linebot-test-result success';
+          resultEl.innerHTML = `
+            <span class="icon">${getIcon('check-circle')}</span>
+            <div>
+              <strong>連線成功</strong>
+              <span>Bot 名稱：${response.bot_info?.display_name || 'N/A'}</span>
+            </div>
+          `;
+        } else {
+          resultEl.className = 'tenant-linebot-test-result error';
+          resultEl.innerHTML = `
+            <span class="icon">${getIcon('alert-circle')}</span>
+            <div><strong>連線失敗</strong><span>${response.error || '未知錯誤'}</span></div>
+          `;
+        }
+        resultEl.style.display = '';
+      } catch (error) {
+        resultEl.className = 'tenant-linebot-test-result error';
+        resultEl.innerHTML = `
+          <span class="icon">${getIcon('alert-circle')}</span>
+          <div><strong>測試失敗</strong><span>${error.message}</span></div>
+        `;
+        resultEl.style.display = '';
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<span class="icon">${getIcon('connection')}</span><span>測試連線</span>`;
+      }
+    });
+
+    // 綁定儲存按鈕
+    container.querySelector('#saveTenantLinebotBtn')?.addEventListener('click', async () => {
+      const btn = container.querySelector('#saveTenantLinebotBtn');
+      const channelId = container.querySelector('#tenantLineChannelId').value.trim();
+      const channelSecret = container.querySelector('#tenantLineChannelSecret').value;
+      const accessToken = container.querySelector('#tenantLineAccessToken').value;
+
+      if (!channelId && !channelSecret && !accessToken) {
+        alert('請至少填寫 Channel ID');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = `<span class="icon">${getIcon('loading', 'mdi-spin')}</span><span>儲存中...</span>`;
+
+      try {
+        const data = {};
+        if (channelId) data.channel_id = channelId;
+        if (channelSecret) data.channel_secret = channelSecret;
+        if (accessToken) data.access_token = accessToken;
+
+        await APIClient.put(`/admin/tenants/${tenantId}/linebot`, data);
+
+        // 清空密碼欄位
+        container.querySelector('#tenantLineChannelSecret').value = '';
+        container.querySelector('#tenantLineAccessToken').value = '';
+
+        // 重新載入
+        loadTenantLineBotSettings(dialog, tenantId);
+        showToast('Line Bot 設定已儲存', 'check');
+      } catch (error) {
+        alert(`儲存失敗：${error.message}`);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<span class="icon">${getIcon('content-save')}</span><span>儲存設定</span>`;
+      }
+    });
+
+    // 綁定清除按鈕
+    container.querySelector('#clearTenantLinebotBtn')?.addEventListener('click', async () => {
+      if (!confirm('確定要清除 Line Bot 設定嗎？\n清除後將使用平台共用 Bot。')) {
+        return;
+      }
+
+      const btn = container.querySelector('#clearTenantLinebotBtn');
+      btn.disabled = true;
+      btn.innerHTML = `<span class="icon">${getIcon('loading', 'mdi-spin')}</span><span>清除中...</span>`;
+
+      try {
+        await APIClient.request(`/admin/tenants/${tenantId}/linebot`, { method: 'DELETE' });
+        loadTenantLineBotSettings(dialog, tenantId);
+        showToast('Line Bot 設定已清除', 'check');
+      } catch (error) {
+        alert(`清除失敗：${error.message}`);
+        btn.disabled = false;
+        btn.innerHTML = `<span class="icon">${getIcon('delete')}</span><span>清除設定</span>`;
+      }
+    });
   }
 
   /**

@@ -570,3 +570,433 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ==========================================================================
+   租戶詳情 Tab 樣式
+   ========================================================================== */
+
+.tenant-detail-tabs {
+  display: flex;
+  gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-md);
+  border-bottom: 1px solid var(--border-light);
+  padding-bottom: var(--spacing-xs);
+}
+
+.tenant-detail-tab {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: none;
+  border: none;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  position: relative;
+}
+
+.tenant-detail-tab:hover {
+  color: var(--text-primary);
+  background-color: var(--interactive-hover);
+}
+
+.tenant-detail-tab.active {
+  color: var(--color-primary);
+  background-color: var(--bg-surface);
+}
+
+.tenant-detail-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-color: var(--color-primary);
+}
+
+.tenant-detail-tab .icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.tenant-detail-tab-content {
+  display: none;
+}
+
+.tenant-detail-tab-content.active {
+  display: block;
+}
+
+/* ==========================================================================
+   租戶管理員列表樣式
+   ========================================================================== */
+
+.tenant-admins-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-md);
+}
+
+.tenant-admins-hint {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.tenant-admins-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-lg);
+  color: var(--text-secondary);
+}
+
+.tenant-admins-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xl);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.tenant-admins-empty .icon svg {
+  width: 48px;
+  height: 48px;
+  opacity: 0.5;
+}
+
+.tenant-admins-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.tenant-admin-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+}
+
+.tenant-admin-item:hover {
+  border-color: var(--border-medium);
+}
+
+.tenant-admin-info {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.tenant-admin-info > .icon svg {
+  width: 32px;
+  height: 32px;
+  color: var(--text-muted);
+}
+
+.tenant-admin-details {
+  display: flex;
+  flex-direction: column;
+}
+
+.tenant-admin-name {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.tenant-admin-username {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}
+
+.tenant-admin-actions .btn {
+  padding: var(--spacing-xs);
+}
+
+.tenant-admin-actions .icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Checkbox 樣式 */
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-primary);
+}
+
+/* ==========================================================================
+   租戶 Line Bot 設定樣式
+   ========================================================================== */
+
+.tenant-linebot-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-lg);
+  color: var(--text-secondary);
+}
+
+.tenant-linebot-status {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-md);
+  font-size: var(--font-size-sm);
+}
+
+.tenant-linebot-status.configured {
+  background-color: rgba(34, 197, 94, 0.1);
+  color: var(--color-success);
+}
+
+.tenant-linebot-status.unconfigured {
+  background-color: var(--bg-surface-dark);
+  color: var(--text-secondary);
+}
+
+.tenant-linebot-status .icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.tenant-linebot-status .linebot-channel-id {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  opacity: 0.8;
+}
+
+.tenant-linebot-form {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+}
+
+.tenant-linebot-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-md);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--border-light);
+  flex-wrap: wrap;
+}
+
+.tenant-linebot-test-result {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  margin-top: var(--spacing-md);
+  font-size: var(--font-size-sm);
+}
+
+.tenant-linebot-test-result.success {
+  background-color: rgba(34, 197, 94, 0.1);
+  color: var(--color-success);
+}
+
+.tenant-linebot-test-result.error {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: var(--color-error);
+}
+
+.tenant-linebot-test-result .icon svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.tenant-linebot-test-result div {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.tenant-linebot-test-result strong {
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   手機版 Tab 響應式
+   ========================================================================== */
+
+@media (max-width: 768px) {
+  .tenant-detail-tabs {
+    flex-wrap: wrap;
+  }
+
+  .tenant-detail-tab {
+    flex: 1;
+    justify-content: center;
+    min-width: 80px;
+  }
+
+  .tenant-detail-tab span:not(.icon) {
+    display: none;
+  }
+
+  .tenant-admins-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-sm);
+  }
+
+  .tenant-linebot-actions {
+    flex-direction: column;
+  }
+
+  .tenant-linebot-actions .btn {
+    width: 100%;
+  }
+}
+
+/* ==========================================================================
+   臨時密碼顯示框
+   ========================================================================== */
+.temp-password-box {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  background-color: var(--bg-surface-dark);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+}
+
+.temp-password-box code {
+  flex: 1;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: var(--font-size-lg);
+  color: var(--color-primary);
+  letter-spacing: 1px;
+  user-select: all;
+}
+
+.temp-password-box .copy-password-btn {
+  flex-shrink: 0;
+}
+
+/* ==========================================================================
+   新增管理員對話框 - 模式切換 Tab
+   ========================================================================== */
+
+.admin-mode-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: var(--spacing-md);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.admin-mode-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: var(--bg-surface);
+  border: none;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.admin-mode-tab:not(:last-child) {
+  border-right: 1px solid var(--border-medium);
+}
+
+.admin-mode-tab:hover {
+  background-color: var(--interactive-hover);
+  color: var(--text-primary);
+}
+
+.admin-mode-tab.active {
+  background-color: var(--color-primary);
+  color: white;
+}
+
+.admin-mode-tab .icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* 管理員模式內容區塊 */
+.admin-mode-content {
+  display: none;
+}
+
+.admin-mode-content.active {
+  display: block;
+}
+
+/* 現有使用者選擇下拉選單 */
+#existingUserSelect {
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+#existingUserSelect:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb), 0.2);
+}
+
+#existingUserSelect option {
+  background-color: var(--color-background);
+  color: var(--text-primary);
+  padding: var(--spacing-sm);
+}
+
+#existingUserSelect:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 手機版 Tab 響應式 */
+@media (max-width: 480px) {
+  .admin-mode-tab {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    font-size: var(--font-size-xs);
+  }
+
+  .admin-mode-tab .icon svg {
+    width: 14px;
+    height: 14px;
+  }
+}

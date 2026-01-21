@@ -96,22 +96,43 @@ class TenantUsage(BaseModel):
 class TenantAdminBase(BaseModel):
     """租戶管理員基本資訊"""
 
-    user_id: int
+    user_id: int | None = None  # 選擇現有使用者時使用
     role: str = "admin"  # admin, owner
 
 
-class TenantAdminCreate(TenantAdminBase):
-    """新增租戶管理員請求"""
-    pass
+class TenantAdminCreate(BaseModel):
+    """新增租戶管理員請求 - 支援建立新帳號"""
+
+    # 方式一：選擇現有使用者
+    user_id: int | None = None
+
+    # 方式二：建立新帳號
+    username: str | None = None
+    display_name: str | None = None
+    password: str | None = None  # 空值時自動產生臨時密碼
+    must_change_password: bool = True
+
+    role: str = "admin"  # admin, owner
 
 
-class TenantAdminInfo(TenantAdminBase):
+class TenantAdminCreateResponse(BaseModel):
+    """新增租戶管理員回應"""
+
+    success: bool
+    admin: "TenantAdminInfo | None" = None
+    temporary_password: str | None = None  # 自動產生的臨時密碼
+    error: str | None = None
+
+
+class TenantAdminInfo(BaseModel):
     """租戶管理員資訊"""
 
     id: UUID
     tenant_id: UUID
+    user_id: int
     username: str  # 從 user 關聯取得
     display_name: str | None
+    role: str = "admin"
     created_at: datetime
 
 
@@ -172,3 +193,22 @@ class LineBotTestResponse(BaseModel):
     success: bool
     bot_info: dict | None = None  # 包含 bot 名稱等資訊
     error: str | None = None
+
+
+# === 租戶使用者列表模型 ===
+
+
+class TenantUserBrief(BaseModel):
+    """租戶使用者簡要資訊（供平台管理員選擇管理員用）"""
+
+    id: int
+    username: str
+    display_name: str | None
+    role: str  # user, tenant_admin
+    is_admin: bool  # 是否已是此租戶的管理員
+
+
+class TenantUserListResponse(BaseModel):
+    """租戶使用者列表回應"""
+
+    users: list[TenantUserBrief]
