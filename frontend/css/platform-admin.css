@@ -277,6 +277,14 @@
   height: 18px;
 }
 
+.platform-admin-actions .btn-danger-text {
+  color: var(--color-error);
+}
+
+.platform-admin-actions .btn-danger-text:hover {
+  background-color: rgba(229, 57, 53, 0.1);
+}
+
 /* ==========================================================================
    對話框
    ========================================================================== */

@@ -300,6 +300,9 @@ const PlatformAdminApp = (function () {
                       <span class="icon">${getIcon('cancel')}</span>
                     </button>
                   `}
+                  <button class="btn btn-ghost btn-sm btn-danger-text tenant-delete-btn" data-tenant-id="${tenant.id}" data-tenant-name="${escapeHtml(tenant.name)}" data-tenant-code="${escapeHtml(tenant.code)}" title="刪除">
+                    <span class="icon">${getIcon('delete')}</span>
+                  </button>
                 </td>
               </tr>
             `).join('')}
@@ -319,6 +322,10 @@ const PlatformAdminApp = (function () {
 
     container.querySelectorAll('.tenant-activate-btn').forEach(btn => {
       btn.addEventListener('click', () => activateTenant(windowEl, btn.dataset.tenantId));
+    });
+
+    container.querySelectorAll('.tenant-delete-btn').forEach(btn => {
+      btn.addEventListener('click', () => deleteTenant(windowEl, btn.dataset.tenantId, btn.dataset.tenantName, btn.dataset.tenantCode));
     });
   }
 
@@ -1512,6 +1519,105 @@ const PlatformAdminApp = (function () {
     } catch (error) {
       alert(`啟用失敗：${error.message}`);
     }
+  }
+
+  /**
+   * 刪除租戶
+   * @param {HTMLElement} windowEl
+   * @param {string} tenantId
+   * @param {string} tenantName
+   * @param {string} tenantCode
+   */
+  async function deleteTenant(windowEl, tenantId, tenantName, tenantCode) {
+    // 建立確認對話框
+    const confirmDialog = document.createElement('div');
+    confirmDialog.className = 'platform-admin-dialog-overlay';
+    confirmDialog.innerHTML = `
+      <div class="platform-admin-dialog" style="max-width: 480px;">
+        <div class="platform-admin-dialog-header">
+          <h3>
+            <span class="icon" style="color: var(--color-error);">${getIcon('alert-circle')}</span>
+            刪除租戶
+          </h3>
+          <button class="btn btn-ghost btn-sm dialog-close-btn">
+            <span class="icon">${getIcon('close')}</span>
+          </button>
+        </div>
+        <div class="platform-admin-dialog-body">
+          <div class="platform-admin-warning" style="margin-bottom: var(--spacing-md);">
+            <span class="icon">${getIcon('alert')}</span>
+            <span>此操作不可逆！將永久刪除租戶及其所有資料。</span>
+          </div>
+          <p style="margin-bottom: var(--spacing-md); color: var(--text-primary);">
+            確定要刪除租戶「<strong>${escapeHtml(tenantName)}</strong>」(<code>${escapeHtml(tenantCode)}</code>) 嗎？
+          </p>
+          <p style="margin-bottom: var(--spacing-md); color: var(--text-secondary); font-size: 0.9em;">
+            以下資料將被永久刪除：
+          </p>
+          <ul style="margin: 0 0 var(--spacing-md) var(--spacing-lg); color: var(--text-secondary); font-size: 0.9em;">
+            <li>所有使用者帳號</li>
+            <li>專案及相關資料</li>
+            <li>知識庫文件</li>
+            <li>AI 設定和對話記錄</li>
+            <li>Line 群組和使用者綁定</li>
+            <li>庫存和廠商資料</li>
+          </ul>
+          <div class="form-group">
+            <label for="confirmTenantCode">請輸入租戶代碼 <code>${escapeHtml(tenantCode)}</code> 確認刪除：</label>
+            <input type="text" id="confirmTenantCode" class="input" placeholder="輸入租戶代碼" autocomplete="off" />
+          </div>
+        </div>
+        <div class="platform-admin-dialog-footer">
+          <button class="btn btn-ghost dialog-cancel-btn">取消</button>
+          <button class="btn btn-danger dialog-confirm-btn" disabled>
+            <span class="icon">${getIcon('delete')}</span>
+            <span>永久刪除</span>
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(confirmDialog);
+
+    const confirmInput = confirmDialog.querySelector('#confirmTenantCode');
+    const confirmBtn = confirmDialog.querySelector('.dialog-confirm-btn');
+
+    // 只有輸入正確的租戶代碼才能刪除
+    confirmInput.addEventListener('input', () => {
+      confirmBtn.disabled = confirmInput.value !== tenantCode;
+    });
+
+    // 關閉對話框
+    const closeDialog = () => confirmDialog.remove();
+    confirmDialog.querySelector('.dialog-close-btn').addEventListener('click', closeDialog);
+    confirmDialog.querySelector('.dialog-cancel-btn').addEventListener('click', closeDialog);
+    confirmDialog.addEventListener('click', (e) => {
+      if (e.target === confirmDialog) closeDialog();
+    });
+
+    // 確認刪除
+    confirmBtn.addEventListener('click', async () => {
+      if (confirmInput.value !== tenantCode) {
+        return;
+      }
+
+      confirmBtn.disabled = true;
+      confirmBtn.innerHTML = `<span class="icon">${getIcon('loading', 'mdi-spin')}</span><span>刪除中...</span>`;
+
+      try {
+        await APIClient.request(`/admin/tenants/${tenantId}`, { method: 'DELETE' });
+        closeDialog();
+        showToast('租戶已刪除', 'check');
+        loadTenants(windowEl);
+      } catch (error) {
+        alert(`刪除失敗：${error.message}`);
+        confirmBtn.disabled = false;
+        confirmBtn.innerHTML = `<span class="icon">${getIcon('delete')}</span><span>永久刪除</span>`;
+      }
+    });
+
+    // 聚焦輸入欄位
+    setTimeout(() => confirmInput.focus(), 100);
   }
 
   // ============================================================

@@ -134,9 +134,9 @@
           const data = await response.json();
           if (data.multi_tenant_mode) {
             document.getElementById('tenantCodeGroup').style.display = '';
-            // 從 URL 參數或 localStorage 讀取上次使用的租戶代碼，預設為 default
+            // 從 URL 參數或 localStorage 讀取上次使用的租戶代碼，預設為 chingtech
             const urlParams = new URLSearchParams(window.location.search);
-            const tenantCode = urlParams.get('tenant') || localStorage.getItem('chingtech_last_tenant') || 'default';
+            const tenantCode = urlParams.get('tenant') || localStorage.getItem('chingtech_last_tenant') || 'chingtech';
             document.getElementById('tenantCode').value = tenantCode;
           }
         }

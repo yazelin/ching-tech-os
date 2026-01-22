@@ -14,6 +14,14 @@ const AgentSettingsApp = (function() {
   let isDirty = false;
 
   /**
+   * 取得認證 headers
+   */
+  function getAuthHeaders() {
+    const token = LoginModule?.getToken?.() || localStorage.getItem('chingtech_token');
+    return token ? { 'Authorization': `Bearer ${token}` } : {};
+  }
+
+  /**
    * Check if current view is mobile
    */
   function isMobileView() {
@@ -67,7 +75,9 @@ const AgentSettingsApp = (function() {
    */
   async function loadAgents() {
     try {
-      const response = await fetch('/api/ai/agents');
+      const response = await fetch('/api/ai/agents', {
+        headers: getAuthHeaders()
+      });
       if (!response.ok) throw new Error('Failed to load agents');
       const data = await response.json();
       agents = data.items || [];
@@ -82,7 +92,9 @@ const AgentSettingsApp = (function() {
    */
   async function loadPrompts() {
     try {
-      const response = await fetch('/api/ai/prompts');
+      const response = await fetch('/api/ai/prompts', {
+        headers: getAuthHeaders()
+      });
       if (!response.ok) throw new Error('Failed to load prompts');
       const data = await response.json();
       // Agent 不應選擇 internal 類別的 prompt（如 summarizer）
@@ -98,7 +110,9 @@ const AgentSettingsApp = (function() {
    */
   async function loadAgentDetail(agentId) {
     try {
-      const response = await fetch(`/api/ai/agents/${agentId}`);
+      const response = await fetch(`/api/ai/agents/${agentId}`, {
+        headers: getAuthHeaders()
+      });
       if (!response.ok) throw new Error('Failed to load agent');
       return await response.json();
     } catch (e) {
@@ -117,7 +131,10 @@ const AgentSettingsApp = (function() {
 
       const response = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        },
         body: JSON.stringify(data)
       });
 
@@ -139,7 +156,8 @@ const AgentSettingsApp = (function() {
   async function deleteAgent(agentId) {
     try {
       const response = await fetch(`/api/ai/agents/${agentId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: getAuthHeaders()
       });
 
       if (!response.ok) {
@@ -161,7 +179,10 @@ const AgentSettingsApp = (function() {
     try {
       const response = await fetch('/api/ai/test', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        },
         body: JSON.stringify({ agent_id: agentId, message })
       });
 

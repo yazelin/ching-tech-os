@@ -712,6 +712,56 @@
   opacity: 0.9;
 }
 
+/* NAS 登入驗證設定 */
+.nas-auth-settings-section {
+  margin-top: var(--spacing-lg);
+}
+
+.nas-auth-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.nas-auth-config {
+  margin-top: var(--spacing-md);
+  padding: var(--spacing-md);
+  background: var(--bg-surface-dark);
+  border-radius: var(--radius-md);
+}
+
+.nas-auth-actions {
+  margin-top: var(--spacing-md);
+}
+
+/* NAS 認證測試結果 */
+.nas-auth-test-result {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  margin-top: var(--spacing-md);
+}
+
+.nas-auth-test-result.success {
+  background-color: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: var(--color-success);
+}
+
+.nas-auth-test-result.error {
+  background-color: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: var(--color-error);
+}
+
+.nas-auth-test-result .icon svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
 /* ==========================================================================
    使用者管理區段
    ========================================================================== */

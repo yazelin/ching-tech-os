@@ -52,7 +52,7 @@ const ProjectManagementModule = (function() {
    * Get authentication token
    */
   function getToken() {
-    return LoginModule?.getToken?.() || localStorage.getItem('auth_token') || '';
+    return LoginModule?.getToken?.() || localStorage.getItem('chingtech_token') || '';
   }
 
   /**
@@ -433,31 +433,30 @@ const ProjectManagementModule = (function() {
 
   /**
    * Format date
+   * 後端返回的 created_at/updated_at 是 UTC 時間，需要轉換為本地時間顯示
    */
   function formatDate(dateStr) {
     if (!dateStr) return '';
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('zh-TW');
-  }
-
-  /**
-   * Format datetime for datetime-local input (YYYY-MM-DDTHH:MM in local timezone)
-   * 將 UTC/ISO 時間字串轉換成本地時間格式，供 datetime-local 輸入使用
-   */
-  function formatDateTimeLocal(dateStr) {
-    if (!dateStr) return '';
-    // 如果日期字串沒有時區資訊（沒有 Z 或 +/-），視為 UTC 時間
+    // 如果沒有時區資訊，加上 'Z' 表示 UTC
     let normalizedStr = dateStr;
     if (!/[Z+-]/.test(dateStr.slice(-6))) {
       normalizedStr = dateStr + 'Z';
     }
     const date = new Date(normalizedStr);
-    // 取得本地時間各部分
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return date.toLocaleDateString('zh-TW');
+  }
+
+  /**
+   * Format datetime for datetime-local input (YYYY-MM-DDTHH:MM)
+   * 後端返回的時間已是本地時間（台北），直接解析即可
+   */
+  function formatDateTimeLocal(dateStr) {
+    if (!dateStr) return '';
+    // 後端返回的時間格式為 YYYY-MM-DDTHH:MM:SS，視為本地時間
+    // 不要加 'Z'，因為那會讓瀏覽器誤認為 UTC 時間
+    const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})T?(\d{2})?:?(\d{2})?/);
+    if (!match) return '';
+    const [, year, month, day, hours = '00', minutes = '00'] = match;
     return `${year}-${month}-${day}T${hours}:${minutes}`;
   }
 
@@ -1040,25 +1039,19 @@ const ProjectManagementModule = (function() {
         return;
       }
 
-      // datetime-local 值格式是 YYYY-MM-DDTHH:MM，需要正確轉換為 ISO 字串
-      // 直接 new Date(dateValue) 可能會被誤解為 UTC，需要手動處理
+      // datetime-local 值格式是 YYYY-MM-DDTHH:MM，直接轉換為後端接受的格式
+      // 不要使用 toISOString()，因為它會轉換為 UTC 時間
       const [datePart, timePart] = dateValue.split('T');
-      const [year, month, day] = datePart.split('-').map(Number);
-      const timeParts = timePart.split(':').map(Number);
-      const hours = timeParts[0] || 0;
-      const minutes = timeParts[1] || 0;
-      // 使用本地時間建立 Date 物件
-      const localDate = new Date(year, month - 1, day, hours, minutes);
-
-      // 確保日期有效
-      if (isNaN(localDate.getTime())) {
+      if (!datePart || !timePart) {
         NotificationModule.show({ title: '錯誤', message: '日期格式無效', icon: 'alert' });
         return;
       }
+      // 格式化為 YYYY-MM-DD HH:MM（本地時間）
+      const meetingDateStr = `${datePart} ${timePart}`;
 
       const data = {
         title,
-        meeting_date: localDate.toISOString(),
+        meeting_date: meetingDateStr,
         location: modal.querySelector('#meetingLocation').value.trim() || null,
         attendees: attendeesValue ? attendeesValue.split(',').map(s => s.trim()).filter(Boolean) : [],
         content: modal.querySelector('#meetingContent').value || null,

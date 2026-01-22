@@ -27,6 +27,14 @@ const AIAssistantApp = (function() {
   };
 
   /**
+   * 取得認證 headers
+   */
+  function getAuthHeaders() {
+    const token = LoginModule?.getToken?.() || localStorage.getItem('chingtech_token');
+    return token ? { 'Authorization': `Bearer ${token}` } : {};
+  }
+
+  /**
    * Estimate tokens from text (simplified: ~2 chars per token)
    * @param {string} text
    * @returns {number}
@@ -68,7 +76,9 @@ const AIAssistantApp = (function() {
    */
   async function loadAgents() {
     try {
-      const response = await fetch('/api/ai/agents');
+      const response = await fetch('/api/ai/agents', {
+        headers: getAuthHeaders()
+      });
       if (response.ok) {
         const data = await response.json();
         availableAgents = (data.items || []).filter(a => a.is_active);

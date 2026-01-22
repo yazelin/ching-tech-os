@@ -1300,6 +1300,61 @@ const TenantAdminApp = (function () {
         </div>
       </div>
 
+      <!-- NAS 登入驗證設定區塊（僅平台管理員可見） -->
+      <div class="tenant-settings-form nas-auth-settings-section" id="nasAuthSettingsSection" style="display: none;">
+        <div class="settings-group">
+          <h3 class="settings-group-title">
+            <span class="icon">${getIcon('server-network')}</span>
+            NAS 登入驗證
+          </h3>
+          <p class="settings-description">
+            啟用後，此租戶的使用者可以使用 NAS 帳號密碼登入系統。<br>
+            適用於尚未設定系統密碼的使用者。
+          </p>
+
+          <div class="form-group">
+            <label class="feature-toggle nas-auth-toggle">
+              <input type="checkbox" id="enableNasAuth" ${settings.enable_nas_auth ? 'checked' : ''} />
+              <span class="icon">${getIcon('shield-key')}</span>
+              <span>啟用 NAS 帳號登入</span>
+            </label>
+          </div>
+
+          <div class="nas-auth-config" id="nasAuthConfig" style="display: ${settings.enable_nas_auth ? 'block' : 'none'};">
+            <div class="form-group">
+              <label for="nasAuthHost">NAS 主機位址</label>
+              <input type="text" id="nasAuthHost" class="input" placeholder="例如：192.168.1.100" value="${settings.nas_auth_host || ''}" />
+              <span class="form-hint">留空則使用系統預設的 NAS 主機</span>
+            </div>
+            <div class="form-group">
+              <label for="nasAuthPort">NAS 連接埠</label>
+              <input type="number" id="nasAuthPort" class="input" placeholder="預設：445" value="${settings.nas_auth_port || ''}" min="1" max="65535" />
+              <span class="form-hint">SMB 預設為 445，通常不需要修改</span>
+            </div>
+            <div class="form-group">
+              <label for="nasAuthShare">驗證用共享名稱</label>
+              <input type="text" id="nasAuthShare" class="input" placeholder="例如：home" value="${settings.nas_auth_share || ''}" />
+              <span class="form-hint">用於驗證使用者是否有權存取，建議使用 home（每個 NAS 用戶都有）</span>
+            </div>
+
+            <div class="nas-auth-actions">
+              <button class="btn btn-secondary" id="testNasAuthBtn">
+                <span class="icon">${getIcon('connection')}</span>
+                <span>測試連線</span>
+              </button>
+            </div>
+            <div class="nas-auth-test-result" id="nasAuthTestResult" style="display: none;"></div>
+          </div>
+
+          <div class="settings-actions">
+            <button class="btn btn-primary" id="saveNasAuthBtn">
+              <span class="icon">${getIcon('content-save')}</span>
+              <span>儲存 NAS 設定</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- Line Bot 設定區塊（僅平台管理員可見） -->
       <div class="tenant-settings-form linebot-settings-section" id="linebotSettingsSection" style="display: none;">
         <div class="settings-group">
@@ -1361,25 +1416,156 @@ const TenantAdminApp = (function () {
     const saveBtn = container.querySelector('#saveSettingsBtn');
     saveBtn.addEventListener('click', () => saveSettings(windowEl, container));
 
-    // 檢查是否為平台管理員，若是則顯示 Line Bot 設定
-    if (PermissionsModule.isPlatformAdmin?.()) {
+    // 檢查是否為平台管理員或租戶管理員，若是則顯示進階設定
+    const isPlatformAdmin = PermissionsModule.isPlatformAdmin?.();
+    const isTenantAdmin = PermissionsModule.isTenantAdmin?.();
+
+    // NAS 登入驗證設定：平台管理員和租戶管理員都可以設定
+    if (isPlatformAdmin || isTenantAdmin) {
+      const nasAuthSection = container.querySelector('#nasAuthSettingsSection');
+      nasAuthSection.style.display = '';
+      initNasAuthSettings(container, isPlatformAdmin);
+    }
+
+    // Line Bot 設定：平台管理員和租戶管理員都可以設定
+    if (isPlatformAdmin || isTenantAdmin) {
       const linebotSection = container.querySelector('#linebotSettingsSection');
       linebotSection.style.display = '';
-      loadLinebotSettings(container, true);  // 首次載入，綁定事件
+      loadLinebotSettings(container, isPlatformAdmin, true);  // 首次載入，綁定事件
+    }
+  }
+
+  /**
+   * 初始化 NAS 登入驗證設定
+   * @param {HTMLElement} container
+   * @param {boolean} isPlatformAdmin - 是否為平台管理員
+   */
+  function initNasAuthSettings(container, isPlatformAdmin = false) {
+    const enableCheckbox = container.querySelector('#enableNasAuth');
+    const configDiv = container.querySelector('#nasAuthConfig');
+    const testBtn = container.querySelector('#testNasAuthBtn');
+    const saveBtn = container.querySelector('#saveNasAuthBtn');
+
+    // 切換啟用狀態時顯示/隱藏設定區塊
+    enableCheckbox.addEventListener('change', () => {
+      configDiv.style.display = enableCheckbox.checked ? 'block' : 'none';
+    });
+
+    // 測試連線按鈕
+    testBtn.addEventListener('click', () => testNasAuthConnection(container, isPlatformAdmin));
+
+    // 儲存按鈕
+    saveBtn.addEventListener('click', () => saveNasAuthSettings(container));
+  }
+
+  /**
+   * 測試 NAS 登入驗證連線
+   * @param {HTMLElement} container
+   * @param {boolean} isPlatformAdmin - 是否為平台管理員
+   */
+  async function testNasAuthConnection(container, isPlatformAdmin = false) {
+    const testBtn = container.querySelector('#testNasAuthBtn');
+    const resultEl = container.querySelector('#nasAuthTestResult');
+
+    const host = container.querySelector('#nasAuthHost').value.trim();
+    const port = container.querySelector('#nasAuthPort').value.trim();
+    const share = container.querySelector('#nasAuthShare').value.trim();
+
+    testBtn.disabled = true;
+    testBtn.innerHTML = `<span class="icon">${getIcon('loading', 'mdi-spin')}</span><span>測試中...</span>`;
+    resultEl.style.display = 'none';
+
+    try {
+      // 根據角色使用不同的 API 端點
+      const apiPath = isPlatformAdmin
+        ? `/admin/tenants/${tenantInfo.id}/nas-auth/test`
+        : '/tenant/nas-auth/test';
+
+      const response = await APIClient.post(apiPath, {
+        host: host || null,
+        port: port ? parseInt(port, 10) : null,
+        share: share || null
+      });
+
+      if (response.success) {
+        resultEl.className = 'nas-auth-test-result success';
+        resultEl.innerHTML = `
+          <span class="icon">${getIcon('check-circle')}</span>
+          <span>連線成功：可以連線至 NAS 並存取指定的共享</span>
+        `;
+      } else {
+        resultEl.className = 'nas-auth-test-result error';
+        resultEl.innerHTML = `
+          <span class="icon">${getIcon('alert-circle')}</span>
+          <span>連線失敗：${response.error || '無法連線至 NAS'}</span>
+        `;
+      }
+      resultEl.style.display = '';
+
+    } catch (error) {
+      resultEl.className = 'nas-auth-test-result error';
+      resultEl.innerHTML = `
+        <span class="icon">${getIcon('alert-circle')}</span>
+        <span>測試失敗：${error.message}</span>
+      `;
+      resultEl.style.display = '';
+    } finally {
+      testBtn.disabled = false;
+      testBtn.innerHTML = `<span class="icon">${getIcon('connection')}</span><span>測試連線</span>`;
+    }
+  }
+
+  /**
+   * 儲存 NAS 登入驗證設定
+   * @param {HTMLElement} container
+   */
+  async function saveNasAuthSettings(container) {
+    const saveBtn = container.querySelector('#saveNasAuthBtn');
+    const enableNasAuth = container.querySelector('#enableNasAuth').checked;
+    const nasAuthHost = container.querySelector('#nasAuthHost').value.trim();
+    const nasAuthPort = container.querySelector('#nasAuthPort').value.trim();
+    const nasAuthShare = container.querySelector('#nasAuthShare').value.trim();
+
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = `<span class="icon">${getIcon('loading', 'mdi-spin')}</span><span>儲存中...</span>`;
+
+    try {
+      // 合併現有設定
+      const newSettings = {
+        ...tenantInfo.settings,
+        enable_nas_auth: enableNasAuth,
+        nas_auth_host: nasAuthHost || null,
+        nas_auth_port: nasAuthPort ? parseInt(nasAuthPort, 10) : null,
+        nas_auth_share: nasAuthShare || null
+      };
+
+      await APIClient.updateTenantSettings({ settings: newSettings });
+
+      // 更新快取
+      tenantInfo.settings = newSettings;
+
+      showToast('NAS 登入設定已儲存', 'check');
+    } catch (error) {
+      alert(`儲存失敗：${error.message}`);
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.innerHTML = `<span class="icon">${getIcon('content-save')}</span><span>儲存 NAS 設定</span>`;
     }
   }
 
   /**
    * 載入 Line Bot 設定
    * @param {HTMLElement} container
+   * @param {boolean} isPlatformAdmin - 是否為平台管理員（未使用，保留向後相容）
    * @param {boolean} bindEvents - 是否綁定事件（首次載入時為 true）
    */
-  async function loadLinebotSettings(container, bindEvents = false) {
+  async function loadLinebotSettings(container, isPlatformAdmin = false, bindEvents = false) {
     const statusEl = container.querySelector('#linebotStatus');
     const formEl = container.querySelector('#linebotForm');
 
     try {
-      const response = await APIClient.get(`/admin/tenants/${tenantInfo.id}/linebot`);
+      // 使用租戶 API（平台管理員和租戶管理員都可以用）
+      const response = await APIClient.get('/tenant/linebot');
 
       // 更新狀態顯示
       if (response.configured) {
@@ -1433,7 +1619,8 @@ const TenantAdminApp = (function () {
     resultEl.style.display = 'none';
 
     try {
-      const response = await APIClient.post(`/admin/tenants/${tenantInfo.id}/linebot/test`);
+      // 使用租戶 API
+      const response = await APIClient.post('/tenant/linebot/test');
 
       if (response.success) {
         resultEl.className = 'linebot-test-result success';
@@ -1498,7 +1685,8 @@ const TenantAdminApp = (function () {
       if (channelSecret) data.channel_secret = channelSecret;
       if (accessToken) data.access_token = accessToken;
 
-      await APIClient.put(`/admin/tenants/${tenantInfo.id}/linebot`, data);
+      // 使用租戶 API
+      await APIClient.put('/tenant/linebot', data);
 
       // 清空密碼欄位
       container.querySelector('#lineChannelSecret').value = '';
@@ -1532,7 +1720,8 @@ const TenantAdminApp = (function () {
     clearBtn.innerHTML = `<span class="icon">${getIcon('loading', 'mdi-spin')}</span><span>清除中...</span>`;
 
     try {
-      await APIClient.delete(`/admin/tenants/${tenantInfo.id}/linebot`);
+      // 使用租戶 API
+      await APIClient.delete('/tenant/linebot');
 
       // 清空表單
       container.querySelector('#lineChannelId').value = '';
