@@ -16,6 +16,9 @@ from .huggingface_image import generate_image_fallback
 from .linebot import (
     reply_text,
     reply_messages,
+    push_text,
+    push_image,
+    get_line_group_external_id,
     create_text_message_with_mention,
     MENTION_PLACEHOLDER,
     mark_message_ai_processed,
@@ -263,6 +266,7 @@ def extract_generated_images_from_tool_calls(tool_calls: list) -> list[str]:
 async def auto_prepare_generated_images(
     ai_response: str,
     tool_calls: list,
+    tenant_id: UUID | None = None,
 ) -> str:
     """
     自動處理 AI 生成的圖片，確保用戶能收到圖片
@@ -275,6 +279,7 @@ async def auto_prepare_generated_images(
     Args:
         ai_response: AI 回應文字
         tool_calls: Claude response 的 tool_calls 列表
+        tenant_id: 租戶 ID（用於檔案處理）
 
     Returns:
         處理後的 AI 回應（可能包含新增的 FILE_MESSAGE 標記或錯誤提示）
@@ -323,7 +328,7 @@ async def auto_prepare_generated_images(
             else:
                 relative_path = file_path
 
-            result = await prepare_file_message(relative_path)
+            result = await prepare_file_message(relative_path, ctos_tenant_id=str(tenant_id) if tenant_id else None)
             if "[FILE_MESSAGE:" in result:
                 file_messages.append(result)
                 logger.info(f"自動準備圖片訊息: {relative_path}")
@@ -424,6 +429,7 @@ async def send_ai_response(
     text: str,
     file_messages: list[dict],
     mention_line_user_id: str | None = None,
+    tenant_id: UUID | None = None,
 ) -> list[str]:
     """
     發送 AI 回應（文字 + 檔案訊息）
@@ -433,6 +439,7 @@ async def send_ai_response(
         text: 文字回覆
         file_messages: 檔案訊息列表
         mention_line_user_id: 要 mention 的 Line 用戶 ID（群組對話時使用）
+        tenant_id: 租戶 ID（用於選擇正確的 Line Bot access token）
 
     Returns:
         發送成功的訊息 ID 列表
@@ -487,8 +494,8 @@ async def send_ai_response(
     if not messages:
         return []
 
-    # 發送訊息
-    return await reply_messages(reply_token, messages)
+    # 發送訊息（傳入 tenant_id 以使用正確的 access token）
+    return await reply_messages(reply_token, messages, tenant_id=tenant_id)
 
 
 # ============================================================
@@ -778,7 +785,7 @@ async def process_message_with_ai(
                     # Fallback 成功，準備圖片訊息
                     logger.info(f"Hugging Face fallback 成功: {fallback_path}")
                     from .mcp_server import prepare_file_message
-                    file_msg = await prepare_file_message(fallback_path)
+                    file_msg = await prepare_file_message(fallback_path, ctos_tenant_id=str(tenant_id) if tenant_id else None)
                     ai_response = f"圖片已生成（使用備用服務）：\n\n{file_msg}"
                 elif used_fallback:
                     # Fallback 被觸發但失敗
@@ -817,7 +824,7 @@ async def process_message_with_ai(
                     # 嘗試發送已生成的圖片
                     ai_response = f"抱歉，處理過程遇到問題，但圖片已經生成好了："
                     ai_response = await auto_prepare_generated_images(
-                        ai_response, response.tool_calls
+                        ai_response, response.tool_calls, tenant_id=tenant_id
                     )
                     # 繼續後續的發送流程（不 return）
                 else:
@@ -829,7 +836,7 @@ async def process_message_with_ai(
 
             # 自動處理 AI 生成的圖片（如果 AI 沒有呼叫 prepare_file_message）
             ai_response = await auto_prepare_generated_images(
-                ai_response, response.tool_calls
+                ai_response, response.tool_calls, tenant_id=tenant_id
             )
 
         # 標記訊息已處理
@@ -841,6 +848,7 @@ async def process_message_with_ai(
         # 回覆訊息並取得 Line 訊息 ID（用於回覆觸發功能）
         # 群組對話時，mention 發問的用戶
         line_message_ids = []
+        reply_success = False
         if reply_token and (text_response or file_messages):
             try:
                 line_message_ids = await send_ai_response(
@@ -848,9 +856,45 @@ async def process_message_with_ai(
                     text=text_response,
                     file_messages=file_messages,
                     mention_line_user_id=line_user_id if is_group else None,
+                    tenant_id=tenant_id,
                 )
+                reply_success = True
             except Exception as e:
                 logger.warning(f"回覆訊息失敗（token 可能已過期）: {e}")
+
+        # Reply 失敗時 fallback 到 push message
+        if not reply_success and (text_response or file_messages):
+            logger.info("嘗試使用 push message 發送訊息...")
+            # 取得發送目標（個人對話用 line_user_id，群組用 line_group_external_id）
+            push_target = None
+            if is_group and line_group_id:
+                push_target = await get_line_group_external_id(line_group_id, tenant_id=tenant_id)
+            else:
+                push_target = line_user_id
+
+            if push_target:
+                # 發送文字訊息
+                if text_response:
+                    msg_id, error = await push_text(push_target, text_response, tenant_id=tenant_id)
+                    if msg_id:
+                        line_message_ids.append(msg_id)
+                        logger.info(f"Push 文字訊息成功: {msg_id}")
+                    elif error:
+                        logger.warning(f"Push 文字訊息失敗: {error}")
+
+                # 發送圖片訊息
+                for file_info in file_messages:
+                    if file_info.get("type") == "image" and file_info.get("url"):
+                        msg_id, error = await push_image(
+                            push_target, file_info["url"], tenant_id=tenant_id
+                        )
+                        if msg_id:
+                            line_message_ids.append(msg_id)
+                            logger.info(f"Push 圖片訊息成功: {msg_id}")
+                        elif error:
+                            logger.warning(f"Push 圖片訊息失敗: {error}")
+            else:
+                logger.warning("無法取得 push 發送目標")
 
         # 儲存 Bot 回應到資料庫（包含所有 Line 訊息 ID）
         # 計算文字和圖片訊息的對應關係

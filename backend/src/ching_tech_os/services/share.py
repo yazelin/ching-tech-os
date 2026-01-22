@@ -93,7 +93,7 @@ def validate_nas_file_path(file_path: str, tenant_id: str | None = None) -> Path
 
     Args:
         file_path: 檔案路徑（完整路徑或相對路徑）
-        tenant_id: 租戶 ID（用於 CTOS zone 的租戶隔離）
+        tenant_id: 租戶 ID（用於 CTOS zone 的租戶隔離，可以是 str 或 UUID）
 
     Returns:
         驗證後的完整路徑
@@ -106,20 +106,30 @@ def validate_nas_file_path(file_path: str, tenant_id: str | None = None) -> Path
 
     ctos_path = Path(settings.ctos_mount_path)
 
+    # 確保 tenant_id 是字串（處理 UUID 類型）
+    tid_str = str(tenant_id) if tenant_id else None
+
     # 特殊處理：nanobanana 輸出路徑（/tmp/.../nanobanana-output/xxx.jpg）
     # 這些檔案已被複製到 NAS，需要映射到實際位置
     if "/nanobanana-output/" in file_path or file_path.startswith("nanobanana-output/"):
         filename = file_path.split("nanobanana-output/")[-1]
-        if tenant_id:
-            # 多租戶模式：使用租戶專屬路徑
-            full_path = ctos_path / "tenants" / tenant_id / "linebot" / "ai-images" / filename
+        if tid_str:
+            # 多租戶模式：先嘗試租戶專屬路徑，再 fallback 到共用路徑
+            full_path = ctos_path / "tenants" / tid_str / "linebot" / "ai-images" / filename
+            if not full_path.exists():
+                # Fallback 到舊路徑（symlink 指向的共用目錄）
+                full_path = ctos_path / "linebot" / "files" / "ai-images" / filename
         else:
             full_path = ctos_path / "linebot" / "files" / "ai-images" / filename
     elif file_path.startswith("ai-images/"):
         # ai-images/ 相對路徑
         filename = file_path.split("/", 1)[1] if "/" in file_path else file_path
-        if tenant_id:
-            full_path = ctos_path / "tenants" / tenant_id / "linebot" / "ai-images" / filename
+        if tid_str:
+            # 多租戶模式：先嘗試租戶專屬路徑，再 fallback 到共用路徑
+            full_path = ctos_path / "tenants" / tid_str / "linebot" / "ai-images" / filename
+            if not full_path.exists():
+                # Fallback 到舊路徑
+                full_path = ctos_path / "linebot" / "files" / "ai-images" / filename
         else:
             full_path = ctos_path / "linebot" / "files" / "ai-images" / filename
     else:
@@ -155,18 +165,18 @@ def validate_nas_file_path(file_path: str, tenant_id: str | None = None) -> Path
     return full_path
 
 
-async def get_resource_title(resource_type: str, resource_id: str) -> str:
+async def get_resource_title(resource_type: str, resource_id: str, tenant_id: str | None = None) -> str:
     """取得資源標題"""
     try:
         if resource_type == "knowledge":
-            knowledge = get_knowledge(resource_id)
+            knowledge = get_knowledge(resource_id, tenant_id=tenant_id)
             return knowledge.title
         elif resource_type == "project":
-            project = await get_project(UUID(resource_id))
+            project = await get_project(UUID(resource_id), tenant_id=tenant_id)
             return project.name
         elif resource_type == "nas_file":
             # 驗證路徑並回傳檔名
-            full_path = validate_nas_file_path(resource_id)
+            full_path = validate_nas_file_path(resource_id, tenant_id=tenant_id)
             return full_path.name
         elif resource_type == "project_attachment":
             # 取得專案附件資訊
@@ -207,7 +217,7 @@ async def create_share_link(
         tenant_id: 租戶 ID
     """
     # 驗證資源存在
-    resource_title = await get_resource_title(data.resource_type, data.resource_id)
+    resource_title = await get_resource_title(data.resource_type, data.resource_id, tenant_id=str(tenant_id) if tenant_id else None)
 
     # 產生唯一 token
     async with get_connection() as conn:
@@ -424,10 +434,10 @@ async def revoke_link(token: str, username: str, is_admin: bool = False) -> None
 async def get_public_resource(token: str) -> PublicResourceResponse:
     """取得公開資源"""
     async with get_connection() as conn:
-        # 查詢連結
+        # 查詢連結（包含 tenant_id）
         row = await conn.fetchrow(
             """
-            SELECT token, resource_type, resource_id, created_by, expires_at, created_at
+            SELECT token, resource_type, resource_id, created_by, expires_at, created_at, tenant_id
             FROM public_share_links
             WHERE token = $1
             """,
@@ -451,10 +461,11 @@ async def get_public_resource(token: str) -> PublicResourceResponse:
         # 取得資源內容
         resource_type = row["resource_type"]
         resource_id = row["resource_id"]
+        tenant_id = str(row["tenant_id"]) if row["tenant_id"] else None
 
         if resource_type == "knowledge":
             try:
-                knowledge = get_knowledge(resource_id)
+                knowledge = get_knowledge(resource_id, tenant_id=tenant_id)
                 # 正規化附件路徑，將 ../assets/images/xxx 轉換為 local/images/xxx
                 normalized_attachments = []
                 for att in knowledge.attachments:
@@ -509,7 +520,7 @@ async def get_public_resource(token: str) -> PublicResourceResponse:
         elif resource_type == "nas_file":
             try:
                 # 驗證檔案存在且可存取
-                full_path = validate_nas_file_path(resource_id)
+                full_path = validate_nas_file_path(resource_id, tenant_id=tenant_id)
                 stat = full_path.stat()
 
                 # 格式化大小
@@ -580,7 +591,7 @@ async def get_link_info(token: str) -> dict:
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
-            SELECT token, resource_type, resource_id, expires_at
+            SELECT token, resource_type, resource_id, expires_at, tenant_id
             FROM public_share_links
             WHERE token = $1
             """,
@@ -598,6 +609,7 @@ async def get_link_info(token: str) -> dict:
         return {
             "resource_type": row["resource_type"],
             "resource_id": row["resource_id"],
+            "tenant_id": str(row["tenant_id"]) if row["tenant_id"] else None,
         }
 
 
