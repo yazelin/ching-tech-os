@@ -308,9 +308,24 @@ body {
     margin-bottom: 16px;
 }
 
+/* 表格包裹器 - 允許水平捲動 */
+.table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin-bottom: 16px;
+}
+
 .markdown-body table {
     width: 100%;
     border-collapse: collapse;
+    margin-bottom: 0; /* 由 .table-wrapper 控制 margin */
+}
+
+/* 未包裹的表格（fallback）也要支援捲動 */
+.markdown-body > table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
     margin-bottom: 16px;
 }
 
@@ -319,6 +334,12 @@ body {
     border: 1px solid var(--public-border);
     padding: var(--public-spacing-sm) var(--public-spacing-md);
     text-align: left;
+    white-space: nowrap; /* 防止儲存格內文字換行，確保表格能正確捲動 */
+}
+
+/* 允許特定儲存格換行（如描述欄位） */
+.markdown-body td.wrap-text {
+    white-space: normal;
 }
 
 .markdown-body th {

@@ -730,7 +730,7 @@ async def process_message_with_ai(
                 model=model,
                 history=history,
                 system_prompt=system_prompt,
-                timeout=120,  # 正常圖片生成約 30-90 秒，超過 120 秒視為 hang 住
+                timeout=480,  # 延長至 8 分鐘，支援複雜任務如多次 WebSearch + 分析
                 tools=all_tools,
             )
 

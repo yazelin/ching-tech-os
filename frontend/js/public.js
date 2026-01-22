@@ -76,6 +76,23 @@
     }
 
     /**
+     * 將表格包裹在可捲動的容器中（解決手機版表格被截斷問題）
+     */
+    function wrapTablesForScroll(containerEl) {
+        const tables = containerEl.querySelectorAll('table');
+        tables.forEach(table => {
+            // 如果已經被包裹，跳過
+            if (table.parentElement.classList.contains('table-wrapper')) {
+                return;
+            }
+            const wrapper = document.createElement('div');
+            wrapper.className = 'table-wrapper';
+            table.parentNode.insertBefore(wrapper, table);
+            wrapper.appendChild(table);
+        });
+    }
+
+    /**
      * 取得附件圖示
      */
     function getAttachmentIcon(type, filename) {
@@ -180,6 +197,8 @@
                 gfm: true
             });
             docContentEl.innerHTML = marked.parse(data.content || '');
+            // 包裹表格以支援手機版水平捲動
+            wrapTablesForScroll(docContentEl);
         } else {
             docContentEl.innerHTML = `<pre>${data.content || ''}</pre>`;
         }
@@ -220,6 +239,8 @@
         if (data.description) {
             if (typeof marked !== 'undefined') {
                 docContentEl.innerHTML = marked.parse(data.description);
+                // 包裹表格以支援手機版水平捲動
+                wrapTablesForScroll(docContentEl);
             } else {
                 docContentEl.innerHTML = `<p>${data.description}</p>`;
             }
