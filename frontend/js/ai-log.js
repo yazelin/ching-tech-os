@@ -8,6 +8,17 @@ const AILogApp = (function() {
 
   const APP_ID = 'ai-log';
   const MOBILE_BREAKPOINT = 768;
+
+  // 取得 token
+  function getToken() {
+    return localStorage.getItem('chingtech_token');
+  }
+
+  // API 呼叫輔助函數
+  function getAuthHeaders() {
+    const token = getToken();
+    return token ? { 'Authorization': `Bearer ${token}` } : {};
+  }
   let windowId = null;
   let logs = [];
   let agents = [];
@@ -40,7 +51,9 @@ const AILogApp = (function() {
    */
   async function loadAgents() {
     try {
-      const response = await fetch('/api/ai/agents');
+      const response = await fetch('/api/ai/agents', {
+        headers: getAuthHeaders()
+      });
       if (!response.ok) throw new Error('Failed to load agents');
       const data = await response.json();
       agents = data.items || [];
@@ -65,7 +78,9 @@ const AILogApp = (function() {
       if (filters.start_date) params.set('start_date', filters.start_date);
       if (filters.end_date) params.set('end_date', filters.end_date);
 
-      const response = await fetch(`/api/ai/logs?${params.toString()}`);
+      const response = await fetch(`/api/ai/logs?${params.toString()}`, {
+        headers: getAuthHeaders()
+      });
       if (!response.ok) throw new Error('Failed to load logs');
       const data = await response.json();
 
@@ -87,7 +102,9 @@ const AILogApp = (function() {
       if (filters.start_date) params.set('start_date', filters.start_date);
       if (filters.end_date) params.set('end_date', filters.end_date);
 
-      const response = await fetch(`/api/ai/logs/stats?${params.toString()}`);
+      const response = await fetch(`/api/ai/logs/stats?${params.toString()}`, {
+        headers: getAuthHeaders()
+      });
       if (!response.ok) throw new Error('Failed to load stats');
       stats = await response.json();
     } catch (e) {
@@ -101,7 +118,9 @@ const AILogApp = (function() {
    */
   async function loadLogDetail(logId) {
     try {
-      const response = await fetch(`/api/ai/logs/${logId}`);
+      const response = await fetch(`/api/ai/logs/${logId}`, {
+        headers: getAuthHeaders()
+      });
       if (!response.ok) throw new Error('Failed to load log');
       return await response.json();
     } catch (e) {

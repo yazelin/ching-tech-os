@@ -511,7 +511,7 @@ async def get_user_role_and_permissions(user_id: int) -> dict:
             return {"role": "user", "permissions": None, "user_data": None}
 
         role = row["role"] or "user"
-        preferences = row["preferences"] or {}
+        preferences = _parse_preferences(row["preferences"])
         permissions = preferences.get("permissions")
 
         # 建立 user_data 供 get_user_app_permissions_sync 使用

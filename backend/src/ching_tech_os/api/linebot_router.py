@@ -735,8 +735,8 @@ async def api_download_file(
     if not nas_path:
         raise HTTPException(status_code=404, detail="File not stored on NAS")
 
-    # 從 NAS 讀取檔案
-    content = await read_file_from_nas(nas_path)
+    # 從 NAS 讀取檔案（傳遞 tenant_id 支援多租戶）
+    content = await read_file_from_nas(nas_path, tenant_id=session.tenant_id)
     if content is None:
         raise HTTPException(status_code=404, detail="File not found on NAS")
 

@@ -118,9 +118,10 @@ async def resolve_tenant_for_message(
     """解析訊息的租戶 ID
 
     優先順序：
-    1. 群組訊息：使用群組的 tenant_id
-    2. 個人訊息：使用用戶綁定的 CTOS 帳號的 tenant_id
-    3. 都找不到：使用預設租戶
+    1. 群組訊息且群組已綁定非預設租戶：使用群組的 tenant_id
+    2. 群組訊息但群組在預設租戶，且用戶已綁定：自動遷移群組到用戶的租戶
+    3. 個人訊息：使用用戶綁定的 CTOS 帳號的 tenant_id
+    4. 都找不到：使用預設租戶
 
     Args:
         line_group_id: Line 群組 ID（群組訊息）
@@ -129,11 +130,31 @@ async def resolve_tenant_for_message(
     Returns:
         租戶 UUID
     """
-    # 群組訊息：使用群組的租戶
+    default_tid = UUID(settings.default_tenant_id)
+
+    # 群組訊息：檢查群組的租戶
     if line_group_id:
-        tenant_id = await get_group_tenant_id(line_group_id)
-        if tenant_id:
-            return tenant_id
+        group_tenant_id = await get_group_tenant_id(line_group_id)
+
+        # 如果群組已綁定到非預設租戶，直接使用
+        if group_tenant_id and group_tenant_id != default_tid:
+            return group_tenant_id
+
+        # 群組在預設租戶或不存在，檢查用戶是否已綁定
+        if line_user_id:
+            user_tenant_id = await get_user_tenant_id(line_user_id)
+            if user_tenant_id and user_tenant_id != default_tid:
+                # 用戶已綁定到非預設租戶，自動遷移群組
+                if group_tenant_id == default_tid:
+                    await _migrate_group_to_tenant(line_group_id, user_tenant_id)
+                    logger.info(
+                        f"已自動將群組 {line_group_id} 從預設租戶遷移到 {user_tenant_id}"
+                    )
+                return user_tenant_id
+
+        # 群組存在但在預設租戶，且用戶未綁定
+        if group_tenant_id:
+            return group_tenant_id
 
     # 個人訊息：使用用戶綁定的租戶
     if line_user_id:
@@ -142,7 +163,21 @@ async def resolve_tenant_for_message(
             return tenant_id
 
     # 預設租戶
-    return UUID(settings.default_tenant_id)
+    return default_tid
+
+
+async def _migrate_group_to_tenant(line_group_id: str, tenant_id: UUID) -> None:
+    """將群組遷移到指定租戶（內部函數）"""
+    async with get_connection() as conn:
+        await conn.execute(
+            """
+            UPDATE line_groups
+            SET tenant_id = $2, updated_at = NOW()
+            WHERE line_group_id = $1
+            """,
+            line_group_id,
+            tenant_id,
+        )
 
 
 # ============================================================
@@ -379,23 +414,25 @@ async def get_or_create_user(
 ) -> UUID:
     """取得或建立 Line 用戶，回傳內部 UUID
 
+    由於 line_user_id 有全域唯一約束，一個 Line 用戶只能存在於一個租戶。
+    此函數會優先查詢全域用戶，如果已存在則返回現有用戶（並更新 profile），
+    只有在完全不存在時才建立新用戶。
+
     Args:
         line_user_id: Line 用戶 ID
         profile: 用戶資料（displayName, pictureUrl, statusMessage）
         is_friend: 是否為好友（僅在建立新用戶時使用）
-        tenant_id: 租戶 ID
+        tenant_id: 租戶 ID（僅在建立新用戶時使用）
     """
     tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
-        # 查詢現有用戶（同一租戶內）
+        # 先查詢全域是否有此用戶（line_user_id 有全域唯一約束）
         row = await conn.fetchrow(
-            "SELECT id FROM line_users WHERE line_user_id = $1 AND tenant_id = $2",
+            "SELECT id, tenant_id FROM line_users WHERE line_user_id = $1",
             line_user_id,
-            tid,
         )
         if row:
-            # 更新用戶資訊（如果有 profile）
-            # 注意：不更新 is_friend，好友狀態由 FollowEvent/UnfollowEvent 決定
+            # 用戶已存在，更新 profile 資訊（如果有）
             if profile:
                 await conn.execute(
                     """
@@ -404,17 +441,16 @@ async def get_or_create_user(
                         picture_url = COALESCE($3, picture_url),
                         status_message = COALESCE($4, status_message),
                         updated_at = NOW()
-                    WHERE line_user_id = $1 AND tenant_id = $5
+                    WHERE id = $1
                     """,
-                    line_user_id,
+                    row["id"],
                     profile.get("displayName"),
                     profile.get("pictureUrl"),
                     profile.get("statusMessage"),
-                    tid,
                 )
             return row["id"]
 
-        # 建立新用戶
+        # 用戶不存在，建立新用戶
         row = await conn.fetchrow(
             """
             INSERT INTO line_users (line_user_id, display_name, picture_url, status_message, is_friend, tenant_id)
@@ -528,21 +564,24 @@ async def get_or_create_group(
 ) -> UUID:
     """取得或建立 Line 群組，回傳內部 UUID
 
+    由於 line_group_id 有全域唯一約束，一個 Line 群組只能存在於一個租戶。
+    此函數會優先查詢全域群組，如果已存在則返回現有群組（並更新 profile），
+    只有在完全不存在時才建立新群組。
+
     Args:
         line_group_id: Line 群組 ID
         profile: 群組資料（groupName, pictureUrl, memberCount）
-        tenant_id: 租戶 ID
+        tenant_id: 租戶 ID（僅在建立新群組時使用）
     """
     tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
-        # 查詢現有群組（同一租戶內）
+        # 先查詢全域是否有此群組（line_group_id 有全域唯一約束）
         row = await conn.fetchrow(
-            "SELECT id FROM line_groups WHERE line_group_id = $1 AND tenant_id = $2",
+            "SELECT id, tenant_id FROM line_groups WHERE line_group_id = $1",
             line_group_id,
-            tid,
         )
         if row:
-            # 更新群組資訊（如果有 profile）
+            # 群組已存在，更新 profile 資訊（如果有）
             if profile:
                 await conn.execute(
                     """
@@ -551,17 +590,16 @@ async def get_or_create_group(
                         picture_url = COALESCE($3, picture_url),
                         member_count = COALESCE($4, member_count),
                         updated_at = NOW()
-                    WHERE line_group_id = $1 AND tenant_id = $5
+                    WHERE id = $1
                     """,
-                    line_group_id,
+                    row["id"],
                     profile.get("groupName"),
                     profile.get("pictureUrl"),
                     profile.get("memberCount"),
-                    tid,
                 )
             return row["id"]
 
-        # 建立新群組
+        # 群組不存在，建立新群組
         row = await conn.fetchrow(
             """
             INSERT INTO line_groups (line_group_id, name, picture_url, member_count, tenant_id)
@@ -741,18 +779,20 @@ async def mark_message_ai_processed(message_uuid: UUID) -> None:
 async def get_or_create_bot_user(tenant_id: UUID | str | None = None) -> UUID:
     """取得或建立 Bot 用戶，回傳用戶 UUID
 
+    由於 line_user_id 有全域唯一約束，Bot 用戶在全系統只會有一個。
+    此函數會優先查詢全域 Bot 用戶，如果已存在則返回現有用戶。
+
     Args:
-        tenant_id: 租戶 ID
+        tenant_id: 租戶 ID（僅在建立新用戶時使用）
     """
     tid = _get_tenant_id(tenant_id)
     bot_line_id = "BOT_CHINGTECH"
 
     async with get_connection() as conn:
-        # 查詢現有 Bot 用戶（同一租戶內）
+        # 先查詢全域是否有 Bot 用戶（line_user_id 有全域唯一約束）
         row = await conn.fetchrow(
-            "SELECT id, is_friend FROM line_users WHERE line_user_id = $1 AND tenant_id = $2",
+            "SELECT id FROM line_users WHERE line_user_id = $1",
             bot_line_id,
-            tid,
         )
         if row:
             # 確保 Bot 用戶的 is_friend 為 false 且名稱正確
@@ -1773,6 +1813,10 @@ async def read_file_from_nas(
 ) -> bytes | None:
     """從 NAS 讀取檔案（透過掛載路徑）
 
+    支援租戶隔離路徑與舊版路徑的向後相容：
+    1. 若有 tenant_id，先嘗試租戶專屬路徑
+    2. 若租戶路徑不存在，自動 fallback 到舊版路徑（如 AI 生成圖片）
+
     Args:
         nas_path: 相對於 linebot files 根目錄的路徑
         tenant_id: 租戶 ID，用於租戶隔離
@@ -1780,10 +1824,21 @@ async def read_file_from_nas(
     Returns:
         檔案內容 bytes，失敗回傳 None
     """
+    tid_str = str(tenant_id) if tenant_id else None
+
+    # 1. 若有 tenant_id，先嘗試租戶專屬路徑
+    if tid_str:
+        try:
+            file_service = create_linebot_file_service(tid_str)
+            content = file_service.read_file(nas_path)
+            return content
+        except LocalFileError:
+            # 租戶路徑不存在，嘗試 fallback 到舊版路徑
+            pass
+
+    # 2. Fallback：使用舊版路徑（無租戶隔離）
     try:
-        # 傳遞 tenant_id 以支援租戶隔離
-        tid_str = str(tenant_id) if tenant_id else None
-        file_service = create_linebot_file_service(tid_str)
+        file_service = create_linebot_file_service(None)
         content = file_service.read_file(nas_path)
         return content
     except LocalFileError as e:
@@ -1907,47 +1962,108 @@ async def verify_binding_code(
     """
     驗證綁定驗證碼並完成綁定
 
+    支援跨租戶綁定：當用戶在共用 Bot 模式下首次綁定時，
+    Line 用戶記錄可能在預設租戶，但驗證碼在目標租戶。
+    此函數會自動處理這種情況。
+
     Args:
         line_user_uuid: Line 用戶內部 UUID
         code: 驗證碼
-        tenant_id: 租戶 ID
+        tenant_id: 租戶 ID（可能是預設租戶）
 
     Returns:
         (是否成功, 訊息)
     """
-    tid = _get_tenant_id(tenant_id)
+    current_tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
-        # 查詢有效的驗證碼
-        row = await conn.fetchrow(
+        # 先用 code 查詢驗證碼（不限租戶），找到目標租戶
+        code_row = await conn.fetchrow(
             """
-            SELECT id, user_id
+            SELECT id, user_id, tenant_id
             FROM line_binding_codes
             WHERE code = $1
               AND used_at IS NULL
               AND expires_at > NOW()
-              AND tenant_id = $2
             """,
             code,
-            tid,
         )
 
-        if not row:
+        if not code_row:
             return False, "驗證碼無效或已過期"
 
-        code_id = row["id"]
-        ctos_user_id = row["user_id"]
+        code_id = code_row["id"]
+        ctos_user_id = code_row["user_id"]
+        target_tid = code_row["tenant_id"]  # 驗證碼所屬的租戶（目標租戶）
 
-        # 檢查該 Line 用戶是否已綁定其他帳號
-        existing = await conn.fetchrow(
-            """
-            SELECT user_id FROM line_users
-            WHERE id = $1 AND user_id IS NOT NULL AND tenant_id = $2
-            """,
+        # 取得 Line 用戶的 line_user_id
+        line_user_row = await conn.fetchrow(
+            "SELECT line_user_id, display_name FROM line_users WHERE id = $1",
             line_user_uuid,
-            tid,
         )
-        if existing and existing["user_id"]:
-            return False, "此 Line 帳號已綁定其他 CTOS 帳號"
+        if not line_user_row:
+            return False, "找不到 Line 用戶記錄"
+
+        line_user_id = line_user_row["line_user_id"]
+        display_name = line_user_row["display_name"]
+
+        # 檢查目標租戶是否已有此 Line 用戶的綁定記錄
+        target_line_user = await conn.fetchrow(
+            """
+            SELECT id, user_id FROM line_users
+            WHERE line_user_id = $1 AND tenant_id = $2
+            """,
+            line_user_id,
+            target_tid,
+        )
+
+        if target_line_user:
+            # 目標租戶已有此 Line 用戶記錄
+            if target_line_user["user_id"]:
+                return False, "此 Line 帳號在目標租戶已綁定其他 CTOS 帳號"
+            target_line_user_uuid = target_line_user["id"]
+        else:
+            # 檢查其他租戶是否有此 Line 用戶（共用 Bot 模式下常見情況）
+            # line_user_id 有全域唯一約束，所以只能有一筆記錄
+            existing_line_user = await conn.fetchrow(
+                """
+                SELECT id, user_id, tenant_id FROM line_users
+                WHERE line_user_id = $1
+                """,
+                line_user_id,
+            )
+
+            if existing_line_user:
+                # 在其他租戶找到記錄
+                if existing_line_user["user_id"]:
+                    return False, "此 Line 帳號已在其他租戶綁定 CTOS 帳號"
+                # 將記錄遷移到目標租戶
+                await conn.execute(
+                    """
+                    UPDATE line_users
+                    SET tenant_id = $2, updated_at = NOW()
+                    WHERE id = $1
+                    """,
+                    existing_line_user["id"],
+                    target_tid,
+                )
+                target_line_user_uuid = existing_line_user["id"]
+                logger.info(
+                    f"已將 Line 用戶從租戶 {existing_line_user['tenant_id']} "
+                    f"遷移到 {target_tid}: {target_line_user_uuid}"
+                )
+            else:
+                # 完全新的 Line 用戶，建立記錄
+                target_line_user_uuid = await conn.fetchval(
+                    """
+                    INSERT INTO line_users (line_user_id, display_name, tenant_id)
+                    VALUES ($1, $2, $3)
+                    RETURNING id
+                    """,
+                    line_user_id,
+                    display_name,
+                    target_tid,
+                )
+                logger.info(f"已在目標租戶建立 Line 用戶記錄: {target_line_user_uuid}")
 
         # 檢查該 CTOS 用戶是否已綁定其他 Line 帳號
         existing_line = await conn.fetchrow(
@@ -1956,21 +2072,21 @@ async def verify_binding_code(
             WHERE user_id = $1 AND tenant_id = $2
             """,
             ctos_user_id,
-            tid,
+            target_tid,
         )
         if existing_line:
             return False, "此 CTOS 帳號已綁定其他 Line 帳號"
 
-        # 執行綁定
+        # 執行綁定（在目標租戶）
         await conn.execute(
             """
             UPDATE line_users
             SET user_id = $2, updated_at = NOW()
             WHERE id = $1 AND tenant_id = $3
             """,
-            line_user_uuid,
+            target_line_user_uuid,
             ctos_user_id,
-            tid,
+            target_tid,
         )
 
         # 標記驗證碼已使用
@@ -1981,10 +2097,13 @@ async def verify_binding_code(
             WHERE id = $1
             """,
             code_id,
-            line_user_uuid,
+            target_line_user_uuid,
         )
 
-        logger.info(f"綁定成功: line_user={line_user_uuid}, ctos_user={ctos_user_id}")
+        logger.info(
+            f"綁定成功: line_user={target_line_user_uuid}, ctos_user={ctos_user_id}, "
+            f"tenant={target_tid}"
+        )
         return True, "綁定成功！您現在可以使用 Line Bot 了。"
 
 
@@ -2496,7 +2615,11 @@ def get_temp_image_path(line_message_id: str) -> str:
     return f"{TEMP_IMAGE_DIR}/{line_message_id}.jpg"
 
 
-async def ensure_temp_image(line_message_id: str, nas_path: str) -> str | None:
+async def ensure_temp_image(
+    line_message_id: str,
+    nas_path: str,
+    tenant_id: UUID | str | None = None,
+) -> str | None:
     """確保圖片暫存檔存在
 
     如果暫存檔不存在，從 NAS 讀取並寫入暫存。
@@ -2504,6 +2627,7 @@ async def ensure_temp_image(line_message_id: str, nas_path: str) -> str | None:
     Args:
         line_message_id: Line 訊息 ID
         nas_path: NAS 上的檔案路徑
+        tenant_id: 租戶 ID，用於多租戶 NAS 隔離
 
     Returns:
         暫存檔案路徑，失敗回傳 None
@@ -2519,10 +2643,10 @@ async def ensure_temp_image(line_message_id: str, nas_path: str) -> str | None:
     if os.path.exists(temp_path):
         return temp_path
 
-    # 從 NAS 讀取圖片
-    content = await read_file_from_nas(nas_path)
+    # 從 NAS 讀取圖片（傳遞 tenant_id 支援多租戶）
+    content = await read_file_from_nas(nas_path, tenant_id=tenant_id)
     if content is None:
-        logger.warning(f"無法從 NAS 讀取圖片: {nas_path}")
+        logger.warning(f"無法從 NAS 讀取圖片: {nas_path} (tenant_id={tenant_id})")
         return None
 
     # 寫入暫存檔
@@ -2591,6 +2715,7 @@ async def ensure_temp_file(
     nas_path: str,
     filename: str,
     file_size: int | None = None,
+    tenant_id: UUID | str | None = None,
 ) -> str | None:
     """確保檔案暫存檔存在
 
@@ -2602,6 +2727,7 @@ async def ensure_temp_file(
         nas_path: NAS 上的檔案路徑
         filename: 原始檔案名稱
         file_size: 檔案大小（用於檢查是否超過限制）
+        tenant_id: 租戶 ID，用於多租戶 NAS 隔離
 
     Returns:
         暫存檔案路徑，失敗或不符合條件回傳 None
@@ -2648,10 +2774,10 @@ async def ensure_temp_file(
     elif os.path.exists(temp_path):
         return temp_path
 
-    # 從 NAS 讀取檔案
-    content = await read_file_from_nas(nas_path)
+    # 從 NAS 讀取檔案（傳遞 tenant_id 支援多租戶）
+    content = await read_file_from_nas(nas_path, tenant_id=tenant_id)
     if content is None:
-        logger.warning(f"無法從 NAS 讀取檔案: {nas_path}")
+        logger.warning(f"無法從 NAS 讀取檔案: {nas_path} (tenant_id={tenant_id})")
         return None
 
     # 如果需要解析文件

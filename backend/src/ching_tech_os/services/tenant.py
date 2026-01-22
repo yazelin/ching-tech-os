@@ -146,6 +146,8 @@ async def resolve_tenant_id(tenant_code: str | None = None) -> UUID:
 async def create_tenant(data: TenantCreate) -> TenantInfo:
     """建立新租戶
 
+    建立租戶時會自動從預設租戶複製 AI Agents 和 Prompts 設定。
+
     Args:
         data: 建立租戶請求資料
 
@@ -191,6 +193,13 @@ async def create_tenant(data: TenantCreate) -> TenantInfo:
             trial_ends_at,
             now,
         )
+
+        new_tenant_id = row["id"]
+
+        # 從預設租戶複製 AI Agents（包含關聯的 Prompts）
+        await _copy_default_ai_settings(conn, new_tenant_id)
+
+        logger.info(f"已建立租戶 {data.code} ({new_tenant_id})，並複製預設 AI 設定")
 
         return _row_to_tenant_info(row)
 
@@ -943,3 +952,40 @@ async def update_tenant_line_settings(
         )
 
         return True
+
+
+async def _copy_default_ai_settings(conn, new_tenant_id: UUID) -> None:
+    """從預設租戶複製 AI 設定到新租戶
+
+    複製項目：
+    - AI Agents（linebot-group, linebot-personal 等）
+    - AI Prompts（Agent 使用的 system prompts）
+
+    注意：新租戶的 Agents 會引用預設租戶的 Prompts，
+    這樣可以讓所有租戶共享相同的 prompt 模板。
+    租戶可以之後建立自己的 prompts 並更新 agent 設定。
+
+    Args:
+        conn: 資料庫連線
+        new_tenant_id: 新租戶 UUID
+    """
+    # 複製預設租戶的 AI Agents
+    # system_prompt_id 保留指向預設租戶的 prompts（共享）
+    await conn.execute(
+        """
+        INSERT INTO ai_agents (
+            name, display_name, description, model,
+            system_prompt_id, is_active, settings, tools, tenant_id
+        )
+        SELECT
+            name, display_name, description, model,
+            system_prompt_id, is_active, settings, tools, $1
+        FROM ai_agents
+        WHERE tenant_id = $2
+          AND name IN ('linebot-group', 'linebot-personal')
+        """,
+        new_tenant_id,
+        DEFAULT_TENANT_UUID,
+    )
+
+    logger.debug(f"已為租戶 {new_tenant_id} 複製預設 AI Agents")

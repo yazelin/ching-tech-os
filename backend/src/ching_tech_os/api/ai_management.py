@@ -6,8 +6,10 @@
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from ..models.auth import SessionData
+from .auth import get_current_session
 from ..models.ai import (
     AiAgentCreate,
     AiAgentListResponse,
@@ -181,6 +183,7 @@ async def list_logs(
     end_date: datetime | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
+    session: SessionData = Depends(get_current_session),
 ):
     """取得 AI Log 列表（分頁）
 
@@ -198,7 +201,9 @@ async def list_logs(
         start_date=start_date,
         end_date=end_date,
     )
-    items, total = await ai_manager.get_logs(filter_data, page, page_size)
+    items, total = await ai_manager.get_logs(
+        filter_data, page, page_size, tenant_id=session.tenant_id
+    )
     return {
         "items": items,
         "total": total,
@@ -212,6 +217,7 @@ async def get_log_stats(
     agent_id: UUID | None = None,
     start_date: datetime | None = None,
     end_date: datetime | None = None,
+    session: SessionData = Depends(get_current_session),
 ):
     """取得 AI Log 統計
 
@@ -220,14 +226,19 @@ async def get_log_stats(
     - start_date: 開始日期
     - end_date: 結束日期
     """
-    stats = await ai_manager.get_log_stats(agent_id, start_date, end_date)
+    stats = await ai_manager.get_log_stats(
+        agent_id, start_date, end_date, tenant_id=session.tenant_id
+    )
     return stats
 
 
 @router.get("/logs/{log_id}", response_model=AiLogResponse)
-async def get_log(log_id: UUID):
+async def get_log(
+    log_id: UUID,
+    session: SessionData = Depends(get_current_session),
+):
     """取得 AI Log 詳情"""
-    log = await ai_manager.get_log(log_id)
+    log = await ai_manager.get_log(log_id, tenant_id=session.tenant_id)
     if log is None:
         raise HTTPException(status_code=404, detail="Log 不存在")
     return log

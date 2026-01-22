@@ -578,7 +578,15 @@ async def process_message_with_ai(
 
         # 從 Agent 取得 model 和基礎 prompt
         model = agent["model"].replace("claude-", "")  # claude-sonnet -> sonnet
-        base_prompt = agent.get("system_prompt", {}).get("content", "")
+        # 安全取得 system_prompt（處理 None 和非 dict 情況）
+        system_prompt_data = agent.get("system_prompt")
+        logger.debug(f"system_prompt type: {type(system_prompt_data)}, value preview: {repr(system_prompt_data)[:100] if system_prompt_data else 'None'}")
+        if isinstance(system_prompt_data, dict):
+            base_prompt = system_prompt_data.get("content", "")
+        else:
+            base_prompt = ""
+            if system_prompt_data is not None:
+                logger.warning(f"system_prompt 不是 dict: {type(system_prompt_data)}")
         # 從 Agent 取得內建工具權限（如 WebSearch, WebFetch）
         agent_tools = agent.get("tools") or []
         logger.info(f"使用 Agent '{agent_name}' 設定，內建工具: {agent_tools}")
@@ -635,7 +643,7 @@ async def process_message_with_ai(
             image_info = await get_image_info_by_line_message_id(quoted_message_id, tenant_id=tenant_id)
             if image_info and image_info.get("nas_path"):
                 # 確保圖片暫存存在
-                temp_path = await ensure_temp_image(quoted_message_id, image_info["nas_path"])
+                temp_path = await ensure_temp_image(quoted_message_id, image_info["nas_path"], tenant_id=tenant_id)
                 if temp_path:
                     quoted_image_path = temp_path
                     logger.info(f"用戶回覆圖片: {quoted_message_id} -> {temp_path}")
@@ -651,7 +659,7 @@ async def process_message_with_ai(
                         else:
                             # 確保檔案暫存存在
                             temp_path = await ensure_temp_file(
-                                quoted_message_id, file_info["nas_path"], file_name, file_size
+                                quoted_message_id, file_info["nas_path"], file_name, file_size, tenant_id=tenant_id
                             )
                             if temp_path:
                                 quoted_file_path = temp_path
@@ -891,7 +899,8 @@ async def process_message_with_ai(
         return text_response
 
     except Exception as e:
-        logger.error(f"AI 處理訊息失敗: {e}")
+        import traceback
+        logger.error(f"AI 處理訊息失敗: {e}\n{traceback.format_exc()}")
         return None
 
 
@@ -1085,7 +1094,7 @@ async def get_conversation_context(
             if row["message_type"] == "image" and row["nas_path"]:
                 # 圖片訊息：確保暫存存在並格式化為特殊標記
                 temp_path = await ensure_temp_image(
-                    row["line_message_id"], row["nas_path"]
+                    row["line_message_id"], row["nas_path"], tenant_id=tenant_id
                 )
                 if temp_path:
                     # 暫存成功，標記最新的圖片
@@ -1113,7 +1122,7 @@ async def get_conversation_context(
                     else:
                         # 可讀取的檔案：確保暫存存在
                         temp_path = await ensure_temp_file(
-                            row["line_message_id"], row["nas_path"], file_name, file_size
+                            row["line_message_id"], row["nas_path"], file_name, file_size, tenant_id=tenant_id
                         )
                         if temp_path:
                             # 使用共用函式解析 PDF 特殊格式
