@@ -1,7 +1,7 @@
 """新增 Line Bot 記憶資料表
 
 Revision ID: 044
-Revises: 043
+Revises: 042
 Create Date: 2026-01-22
 
 新增群組記憶和個人記憶資料表，支援自訂 prompt 記憶功能
@@ -14,7 +14,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "044"
-down_revision: str | None = "043"
+down_revision: str | None = "042"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -381,6 +381,26 @@
      * 渲染 NAS 檔案內容
      */
     function renderNasFile(data, sharedBy, sharedAt, expiresAt) {
+        const base = getApiBase();
+        const downloadUrl = `${base}${data.download_url}`;
+        const ext = data.file_name.split('.').pop().toLowerCase();
+
+        // HTML 簡報：直接在 iframe 中顯示（全螢幕模式）
+        if (ext === 'html' || ext === 'htm') {
+            // 隱藏一般的內容容器，改用全螢幕 iframe
+            document.querySelector('.public-header').style.display = 'none';
+            document.querySelector('.public-footer').style.display = 'none';
+            contentEl.style.display = 'none';
+            loadingEl.style.display = 'none';
+
+            // 建立全螢幕 iframe
+            const iframe = document.createElement('iframe');
+            iframe.src = downloadUrl;
+            iframe.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; border: none; z-index: 9999;';
+            document.body.appendChild(iframe);
+            return;
+        }
+
         // 標題
         docTitleEl.textContent = data.file_name;
 
@@ -389,8 +409,6 @@
 
         // 檔案資訊與下載
         const icon = getAttachmentIcon('file', data.file_name);
-        const base = getApiBase();
-        const downloadUrl = `${base}${data.download_url}`;
 
         docContentEl.innerHTML = `
             <div class="nas-file-container">

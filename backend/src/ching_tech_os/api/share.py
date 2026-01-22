@@ -390,9 +390,10 @@ async def download_shared_file(token: str) -> Response:
         # 處理檔名編碼（支援中文）
         encoded_filename = quote(filename)
 
-        # 圖片用 inline（讓 Line PC 能顯示），其他用 attachment
+        # 圖片和 HTML 用 inline（讓瀏覽器直接顯示），其他用 attachment
         is_image = mime_type and mime_type.startswith("image/")
-        disposition = "inline" if is_image else "attachment"
+        is_html = mime_type == "text/html"
+        disposition = "inline" if (is_image or is_html) else "attachment"
 
         return Response(
             content=content,

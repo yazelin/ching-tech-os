@@ -172,7 +172,8 @@ ExecStartPre=-/usr/bin/fuser -k 8088/tcp
 
 # 執行資料庫遷移並啟動應用程式
 ExecStartPre=/home/ct/.local/bin/uv run alembic upgrade head
-ExecStart=/home/ct/.local/bin/uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8088
+# UVICORN_RELOAD=true 時啟用自動重載（開發用）
+ExecStart=/bin/bash -c 'if [ "\$UVICORN_RELOAD" = "true" ]; then exec /home/ct/.local/bin/uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8088 --reload --reload-dir /home/ct/SDD/ching-tech-os/backend/src; else exec /home/ct/.local/bin/uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8088; fi'
 
 Restart=on-failure
 RestartSec=10

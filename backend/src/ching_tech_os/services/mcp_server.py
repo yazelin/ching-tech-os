@@ -4382,18 +4382,18 @@ async def get_inventory_orders(
 async def generate_presentation(
     topic: str = "",
     num_slides: int = 5,
-    style: str = "professional",
+    theme: str = "uncover",
     include_images: bool = True,
     image_source: str = "pexels",
     outline_json: str | dict | None = None,
-    design_json: str | dict | None = None,
-    designer_request: str | None = None,
-    template: str | None = None,
+    output_format: str = "html",
 ) -> str:
     """
-    生成 PowerPoint 簡報
+    生成簡報（HTML 或 PDF，使用 Marp）
 
-    有四種使用方式：
+    生成的簡報支援 HTML（瀏覽器直接查看）或 PDF（下載列印）格式。
+
+    有兩種使用方式：
 
     方式一：只給主題，AI 自動生成大綱（較慢，約 30-60 秒）
         generate_presentation(topic="AI 在製造業的應用", num_slides=5)
@@ -4404,31 +4404,14 @@ async def generate_presentation(
         3. 呼叫 generate_presentation(outline_json="...")
         4. 用 create_share_link 產生分享連結回覆用戶
 
-    方式三：組織大綱 + 請設計師生成風格（推薦用於有特殊視覺需求的簡報）
-        1. 先組織 outline_json（內容大綱）
-        2. 用 designer_request 描述設計需求
-        3. 呼叫 generate_presentation(outline_json="...", designer_request="給客戶的專業簡報，要有標題底線")
-        4. 系統會自動呼叫 AI 設計師生成適合的視覺風格
-
-    方式四：使用預設模板（快速、設計品質穩定）
-        generate_presentation(topic="Q1 業務檢討會議", template="meeting")
-        - 系統會使用預先設計好的專業模板
-        - 自動將 AI 生成的內容填入模板
-        - 保留模板的設計風格
-
     Args:
-        topic: 簡報主題（方式一必填，方式二/三/四可省略）
+        topic: 簡報主題（方式一必填，方式二可省略）
         num_slides: 頁數，預設 5 頁（範圍 2-20，方式一使用）
-        style: 預設風格，根據場景選擇（當有 designer_request、design_json 或 template 時會被忽略）：
-            - professional: 專業（淺藍灰背景），適合客戶提案、正式報告、投資簡報
-            - casual: 休閒（花白背景），適合內部分享、教育訓練、團隊會議
-            - creative: 創意（淡紫背景），適合創意提案、品牌展示、行銷企劃
-            - minimal: 極簡（純白背景），適合技術文件、學術報告
-            - dark: 深色（深藍黑背景），適合投影展示、晚間活動
-            - tech: 科技（深空藍背景），適合科技新創、產品發布、AI 主題
-            - nature: 自然（薄荷白背景），適合環保、健康、農業主題
-            - warm: 溫暖（奶油白背景），適合激勵演講、活動推廣
-            - elegant: 優雅（象牙白背景），適合奢華品牌、高端提案
+        theme: Marp 內建主題風格，可選：
+            - uncover: 深色投影（深灰背景），適合晚間活動、影片風格（預設）
+            - gaia: 暖色調（米黃/棕色背景），適合輕鬆場合
+            - gaia-invert: 專業藍（深藍背景），適合正式提案、投影展示
+            - default: 簡約白（白底黑字），適合技術文件、學術報告
         include_images: 是否自動配圖，預設 True
         image_source: 圖片來源，可選：
             - pexels: 從 Pexels 圖庫下載（預設，快速）
@@ -4442,108 +4425,70 @@ async def generate_presentation(
                     {"type": "content", "title": "第一章", "content": ["重點1", "重點2"], "image_keyword": "factory automation"}
                 ]
             }
-        design_json: 完整設計規格 JSON 字串（來自簡報設計師 AI）。當提供此參數時，style 和 designer_request 會被忽略。格式：
-            {
-                "design": {
-                    "colors": {"background": "#0D1117", "title": "#58A6FF", "subtitle": "#A371F7", "text": "#C9D1D9", "bullet": "#38A169", "accent": "#F97316"},
-                    "typography": {"title_font": "Noto Sans TC", "title_size": 44, "title_bold": true, "body_font": "Noto Sans TC", "body_size": 20},
-                    "layout": {"title_align": "left", "title_position": "top", "content_columns": 1, "image_position": "right", "image_size": "medium"},
-                    "decorations": {"title_underline": true, "title_underline_color": "#58A6FF", "accent_bar_left": false, "page_number": true, "page_number_position": "bottom-right"}
-                },
-                "slides": [...]  // 可選，若提供則作為大綱使用
-            }
-        designer_request: 設計需求描述，會自動呼叫 AI 設計師生成 design_json（推薦搭配 outline_json 使用）。
-            例如：「給客戶的專業簡報」、「投影用深色背景」、「科技風格要有側邊裝飾」
-        template: 模板 ID（可選），使用預設模板生成簡報：
-            - meeting: 公司內部會議（適合會議、週報、月報、檢討報告）
-            - product: 產品推廣（適合 AGV、工業自動化、AI/CTOS 等科技產品）
-            - pitch: 融資提案（適合商業計畫、投資人簡報、募資提案）
-            - auto: 系統根據主題自動選擇適合的模板
-            當指定 template 時，style/design_json/designer_request 會被忽略
+            type 類型：title（封面）、section（章節分隔）、content（標題+內容）
+        output_format: 輸出格式，可選：
+            - html: 網頁格式，可直接在瀏覽器查看（預設）
+            - pdf: PDF 格式，可下載列印
 
     Returns:
         包含簡報資訊和 NAS 路徑的回應，可用於 create_share_link
     """
-    from ..services.presentation import generate_presentation as gen_pptx, TEMPLATES
+    from ..services.presentation import generate_html_presentation
 
-    # 驗證：必須有 topic、outline_json 或 design_json（含 slides）
-    if not topic and not outline_json and not design_json:
-        return "❌ 請提供 topic（主題）、outline_json（大綱 JSON）或 design_json（設計規格 + 大綱）"
+    # 驗證：必須有 topic 或 outline_json
+    if not topic and not outline_json:
+        return "❌ 請提供 topic（主題）或 outline_json（大綱 JSON）"
 
-    # 驗證模板 ID
-    if template and template != "auto" and template not in TEMPLATES:
-        valid_templates = "\n".join([f"  - {k}: {v['name']}（{v['description']}）" for k, v in TEMPLATES.items()])
-        return f"❌ 無效的模板 ID：{template}\n可用模板：\n{valid_templates}\n  - auto: 系統根據主題自動選擇"
-
-    # 如果有 design_json 但沒有 slides，也需要 topic 或 outline_json
-    if design_json and not topic and not outline_json:
-        import json as _json
-        try:
-            _design_data = _json.loads(design_json)
-            if not _design_data.get("slides"):
-                return "❌ design_json 未包含 slides，請同時提供 topic 或 outline_json"
-        except Exception:
-            pass  # JSON 解析錯誤會在後續處理
-
-    # 驗證頁數範圍（僅在沒有 outline_json 或 design_json.slides 時有效）
-    if not outline_json and not design_json:
+    # 驗證頁數範圍
+    if not outline_json:
         if num_slides < 2:
             num_slides = 2
         elif num_slides > 20:
             num_slides = 20
 
-    # 驗證風格（僅在沒有 design_json 或 designer_request 時需要）
-    valid_styles = ["professional", "casual", "creative", "minimal", "dark", "tech", "nature", "warm", "elegant"]
-    if not design_json and not designer_request and style not in valid_styles:
+    # 驗證主題
+    valid_themes = ["default", "gaia", "gaia-invert", "uncover"]
+    if theme not in valid_themes:
         return (
-            f"❌ 無效的風格：{style}\n"
-            f"可用風格：\n"
-            f"  - professional（專業）：客戶提案、正式報告\n"
-            f"  - casual（休閒）：內部分享、教育訓練\n"
-            f"  - creative（創意）：創意提案、品牌展示\n"
-            f"  - minimal（極簡）：技術文件、學術報告\n"
-            f"  - dark（深色）：投影展示、晚間活動\n"
-            f"  - tech（科技）：科技新創、產品發布\n"
-            f"  - nature（自然）：環保、健康主題\n"
-            f"  - warm（溫暖）：激勵演講、活動推廣\n"
-            f"  - elegant（優雅）：奢華品牌、高端提案"
+            f"❌ 無效的主題：{theme}\n"
+            f"可用主題：\n"
+            f"  - gaia（專業藍）：正式提案、投影展示\n"
+            f"  - gaia-invert（亮色藍）：列印、螢幕閱讀\n"
+            f"  - default（簡約白）：技術文件、學術報告\n"
+            f"  - uncover（深色投影）：晚間活動、影片風格"
         )
+
+    # 驗證輸出格式
+    valid_formats = ["html", "pdf"]
+    if output_format not in valid_formats:
+        return f"❌ 無效的輸出格式：{output_format}\n可用格式：html（網頁）、pdf（列印）"
 
     # 驗證圖片來源
     valid_image_sources = ["pexels", "huggingface", "nanobanana"]
     if image_source not in valid_image_sources:
         return f"❌ 無效的圖片來源：{image_source}\n可用來源：pexels（圖庫）、huggingface（AI）、nanobanana（Gemini）"
 
-    # 將 dict 轉換為 JSON 字串（AI 有時會傳入 dict 而不是字串）
+    # 將 dict 轉換為 JSON 字串
     import json as _json
     if isinstance(outline_json, dict):
         outline_json = _json.dumps(outline_json, ensure_ascii=False)
-    if isinstance(design_json, dict):
-        design_json = _json.dumps(design_json, ensure_ascii=False)
 
     try:
-        result = await gen_pptx(
+        result = await generate_html_presentation(
             topic=topic or "簡報",
             num_slides=num_slides,
-            style=style,
+            theme=theme,
             include_images=include_images,
             image_source=image_source,
             outline_json=outline_json,
-            design_json=design_json,
-            designer_request=designer_request,
-            template=template,
+            output_format=output_format,
         )
 
-        style_names = {
-            "professional": "專業",
-            "casual": "休閒",
-            "creative": "創意",
-            "minimal": "極簡",
-            "dark": "深色",
-            "tech": "科技",
-            "nature": "自然",
-            "warm": "溫暖",
-            "elegant": "優雅",
+        theme_names = {
+            "default": "簡約白",
+            "gaia": "專業藍",
+            "gaia-invert": "亮色藍",
+            "uncover": "深色投影",
         }
 
         image_source_names = {
@@ -4552,32 +4497,29 @@ async def generate_presentation(
             "nanobanana": "Gemini AI",
         }
 
+        format_names = {
+            "html": "HTML（可直接在瀏覽器查看）",
+            "pdf": "PDF（可下載列印）",
+        }
+
         # 產生 NAS 檔案路徑（供 create_share_link 使用）
-        # 使用 ctos:// 協議格式，讓 path_manager 正確解析
         nas_file_path = f"ctos://{result['nas_path']}"
 
         image_info = f"{'有（' + image_source_names.get(image_source, image_source) + '）' if include_images else '無'}"
-
-        # 風格顯示：模板 > design_json > style
-        if result.get("template_used"):
-            style_display = f"模板：{result.get('template_name', result['template_used'])}"
-        elif design_json:
-            style_display = "自訂設計"
-        else:
-            style_display = style_names.get(style, style)
+        theme_display = theme_names.get(theme, theme)
+        format_display = format_names.get(output_format, output_format)
 
         return (
             f"✅ 簡報生成完成！\n\n"
             f"📊 {result['title']}\n"
             f"・頁數：{result['slides_count']} 頁\n"
-            f"・風格：{style_display}\n"
-            f"・配圖：{image_info}\n\n"
+            f"・主題：{theme_display}\n"
+            f"・配圖：{image_info}\n"
+            f"・格式：{format_display}\n\n"
             f"📁 NAS 路徑：{nas_file_path}\n\n"
             f"💡 下一步：使用 create_share_link(resource_type=\"nas_file\", resource_id=\"{nas_file_path}\") 產生分享連結"
         )
 
-    except ValueError as e:
-        return f"❌ 生成失敗：{str(e)}"
     except Exception as e:
         logger.error(f"生成簡報失敗: {e}")
         return f"❌ 生成簡報時發生錯誤：{str(e)}\n請稍後重試或調整內容"

@@ -62,6 +62,23 @@ docker exec ching-tech-os-db psql -U ching_tech -d ching_tech_os -c "SELECT * FR
 - API 路由放在 `api/` 目錄
 - 新增路由後記得在 `main.py` 註冊
 
+### 服務日誌
+後端以 systemd 服務運行，查看日誌使用：
+
+```bash
+# 查看最近 50 行日誌
+journalctl -u ching-tech-os -n 50 --no-pager
+
+# 即時追蹤日誌
+journalctl -u ching-tech-os -f
+
+# 查看特定時間範圍
+journalctl -u ching-tech-os --since "10 minutes ago"
+
+# 過濾特定關鍵字
+journalctl -u ching-tech-os -n 100 --no-pager | grep -i "error"
+```
+
 ## MCP 工具開發
 MCP 工具定義在 `services/mcp_server.py`。
 
