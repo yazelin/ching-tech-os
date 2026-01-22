@@ -84,13 +84,22 @@ uv run python -m ching_tech_os.mcp_cli
 
 | 工具名稱 | 說明 | 參數 |
 |----------|------|------|
-| `query_inventory` | 查詢物料/庫存 | `keyword`（搜尋名稱或規格）, `item_id`（查詢特定物料詳情）, `category`（類別過濾）, `low_stock`（只顯示庫存不足）, `limit` |
-| `add_inventory_item` | 新增物料 | `name`（必填）, `specification`（規格）, `unit`（單位）, `category`（類別）, `default_vendor`（預設廠商）, `min_stock`（最低庫存量） |
+| `query_inventory` | 查詢物料/庫存 | `keyword`（搜尋名稱、型號或規格）, `item_id`（查詢特定物料詳情）, `category`（類別過濾）, `vendor`（廠商過濾）, `low_stock`（只顯示庫存不足）, `limit` |
+| `add_inventory_item` | 新增物料 | `name`（必填）, `model`（型號）, `specification`（規格）, `unit`（單位）, `category`（類別）, `default_vendor`（預設廠商）, `storage_location`（存放庫位，如 A-1-3）, `min_stock`（最低庫存量）, `notes` |
+| `update_inventory_item` | 更新物料資訊 | `item_id` 或 `item_name`（擇一）, `name`, `model`, `specification`, `unit`, `category`, `default_vendor`, `storage_location`, `min_stock`, `notes` |
 | `record_inventory_in` | 記錄進貨 | `quantity`（必填）, `item_id` 或 `item_name`（擇一）, `vendor`（廠商）, `project_id` 或 `project_name`（關聯專案）, `transaction_date`, `notes` |
 | `record_inventory_out` | 記錄出貨/領料 | `quantity`（必填）, `item_id` 或 `item_name`（擇一）, `project_id` 或 `project_name`（關聯專案）, `transaction_date`, `notes` |
 | `adjust_inventory` | 庫存調整（盤點校正） | `new_quantity`（必填）, `reason`（必填，如「盤點調整」）, `item_id` 或 `item_name`（擇一） |
 
 > **庫存低量警示**：當物料設定了 `min_stock` 且目前庫存低於此值，`query_inventory` 會顯示 ⚠️ 警示。使用 `low_stock=true` 可只查詢庫存不足的物料。
+
+### 訂購記錄
+
+| 工具名稱 | 說明 | 參數 |
+|----------|------|------|
+| `add_inventory_order` | 新增訂購記錄 | `order_quantity`（必填）, `item_id` 或 `item_name`（擇一）, `order_date`, `expected_delivery_date`, `vendor`, `project_id` 或 `project_name`, `notes` |
+| `update_inventory_order` | 更新訂購記錄 | `order_id`（必填）, `order_quantity`, `order_date`, `expected_delivery_date`, `actual_delivery_date`, `status`（pending/ordered/delivered/cancelled）, `vendor`, `project_id`, `notes` |
+| `get_inventory_orders` | 查詢訂購記錄 | `item_id` 或 `item_name`（擇一）, `status`（過濾）, `limit` |
 
 ### 知識庫
 
@@ -115,6 +124,9 @@ uv run python -m ching_tech_os.mcp_cli
 | `add_attachments_to_knowledge` | 為現有知識新增附件 | `kb_id`（必填）, `attachments`（必填，NAS 路徑列表）, `descriptions`（附件描述列表） |
 | `get_knowledge_attachments` | 取得知識庫附件列表 | `kb_id`（必填） |
 | `update_knowledge_attachment` | 更新附件說明 | `kb_id`（必填）, `attachment_index`（必填）, `description` |
+| `read_knowledge_attachment` | 讀取知識庫附件的文字內容 | `kb_id`（必填）, `attachment_index`（預設 0）, `max_chars`（預設 15000） |
+
+> **附件內容讀取**：`read_knowledge_attachment` 可讀取 Word/Excel/PowerPoint/PDF 等文件格式的附件內容，方便 AI 分析或回答問題。
 
 ### Line Bot
 
@@ -122,6 +134,17 @@ uv run python -m ching_tech_os.mcp_cli
 |----------|------|------|
 | `summarize_chat` | 取得群組聊天記錄 | `line_group_id`（必填）, `hours`, `max_messages` |
 | `get_message_attachments` | 查詢對話中的附件 | `line_user_id`, `line_group_id`, `days`, `file_type`, `limit` |
+
+### 自訂記憶
+
+| 工具名稱 | 說明 | 參數 |
+|----------|------|------|
+| `add_memory` | 新增自訂記憶 | `content`（必填）, `title`（選填，會自動產生）, `line_group_id`, `line_user_id` |
+| `get_memories` | 查詢記憶列表 | `line_group_id`, `line_user_id` |
+| `update_memory` | 更新記憶 | `memory_id`（必填）, `title`, `content`, `is_active`（啟用/停用） |
+| `delete_memory` | 刪除記憶 | `memory_id`（必填） |
+
+> **自訂記憶**：用戶可以設定自訂記憶讓 AI 記住特定指示（如回覆風格、稱呼方式等）。每個群組/用戶的記憶獨立管理，可隨時啟用或停用。
 
 ### NAS 檔案
 
@@ -139,6 +162,85 @@ uv run python -m ching_tech_os.mcp_cli
 | 工具名稱 | 說明 | 參數 |
 |----------|------|------|
 | `create_share_link` | 建立公開分享連結 | `resource_type`（必填，knowledge/project/nas_file/project_attachment）, `resource_id`（必填）, `expires_in`（1h/24h/7d/null） |
+
+### 簡報生成
+
+| 工具名稱 | 說明 | 參數 |
+|----------|------|------|
+| `generate_presentation` | 生成 PowerPoint 簡報 | `topic`, `num_slides`, `style`, `include_images`, `image_source`, `outline_json`, `design_json` |
+
+#### 基本用法（指定主題）
+
+```python
+result = await execute_tool("generate_presentation", {
+    "topic": "AI 在製造業的應用",
+    "num_slides": 5,
+    "style": "tech",          # professional/casual/creative/minimal/dark/tech/nature/warm/elegant
+    "include_images": True,
+    "image_source": "pexels"  # pexels/huggingface/nanobanana
+})
+```
+
+#### 進階用法（自訂設計）
+
+使用 `design_json` 參數可完全自訂簡報的視覺設計：
+
+```python
+design_json = {
+    "design": {
+        "colors": {
+            "background": "#0D1117",      # 深空藍背景
+            "title": "#58A6FF",           # 亮藍標題
+            "subtitle": "#A371F7",        # 電紫副標題
+            "text": "#C9D1D9",            # 淺藍白內文
+            "bullet": "#A371F7",          # 項目符號顏色
+            "accent": "#A371F7"           # 強調色
+        },
+        "typography": {
+            "title_font": "Noto Sans TC",
+            "title_size": 44,
+            "title_bold": True,
+            "body_font": "Noto Sans TC",
+            "body_size": 20
+        },
+        "layout": {
+            "title_align": "left",        # left/center
+            "image_position": "right",    # left/right/bottom
+            "image_size": "medium"        # small/medium/large
+        },
+        "decorations": {
+            "title_underline": True,
+            "title_underline_color": "#A371F7",
+            "accent_bar_left": False,
+            "page_number": True,
+            "page_number_position": "bottom-right"
+        }
+    },
+    "slides": [
+        {"type": "title", "title": "主標題", "subtitle": "副標題"},
+        {"type": "content", "title": "章節標題", "content": ["重點1", "重點2"], "image_keyword": "technology"}
+    ]
+}
+
+result = await execute_tool("generate_presentation", {
+    "design_json": json.dumps(design_json),
+    "include_images": True
+})
+```
+
+#### 預設風格
+
+| 風格 | 說明 | 適用場景 |
+|------|------|----------|
+| `professional` | 淺藍灰背景、深海軍藍標題 | 客戶提案、正式報告 |
+| `casual` | 花白背景、森林綠標題 | 內部分享、教育訓練 |
+| `creative` | 淡紫背景、紫羅蘭標題 | 創意提案、品牌展示 |
+| `minimal` | 純白背景、近黑標題 | 技術文件、學術報告 |
+| `dark` | 深藍黑背景、淺灰白標題 | 投影展示、晚間活動 |
+| `tech` | 深空藍背景、青色標題 | 科技新創、產品發布 |
+| `nature` | 薄荷白背景、深森林綠標題 | 環保、健康主題 |
+| `warm` | 奶油白背景、磚紅標題 | 激勵演講、活動推廣 |
+| `elegant` | 象牙白背景、深金棕標題 | 奢華品牌、高端提案 |
 
 ### AI 圖片生成（外部 MCP Server）
 

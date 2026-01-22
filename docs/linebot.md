@@ -41,13 +41,16 @@ Line Platform
 | 訊息儲存 | 自動儲存所有群組/個人訊息到資料庫 |
 | 檔案儲存 | 圖片、檔案自動下載到 NAS |
 | AI 對話 | 個人/群組對話支援 AI 助理 |
-| AI 圖片生成 | 根據文字描述生成圖片、編輯圖片 |
+| 自訂記憶 | 群組/個人可設定自訂記憶，讓 AI 記住特定指示 |
+| AI 圖片生成 | 根據文字描述生成圖片、編輯圖片（支援 Hugging Face FLUX 備用） |
+| 簡報生成 | 根據主題或大綱生成 PowerPoint 簡報 |
 | 文件讀取 | 支援讀取 Word、Excel、PowerPoint、PDF 文件內容 |
 | 專案管理 | 透過對話建立專案、新增成員和里程碑 |
-| 知識庫 | 透過對話新增筆記、搜尋知識、管理附件 |
+| 知識庫 | 透過對話新增筆記、搜尋知識、管理附件、讀取附件內容 |
 | NAS 檔案搜尋 | 搜尋並發送 NAS 共享檔案（圖片直接發送） |
 | 公開分享 | 建立知識庫/專案/檔案的公開連結分享給外部人員 |
 | 群組 Mention | 群組對話回覆時 @ 提及發問用戶，讓用戶收到通知 |
+| 回覆引用 | 回覆文字訊息時自動帶入被回覆的內容 |
 
 ## 資料表
 
@@ -192,6 +195,13 @@ AI 助理可使用的工具（完整列表見 [docs/mcp-server.md](mcp-server.md
 - `add_attachments_to_knowledge` - 為現有知識新增附件
 - `get_knowledge_attachments` - 查詢知識庫附件列表
 - `update_knowledge_attachment` - 更新附件說明
+- `read_knowledge_attachment` - 讀取知識庫附件的文字內容（Word/Excel/PDF 等）
+
+**自訂記憶**
+- `add_memory` - 新增自訂記憶
+- `get_memories` - 查詢記憶列表
+- `update_memory` - 更新記憶內容或啟用/停用狀態
+- `delete_memory` - 刪除記憶
 
 **群組專用**
 - `summarize_chat` - 取得群組聊天記錄摘要
@@ -205,7 +215,10 @@ AI 助理可使用的工具（完整列表見 [docs/mcp-server.md](mcp-server.md
 **分享功能**
 - `create_share_link` - 建立公開分享連結（支援知識庫、專案、NAS 檔案）
 
-**AI 圖片生成**（需設定 nanobanana MCP Server）
+**簡報生成**
+- `generate_presentation` - 生成 PowerPoint 簡報（可指定主題或傳入大綱 JSON）
+
+**AI 圖片生成**（需設定 nanobanana MCP Server，支援 Hugging Face FLUX 備用）
 - `mcp__nanobanana__generate_image` - 根據文字描述生成圖片
 - `mcp__nanobanana__edit_image` - 編輯/修改現有圖片
 
@@ -279,6 +292,30 @@ AI：（顯示編輯後的圖片）
 AI：（取得用戶圖片路徑作為參考）
 AI：（使用 generate_image 生成類似風格的圖）
 AI：參考你的圖片風格畫了一隻狗 👇
+```
+
+**設定自訂記憶**
+```
+用戶：記住，回覆時用正式語氣，稱呼我為「張經理」
+AI：（使用 add_memory 新增記憶）
+AI：好的，我已記住這項設定！
+```
+
+**查詢與管理記憶**
+```
+用戶：我之前設定了哪些記憶？
+AI：（使用 get_memories 查詢）
+AI：目前有 2 條記憶：
+    1. ✅ 回覆時用正式語氣
+    2. ✅ 稱呼我為「張經理」
+```
+
+**生成簡報**
+```
+用戶：幫我做一份 AI 在製造業應用的簡報，5 頁
+AI：（使用 generate_presentation 生成）
+AI：簡報已生成，共 5 頁！
+    下載連結：https://xxx/share/abc123
 ```
 
 ## 設定
