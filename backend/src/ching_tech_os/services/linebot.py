@@ -368,7 +368,7 @@ async def verify_signature_multi_tenant(body: bytes, signature: str) -> UUID | N
     return None  # 這裡也回傳 None，但外層需要檢查是否驗證失敗
 
 
-async def verify_webhook_signature(body: bytes, signature: str) -> tuple[bool, UUID | None]:
+async def verify_webhook_signature(body: bytes, signature: str) -> tuple[bool, UUID | None, str | None]:
     """驗證 Webhook 簽章並識別租戶
 
     這是對外的主要驗證函數。
@@ -378,10 +378,10 @@ async def verify_webhook_signature(body: bytes, signature: str) -> tuple[bool, U
         signature: X-Line-Signature header
 
     Returns:
-        (是否驗證成功, 租戶 UUID)
-        - (True, tenant_id): 驗證成功，識別為指定租戶（獨立 Bot）
-        - (True, None): 驗證成功，使用共用 Bot（需從群組綁定判斷租戶）
-        - (False, None): 驗證失敗
+        (是否驗證成功, 租戶 UUID, channel_secret)
+        - (True, tenant_id, secret): 驗證成功，識別為指定租戶（獨立 Bot）
+        - (True, None, None): 驗證成功，使用共用 Bot（需從群組綁定判斷租戶）
+        - (False, None, None): 驗證失敗
     """
     # 1. 先嘗試各租戶的 secret
     tenant_secrets = await get_cached_tenant_secrets()
@@ -391,15 +391,15 @@ async def verify_webhook_signature(body: bytes, signature: str) -> tuple[bool, U
         if secret and verify_signature(body, signature, secret):
             tenant_id = tenant_info["tenant_id"]
             logger.debug(f"Webhook 驗證成功（獨立 Bot），租戶: {tenant_id}")
-            return True, tenant_id
+            return True, tenant_id, secret
 
     # 2. 嘗試環境變數的 secret
     if verify_signature(body, signature):
         logger.debug("Webhook 驗證成功（共用 Bot）")
-        return True, None
+        return True, None, None
 
     logger.warning("Webhook 簽章驗證失敗")
-    return False, None
+    return False, None, None
 
 
 # ============================================================
@@ -426,13 +426,15 @@ async def get_or_create_user(
     """
     tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
-        # 先查詢全域是否有此用戶（line_user_id 有全域唯一約束）
+        # 查詢指定租戶是否有此用戶
+        # 注意：同一個 Line 用戶可以在不同租戶存在（唯一約束是 tenant_id + line_user_id）
         row = await conn.fetchrow(
-            "SELECT id, tenant_id FROM line_users WHERE line_user_id = $1",
+            "SELECT id, tenant_id FROM line_users WHERE line_user_id = $1 AND tenant_id = $2",
             line_user_id,
+            tid,
         )
         if row:
-            # 用戶已存在，更新 profile 資訊（如果有）
+            # 用戶已存在於此租戶，更新 profile 資訊（如果有）
             if profile:
                 await conn.execute(
                     """
@@ -450,7 +452,7 @@ async def get_or_create_user(
                 )
             return row["id"]
 
-        # 用戶不存在，建立新用戶
+        # 用戶在此租戶不存在，建立新記錄
         row = await conn.fetchrow(
             """
             INSERT INTO line_users (line_user_id, display_name, picture_url, status_message, is_friend, tenant_id)
@@ -693,6 +695,29 @@ async def handle_leave_event(
             tid,
         )
     logger.info(f"Bot 離開群組: {line_group_id}")
+
+
+async def get_line_group_external_id(
+    group_uuid: UUID,
+    tenant_id: UUID | str | None = None,
+) -> str | None:
+    """從內部 UUID 取得 Line 群組的外部 ID
+
+    Args:
+        group_uuid: 群組內部 UUID
+        tenant_id: 租戶 ID
+
+    Returns:
+        Line 群組 ID（外部），或 None（如果找不到）
+    """
+    tid = _get_tenant_id(tenant_id)
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            "SELECT line_group_id FROM line_groups WHERE id = $1 AND tenant_id = $2",
+            group_uuid,
+            tid,
+        )
+        return row["line_group_id"] if row else None
 
 
 # ============================================================

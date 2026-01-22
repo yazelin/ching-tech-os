@@ -1701,9 +1701,9 @@ async def read_knowledge_attachment(
         filename = Path(attachment.path).name
         file_ext = Path(attachment.path).suffix.lower()
 
-        # 解析路徑並轉換為檔案系統路徑
+        # 解析路徑並轉換為檔案系統路徑（傳入 tenant_id 以正確解析 CTOS 路徑）
         try:
-            fs_path = path_manager.to_filesystem(attachment.path)
+            fs_path = path_manager.to_filesystem(attachment.path, tenant_id=ctos_tenant_id)
         except ValueError as e:
             return f"無法解析附件路徑：{e}"
 
@@ -2409,9 +2409,8 @@ async def read_document(
     if not allowed:
         return f"❌ {error_msg}"
 
-    # 此工具主要用於讀取公司共用專案區的文件（SHARED zone）
-    # 對於 CTOS zone，未來可使用 tenant_id 做路徑隔離
-    _tid = _get_tenant_id(ctos_tenant_id)  # noqa: F841 保留以備日後需要
+    # 支援 CTOS zone（需要 tenant_id）和 SHARED zone
+    tid = _get_tenant_id(ctos_tenant_id)
     from pathlib import Path
     from ..config import settings
     from . import document_reader
@@ -2424,8 +2423,8 @@ async def read_document(
     except ValueError as e:
         return f"錯誤：{e}"
 
-    # 取得實際檔案系統路徑
-    resolved_path = path_manager.to_filesystem(file_path)
+    # 取得實際檔案系統路徑（傳入 tenant_id 以正確解析 CTOS 路徑）
+    resolved_path = path_manager.to_filesystem(file_path, tenant_id=tid)
     full_path = Path(resolved_path)
 
     # 安全檢查：只允許 CTOS 和 SHARED 區域（不允許 TEMP/LOCAL）
@@ -2613,9 +2612,9 @@ async def send_nas_file(
     if not line_user_id and not line_group_id:
         return "錯誤：請從【對話識別】區塊取得 line_user_id 或 line_group_id"
 
-    # 驗證檔案路徑
+    # 驗證檔案路徑（傳入 tenant_id 以正確解析 CTOS 路徑）
     try:
-        full_path = validate_nas_file_path(file_path)
+        full_path = validate_nas_file_path(file_path, tenant_id=tid)
     except NasFileNotFoundError as e:
         return f"錯誤：{e}"
     except NasFileAccessDenied as e:
@@ -2721,8 +2720,8 @@ async def prepare_file_message(
     if not allowed:
         return f"❌ {error_msg}"
 
-    # 預留租戶 ID 參數，未來透過 config 的 get_tenant_nas_path() 處理路徑隔離
-    tid = _get_tenant_id(ctos_tenant_id)  # noqa: F841
+    # 取得租戶 ID，用於 CTOS zone 路徑解析
+    tid = _get_tenant_id(ctos_tenant_id)
 
     import json
     from pathlib import Path
@@ -2735,9 +2734,9 @@ async def prepare_file_message(
     )
     from ..models.share import ShareLinkCreate
 
-    # 驗證檔案路徑
+    # 驗證檔案路徑（傳入 tenant_id 以正確解析 CTOS 路徑）
     try:
-        full_path = validate_nas_file_path(file_path)
+        full_path = validate_nas_file_path(file_path, tenant_id=tid)
     except NasFileNotFoundError as e:
         return f"錯誤：{e}"
     except NasFileAccessDenied as e:
@@ -2871,24 +2870,24 @@ async def add_delivery_schedule(
         if not project:
             return f"錯誤：找不到專案 {project_id}"
 
-        # 處理廠商：若提供 vendor_id 則自動查詢廠商名稱
+        # 處理廠商：若提供 vendor_id 則自動查詢廠商名稱（加入 tenant_id 過濾）
         actual_vendor = vendor
         actual_vendor_id = vendor_id
         if vendor_id and not vendor:
             vendor_row = await conn.fetchrow(
-                "SELECT name FROM vendors WHERE id = $1", vendor_id
+                "SELECT name FROM vendors WHERE id = $1 AND tenant_id = $2", vendor_id, tid
             )
             if vendor_row:
                 actual_vendor = vendor_row["name"]
             else:
                 return f"錯誤：找不到廠商 {vendor_id}"
 
-        # 處理物料：若提供 item_id 則自動查詢物料名稱
+        # 處理物料：若提供 item_id 則自動查詢物料名稱（加入 tenant_id 過濾）
         actual_item = item
         actual_item_id = item_id
         if item_id and not item:
             item_row = await conn.fetchrow(
-                "SELECT name FROM inventory_items WHERE id = $1", item_id
+                "SELECT name FROM inventory_items WHERE id = $1 AND tenant_id = $2", item_id, tid
             )
             if item_row:
                 actual_item = item_row["name"]
@@ -2922,12 +2921,12 @@ async def add_delivery_schedule(
         if status not in valid_statuses:
             return f"錯誤：狀態必須是 {', '.join(valid_statuses)} 其中之一"
 
-        # 新增記錄
+        # 新增記錄（包含 tenant_id）
         row = await conn.fetchrow(
             """
             INSERT INTO project_delivery_schedules
-                (project_id, vendor, vendor_id, item, item_id, quantity, order_date, expected_delivery_date, status, notes, created_by)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'AI')
+                (project_id, vendor, vendor_id, item, item_id, quantity, order_date, expected_delivery_date, status, notes, created_by, tenant_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'AI', $11)
             RETURNING id, vendor, item
             """,
             project_id,
@@ -2940,6 +2939,7 @@ async def add_delivery_schedule(
             parsed_expected_date,
             status,
             notes,
+            tid,
         )
 
         status_names = {
@@ -3297,16 +3297,17 @@ async def add_project_link(
         if not project:
             return f"錯誤：找不到專案 {project_id}"
 
-        # 新增連結
+        # 新增連結（包含 tenant_id）
         await conn.execute(
             """
-            INSERT INTO project_links (project_id, title, url, description)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO project_links (project_id, title, url, description, tenant_id)
+            VALUES ($1, $2, $3, $4, $5)
             """,
             project_id,
             title,
             url,
             description,
+            tid,
         )
 
         return f"✅ 已為專案「{project['name']}」新增連結「{title}」"
@@ -3569,8 +3570,8 @@ async def add_project_attachment(
         if parsed.zone != StorageZone.CTOS:
             return f"錯誤：只能添加 CTOS 區域的檔案，目前路徑屬於 {parsed.zone.value}://"
 
-        # 取得實際檔案系統路徑
-        actual_path = FilePath(path_manager.to_filesystem(nas_path))
+        # 取得實際檔案系統路徑（傳入 tenant_id 以正確解析 CTOS 路徑）
+        actual_path = FilePath(path_manager.to_filesystem(nas_path, tenant_id=tid))
 
         # 檢查檔案存在
         if not actual_path.exists():
@@ -3584,12 +3585,12 @@ async def add_project_attachment(
         file_size = actual_path.stat().st_size
         file_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
 
-        # 新增附件記錄
+        # 新增附件記錄（包含 tenant_id）
         await conn.execute(
             """
             INSERT INTO project_attachments
-            (project_id, filename, file_type, file_size, storage_path, description, uploaded_by)
-            VALUES ($1, $2, $3, $4, $5, $6, 'AI 助手')
+            (project_id, filename, file_type, file_size, storage_path, description, uploaded_by, tenant_id)
+            VALUES ($1, $2, $3, $4, $5, $6, 'AI 助手', $7)
             """,
             project_id,
             filename,
@@ -3597,6 +3598,7 @@ async def add_project_attachment(
             file_size,
             storage_path,
             description,
+            tid,
         )
 
         return f"✅ 已為專案「{project['name']}」新增附件「{filename}」"
@@ -3835,8 +3837,8 @@ async def convert_pdf_to_images(
             "error": error_msg
         }, ensure_ascii=False)
 
-    # 預留租戶 ID 參數，未來透過 config 的 get_tenant_nas_path() 處理路徑隔離
-    tid = _get_tenant_id(ctos_tenant_id)  # noqa: F841
+    # 取得租戶 ID，用於 CTOS zone 路徑解析
+    tid = _get_tenant_id(ctos_tenant_id)
     from pathlib import Path as FilePath
 
     from ..config import settings
@@ -3879,7 +3881,8 @@ async def convert_pdf_to_images(
             "error": f"不允許存取 {parsed.zone.value}:// 區域的檔案"
         }, ensure_ascii=False)
 
-    actual_path = path_manager.to_filesystem(pdf_path)
+    # 取得實際檔案系統路徑（傳入 tenant_id 以正確解析 CTOS 路徑）
+    actual_path = path_manager.to_filesystem(pdf_path, tenant_id=tid)
 
     # 檢查檔案存在
     if not FilePath(actual_path).exists():
@@ -4378,6 +4381,7 @@ async def update_inventory_item(
     min_stock: float | None = None,
     notes: str | None = None,
     ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     更新物料資訊
@@ -4395,6 +4399,7 @@ async def update_inventory_item(
         min_stock: 最低庫存量
         notes: 備註
         ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     from decimal import Decimal
     from ..services.inventory import (
@@ -4412,13 +4417,13 @@ async def update_inventory_item(
         return f"❌ {error_msg}"
 
     try:
-        # 找到物料
+        # 找到物料（使用 tenant_id 過濾）
         target_id = None
         if item_id:
             target_id = UUID(item_id)
         elif item_name:
             # 用名稱搜尋
-            response = await list_inventory_items(query=item_name)
+            response = await list_inventory_items(query=item_name, tenant_id=ctos_tenant_id)
             if not response.items:
                 return f"❌ 找不到物料：{item_name}"
             if len(response.items) > 1:
@@ -4770,6 +4775,7 @@ async def add_inventory_order(
     project_name: str | None = None,
     notes: str | None = None,
     ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     新增訂購記錄
@@ -4784,6 +4790,7 @@ async def add_inventory_order(
         project_id: 關聯專案 ID
         project_name: 關聯專案名稱（會搜尋匹配）
         notes: 備註
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
         ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
     """
     from datetime import date
@@ -4877,6 +4884,7 @@ async def update_inventory_order(
     project_id: str | None = None,
     notes: str | None = None,
     ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     更新訂購記錄
@@ -4892,6 +4900,7 @@ async def update_inventory_order(
         project_id: 關聯專案 ID
         notes: 備註
         ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     from datetime import date
     from decimal import Decimal

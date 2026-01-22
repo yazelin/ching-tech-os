@@ -118,17 +118,16 @@ async def webhook(
 
     # 多租戶簽章驗證
     # 會嘗試所有租戶的 channel_secret，找到匹配的租戶
-    is_valid, webhook_tenant_id = await verify_webhook_signature(body, x_line_signature)
+    is_valid, webhook_tenant_id, channel_secret = await verify_webhook_signature(body, x_line_signature)
 
     if not is_valid:
         logger.warning("Webhook 簽章驗證失敗")
         raise HTTPException(status_code=400, detail="Invalid signature")
 
     # 解析事件
-    # 注意：此處的 parser 使用預設 channel_secret，因為簽章已驗證通過
-    # 獨立 Bot 模式下租戶已識別，共用 Bot 模式下會在 process_event 中解析
+    # 使用驗證成功的 channel_secret 來建立 parser（避免再次驗證失敗）
     try:
-        parser = get_webhook_parser()
+        parser = get_webhook_parser(channel_secret)
         events = parser.parse(body.decode("utf-8"), x_line_signature)
     except Exception as e:
         logger.error(f"解析 Webhook 事件失敗: {e}")
@@ -885,8 +884,8 @@ async def api_list_group_memories(
     """取得群組記憶列表"""
     from ..services.linebot import list_group_memories
 
-    # 檢查群組是否存在
-    group = await get_group_by_id(group_id)
+    # 檢查群組是否存在（需傳入 tenant_id）
+    group = await get_group_by_id(group_id, tenant_id=session.tenant_id)
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
 
@@ -906,8 +905,8 @@ async def api_create_group_memory(
     """新增群組記憶"""
     from ..services.linebot import create_group_memory, get_line_user_by_ctos_user
 
-    # 檢查群組是否存在
-    group = await get_group_by_id(group_id)
+    # 檢查群組是否存在（需傳入 tenant_id）
+    group = await get_group_by_id(group_id, tenant_id=session.tenant_id)
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
 

@@ -308,9 +308,9 @@ async def delete_project(
             tid,
         )
 
-        # 刪除附件檔案
+        # 刪除附件檔案（傳入 tenant_id 以正確解析路徑）
         for att in attachments:
-            _delete_attachment_file(att["storage_path"])
+            _delete_attachment_file(att["storage_path"], tenant_id=tid)
 
 
 # ============================================
@@ -580,15 +580,15 @@ def _get_file_type(filename: str) -> str:
     return "other"
 
 
-def _delete_attachment_file(storage_path: str) -> None:
+def _delete_attachment_file(storage_path: str, tenant_id: str | None = None) -> None:
     """刪除附件檔案"""
     from .path_manager import path_manager, StorageZone
     try:
         parsed = path_manager.parse(storage_path)
         if parsed.zone == StorageZone.CTOS:
-            # CTOS 區檔案：使用 path_manager 解析完整路徑
+            # CTOS 區檔案：使用 path_manager 解析完整路徑（需要 tenant_id）
             try:
-                full_path = Path(path_manager.to_filesystem(storage_path))
+                full_path = Path(path_manager.to_filesystem(storage_path, tenant_id=tenant_id))
                 if full_path.exists():
                     full_path.unlink()
             except Exception:
@@ -679,7 +679,7 @@ async def get_attachment_content(project_id: UUID, attachment_id: UUID) -> tuple
     """取得附件內容"""
     async with get_connection() as conn:
         row = await conn.fetchrow(
-            "SELECT storage_path, filename FROM project_attachments WHERE id = $1 AND project_id = $2",
+            "SELECT storage_path, filename, tenant_id FROM project_attachments WHERE id = $1 AND project_id = $2",
             attachment_id, project_id,
         )
         if not row:
@@ -687,6 +687,7 @@ async def get_attachment_content(project_id: UUID, attachment_id: UUID) -> tuple
 
         storage_path = row["storage_path"]
         filename = row["filename"]
+        tenant_id = str(row["tenant_id"]) if row["tenant_id"] else None
 
         # 使用 PathManager 解析路徑
         from .path_manager import path_manager, StorageZone
@@ -696,7 +697,7 @@ async def get_attachment_content(project_id: UUID, attachment_id: UUID) -> tuple
             if parsed.zone == StorageZone.CTOS:
                 # CTOS 區檔案（透過掛載路徑存取）
                 try:
-                    fs_path = path_manager.to_filesystem(storage_path)
+                    fs_path = path_manager.to_filesystem(storage_path, tenant_id=tenant_id)
                     file_path = Path(fs_path)
                     if not file_path.exists():
                         raise ProjectError(f"檔案不存在：{storage_path}")
@@ -745,16 +746,17 @@ async def update_attachment(
 async def delete_attachment(project_id: UUID, attachment_id: UUID) -> None:
     """刪除附件"""
     async with get_connection() as conn:
-        # 取得附件資訊
+        # 取得附件資訊（包含 tenant_id）
         row = await conn.fetchrow(
-            "SELECT storage_path FROM project_attachments WHERE id = $1 AND project_id = $2",
+            "SELECT storage_path, tenant_id FROM project_attachments WHERE id = $1 AND project_id = $2",
             attachment_id, project_id,
         )
         if not row:
             raise ProjectNotFoundError(f"附件 {attachment_id} 不存在")
 
-        # 刪除檔案
-        _delete_attachment_file(row["storage_path"])
+        # 刪除檔案（傳入 tenant_id 以正確解析路徑）
+        tenant_id = str(row["tenant_id"]) if row["tenant_id"] else None
+        _delete_attachment_file(row["storage_path"], tenant_id=tenant_id)
 
         # 刪除資料庫記錄
         await conn.execute(

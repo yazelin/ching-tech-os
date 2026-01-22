@@ -72,13 +72,14 @@ class SMBService:
 
     def __init__(
         self, host: str, username: str, password: str, port: int | None = None,
-        connect_timeout: int | None = None
+        connect_timeout: int | None = None, auth_share: str | None = None
     ):
         self.host = host
         self.username = username
         self.password = password
         self.port = port or settings.nas_port
         self.connect_timeout = connect_timeout or settings.smb_connect_timeout
+        self.auth_share = auth_share  # 用於驗證的共享名稱
         self._connection: Connection | None = None
         self._session: Session | None = None
 
@@ -134,14 +135,36 @@ class SMBService:
     def test_auth(self) -> bool:
         """測試認證是否成功
 
+        若有指定 auth_share，會嘗試連線到該共享以確認權限。
+        這用於租戶 NAS 驗證，確保帳號有權存取指定的共享。
+
         Returns:
             True 表示認證成功
         """
+        tree = None
         try:
             self._connect()
             self._authenticate()
+
+            # 若有指定 auth_share，嘗試連線以驗證權限
+            if self.auth_share and self._session:
+                try:
+                    tree = TreeConnect(self._session, rf"\\{self.host}\{self.auth_share}")
+                    tree.connect()
+                except Exception as e:
+                    error_msg = str(e).lower()
+                    if "access" in error_msg or "denied" in error_msg:
+                        raise SMBAuthError("無權限存取指定的共享資料夾") from e
+                    # 其他錯誤（如共享不存在）也視為認證失敗
+                    raise SMBAuthError(f"無法存取指定的共享：{e}") from e
+
             return True
         finally:
+            if tree is not None:
+                try:
+                    tree.disconnect()
+                except Exception:
+                    pass
             self._disconnect()
 
     def list_shares(self) -> list[dict[str, str]]:
@@ -658,7 +681,11 @@ class SMBService:
 
 
 def create_smb_service(
-    username: str, password: str, host: str | None = None
+    username: str,
+    password: str,
+    host: str | None = None,
+    port: int | None = None,
+    share: str | None = None,
 ) -> SMBService:
     """建立 SMB 服務實例
 
@@ -666,6 +693,8 @@ def create_smb_service(
         username: 使用者帳號
         password: 使用者密碼
         host: NAS 主機位址（預設使用設定檔的值）
+        port: NAS 連接埠（預設使用設定檔的值）
+        share: 用於驗證的共享名稱（測試連線時使用）
 
     Returns:
         SMBService 實例
@@ -674,4 +703,6 @@ def create_smb_service(
         host=host or settings.nas_host,
         username=username,
         password=password,
+        port=port,
+        auth_share=share,
     )

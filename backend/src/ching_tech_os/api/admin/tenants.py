@@ -25,6 +25,7 @@ from ...services.tenant import (
     create_tenant,
     get_tenant_by_id,
     update_tenant,
+    delete_tenant,
     list_tenants,
     get_tenant_usage,
     add_tenant_admin,
@@ -440,6 +441,41 @@ async def activate_tenant(
         )
 
 
+class DeleteTenantResponse(BaseModel):
+    """刪除租戶回應"""
+    success: bool
+    message: str
+
+
+@router.delete("/{tenant_id}", response_model=DeleteTenantResponse)
+async def delete_tenant_by_id(
+    tenant_id: str,
+    session: SessionData = Depends(get_current_session),
+) -> DeleteTenantResponse:
+    """刪除租戶
+
+    僅平台管理員可操作。
+
+    警告：此操作不可逆！會刪除租戶的所有資料，包括：
+    - 使用者帳號
+    - 專案及相關資料
+    - 知識庫
+    - AI 設定和記錄
+    - Line 群組和使用者綁定
+    - 庫存資料
+    """
+    await require_platform_admin(session)
+
+    try:
+        await delete_tenant(tenant_id)
+        return DeleteTenantResponse(success=True, message="租戶已刪除")
+    except TenantNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="租戶不存在",
+        )
+
+
 # === 租戶管理員操作 ===
 
 
@@ -743,3 +779,72 @@ async def delete_tenant_linebot_settings(
     invalidate_tenant_secrets_cache()
 
     return SuspendResponse(success=True, message="Line Bot 設定已清除")
+
+
+# ============================================================
+# NAS 認證設定 API
+# ============================================================
+
+
+class NasAuthTestRequest(BaseModel):
+    """NAS 認證測試請求"""
+    host: str | None = None  # None 使用系統預設
+    port: int | None = None  # None 使用 445
+    share: str | None = None  # None 使用系統預設
+
+
+class NasAuthTestResponse(BaseModel):
+    """NAS 認證測試回應"""
+    success: bool
+    message: str | None = None
+    error: str | None = None
+
+
+@router.post("/{tenant_id}/nas-auth/test", response_model=NasAuthTestResponse)
+async def test_tenant_nas_auth(
+    tenant_id: str,
+    request: NasAuthTestRequest,
+    session: SessionData = Depends(get_current_session),
+) -> NasAuthTestResponse:
+    """測試 NAS 認證連線
+
+    僅平台管理員可操作。
+    使用系統服務帳號測試指定的 NAS 主機/共享是否可連線。
+    """
+    from ...services.smb import create_smb_service, SMBAuthError, SMBConnectionError
+    from ...config import settings
+
+    await require_platform_admin(session)
+
+    # 確認租戶存在
+    tenant = await get_tenant_by_id(tenant_id)
+    if tenant is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="租戶不存在",
+        )
+
+    # 使用系統服務帳號測試連線
+    try:
+        smb = create_smb_service(
+            settings.nas_user,
+            settings.nas_password,
+            host=request.host,
+            port=request.port,
+            share=request.share,
+        )
+        smb.test_auth()
+        return NasAuthTestResponse(
+            success=True,
+            message="NAS 連線測試成功",
+        )
+    except SMBAuthError as e:
+        return NasAuthTestResponse(
+            success=False,
+            error=f"認證失敗：{e}",
+        )
+    except SMBConnectionError as e:
+        return NasAuthTestResponse(
+            success=False,
+            error=f"連線失敗：{e}",
+        )

@@ -18,6 +18,7 @@ from ..services.tenant import (
     resolve_tenant_id,
     get_tenant_by_id,
     get_tenant_admin_role,
+    get_tenant_settings,
     TenantNotFoundError,
     TenantSuspendedError,
 )
@@ -281,18 +282,38 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
         else:
             auth_success = False
     else:
-        # 使用者沒有密碼，fallback 到 SMB 認證（過渡期）
-        smb = create_smb_service(request.username, request.password)
+        # 使用者沒有密碼，檢查租戶是否啟用 NAS 驗證
         try:
-            smb.test_auth()
-            auth_success = True
-        except SMBAuthError:
-            auth_success = False
-        except SMBConnectionError:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="無法連線至檔案伺服器",
+            tenant_settings = await get_tenant_settings(tenant_id)
+        except TenantNotFoundError:
+            return LoginResponse(success=False, error="租戶不存在")
+
+        if tenant_settings.enable_nas_auth:
+            # 租戶啟用 NAS 驗證，使用租戶設定的 NAS 主機
+            smb = create_smb_service(
+                request.username,
+                request.password,
+                host=tenant_settings.nas_auth_host,  # None 表示使用系統預設
+                port=tenant_settings.nas_auth_port,
+                share=tenant_settings.nas_auth_share,
             )
+            try:
+                smb.test_auth()
+                auth_success = True
+            except SMBAuthError:
+                auth_success = False
+            except SMBConnectionError:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="無法連線至檔案伺服器",
+                )
+        else:
+            # 租戶未啟用 NAS 驗證，且使用者不存在或無密碼
+            if user_data is None:
+                return LoginResponse(success=False, error="帳號不存在")
+            else:
+                # 使用者存在但沒有密碼，無法登入
+                return LoginResponse(success=False, error="帳號或密碼錯誤")
 
     if not auth_success:
         # 登入失敗：記錄失敗的登入嘗試

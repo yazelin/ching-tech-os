@@ -146,6 +146,31 @@ async def resolve_tenant_id(tenant_code: str | None = None) -> UUID:
     return tenant["id"]
 
 
+async def get_tenant_settings(tenant_id: UUID | str) -> TenantSettings:
+    """取得租戶設定
+
+    Args:
+        tenant_id: 租戶 UUID
+
+    Returns:
+        TenantSettings 物件
+
+    Raises:
+        TenantNotFoundError: 租戶不存在
+    """
+    tenant = await get_tenant_by_id(tenant_id)
+    if tenant is None:
+        raise TenantNotFoundError(f"租戶 {tenant_id} 不存在")
+
+    settings_data = tenant.get("settings", {})
+    if isinstance(settings_data, str):
+        settings_data = json.loads(settings_data)
+    elif settings_data is None:
+        settings_data = {}
+
+    return TenantSettings(**settings_data)
+
+
 async def create_tenant(data: TenantCreate) -> TenantInfo:
     """建立新租戶
 
@@ -282,6 +307,141 @@ async def update_tenant(tenant_id: UUID | str, data: TenantUpdate) -> TenantInfo
 
         row = await conn.fetchrow(query, *params)
         return _row_to_tenant_info(row)
+
+
+async def delete_tenant(tenant_id: UUID | str) -> bool:
+    """刪除租戶及其所有資料
+
+    警告：此操作不可逆！會刪除租戶的所有資料。
+
+    Args:
+        tenant_id: 租戶 UUID
+
+    Returns:
+        True 如果刪除成功
+
+    Raises:
+        TenantNotFoundError: 租戶不存在
+    """
+    if isinstance(tenant_id, str):
+        tenant_id = UUID(tenant_id)
+
+    async with get_connection() as conn:
+        # 確認租戶存在
+        existing = await conn.fetchrow(
+            "SELECT code, name FROM tenants WHERE id = $1",
+            tenant_id,
+        )
+        if existing is None:
+            raise TenantNotFoundError(f"租戶 {tenant_id} 不存在")
+
+        tenant_code = existing["code"]
+        tenant_name = existing["name"]
+
+        logger.warning(f"開始刪除租戶 {tenant_code} ({tenant_name})，ID: {tenant_id}")
+
+        # 使用交易確保一致性
+        async with conn.transaction():
+            # 依照外鍵關係順序刪除
+
+            # 1. 刪除 AI 相關資料
+            await conn.execute(
+                "DELETE FROM ai_logs WHERE tenant_id = $1", tenant_id
+            )
+            await conn.execute(
+                "DELETE FROM ai_chats WHERE tenant_id = $1", tenant_id
+            )
+            await conn.execute(
+                "DELETE FROM ai_agents WHERE tenant_id = $1", tenant_id
+            )
+            await conn.execute(
+                "DELETE FROM ai_prompts WHERE tenant_id = $1", tenant_id
+            )
+
+            # 2. 刪除專案相關資料
+            await conn.execute(
+                "DELETE FROM project_delivery_schedules WHERE tenant_id = $1", tenant_id
+            )
+            await conn.execute(
+                "DELETE FROM project_attachments WHERE tenant_id = $1", tenant_id
+            )
+            await conn.execute(
+                "DELETE FROM project_links WHERE tenant_id = $1", tenant_id
+            )
+            await conn.execute(
+                "DELETE FROM project_meetings WHERE tenant_id = $1", tenant_id
+            )
+            await conn.execute(
+                "DELETE FROM project_milestones WHERE tenant_id = $1", tenant_id
+            )
+            await conn.execute(
+                "DELETE FROM project_members WHERE tenant_id = $1", tenant_id
+            )
+            await conn.execute(
+                "DELETE FROM projects WHERE tenant_id = $1", tenant_id
+            )
+
+            # 3. 刪除庫存相關資料
+            await conn.execute(
+                "DELETE FROM inventory_orders WHERE tenant_id = $1", tenant_id
+            )
+            await conn.execute(
+                "DELETE FROM inventory_transactions WHERE tenant_id = $1", tenant_id
+            )
+            await conn.execute(
+                "DELETE FROM inventory_items WHERE tenant_id = $1", tenant_id
+            )
+            await conn.execute(
+                "DELETE FROM vendors WHERE tenant_id = $1", tenant_id
+            )
+
+            # 4. 刪除 Line 相關資料
+            await conn.execute(
+                "DELETE FROM line_messages WHERE tenant_id = $1", tenant_id
+            )
+            await conn.execute(
+                "DELETE FROM line_files WHERE tenant_id = $1", tenant_id
+            )
+            await conn.execute(
+                "DELETE FROM line_binding_codes WHERE tenant_id = $1", tenant_id
+            )
+            await conn.execute(
+                "DELETE FROM line_groups WHERE tenant_id = $1", tenant_id
+            )
+            await conn.execute(
+                "DELETE FROM line_users WHERE tenant_id = $1", tenant_id
+            )
+
+            # 5. 刪除公開分享連結
+            await conn.execute(
+                "DELETE FROM public_share_links WHERE tenant_id = $1", tenant_id
+            )
+
+            # 6. 刪除登入記錄和訊息
+            await conn.execute(
+                "DELETE FROM login_records WHERE tenant_id = $1", tenant_id
+            )
+            await conn.execute(
+                "DELETE FROM messages WHERE tenant_id = $1", tenant_id
+            )
+
+            # 7. 刪除租戶管理員記錄
+            await conn.execute(
+                "DELETE FROM tenant_admins WHERE tenant_id = $1", tenant_id
+            )
+
+            # 8. 刪除使用者
+            await conn.execute(
+                "DELETE FROM users WHERE tenant_id = $1", tenant_id
+            )
+
+            # 9. 最後刪除租戶本身
+            await conn.execute(
+                "DELETE FROM tenants WHERE id = $1", tenant_id
+            )
+
+        logger.warning(f"已刪除租戶 {tenant_code} ({tenant_name})，ID: {tenant_id}")
+        return True
 
 
 async def list_tenants(

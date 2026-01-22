@@ -880,3 +880,279 @@ async def activate_user_endpoint(
         return ToggleUserResponse(success=True, message="帳號已啟用")
     else:
         return ToggleUserResponse(success=False, message="啟用失敗")
+
+
+# ============================================================
+# NAS 登入驗證設定 API
+# ============================================================
+
+
+class NasAuthTestRequest(BaseModel):
+    """NAS 認證測試請求"""
+    host: str | None = None  # None 使用系統預設
+    port: int | None = None  # None 使用 445
+    share: str | None = None  # None 使用系統預設
+
+
+class NasAuthTestResponse(BaseModel):
+    """NAS 認證測試回應"""
+    success: bool
+    message: str | None = None
+    error: str | None = None
+
+
+# ============================================================
+# Line Bot 設定 API
+# ============================================================
+
+
+class LineBotSettingsUpdate(BaseModel):
+    """更新 Line Bot 設定請求"""
+    channel_id: str | None = None
+    channel_secret: str | None = None
+    access_token: str | None = None
+
+
+class LineBotSettingsResponse(BaseModel):
+    """Line Bot 設定回應（不包含敏感資訊）"""
+    configured: bool
+    channel_id: str | None = None
+
+
+class LineBotTestResponse(BaseModel):
+    """Line Bot 測試回應"""
+    success: bool
+    bot_info: dict | None = None
+    error: str | None = None
+
+
+class LineBotDeleteResponse(BaseModel):
+    """Line Bot 刪除回應"""
+    success: bool
+    message: str
+
+
+@router.post("/nas-auth/test", response_model=NasAuthTestResponse)
+async def test_nas_auth_connection(
+    request: NasAuthTestRequest,
+    session: SessionData = Depends(get_current_session),
+) -> NasAuthTestResponse:
+    """測試 NAS 認證連線
+
+    僅租戶管理員可操作。
+    使用系統服務帳號測試指定的 NAS 主機/共享是否可連線。
+    """
+    from ..services.smb import create_smb_service, SMBAuthError, SMBConnectionError
+
+    await require_tenant_admin(session)
+
+    if session.tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="未關聯租戶",
+        )
+
+    # 使用系統服務帳號測試連線
+    try:
+        smb = create_smb_service(
+            settings.nas_user,
+            settings.nas_password,
+            host=request.host,
+            port=request.port,
+            share=request.share,
+        )
+        smb.test_auth()
+        return NasAuthTestResponse(
+            success=True,
+            message="NAS 連線測試成功",
+        )
+    except SMBAuthError as e:
+        return NasAuthTestResponse(
+            success=False,
+            error=f"認證失敗：{e}",
+        )
+    except SMBConnectionError as e:
+        return NasAuthTestResponse(
+            success=False,
+            error=f"連線失敗：{e}",
+        )
+
+
+@router.get("/linebot", response_model=LineBotSettingsResponse)
+async def get_linebot_settings(
+    session: SessionData = Depends(get_current_session),
+) -> LineBotSettingsResponse:
+    """取得租戶 Line Bot 設定
+
+    僅租戶管理員可操作。
+    回傳設定狀態，不包含敏感憑證。
+    """
+    from ..services.tenant import get_tenant_line_credentials
+
+    await require_tenant_admin(session)
+
+    if session.tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="未關聯租戶",
+        )
+
+    # 取得 Line Bot 憑證（解密後）
+    credentials = await get_tenant_line_credentials(session.tenant_id)
+
+    if credentials:
+        return LineBotSettingsResponse(
+            configured=True,
+            channel_id=credentials.get("channel_id"),
+        )
+    else:
+        return LineBotSettingsResponse(
+            configured=False,
+            channel_id=None,
+        )
+
+
+@router.put("/linebot", response_model=LineBotSettingsResponse)
+async def update_linebot_settings(
+    request: LineBotSettingsUpdate,
+    session: SessionData = Depends(get_current_session),
+) -> LineBotSettingsResponse:
+    """更新租戶 Line Bot 設定
+
+    僅租戶管理員可操作。
+    更新 Line Bot 憑證（會自動加密儲存）。
+    """
+    from ..services.tenant import get_tenant_line_credentials, update_tenant_line_settings
+    from ..services.linebot import invalidate_tenant_secrets_cache
+
+    await require_tenant_admin(session)
+
+    if session.tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="未關聯租戶",
+        )
+
+    # 更新設定
+    success = await update_tenant_line_settings(
+        session.tenant_id,
+        channel_id=request.channel_id,
+        channel_secret=request.channel_secret,
+        access_token=request.access_token,
+    )
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="更新失敗",
+        )
+
+    # 清除租戶 secrets 快取（讓新設定立即生效）
+    invalidate_tenant_secrets_cache()
+
+    # 取得更新後的設定
+    credentials = await get_tenant_line_credentials(session.tenant_id)
+
+    return LineBotSettingsResponse(
+        configured=bool(credentials),
+        channel_id=credentials.get("channel_id") if credentials else None,
+    )
+
+
+@router.post("/linebot/test", response_model=LineBotTestResponse)
+async def test_linebot_connection(
+    session: SessionData = Depends(get_current_session),
+) -> LineBotTestResponse:
+    """測試租戶 Line Bot 憑證
+
+    僅租戶管理員可操作。
+    使用租戶的憑證呼叫 Line API 確認設定是否正確。
+    """
+    from linebot.v3.messaging import AsyncApiClient, AsyncMessagingApi, Configuration
+    from ..services.tenant import get_tenant_line_credentials
+
+    await require_tenant_admin(session)
+
+    if session.tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="未關聯租戶",
+        )
+
+    # 取得 Line Bot 憑證
+    credentials = await get_tenant_line_credentials(session.tenant_id)
+
+    if not credentials:
+        return LineBotTestResponse(
+            success=False,
+            error="尚未設定 Line Bot 憑證",
+        )
+
+    access_token = credentials.get("access_token")
+    if not access_token:
+        return LineBotTestResponse(
+            success=False,
+            error="缺少 Access Token",
+        )
+
+    # 測試憑證
+    try:
+        config = Configuration(access_token=access_token)
+        async with AsyncApiClient(config) as api_client:
+            api = AsyncMessagingApi(api_client)
+            bot_info = await api.get_bot_info()
+
+            return LineBotTestResponse(
+                success=True,
+                bot_info={
+                    "display_name": bot_info.display_name,
+                    "basic_id": bot_info.basic_id,
+                    "premium_id": bot_info.premium_id,
+                    "chat_mode": bot_info.chat_mode,
+                },
+            )
+    except Exception as e:
+        return LineBotTestResponse(
+            success=False,
+            error=str(e),
+        )
+
+
+@router.delete("/linebot", response_model=LineBotDeleteResponse)
+async def delete_linebot_settings(
+    session: SessionData = Depends(get_current_session),
+) -> LineBotDeleteResponse:
+    """清除租戶 Line Bot 設定
+
+    僅租戶管理員可操作。
+    清除所有 Line Bot 憑證。
+    """
+    from ..services.tenant import update_tenant_line_settings
+    from ..services.linebot import invalidate_tenant_secrets_cache
+
+    await require_tenant_admin(session)
+
+    if session.tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="未關聯租戶",
+        )
+
+    # 清除設定（傳入空值）
+    success = await update_tenant_line_settings(
+        session.tenant_id,
+        channel_id=None,
+        channel_secret=None,
+        access_token=None,
+    )
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="清除失敗",
+        )
+
+    # 清除租戶 secrets 快取
+    invalidate_tenant_secrets_cache()
+
+    return LineBotDeleteResponse(success=True, message="Line Bot 設定已清除")
