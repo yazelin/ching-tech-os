@@ -2031,6 +2031,29 @@ async def get_file_info_by_line_message_id(line_message_id: str) -> dict | None:
         return dict(row) if row else None
 
 
+async def get_message_content_by_line_message_id(line_message_id: str) -> dict | None:
+    """根據 Line message_id 取得訊息內容
+
+    Args:
+        line_message_id: Line 訊息 ID
+
+    Returns:
+        dict with content, message_type, display_name, is_from_bot or None
+    """
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT m.content, m.message_type, m.is_from_bot,
+                   u.display_name
+            FROM line_messages m
+            JOIN line_users u ON m.line_user_id = u.id
+            WHERE m.message_id = $1
+            """,
+            line_message_id,
+        )
+        return dict(row) if row else None
+
+
 # ============================================================
 # 記憶管理服務
 # ============================================================

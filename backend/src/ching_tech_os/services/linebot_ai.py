@@ -28,6 +28,7 @@ from .linebot import (
     ensure_temp_image,
     get_image_info_by_line_message_id,
     get_temp_image_path,
+    get_message_content_by_line_message_id,
     # 檔案暫存相關
     ensure_temp_file,
     get_file_info_by_line_message_id,
@@ -595,9 +596,10 @@ async def process_message_with_ai(
             line_group_id, line_user_id, limit=20, exclude_message_id=message_uuid
         )
 
-        # 處理回覆舊圖片或檔案（quotedMessageId）
+        # 處理回覆舊訊息（quotedMessageId）- 圖片、檔案或文字
         quoted_image_path = None
         quoted_file_path = None
+        quoted_text_content = None
         if quoted_message_id:
             # 先嘗試查詢圖片
             image_info = await get_image_info_by_line_message_id(quoted_message_id)
@@ -626,6 +628,16 @@ async def process_message_with_ai(
                                 logger.info(f"用戶回覆檔案: {quoted_message_id} -> {temp_path}")
                     else:
                         logger.info(f"用戶回覆檔案類型不支援: {quoted_message_id} -> {file_name}")
+                else:
+                    # 嘗試查詢文字訊息
+                    msg_info = await get_message_content_by_line_message_id(quoted_message_id)
+                    if msg_info and msg_info.get("content"):
+                        quoted_text_content = {
+                            "content": msg_info["content"],
+                            "display_name": msg_info.get("display_name", ""),
+                            "is_from_bot": msg_info.get("is_from_bot", False),
+                        }
+                        logger.info(f"用戶回覆文字: {quoted_message_id} -> {msg_info['content'][:50]}...")
 
         # 註：對話歷史中的圖片/檔案暫存已在 get_conversation_context 中處理
 
@@ -634,7 +646,7 @@ async def process_message_with_ai(
         if user_display_name:
             user_message = f"{user_display_name}: {content}"
 
-        # 如果是回覆圖片或檔案，在訊息開頭標註
+        # 如果是回覆圖片、檔案或文字，在訊息開頭標註
         if quoted_image_path:
             user_message = f"[回覆圖片: {quoted_image_path}]\n{user_message}"
         elif quoted_file_path:
@@ -648,6 +660,14 @@ async def process_message_with_ai(
                     user_message = f"[回覆 PDF: {pdf_path}（純圖片，無文字）]\n{user_message}"
             else:
                 user_message = f"[回覆檔案: {quoted_file_path}]\n{user_message}"
+        elif quoted_text_content:
+            # 回覆文字訊息
+            sender = quoted_text_content["display_name"] or ("AI" if quoted_text_content["is_from_bot"] else "用戶")
+            quoted_text = quoted_text_content["content"]
+            # 限制引用文字長度，避免 prompt 過長
+            if len(quoted_text) > 2000:
+                quoted_text = quoted_text[:2000] + "..."
+            user_message = f"[回覆 {sender} 的訊息：「{quoted_text}」]\n{user_message}"
 
         # MCP 工具列表（動態取得）
         from .mcp_server import get_mcp_tool_names
