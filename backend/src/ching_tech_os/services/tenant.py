@@ -1,11 +1,14 @@
 """租戶服務"""
 
+import asyncio
 import json
 import logging
+import os
 from datetime import datetime, timedelta
 from uuid import UUID
 
 from ..config import settings, DEFAULT_TENANT_UUID
+from .path_manager import path_manager
 from ..database import get_connection
 from ..models.tenant import (
     TenantCreate,
@@ -337,6 +340,55 @@ async def list_tenants(
         return tenants, total
 
 
+def _calculate_directory_size(path: str) -> int:
+    """計算目錄大小（同步函數）
+
+    Args:
+        path: 目錄路徑
+
+    Returns:
+        目錄大小（bytes）
+    """
+    total_size = 0
+    try:
+        if not os.path.exists(path):
+            return 0
+        for dirpath, dirnames, filenames in os.walk(path):
+            for filename in filenames:
+                filepath = os.path.join(dirpath, filename)
+                try:
+                    total_size += os.path.getsize(filepath)
+                except (OSError, FileNotFoundError):
+                    pass
+    except (OSError, PermissionError) as e:
+        logger.warning(f"計算目錄大小失敗 {path}: {e}")
+    return total_size
+
+
+async def calculate_tenant_storage(tenant_id: UUID | str) -> int:
+    """計算租戶儲存空間使用量
+
+    掃描租戶目錄下所有檔案，計算總大小。
+
+    Args:
+        tenant_id: 租戶 UUID
+
+    Returns:
+        儲存空間使用量（MB）
+    """
+    tid_str = str(tenant_id)
+    tenant_base_path = path_manager.get_tenant_base_path(tid_str)
+
+    # 在執行緒池中執行同步的目錄掃描
+    loop = asyncio.get_event_loop()
+    total_bytes = await loop.run_in_executor(
+        None, _calculate_directory_size, tenant_base_path
+    )
+
+    # 轉換為 MB
+    return total_bytes // (1024 * 1024)
+
+
 async def get_tenant_usage(tenant_id: UUID | str) -> TenantUsage:
     """取得租戶使用量統計
 
@@ -391,14 +443,15 @@ async def get_tenant_usage(tenant_id: UUID | str) -> TenantUsage:
             tenant_id,
         )
 
-        storage_used = tenant["storage_used_mb"] or 0
+        # 動態計算儲存空間使用量
+        storage_used = await calculate_tenant_storage(tenant_id)
         storage_quota = tenant["storage_quota_mb"] or 1
 
         return TenantUsage(
             tenant_id=tenant_id,
             storage_used_mb=storage_used,
             storage_quota_mb=storage_quota,
-            storage_percentage=round(storage_used / storage_quota * 100, 2),
+            storage_percentage=round(storage_used / max(storage_quota, 1) * 100, 2),
             user_count=user_count or 0,
             project_count=project_count or 0,
             knowledge_count=knowledge_count,

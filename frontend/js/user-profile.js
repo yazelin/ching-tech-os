@@ -380,7 +380,7 @@ const UserProfileModule = (function() {
       appId: APP_ID,
       icon: 'account-circle',
       width: 500,
-      height: 320,
+      height: 480,
       content: getWindowContent(),
       onInit: initWindow,
       onClose: () => {

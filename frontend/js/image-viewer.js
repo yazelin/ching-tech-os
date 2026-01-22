@@ -189,6 +189,9 @@ const ImageViewerModule = (function() {
     if (currentPath.startsWith('/api/')) {
       // API URL - add base path for sub-path deployment
       fetchUrl = `${basePath}${currentPath}`;
+    } else if (basePath && currentPath.startsWith(`${basePath}/api/`)) {
+      // 已包含 basePath 的 API URL（子路徑部署），直接使用
+      fetchUrl = currentPath;
     } else if (currentPath.startsWith('http://') || currentPath.startsWith('https://')) {
       // Absolute URL - use as is
       fetchUrl = currentPath;

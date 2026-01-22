@@ -1068,7 +1068,12 @@ const FileManagerModule = (function() {
     // 使用 FileOpener 統一入口開啟檔案
     // 傳入統一格式的路徑，FileOpener 會透過 PathUtils 轉換為 API URL
     if (typeof FileOpener !== 'undefined' && FileOpener.canOpen(name)) {
-      const apiUrl = PathUtils.toApiUrl(filePath);
+      let apiUrl = PathUtils.toApiUrl(filePath);
+      // 若有 NAS Token，附加到 URL 以支援 NAS 檔案開啟
+      if (nasToken) {
+        const separator = apiUrl.includes('?') ? '&' : '?';
+        apiUrl = `${apiUrl}${separator}nas_token=${encodeURIComponent(nasToken)}`;
+      }
       FileOpener.open(apiUrl, name);
     }
   }
@@ -1367,11 +1372,15 @@ const FileManagerModule = (function() {
     // 使用統一的 Files API，PathUtils 會將 NAS 路徑轉換為 /api/files/nas/...
     const apiUrl = PathUtils.toApiUrl(filePath);
 
+    // 準備 headers（包含 NAS Token 以支援 NAS 預覽）
+    const previewHeaders = { 'Authorization': `Bearer ${getToken()}` };
+    if (nasToken) {
+      previewHeaders['X-NAS-Token'] = nasToken;
+    }
+
     if (FileUtils.isImageFile(file.name)) {
       try {
-        const response = await fetch(apiUrl, {
-          headers: { 'Authorization': `Bearer ${getToken()}` }
-        });
+        const response = await fetch(apiUrl, { headers: previewHeaders });
         if (response.ok) {
           const blob = await response.blob();
           const previewImage = windowEl.querySelector('#fmPreviewImage');
@@ -1388,9 +1397,7 @@ const FileManagerModule = (function() {
     // Load text content async
     if (FileUtils.isTextFile(file.name)) {
       try {
-        const response = await fetch(apiUrl, {
-          headers: { 'Authorization': `Bearer ${getToken()}` }
-        });
+        const response = await fetch(apiUrl, { headers: previewHeaders });
         if (response.ok) {
           const text = await response.text();
           const previewText = windowEl.querySelector('#fmPreviewText');
@@ -1506,11 +1513,15 @@ const FileManagerModule = (function() {
     // 使用統一的 Files API，PathUtils 會將 NAS 路徑轉換為 /api/files/nas/...
     const apiUrl = PathUtils.toApiUrl(filePath);
 
+    // 準備 headers（包含 NAS Token 以支援 NAS 預覽）
+    const mobilePreviewHeaders = { 'Authorization': `Bearer ${getToken()}` };
+    if (nasToken) {
+      mobilePreviewHeaders['X-NAS-Token'] = nasToken;
+    }
+
     if (FileUtils.isImageFile(file.name)) {
       try {
-        const response = await fetch(apiUrl, {
-          headers: { 'Authorization': `Bearer ${getToken()}` }
-        });
+        const response = await fetch(apiUrl, { headers: mobilePreviewHeaders });
         if (response.ok) {
           const blob = await response.blob();
           const previewImage = mobilePreviewOverlay.querySelector('#fmMobilePreviewImage');
@@ -1527,9 +1538,7 @@ const FileManagerModule = (function() {
     // Load text content async
     if (FileUtils.isTextFile(file.name)) {
       try {
-        const response = await fetch(apiUrl, {
-          headers: { 'Authorization': `Bearer ${getToken()}` }
-        });
+        const response = await fetch(apiUrl, { headers: mobilePreviewHeaders });
         if (response.ok) {
           const text = await response.text();
           const previewText = mobilePreviewOverlay.querySelector('#fmMobilePreviewText');

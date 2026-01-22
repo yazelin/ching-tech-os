@@ -268,9 +268,9 @@
     padding: 0 var(--spacing-sm);
   }
 
-  /* 隱藏標題文字 */
+  /* 標題文字縮小 */
   .header-title {
-    display: none;
+    font-size: var(--font-size-xs);
   }
 
   /* 隱藏時間 */
@@ -320,15 +320,14 @@
     height: 36px;
   }
 
-  /* 隱藏租戶名稱，只顯示圖示 */
+  /* 租戶名稱縮短寬度 */
   .header-tenant-name {
-    display: none;
+    max-width: 60px;
+    font-size: var(--font-size-xs);
   }
 
   .header-tenant {
-    padding: var(--spacing-xs);
-    min-width: 32px;
-    justify-content: center;
+    padding: var(--spacing-xs) var(--spacing-sm);
   }
 
   .header-tenant-divider {
