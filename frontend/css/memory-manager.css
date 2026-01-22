@@ -553,3 +553,181 @@
 .mm-btn.secondary:hover {
   background: var(--bg-surface-darker);
 }
+
+/* ==========================================================================
+   Mobile Styles (< 768px)
+   ========================================================================== */
+@media (max-width: 768px) {
+  /* Tabs：縮小間距，文字可隱藏 */
+  .mm-tabs {
+    padding: 6px 8px;
+    gap: 2px;
+  }
+
+  .mm-tab {
+    padding: 8px 12px;
+    font-size: 12px;
+    min-height: 44px;
+  }
+
+  .mm-tab span:not(.icon) {
+    display: none;
+  }
+
+  /* 內容區域：相對定位供堆疊導航 */
+  .mm-content {
+    position: relative;
+  }
+
+  /* 側邊欄：手機版全寬 */
+  .mm-sidebar {
+    width: 100%;
+    border-right: none;
+    transition: opacity 0.3s ease;
+  }
+
+  /* 主區域：手機版覆蓋滑入 */
+  .mm-main {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    transform: translateX(100%);
+    transition: transform 0.3s ease;
+    z-index: 10;
+    background: var(--color-background);
+  }
+
+  /* 顯示詳情狀態 */
+  .memory-manager.showing-detail .mm-sidebar {
+    visibility: hidden;
+  }
+
+  .memory-manager.showing-detail .mm-main {
+    transform: translateX(0);
+  }
+
+  /* 側邊欄項目：增大觸控區域 */
+  .mm-sidebar-item {
+    padding: 12px;
+    min-height: 56px;
+  }
+
+  .mm-sidebar-item-icon,
+  .mm-sidebar-item-avatar {
+    width: 40px;
+    height: 40px;
+  }
+
+  .mm-sidebar-item-name {
+    font-size: 14px;
+  }
+
+  .mm-sidebar-item-meta {
+    font-size: 12px;
+  }
+
+  /* 主區域標題列 */
+  .mm-main-header {
+    padding: 8px 12px;
+    gap: 8px;
+  }
+
+  /* 手機版返回按鈕 */
+  .mm-mobile-back-btn {
+    display: flex !important;
+    align-items: center;
+    gap: 4px;
+    padding: 8px;
+    min-width: 44px;
+    min-height: 44px;
+    background: transparent;
+    border: none;
+    color: var(--color-primary);
+    font-size: 14px;
+    cursor: pointer;
+    margin-right: 8px;
+  }
+
+  .mm-mobile-back-btn .icon {
+    font-size: 20px;
+  }
+
+  /* 新增按鈕：只顯示圖示 */
+  .mm-add-btn span:not(.icon) {
+    display: none;
+  }
+
+  .mm-add-btn {
+    padding: 8px 12px;
+    min-height: 44px;
+  }
+
+  /* 記憶卡片：調整觸控區域 */
+  .mm-memory-header {
+    padding: 12px;
+    gap: 8px;
+  }
+
+  .mm-memory-title {
+    font-size: 13px;
+  }
+
+  .mm-memory-btn {
+    width: 40px;
+    height: 40px;
+  }
+
+  .mm-memory-content {
+    padding: 12px;
+    font-size: 14px;
+  }
+
+  .mm-memory-meta {
+    padding: 10px 12px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  /* 記憶列表間距 */
+  .mm-memory-list {
+    padding: 12px;
+    gap: 10px;
+  }
+
+  /* Modal 調整 */
+  .mm-modal {
+    width: 95vw;
+    max-height: 85vh;
+    margin: 0 auto;
+  }
+
+  .mm-modal-header {
+    padding: 14px 16px;
+  }
+
+  .mm-modal-body {
+    padding: 16px;
+  }
+
+  .mm-modal-footer {
+    padding: 14px 16px;
+  }
+
+  .mm-input,
+  .mm-textarea {
+    font-size: 16px; /* 防止 iOS 縮放 */
+    padding: 12px;
+  }
+
+  .mm-btn {
+    min-height: 44px;
+    padding: 10px 16px;
+  }
+}
+
+/* 桌面版隱藏返回按鈕 */
+.mm-mobile-back-btn {
+  display: none;
+}

@@ -95,6 +95,9 @@ const MemoryManagerApp = (function() {
           </div>
           <div class="mm-main">
             <div class="mm-main-header">
+              <button class="mm-mobile-back-btn" id="mmBackBtn">
+                ${icon('arrow-left')}
+              </button>
               <span class="mm-main-title" id="mmMainTitle">請選擇群組</span>
               <button class="mm-add-btn" id="mmAddBtn" style="display: none;">
                 ${icon('plus')}
@@ -259,6 +262,9 @@ const MemoryManagerApp = (function() {
       titleEl.textContent = group ? (group.name || '未命名群組') : '群組記憶';
     }
 
+    // 手機版：顯示詳情
+    containerEl.classList.add('showing-detail');
+
     // 載入記憶
     await loadMemories(containerEl, 'group', groupId);
   }
@@ -286,6 +292,9 @@ const MemoryManagerApp = (function() {
     if (titleEl) {
       titleEl.textContent = user ? (user.display_name || '未知用戶') : '個人記憶';
     }
+
+    // 手機版：顯示詳情
+    containerEl.classList.add('showing-detail');
 
     // 載入記憶
     await loadMemories(containerEl, 'user', userId);
@@ -611,6 +620,9 @@ const MemoryManagerApp = (function() {
         selectedGroupId = null;
         selectedUserId = null;
 
+        // 手機版：回到列表
+        containerEl.classList.remove('showing-detail');
+
         // 隱藏新增按鈕
         const addBtn = containerEl.querySelector('#mmAddBtn');
         if (addBtn) addBtn.style.display = 'none';
@@ -644,6 +656,14 @@ const MemoryManagerApp = (function() {
     if (addBtn) {
       addBtn.addEventListener('click', () => {
         showEditModal(null, containerEl);
+      });
+    }
+
+    // 手機版返回按鈕
+    const backBtn = containerEl.querySelector('#mmBackBtn');
+    if (backBtn) {
+      backBtn.addEventListener('click', () => {
+        containerEl.classList.remove('showing-detail');
       });
     }
 
