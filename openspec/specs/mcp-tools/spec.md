@@ -817,3 +817,143 @@ MCP Server SHALL 提供工具讓 AI 可以查詢物料訂購記錄。
 - **THEN** 系統返回所有已下單但尚未交貨的訂購記錄
 - **AND** 方便追蹤待交貨項目
 
+### Requirement: 生成簡報 MCP 工具
+The system SHALL provide a `generate_presentation` MCP tool that generates PowerPoint presentations.
+
+The tool SHALL accept the following parameters:
+- `topic`: Presentation topic (required if no outline_json)
+- `num_slides`: Number of slides (2-20, default 5)
+- `style`: Predefined style name (professional, casual, creative, minimal, dark, tech, nature, warm, elegant)
+- `include_images`: Whether to auto-add images (default true)
+- `image_source`: Image source (pexels, huggingface, nanobanana)
+- `outline_json`: Direct outline JSON to skip AI generation
+- `design_json`: Complete design specification from presentation designer (NEW)
+
+When `design_json` is provided:
+- The system SHALL use the design specification for colors, typography, layout, and decorations
+- The system SHALL ignore the `style` parameter
+- The system SHALL extract slides from `design_json.slides` if present
+
+The `design_json` structure SHALL include:
+- `design.colors`: Color scheme (background, title, subtitle, text, bullet, accent)
+- `design.typography`: Font settings (title_font, title_size, body_font, body_size)
+- `design.layout`: Layout settings (title_align, content_columns, image_position)
+- `design.decorations`: Decoration settings (title_underline, accent_bar, page_number)
+- `slides`: Array of slide definitions
+
+#### Scenario: Generate with design_json
+- **WHEN** user calls `generate_presentation` with `design_json` parameter
+- **THEN** the system uses the design specification for visual styling
+- **AND** the system generates a PowerPoint file with custom colors, fonts, and decorations
+
+#### Scenario: Generate with predefined style (backward compatible)
+- **WHEN** user calls `generate_presentation` with `style` parameter only
+- **THEN** the system uses the predefined style configuration
+- **AND** the behavior remains unchanged from Phase 1
+
+#### Scenario: Invalid design_json format
+- **WHEN** user provides malformed `design_json`
+- **THEN** the system returns an error message describing the issue
+- **AND** the system does not generate a partial presentation
+
+### Requirement: 簡報風格選項
+`generate_presentation` 工具 SHALL 支援以下風格選項：
+- `professional`（預設）：專業簡潔風格
+- `casual`：輕鬆休閒風格
+- `creative`：創意活潑風格
+- `minimal`：極簡風格
+
+#### Scenario: 使用專業風格
+- **WHEN** 呼叫 `generate_presentation(topic="季度報告", style="professional")`
+- **THEN** 簡報使用深藍色調、正式字體、簡潔版面
+
+#### Scenario: 使用創意風格
+- **WHEN** 呼叫 `generate_presentation(topic="創意提案", style="creative")`
+- **THEN** 簡報使用鮮明色彩、活潑版面配置
+
+---
+
+### Requirement: 簡報檔案命名與儲存
+系統 SHALL 將生成的簡報儲存至 NAS，並使用結構化的檔名。
+
+#### Scenario: 檔案命名格式
+- **WHEN** 生成主題為「AI 應用」的簡報
+- **THEN** 檔名格式為 `AI應用_20260122_143052.pptx`（主題_日期_時間）
+- **AND** 儲存路徑為 `/mnt/nas/projects/ai-presentations/`
+
+#### Scenario: 檔名包含特殊字元
+- **GIVEN** 主題包含特殊字元如「產品/服務介紹」
+- **WHEN** 生成簡報
+- **THEN** 系統清理檔名中的特殊字元（斜線、冒號等）
+- **AND** 產出有效的檔案名稱
+
+### Requirement: 記憶管理 MCP 工具
+MCP Server SHALL 提供記憶管理工具，讓 AI 可以在對話中管理記憶。
+
+#### Scenario: add_memory 新增記憶
+- **WHEN** AI 呼叫 `add_memory` 工具
+- **AND** 提供 content 參數
+- **AND** 提供 line_group_id（群組對話）或 line_user_id（個人對話）
+- **THEN** 系統建立新的記憶
+- **AND** 若未提供 title，系統自動產生合適的標題（取 content 前 20 字或由 AI 判斷）
+- **AND** 回傳成功訊息和記憶 ID
+
+#### Scenario: get_memories 查詢記憶
+- **WHEN** AI 呼叫 `get_memories` 工具
+- **AND** 提供 line_group_id 或 line_user_id
+- **THEN** 系統回傳該群組或用戶的所有記憶列表
+- **AND** 每筆記憶包含 id、title、content、is_active
+
+#### Scenario: update_memory 更新記憶
+- **WHEN** AI 呼叫 `update_memory` 工具
+- **AND** 提供 memory_id 參數
+- **AND** 提供要更新的欄位（title、content、is_active）
+- **THEN** 系統更新該記憶
+- **AND** 回傳成功訊息
+
+#### Scenario: delete_memory 刪除記憶
+- **WHEN** AI 呼叫 `delete_memory` 工具
+- **AND** 提供 memory_id 參數
+- **THEN** 系統刪除該記憶
+- **AND** 回傳成功訊息
+
+#### Scenario: 記憶不存在
+- **WHEN** AI 呼叫 update_memory 或 delete_memory
+- **AND** 指定的 memory_id 不存在
+- **THEN** 系統回傳錯誤訊息「找不到指定的記憶」
+
+---
+
+### Requirement: 記憶管理 Prompt 說明
+Line Bot Agent Prompt SHALL 包含記憶管理工具的使用說明。
+
+#### Scenario: linebot-personal prompt 記憶說明
+- **WHEN** 系統組合 linebot-personal Agent 的 prompt
+- **THEN** prompt 包含記憶管理工具說明
+- **AND** 說明 AI 應如何判斷新增、修改或刪除記憶
+- **AND** 說明 AI 應自動產生合適的標題
+
+#### Scenario: linebot-group prompt 記憶說明
+- **WHEN** 系統組合 linebot-group Agent 的 prompt
+- **THEN** prompt 包含記憶管理工具說明
+- **AND** 說明群組記憶適用於該群組的所有對話
+
+#### Scenario: 用戶要求記住某事
+- **WHEN** 用戶說「記住 XXX」或「以後 XXX」
+- **THEN** AI 應呼叫 add_memory 工具
+- **AND** AI 自動產生合適的標題
+
+#### Scenario: 用戶要求修改記憶
+- **WHEN** 用戶說「修改記憶 XXX」或「把 XXX 改成 YYY」
+- **THEN** AI 應先呼叫 get_memories 查詢現有記憶
+- **AND** 找到相關記憶後呼叫 update_memory 更新
+
+#### Scenario: 用戶要求刪除記憶
+- **WHEN** 用戶說「忘記 XXX」或「不要再 XXX」
+- **THEN** AI 應判斷是否要刪除相關記憶
+- **AND** 若需要刪除，先用 get_memories 查詢再呼叫 delete_memory
+
+#### Scenario: 用戶要求列出記憶
+- **WHEN** 用戶說「列出記憶」或「我設定了什麼」
+- **THEN** AI 應呼叫 get_memories 查詢並列出結果
+

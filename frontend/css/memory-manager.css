@@ -1,0 +1,555 @@
+/**
+ * 記憶管理應用程式樣式
+ */
+
+/* 主容器 */
+.memory-manager {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--color-background);
+}
+
+/* Tabs */
+.mm-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 12px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.mm-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.15s ease;
+}
+
+.mm-tab:hover {
+  background: var(--bg-surface-dark);
+  color: var(--text-primary);
+}
+
+.mm-tab.active {
+  background: var(--color-primary);
+  color: white;
+}
+
+.mm-tab .icon {
+  font-size: 16px;
+}
+
+/* 內容區域 */
+.mm-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* 側邊欄 */
+.mm-sidebar {
+  width: 220px;
+  border-right: 1px solid var(--border-light);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface);
+}
+
+.mm-sidebar-header {
+  padding: 12px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.mm-sidebar-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.mm-sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mm-sidebar-item:hover {
+  background: var(--bg-surface-dark);
+}
+
+.mm-sidebar-item.active {
+  background: var(--color-primary);
+  color: white;
+}
+
+.mm-sidebar-item.active .mm-sidebar-item-meta {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.mm-sidebar-item-icon,
+.mm-sidebar-item-avatar {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--bg-surface-darker);
+  flex-shrink: 0;
+}
+
+.mm-sidebar-item.active .mm-sidebar-item-icon,
+.mm-sidebar-item.active .mm-sidebar-item-avatar {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.mm-sidebar-item-avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.mm-sidebar-item-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mm-sidebar-item-name {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mm-sidebar-item-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* 主區域 */
+.mm-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.mm-main-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-light);
+  background: var(--bg-surface);
+}
+
+.mm-main-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.mm-add-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: none;
+  background: var(--color-primary);
+  color: white;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.15s ease;
+}
+
+.mm-add-btn:hover {
+  background: var(--color-primary-hover);
+}
+
+/* 記憶列表 */
+.mm-memory-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 記憶卡片 */
+.mm-memory-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  overflow: hidden;
+  transition: border-color 0.15s ease, opacity 0.15s ease;
+}
+
+.mm-memory-card:hover {
+  border-color: var(--border-medium);
+}
+
+.mm-memory-card.inactive {
+  opacity: 0.6;
+}
+
+.mm-memory-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-light);
+  background: var(--bg-surface-dark);
+}
+
+.mm-memory-checkbox {
+  position: relative;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.mm-memory-checkbox input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.mm-checkbox-mark {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border-strong);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.mm-memory-checkbox input:checked + .mm-checkbox-mark {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.mm-memory-checkbox input:checked + .mm-checkbox-mark::after {
+  content: '';
+  width: 4px;
+  height: 8px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  margin-bottom: 2px;
+}
+
+.mm-memory-title {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mm-memory-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.mm-memory-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mm-memory-btn:hover {
+  background: var(--bg-surface-darker);
+  color: var(--text-primary);
+}
+
+.mm-memory-btn.danger:hover {
+  background: rgba(229, 57, 53, 0.15);
+  color: var(--color-error);
+}
+
+.mm-memory-content {
+  padding: 12px 16px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.mm-memory-meta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 16px;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-surface-dark);
+  border-top: 1px solid var(--border-light);
+}
+
+.mm-memory-meta span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mm-memory-meta .icon {
+  font-size: 12px;
+}
+
+/* 空狀態 */
+.mm-empty,
+.mm-empty-sidebar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.mm-empty .icon,
+.mm-empty-sidebar .icon {
+  font-size: 48px;
+  opacity: 0.4;
+  margin-bottom: 12px;
+}
+
+.mm-empty p,
+.mm-empty-sidebar p {
+  margin: 4px 0;
+  font-size: 13px;
+}
+
+.mm-empty-hint {
+  font-size: 12px !important;
+  opacity: 0.7;
+}
+
+/* 載入中 */
+.mm-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  color: var(--text-muted);
+}
+
+.mm-loading .icon {
+  font-size: 24px;
+}
+
+/* 錯誤 */
+.mm-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: var(--color-error);
+  text-align: center;
+}
+
+.mm-error .icon {
+  font-size: 32px;
+  margin-bottom: 12px;
+}
+
+.mm-error p {
+  font-size: 13px;
+}
+
+/* Modal */
+.mm-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--bg-overlay-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.mm-modal {
+  background: var(--modal-bg);
+  border: 1px solid var(--modal-border);
+  border-radius: 12px;
+  width: 480px;
+  max-width: 90vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+}
+
+.mm-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.mm-modal-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.mm-modal-close {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mm-modal-close:hover {
+  background: var(--bg-surface-dark);
+  color: var(--text-primary);
+}
+
+.mm-modal-body {
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.mm-form-group {
+  margin-bottom: 16px;
+}
+
+.mm-form-group:last-child {
+  margin-bottom: 0;
+}
+
+.mm-form-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.mm-required {
+  color: var(--color-error);
+}
+
+.mm-input,
+.mm-textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-medium);
+  border-radius: 6px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  transition: border-color 0.15s ease;
+}
+
+.mm-input:focus,
+.mm-textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.mm-input::placeholder,
+.mm-textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.mm-textarea {
+  resize: vertical;
+  min-height: 100px;
+  line-height: 1.5;
+}
+
+.mm-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-light);
+}
+
+.mm-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mm-btn.primary {
+  background: var(--color-primary);
+  color: white;
+}
+
+.mm-btn.primary:hover {
+  background: var(--color-primary-hover);
+}
+
+.mm-btn.primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.mm-btn.secondary {
+  background: var(--bg-surface-dark);
+  color: var(--text-primary);
+}
+
+.mm-btn.secondary:hover {
+  background: var(--bg-surface-darker);
+}

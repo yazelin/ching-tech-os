@@ -267,3 +267,44 @@ class BindingStatusResponse(BaseModel):
     line_display_name: str | None = None
     line_picture_url: str | None = None
     bound_at: datetime | None = None
+
+
+# ============================================================
+# Line Memory Models（自訂記憶）
+# ============================================================
+
+
+class MemoryCreate(BaseModel):
+    """建立記憶"""
+
+    title: str = Field(..., max_length=128)
+    content: str
+
+
+class MemoryUpdate(BaseModel):
+    """更新記憶"""
+
+    title: str | None = Field(None, max_length=128)
+    content: str | None = None
+    is_active: bool | None = None
+
+
+class MemoryResponse(BaseModel):
+    """記憶回應"""
+
+    id: UUID
+    title: str
+    content: str
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+    # 群組記憶特有欄位
+    created_by: UUID | None = None
+    created_by_name: str | None = None
+
+
+class MemoryListResponse(BaseModel):
+    """記憶列表回應"""
+
+    items: list[MemoryResponse]
+    total: int

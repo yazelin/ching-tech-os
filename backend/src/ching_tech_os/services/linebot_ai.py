@@ -120,7 +120,7 @@ def extract_nanobanana_error(tool_calls: list) -> str | None:
 
 def extract_nanobanana_prompt(tool_calls: list) -> str | None:
     """
-    從 tool_calls 中提取 nanobanana 的 prompt
+    從 tool_calls 中提取 nanobanana 的 prompt（用於 fallback）
 
     Args:
         tool_calls: Claude response 的 tool_calls 列表
@@ -182,36 +182,6 @@ def check_nanobanana_timeout(tool_calls: list) -> bool:
                     return True
 
     return False
-
-
-def should_retry_nanobanana(tool_calls: list) -> tuple[bool, str]:
-    """
-    檢測是否應該重試 nanobanana 請求
-
-    可重試的情況：
-    1. timeout（output 為空）
-    2. overloaded 錯誤（Gemini 伺服器過載）
-
-    Args:
-        tool_calls: Claude response 的 tool_calls 列表
-
-    Returns:
-        (should_retry, reason) - 是否應重試及原因
-    """
-    # 檢查 timeout
-    if check_nanobanana_timeout(tool_calls):
-        return True, "timeout"
-
-    # 檢查 overloaded 錯誤
-    error = extract_nanobanana_error(tool_calls)
-    if error:
-        error_lower = error.lower()
-        # 可重試的錯誤關鍵字
-        retry_keywords = ["overloaded", "overload", "503", "try again", "temporarily"]
-        if any(keyword in error_lower for keyword in retry_keywords):
-            return True, f"overloaded: {error[:50]}"
-
-    return False, ""
 
 
 def get_user_friendly_nanobanana_error(error: str) -> str:
@@ -308,32 +278,8 @@ async def auto_prepare_generated_images(
     Returns:
         處理後的 AI 回應（可能包含新增的 FILE_MESSAGE 標記或錯誤提示）
     """
-    # 先檢查是否有 nanobanana 錯誤
-    # 注意：overloaded 等可重試錯誤的重試已在 handle_linebot_message() 中處理
-    # 這裡只處理無法重試或重試後仍失敗的情況
-    nanobanana_error = extract_nanobanana_error(tool_calls)
-    if nanobanana_error:
-        logger.warning(f"Nanobanana 錯誤: {nanobanana_error}")
-        # 顯示用戶友善的錯誤訊息
-        user_error = get_user_friendly_nanobanana_error(nanobanana_error)
-        if "overload" not in ai_response.lower() and "失敗" not in ai_response:
-            ai_response = ai_response.rstrip() + "\n\n" + user_error
-        return ai_response
-
-    # 檢查是否有 nanobanana timeout（呼叫了但 output 為空）
-    # 注意：timeout 的重試已在 handle_linebot_message() 中處理
-    # 這裡只處理最後一次重試仍失敗的情況
-    if check_nanobanana_timeout(tool_calls):
-        logger.warning("Nanobanana timeout 偵測到（output 為空）")
-        # 顯示 timeout 提示（重試邏輯已在外層處理）
-        if "timeout" not in ai_response.lower() and "超時" not in ai_response:
-            timeout_error = (
-                "⚠️ 圖片生成服務暫時無法使用\n\n"
-                "原因：請求超時（Gemini 伺服器無回應）\n\n"
-                "建議：請稍後再試"
-            )
-            ai_response = ai_response.rstrip() + "\n\n" + timeout_error
-        return ai_response
+    # 注意：nanobanana 錯誤和 timeout 已在 chat_with_ai() 中處理（包含 fallback 邏輯）
+    # 這裡只處理成功生成圖片後的自動發送
 
     # 提取生成的圖片
     generated_files = extract_generated_images_from_tool_calls(tool_calls)
@@ -715,70 +661,44 @@ async def process_message_with_ai(
         ]
         all_tools = agent_tools + mcp_tools + nanobanana_tools + ["Read"]
 
-        # nanobanana 重試設定
-        max_retries = 2  # 最多重試 2 次（共 3 次嘗試）
-        retry_count = 0
-        response = None
+        # 計時開始
+        start_time = time.time()
 
-        while retry_count <= max_retries:
-            # 計時開始
-            start_time = time.time()
+        # 呼叫 Claude CLI（只呼叫一次，不重試）
+        response = await call_claude(
+            prompt=user_message,
+            model=model,
+            history=history,
+            system_prompt=system_prompt,
+            timeout=480,  # 延長至 8 分鐘，支援複雜任務如多次 WebSearch + 分析
+            tools=all_tools,
+        )
 
-            # 呼叫 Claude CLI
-            response = await call_claude(
-                prompt=user_message,
-                model=model,
-                history=history,
-                system_prompt=system_prompt,
-                timeout=480,  # 延長至 8 分鐘，支援複雜任務如多次 WebSearch + 分析
-                tools=all_tools,
-            )
+        # 計算耗時
+        duration_ms = int((time.time() - start_time) * 1000)
 
-            # 計算耗時
-            duration_ms = int((time.time() - start_time) * 1000)
+        # 記錄 AI Log
+        await log_linebot_ai_call(
+            message_uuid=message_uuid,
+            line_group_id=line_group_id,
+            is_group=is_group,
+            input_prompt=user_message,
+            history=history,
+            system_prompt=system_prompt,
+            allowed_tools=all_tools,
+            model=model,
+            response=response,
+            duration_ms=duration_ms,
+        )
 
-            # 記錄 AI Log
-            await log_linebot_ai_call(
-                message_uuid=message_uuid,
-                line_group_id=line_group_id,
-                is_group=is_group,
-                input_prompt=user_message,
-                history=history,
-                system_prompt=system_prompt,
-                allowed_tools=all_tools,
-                model=model,
-                response=response,
-                duration_ms=duration_ms,
-            )
+        # 檢查 nanobanana 是否有錯誤（overloaded/timeout）
+        nanobanana_error = extract_nanobanana_error(response.tool_calls)
+        nanobanana_timeout = check_nanobanana_timeout(response.tool_calls)
 
-            # 檢查是否需要重試（nanobanana timeout 或 overloaded）
-            # 注意：即使 response.success=True，nanobanana 內部也可能有 overloaded 錯誤
-            should_retry, retry_reason = should_retry_nanobanana(response.tool_calls)
-            if should_retry:
-                retry_count += 1
-                if retry_count <= max_retries:
-                    logger.warning(
-                        f"Nanobanana 錯誤（{retry_reason}），嘗試重試 ({retry_count}/{max_retries})"
-                    )
-                    # 等待一小段時間讓 Gemini 伺服器恢復
-                    await asyncio.sleep(3)
-                    continue
-                else:
-                    logger.error(f"Nanobanana 重試 {max_retries} 次後仍失敗: {retry_reason}")
-                    break
-            elif response.success:
-                # 成功且沒有可重試的錯誤，跳出迴圈
-                break
-            else:
-                # 其他錯誤（非可重試），跳出迴圈
-                break
-
-        # 檢查是否有可重試的 nanobanana 錯誤（即使 response.success=True）
-        final_should_retry, final_retry_reason = should_retry_nanobanana(response.tool_calls)
-
-        if final_should_retry and retry_count > 0:
-            # 所有重試都失敗了，嘗試 Hugging Face fallback
-            logger.error(f"Nanobanana 重試 {retry_count} 次後仍失敗: {final_retry_reason}")
+        if nanobanana_error or nanobanana_timeout:
+            # nanobanana 失敗，嘗試 Hugging Face fallback
+            error_reason = "timeout" if nanobanana_timeout else nanobanana_error
+            logger.warning(f"Nanobanana 錯誤: {error_reason}")
 
             # 提取原始 prompt，嘗試 fallback
             original_prompt = extract_nanobanana_prompt(response.tool_calls)
@@ -788,7 +708,7 @@ async def process_message_with_ai(
             if original_prompt:
                 logger.info(f"嘗試 Hugging Face fallback: {original_prompt[:50]}...")
                 fallback_path, used_fallback, fallback_error = await generate_image_fallback(
-                    original_prompt, final_retry_reason
+                    original_prompt, str(error_reason)
                 )
 
                 if fallback_path:
@@ -803,7 +723,7 @@ async def process_message_with_ai(
 
             # 如果沒有 fallback 或 fallback 也失敗，顯示錯誤訊息
             if not fallback_path:
-                if "timeout" in final_retry_reason:
+                if nanobanana_timeout:
                     error_detail = "Gemini 伺服器無回應"
                 else:
                     error_detail = "Gemini 伺服器過載（503 錯誤）"
@@ -812,15 +732,14 @@ async def process_message_with_ai(
                 if fallback_error:
                     ai_response = (
                         "⚠️ 圖片生成服務暫時無法使用\n\n"
-                        f"主服務：{error_detail}（已重試 {retry_count} 次）\n"
+                        f"主服務：{error_detail}\n"
                         f"備用服務：{fallback_error}\n\n"
                         "建議：請稍後再試"
                     )
                 else:
                     ai_response = (
                         "⚠️ 圖片生成服務暫時無法使用\n\n"
-                        f"原因：{error_detail}\n"
-                        f"已重試 {retry_count} 次\n\n"
+                        f"原因：{error_detail}\n\n"
                         "建議：請稍後再試"
                     )
         elif not response.success:
@@ -1266,14 +1185,39 @@ async def build_system_prompt(
     # 加入對話識別資訊（供 MCP 工具使用）
     # 查詢用戶的 CTOS user_id（用於權限檢查）
     ctos_user_id = None
+    line_user_uuid = None
     if line_user_id:
         async with get_connection() as conn:
             user_row = await conn.fetchrow(
-                "SELECT user_id FROM line_users WHERE line_user_id = $1",
+                "SELECT id, user_id FROM line_users WHERE line_user_id = $1",
                 line_user_id,
             )
-            if user_row and user_row["user_id"]:
-                ctos_user_id = user_row["user_id"]
+            if user_row:
+                line_user_uuid = user_row["id"]
+                if user_row["user_id"]:
+                    ctos_user_id = user_row["user_id"]
+
+    # 載入並整合自訂記憶
+    from .linebot import get_active_group_memories, get_active_user_memories
+
+    memories = []
+    if line_group_id:
+        # 群組對話：載入群組記憶
+        memories = await get_active_group_memories(line_group_id)
+    elif line_user_uuid:
+        # 個人對話：載入個人記憶
+        memories = await get_active_user_memories(line_user_uuid)
+
+    if memories:
+        memory_lines = [f"{i+1}. {m['content']}" for i, m in enumerate(memories)]
+        memory_block = """
+
+【自訂記憶】
+以下是此對話的自訂記憶，請在回應時遵循這些規則：
+""" + "\n".join(memory_lines) + """
+
+請自然地遵循上述規則，不需要特別提及或確認。"""
+        base_prompt += memory_block
 
     if line_group_id:
         async with get_connection() as conn:

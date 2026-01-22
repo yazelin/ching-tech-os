@@ -37,6 +37,10 @@ from ..models.linebot import (
     ProjectBindingRequest,
     BindingCodeResponse,
     BindingStatusResponse,
+    MemoryCreate,
+    MemoryUpdate,
+    MemoryResponse,
+    MemoryListResponse,
 )
 from ..api.auth import get_current_session
 from ..models.auth import SessionData
@@ -728,3 +732,131 @@ async def api_list_users_with_binding(
         items=[LineUserResponse(**item) for item in items],
         total=total,
     )
+
+
+# ============================================================
+# 記憶管理 API
+# ============================================================
+
+
+@router.get("/groups/{group_id}/memories", response_model=MemoryListResponse)
+async def api_list_group_memories(
+    group_id: UUID,
+    session: SessionData = Depends(get_current_session),
+):
+    """取得群組記憶列表"""
+    from ..services.linebot import list_group_memories
+
+    # 檢查群組是否存在
+    group = await get_group_by_id(group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+
+    items, total = await list_group_memories(group_id)
+    return MemoryListResponse(
+        items=[MemoryResponse(**item) for item in items],
+        total=total,
+    )
+
+
+@router.post("/groups/{group_id}/memories", response_model=MemoryResponse)
+async def api_create_group_memory(
+    group_id: UUID,
+    memory: MemoryCreate,
+    session: SessionData = Depends(get_current_session),
+):
+    """新增群組記憶"""
+    from ..services.linebot import create_group_memory, get_line_user_by_ctos_user
+
+    # 檢查群組是否存在
+    group = await get_group_by_id(group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+
+    # 取得當前用戶對應的 Line 用戶（用於記錄建立者）
+    line_user = await get_line_user_by_ctos_user(session.user_id)
+    created_by = line_user["id"] if line_user else None
+
+    result = await create_group_memory(
+        line_group_id=group_id,
+        title=memory.title,
+        content=memory.content,
+        created_by=created_by,
+    )
+    return MemoryResponse(**result)
+
+
+@router.get("/users/{user_id}/memories", response_model=MemoryListResponse)
+async def api_list_user_memories(
+    user_id: UUID,
+    session: SessionData = Depends(get_current_session),
+):
+    """取得個人記憶列表"""
+    from ..services.linebot import list_user_memories
+
+    # 檢查用戶是否存在
+    user = await get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    items, total = await list_user_memories(user_id)
+    return MemoryListResponse(
+        items=[MemoryResponse(**item) for item in items],
+        total=total,
+    )
+
+
+@router.post("/users/{user_id}/memories", response_model=MemoryResponse)
+async def api_create_user_memory(
+    user_id: UUID,
+    memory: MemoryCreate,
+    session: SessionData = Depends(get_current_session),
+):
+    """新增個人記憶"""
+    from ..services.linebot import create_user_memory
+
+    # 檢查用戶是否存在
+    user = await get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    result = await create_user_memory(
+        line_user_id=user_id,
+        title=memory.title,
+        content=memory.content,
+    )
+    return MemoryResponse(**result)
+
+
+@router.put("/memories/{memory_id}", response_model=MemoryResponse)
+async def api_update_memory(
+    memory_id: UUID,
+    memory: MemoryUpdate,
+    session: SessionData = Depends(get_current_session),
+):
+    """更新記憶（群組或個人）"""
+    from ..services.linebot import update_memory
+
+    result = await update_memory(
+        memory_id=memory_id,
+        title=memory.title,
+        content=memory.content,
+        is_active=memory.is_active,
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Memory not found")
+    return MemoryResponse(**result)
+
+
+@router.delete("/memories/{memory_id}")
+async def api_delete_memory(
+    memory_id: UUID,
+    session: SessionData = Depends(get_current_session),
+):
+    """刪除記憶"""
+    from ..services.linebot import delete_memory
+
+    success = await delete_memory(memory_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Memory not found")
+    return {"status": "ok", "message": "記憶已刪除"}

@@ -4374,6 +4374,471 @@ async def get_inventory_orders(
 
 
 # ============================================================
+# 簡報生成工具
+# ============================================================
+
+
+@mcp.tool()
+async def generate_presentation(
+    topic: str = "",
+    num_slides: int = 5,
+    style: str = "professional",
+    include_images: bool = True,
+    image_source: str = "pexels",
+    outline_json: str | dict | None = None,
+    design_json: str | dict | None = None,
+    designer_request: str | None = None,
+    template: str | None = None,
+) -> str:
+    """
+    生成 PowerPoint 簡報
+
+    有四種使用方式：
+
+    方式一：只給主題，AI 自動生成大綱（較慢，約 30-60 秒）
+        generate_presentation(topic="AI 在製造業的應用", num_slides=5)
+
+    方式二：傳入完整大綱 JSON，直接製作簡報（推薦用於知識庫內容）
+        1. 先用 search_knowledge / get_knowledge_item 查詢相關知識
+        2. 根據知識內容組織大綱 JSON
+        3. 呼叫 generate_presentation(outline_json="...")
+        4. 用 create_share_link 產生分享連結回覆用戶
+
+    方式三：組織大綱 + 請設計師生成風格（推薦用於有特殊視覺需求的簡報）
+        1. 先組織 outline_json（內容大綱）
+        2. 用 designer_request 描述設計需求
+        3. 呼叫 generate_presentation(outline_json="...", designer_request="給客戶的專業簡報，要有標題底線")
+        4. 系統會自動呼叫 AI 設計師生成適合的視覺風格
+
+    方式四：使用預設模板（快速、設計品質穩定）
+        generate_presentation(topic="Q1 業務檢討會議", template="meeting")
+        - 系統會使用預先設計好的專業模板
+        - 自動將 AI 生成的內容填入模板
+        - 保留模板的設計風格
+
+    Args:
+        topic: 簡報主題（方式一必填，方式二/三/四可省略）
+        num_slides: 頁數，預設 5 頁（範圍 2-20，方式一使用）
+        style: 預設風格，根據場景選擇（當有 designer_request、design_json 或 template 時會被忽略）：
+            - professional: 專業（淺藍灰背景），適合客戶提案、正式報告、投資簡報
+            - casual: 休閒（花白背景），適合內部分享、教育訓練、團隊會議
+            - creative: 創意（淡紫背景），適合創意提案、品牌展示、行銷企劃
+            - minimal: 極簡（純白背景），適合技術文件、學術報告
+            - dark: 深色（深藍黑背景），適合投影展示、晚間活動
+            - tech: 科技（深空藍背景），適合科技新創、產品發布、AI 主題
+            - nature: 自然（薄荷白背景），適合環保、健康、農業主題
+            - warm: 溫暖（奶油白背景），適合激勵演講、活動推廣
+            - elegant: 優雅（象牙白背景），適合奢華品牌、高端提案
+        include_images: 是否自動配圖，預設 True
+        image_source: 圖片來源，可選：
+            - pexels: 從 Pexels 圖庫下載（預設，快速）
+            - huggingface: 使用 Hugging Face FLUX AI 生成
+            - nanobanana: 使用 nanobanana/Gemini AI 生成
+        outline_json: 直接傳入大綱 JSON 字串，跳過 AI 生成步驟。格式範例：
+            {
+                "title": "簡報標題",
+                "slides": [
+                    {"type": "title", "title": "標題", "subtitle": "副標題"},
+                    {"type": "content", "title": "第一章", "content": ["重點1", "重點2"], "image_keyword": "factory automation"}
+                ]
+            }
+        design_json: 完整設計規格 JSON 字串（來自簡報設計師 AI）。當提供此參數時，style 和 designer_request 會被忽略。格式：
+            {
+                "design": {
+                    "colors": {"background": "#0D1117", "title": "#58A6FF", "subtitle": "#A371F7", "text": "#C9D1D9", "bullet": "#38A169", "accent": "#F97316"},
+                    "typography": {"title_font": "Noto Sans TC", "title_size": 44, "title_bold": true, "body_font": "Noto Sans TC", "body_size": 20},
+                    "layout": {"title_align": "left", "title_position": "top", "content_columns": 1, "image_position": "right", "image_size": "medium"},
+                    "decorations": {"title_underline": true, "title_underline_color": "#58A6FF", "accent_bar_left": false, "page_number": true, "page_number_position": "bottom-right"}
+                },
+                "slides": [...]  // 可選，若提供則作為大綱使用
+            }
+        designer_request: 設計需求描述，會自動呼叫 AI 設計師生成 design_json（推薦搭配 outline_json 使用）。
+            例如：「給客戶的專業簡報」、「投影用深色背景」、「科技風格要有側邊裝飾」
+        template: 模板 ID（可選），使用預設模板生成簡報：
+            - meeting: 公司內部會議（適合會議、週報、月報、檢討報告）
+            - product: 產品推廣（適合 AGV、工業自動化、AI/CTOS 等科技產品）
+            - pitch: 融資提案（適合商業計畫、投資人簡報、募資提案）
+            - auto: 系統根據主題自動選擇適合的模板
+            當指定 template 時，style/design_json/designer_request 會被忽略
+
+    Returns:
+        包含簡報資訊和 NAS 路徑的回應，可用於 create_share_link
+    """
+    from ..services.presentation import generate_presentation as gen_pptx, TEMPLATES
+
+    # 驗證：必須有 topic、outline_json 或 design_json（含 slides）
+    if not topic and not outline_json and not design_json:
+        return "❌ 請提供 topic（主題）、outline_json（大綱 JSON）或 design_json（設計規格 + 大綱）"
+
+    # 驗證模板 ID
+    if template and template != "auto" and template not in TEMPLATES:
+        valid_templates = "\n".join([f"  - {k}: {v['name']}（{v['description']}）" for k, v in TEMPLATES.items()])
+        return f"❌ 無效的模板 ID：{template}\n可用模板：\n{valid_templates}\n  - auto: 系統根據主題自動選擇"
+
+    # 如果有 design_json 但沒有 slides，也需要 topic 或 outline_json
+    if design_json and not topic and not outline_json:
+        import json as _json
+        try:
+            _design_data = _json.loads(design_json)
+            if not _design_data.get("slides"):
+                return "❌ design_json 未包含 slides，請同時提供 topic 或 outline_json"
+        except Exception:
+            pass  # JSON 解析錯誤會在後續處理
+
+    # 驗證頁數範圍（僅在沒有 outline_json 或 design_json.slides 時有效）
+    if not outline_json and not design_json:
+        if num_slides < 2:
+            num_slides = 2
+        elif num_slides > 20:
+            num_slides = 20
+
+    # 驗證風格（僅在沒有 design_json 或 designer_request 時需要）
+    valid_styles = ["professional", "casual", "creative", "minimal", "dark", "tech", "nature", "warm", "elegant"]
+    if not design_json and not designer_request and style not in valid_styles:
+        return (
+            f"❌ 無效的風格：{style}\n"
+            f"可用風格：\n"
+            f"  - professional（專業）：客戶提案、正式報告\n"
+            f"  - casual（休閒）：內部分享、教育訓練\n"
+            f"  - creative（創意）：創意提案、品牌展示\n"
+            f"  - minimal（極簡）：技術文件、學術報告\n"
+            f"  - dark（深色）：投影展示、晚間活動\n"
+            f"  - tech（科技）：科技新創、產品發布\n"
+            f"  - nature（自然）：環保、健康主題\n"
+            f"  - warm（溫暖）：激勵演講、活動推廣\n"
+            f"  - elegant（優雅）：奢華品牌、高端提案"
+        )
+
+    # 驗證圖片來源
+    valid_image_sources = ["pexels", "huggingface", "nanobanana"]
+    if image_source not in valid_image_sources:
+        return f"❌ 無效的圖片來源：{image_source}\n可用來源：pexels（圖庫）、huggingface（AI）、nanobanana（Gemini）"
+
+    # 將 dict 轉換為 JSON 字串（AI 有時會傳入 dict 而不是字串）
+    import json as _json
+    if isinstance(outline_json, dict):
+        outline_json = _json.dumps(outline_json, ensure_ascii=False)
+    if isinstance(design_json, dict):
+        design_json = _json.dumps(design_json, ensure_ascii=False)
+
+    try:
+        result = await gen_pptx(
+            topic=topic or "簡報",
+            num_slides=num_slides,
+            style=style,
+            include_images=include_images,
+            image_source=image_source,
+            outline_json=outline_json,
+            design_json=design_json,
+            designer_request=designer_request,
+            template=template,
+        )
+
+        style_names = {
+            "professional": "專業",
+            "casual": "休閒",
+            "creative": "創意",
+            "minimal": "極簡",
+            "dark": "深色",
+            "tech": "科技",
+            "nature": "自然",
+            "warm": "溫暖",
+            "elegant": "優雅",
+        }
+
+        image_source_names = {
+            "pexels": "Pexels 圖庫",
+            "huggingface": "Hugging Face AI",
+            "nanobanana": "Gemini AI",
+        }
+
+        # 產生 NAS 檔案路徑（供 create_share_link 使用）
+        # 使用 ctos:// 協議格式，讓 path_manager 正確解析
+        nas_file_path = f"ctos://{result['nas_path']}"
+
+        image_info = f"{'有（' + image_source_names.get(image_source, image_source) + '）' if include_images else '無'}"
+
+        # 風格顯示：模板 > design_json > style
+        if result.get("template_used"):
+            style_display = f"模板：{result.get('template_name', result['template_used'])}"
+        elif design_json:
+            style_display = "自訂設計"
+        else:
+            style_display = style_names.get(style, style)
+
+        return (
+            f"✅ 簡報生成完成！\n\n"
+            f"📊 {result['title']}\n"
+            f"・頁數：{result['slides_count']} 頁\n"
+            f"・風格：{style_display}\n"
+            f"・配圖：{image_info}\n\n"
+            f"📁 NAS 路徑：{nas_file_path}\n\n"
+            f"💡 下一步：使用 create_share_link(resource_type=\"nas_file\", resource_id=\"{nas_file_path}\") 產生分享連結"
+        )
+
+    except ValueError as e:
+        return f"❌ 生成失敗：{str(e)}"
+    except Exception as e:
+        logger.error(f"生成簡報失敗: {e}")
+        return f"❌ 生成簡報時發生錯誤：{str(e)}\n請稍後重試或調整內容"
+
+
+# ============================================================
+# 記憶管理工具
+# ============================================================
+
+
+@mcp.tool()
+async def add_memory(
+    content: str,
+    title: str | None = None,
+    line_group_id: str | None = None,
+    line_user_id: str | None = None,
+) -> str:
+    """
+    新增記憶
+
+    Args:
+        content: 記憶內容（必填）
+        title: 記憶標題（方便識別），若未提供系統會自動產生
+        line_group_id: Line 群組的內部 UUID（群組對話時使用，從對話識別取得）
+        line_user_id: Line 用戶 ID（個人對話時使用，從對話識別取得）
+    """
+    await ensure_db_connection()
+
+    # 自動產生標題（取 content 前 20 字）
+    if not title:
+        title = content[:20] + ("..." if len(content) > 20 else "")
+
+    if line_group_id:
+        # 群組記憶
+        try:
+            group_uuid = UUID(line_group_id)
+        except ValueError:
+            return "❌ 群組 ID 格式錯誤"
+
+        async with get_connection() as conn:
+            row = await conn.fetchrow(
+                """
+                INSERT INTO line_group_memories (line_group_id, title, content)
+                VALUES ($1, $2, $3)
+                RETURNING id
+                """,
+                group_uuid,
+                title,
+                content,
+            )
+            return f"✅ 已新增群組記憶：{title}\n記憶 ID：{row['id']}"
+
+    elif line_user_id:
+        # 個人記憶：需要查詢用戶的內部 UUID
+        async with get_connection() as conn:
+            user_row = await conn.fetchrow(
+                "SELECT id FROM line_users WHERE line_user_id = $1",
+                line_user_id,
+            )
+            if not user_row:
+                return "❌ 找不到用戶"
+
+            row = await conn.fetchrow(
+                """
+                INSERT INTO line_user_memories (line_user_id, title, content)
+                VALUES ($1, $2, $3)
+                RETURNING id
+                """,
+                user_row["id"],
+                title,
+                content,
+            )
+            return f"✅ 已新增個人記憶：{title}\n記憶 ID：{row['id']}"
+    else:
+        return "❌ 請提供 line_group_id 或 line_user_id"
+
+
+@mcp.tool()
+async def get_memories(
+    line_group_id: str | None = None,
+    line_user_id: str | None = None,
+) -> str:
+    """
+    查詢記憶
+
+    Args:
+        line_group_id: Line 群組的內部 UUID（群組對話時使用，從對話識別取得）
+        line_user_id: Line 用戶 ID（個人對話時使用，從對話識別取得）
+    """
+    await ensure_db_connection()
+
+    if line_group_id:
+        # 群組記憶
+        try:
+            group_uuid = UUID(line_group_id)
+        except ValueError:
+            return "❌ 群組 ID 格式錯誤"
+
+        async with get_connection() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT id, title, content, is_active, created_at
+                FROM line_group_memories
+                WHERE line_group_id = $1
+                ORDER BY created_at DESC
+                """,
+                group_uuid,
+            )
+
+            if not rows:
+                return "目前沒有設定任何記憶"
+
+            result = "📝 **群組記憶列表**\n\n"
+            for row in rows:
+                status = "✅" if row["is_active"] else "❌"
+                created = to_taipei_time(row["created_at"]).strftime("%Y-%m-%d %H:%M")
+                result += f"**{row['title']}** {status}\n"
+                result += f"ID: `{row['id']}`\n"
+                result += f"內容: {row['content'][:100]}{'...' if len(row['content']) > 100 else ''}\n"
+                result += f"建立時間: {created}\n\n"
+            return result
+
+    elif line_user_id:
+        # 個人記憶
+        async with get_connection() as conn:
+            user_row = await conn.fetchrow(
+                "SELECT id FROM line_users WHERE line_user_id = $1",
+                line_user_id,
+            )
+            if not user_row:
+                return "❌ 找不到用戶"
+
+            rows = await conn.fetch(
+                """
+                SELECT id, title, content, is_active, created_at
+                FROM line_user_memories
+                WHERE line_user_id = $1
+                ORDER BY created_at DESC
+                """,
+                user_row["id"],
+            )
+
+            if not rows:
+                return "目前沒有設定任何記憶"
+
+            result = "📝 **個人記憶列表**\n\n"
+            for row in rows:
+                status = "✅" if row["is_active"] else "❌"
+                created = to_taipei_time(row["created_at"]).strftime("%Y-%m-%d %H:%M")
+                result += f"**{row['title']}** {status}\n"
+                result += f"ID: `{row['id']}`\n"
+                result += f"內容: {row['content'][:100]}{'...' if len(row['content']) > 100 else ''}\n"
+                result += f"建立時間: {created}\n\n"
+            return result
+    else:
+        return "❌ 請提供 line_group_id 或 line_user_id"
+
+
+@mcp.tool()
+async def update_memory(
+    memory_id: str,
+    title: str | None = None,
+    content: str | None = None,
+    is_active: bool | None = None,
+) -> str:
+    """
+    更新記憶
+
+    Args:
+        memory_id: 記憶 UUID（必填）
+        title: 新標題
+        content: 新內容
+        is_active: 是否啟用（true/false）
+    """
+    await ensure_db_connection()
+
+    try:
+        memory_uuid = UUID(memory_id)
+    except ValueError:
+        return "❌ 記憶 ID 格式錯誤"
+
+    # 建構更新欄位
+    update_fields = []
+    params = [memory_uuid]
+    param_idx = 2
+
+    if title is not None:
+        update_fields.append(f"title = ${param_idx}")
+        params.append(title)
+        param_idx += 1
+    if content is not None:
+        update_fields.append(f"content = ${param_idx}")
+        params.append(content)
+        param_idx += 1
+    if is_active is not None:
+        update_fields.append(f"is_active = ${param_idx}")
+        params.append(is_active)
+        param_idx += 1
+
+    if not update_fields:
+        return "❌ 請提供要更新的欄位（title、content 或 is_active）"
+
+    update_fields.append("updated_at = NOW()")
+    set_clause = ", ".join(update_fields)
+
+    async with get_connection() as conn:
+        # 先嘗試更新群組記憶
+        result = await conn.execute(
+            f"UPDATE line_group_memories SET {set_clause} WHERE id = $1",
+            *params,
+        )
+        if result == "UPDATE 1":
+            return f"✅ 已更新群組記憶"
+
+        # 再嘗試更新個人記憶
+        result = await conn.execute(
+            f"UPDATE line_user_memories SET {set_clause} WHERE id = $1",
+            *params,
+        )
+        if result == "UPDATE 1":
+            return f"✅ 已更新個人記憶"
+
+        return "❌ 找不到指定的記憶"
+
+
+@mcp.tool()
+async def delete_memory(memory_id: str) -> str:
+    """
+    刪除記憶
+
+    Args:
+        memory_id: 記憶 UUID（必填）
+    """
+    await ensure_db_connection()
+
+    try:
+        memory_uuid = UUID(memory_id)
+    except ValueError:
+        return "❌ 記憶 ID 格式錯誤"
+
+    async with get_connection() as conn:
+        # 先嘗試刪除群組記憶
+        result = await conn.execute(
+            "DELETE FROM line_group_memories WHERE id = $1",
+            memory_uuid,
+        )
+        if result == "DELETE 1":
+            return "✅ 已刪除群組記憶"
+
+        # 再嘗試刪除個人記憶
+        result = await conn.execute(
+            "DELETE FROM line_user_memories WHERE id = $1",
+            memory_uuid,
+        )
+        if result == "DELETE 1":
+            return "✅ 已刪除個人記憶"
+
+        return "❌ 找不到指定的記憶"
+
+
+# ============================================================
 # 工具存取介面（供 Line Bot 和其他服務使用）
 # ============================================================
 

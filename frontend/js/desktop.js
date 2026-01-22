@@ -20,6 +20,7 @@ const DesktopModule = (function() {
     { id: 'ai-log', name: 'AI Log', icon: 'mdi-history' },
     { id: 'knowledge-base', name: '知識庫', icon: 'mdi-book-open-page-variant' },
     { id: 'linebot', name: 'Line Bot', icon: 'mdi-message-text' },
+    { id: 'memory-manager', name: '記憶管理', icon: 'mdi-brain' },
     { id: 'share-manager', name: '分享管理', icon: 'mdi-share-variant' },
     { id: 'settings', name: '系統設定', icon: 'mdi-cog' }
   ];
@@ -151,6 +152,11 @@ const DesktopModule = (function() {
       case 'share-manager':
         if (typeof ShareManagerApp !== 'undefined') {
           ShareManagerApp.open();
+        }
+        break;
+      case 'memory-manager':
+        if (typeof MemoryManagerApp !== 'undefined') {
+          MemoryManagerApp.open();
         }
         break;
       default:
