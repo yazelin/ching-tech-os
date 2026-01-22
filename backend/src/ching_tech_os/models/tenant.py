@@ -26,6 +26,12 @@ class TenantSettings(BaseModel):
     line_channel_secret: str | None = None  # 加密儲存
     line_channel_access_token: str | None = None  # 加密儲存
 
+    # NAS SMB 登入驗證設定
+    enable_nas_auth: bool = False  # 允許使用 NAS 帳號登入
+    nas_auth_host: str | None = None  # NAS 主機（None 使用系統預設）
+    nas_auth_port: int | None = None  # NAS 連接埠（None 使用 445）
+    nas_auth_share: str | None = None  # 驗證用的共享名稱（None 使用系統預設）
+
     # 自訂設定
     custom: dict = Field(default_factory=dict)
 
