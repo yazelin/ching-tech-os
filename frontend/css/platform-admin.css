@@ -190,6 +190,7 @@
 .platform-admin-table td {
   padding: var(--spacing-sm) var(--spacing-md);
   text-align: left;
+  vertical-align: middle;
   border-bottom: 1px solid var(--border-light);
 }
 

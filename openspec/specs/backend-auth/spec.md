@@ -188,19 +188,25 @@ TBD - created by archiving change add-backend-nas-auth. Update Purpose after arc
 
 ### Requirement: 管理員識別
 
-系統 SHALL 使用環境變數識別管理員帳號。
+系統 SHALL 使用資料庫中的 `users.role` 欄位識別管理員身份。
 
 #### Scenario: 判斷管理員身份
-- Given 環境變數 `ADMIN_USERNAME` 設定為特定使用者名稱
+- Given 使用者在 `users` 表中的 `role` 欄位為 `platform_admin`
 - When 該使用者登入系統
-- Then 系統識別該使用者為管理員
-- And `GET /api/user/me` 回應 `is_admin: true`
+- Then 系統識別該使用者為平台管理員
+- And `GET /api/user/me` 回應 `role: "platform_admin"`
 
-#### Scenario: 管理員擁有所有權限
-- Given 使用者為管理員
+#### Scenario: 平台管理員擁有所有權限
+- Given 使用者為平台管理員（role = 'platform_admin'）
 - When 取得該使用者權限
 - Then 所有應用程式權限均為 `true`
 - And 所有知識庫權限均為 `true`
+
+#### Scenario: 租戶管理員擁有租戶內完整權限
+- Given 使用者為租戶管理員（role = 'tenant_admin'）
+- When 取得該使用者權限
+- Then 租戶範圍內的權限均為 `true`
+- And 平台管理功能權限為 `false`
 
 ---
 

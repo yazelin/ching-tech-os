@@ -13,7 +13,6 @@ from typing import Any, Callable
 
 from fastapi import Depends, HTTPException, status
 
-from ..config import settings
 from ..database import get_connection
 
 logger = logging.getLogger(__name__)
@@ -184,13 +183,6 @@ DEFAULT_TENANT_ADMIN_PERMISSIONS: dict[str, dict[str, bool]] = {
 # 權限檢查函數
 # ============================================================
 
-def is_admin(username: str) -> bool:
-    """檢查是否為管理員
-
-    管理員帳號由環境變數 ADMIN_USERNAME 設定
-    """
-    return username == settings.admin_username
-
 
 def get_full_permissions() -> dict[str, dict[str, bool]]:
     """取得完整權限（所有權限都開啟）
@@ -233,37 +225,26 @@ def get_user_permissions(preferences: dict | None) -> dict[str, dict[str, bool]]
     return deep_merge(DEFAULT_PERMISSIONS.copy(), user_perms)
 
 
-def get_user_permissions_for_admin(username: str, preferences: dict | None) -> dict[str, dict[str, bool]]:
-    """取得使用者權限，管理員返回完整權限
+def get_user_permissions_for_role(role: str, preferences: dict | None) -> dict[str, dict[str, bool]]:
+    """根據角色取得使用者權限
 
     Args:
-        username: 使用者帳號
+        role: 使用者角色（platform_admin, tenant_admin, user）
         preferences: 使用者的 preferences JSONB 欄位
 
     Returns:
         權限結構
     """
-    if is_admin(username):
+    # 平台管理員擁有所有權限
+    if role == "platform_admin":
         return get_full_permissions()
+
+    # 租戶管理員使用預設租戶管理員權限
+    if role == "tenant_admin":
+        return deep_merge(DEFAULT_TENANT_ADMIN_PERMISSIONS.copy(), preferences.get("permissions", {}) if preferences else {})
+
+    # 一般使用者使用預設權限合併個人設定
     return get_user_permissions(preferences)
-
-
-def check_app_permission(username: str, preferences: dict | None, app_id: str) -> bool:
-    """檢查應用程式權限
-
-    Args:
-        username: 使用者帳號
-        preferences: 使用者的 preferences JSONB 欄位
-        app_id: 應用程式 ID
-
-    Returns:
-        是否有權限使用該應用程式
-    """
-    if is_admin(username):
-        return True
-
-    perms = get_user_permissions(preferences)
-    return perms.get("apps", {}).get(app_id, True)
 
 
 def has_app_permission(
@@ -460,6 +441,7 @@ def check_tool_permission(
 
 
 def check_knowledge_permission(
+    role: str,
     username: str,
     preferences: dict | None,
     knowledge_owner: str | None,
@@ -469,7 +451,8 @@ def check_knowledge_permission(
     """檢查知識庫權限（同步版本，不支援專案知識）
 
     Args:
-        username: 使用者帳號
+        role: 使用者角色（platform_admin, tenant_admin, user）
+        username: 使用者帳號（用於檢查個人知識擁有者）
         preferences: 使用者的 preferences JSONB 欄位
         knowledge_owner: 知識的擁有者（None 表示全域知識）
         knowledge_scope: 知識的範圍（global 或 personal）
@@ -480,8 +463,8 @@ def check_knowledge_permission(
 
     注意：專案知識（scope=project）請使用 check_knowledge_permission_async
     """
-    # 管理員擁有所有權限
-    if is_admin(username):
+    # 平台管理員和租戶管理員擁有所有權限
+    if role in ("platform_admin", "tenant_admin"):
         return True
 
     # 擁有全域權限的使用者可以編輯/刪除任何知識（用於管理目的）
@@ -547,6 +530,7 @@ async def is_project_member(user_id: int | None, project_id: str | None) -> bool
 
 
 async def check_knowledge_permission_async(
+    role: str,
     username: str,
     preferences: dict | None,
     knowledge_owner: str | None,
@@ -558,7 +542,8 @@ async def check_knowledge_permission_async(
     """檢查知識庫權限（async 版本，支援專案知識）
 
     Args:
-        username: 使用者帳號
+        role: 使用者角色（platform_admin, tenant_admin, user）
+        username: 使用者帳號（用於檢查個人知識擁有者）
         preferences: 使用者的 preferences JSONB 欄位
         knowledge_owner: 知識的擁有者（None 表示全域知識）
         knowledge_scope: 知識的範圍（global、personal 或 project）
@@ -569,8 +554,8 @@ async def check_knowledge_permission_async(
     Returns:
         是否有權限執行該操作
     """
-    # 管理員擁有所有權限
-    if is_admin(username):
+    # 平台管理員和租戶管理員擁有所有權限
+    if role in ("platform_admin", "tenant_admin"):
         return True
 
     # 擁有全域權限的使用者可以編輯/刪除任何知識（用於管理目的）

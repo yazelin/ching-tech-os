@@ -931,8 +931,8 @@ async def api_list_user_memories(
     """取得個人記憶列表"""
     from ..services.linebot import list_user_memories
 
-    # 檢查用戶是否存在
-    user = await get_user_by_id(user_id)
+    # 檢查用戶是否存在（需傳入 tenant_id）
+    user = await get_user_by_id(user_id, tenant_id=session.tenant_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -952,8 +952,8 @@ async def api_create_user_memory(
     """新增個人記憶"""
     from ..services.linebot import create_user_memory
 
-    # 檢查用戶是否存在
-    user = await get_user_by_id(user_id)
+    # 檢查用戶是否存在（需傳入 tenant_id）
+    user = await get_user_by_id(user_id, tenant_id=session.tenant_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 

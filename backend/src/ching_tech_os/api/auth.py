@@ -1,5 +1,7 @@
 """認證 API"""
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
@@ -9,7 +11,7 @@ from ..models.login_record import DeviceInfo as LoginRecordDeviceInfo, DeviceTyp
 from ..models.message import MessageSeverity, MessageSource
 from ..services.session import session_manager, SessionData
 from ..services.smb import create_smb_service, SMBAuthError, SMBConnectionError
-from ..services.user import upsert_user, get_user_by_username, get_user_for_auth, update_last_login, get_user_role
+from ..services.user import upsert_user, get_user_by_username, get_user_for_auth, update_last_login
 from ..services.password import verify_password
 from ..services.login_record import record_login
 from ..services.message import log_message
@@ -23,6 +25,8 @@ from ..services.tenant import (
     TenantSuspendedError,
 )
 from ..api.message_events import emit_new_message, emit_unread_count
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -361,20 +365,23 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
     user_role = "user"
 
     if user_data:
-        # 使用者已存在
+        # 使用者已存在，從資料庫取得角色
         user_id = user_data["id"]
-        user_role = user_data.get("role", "user")
+        user_role = user_data.get("role") or "user"
         # 更新最後登入時間
         await update_last_login(user_id)
     else:
         # 使用者不存在（SMB 認證但尚未建立用戶記錄）
         try:
             user_id = await upsert_user(request.username, tenant_id=tenant_id)
-        except Exception:
-            pass
-
-    # 判斷使用者角色
-    user_role = await get_user_role(request.username, user_id, tenant_id)
+            # 新建使用者預設為一般使用者
+            user_role = "user"
+        except Exception as e:
+            logger.error(f"Failed to upsert user '{request.username}': {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="無法建立使用者記錄，請稍後再試。",
+            )
 
     # 取得使用者的 App 權限（供 session 快取使用）
     from ..services.permissions import get_user_app_permissions_sync

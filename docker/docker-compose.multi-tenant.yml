@@ -48,7 +48,6 @@
 #
 #       # 其他設定
 #       SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-8}
-#       ADMIN_USERNAME: ${ADMIN_USERNAME:-}
 #     volumes:
 #       # NAS 掛載點（需在主機上先掛載）
 #       - /mnt/nas:/mnt/nas:rw

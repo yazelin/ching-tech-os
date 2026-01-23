@@ -153,6 +153,8 @@ async def list_all_line_groups(
             # 轉換 UUID 為字串
             group["id"] = str(group["id"])
             group["tenant_id"] = str(group["tenant_id"])
+            # 欄位名稱對應（前端使用 group_name）
+            group["group_name"] = group.get("name")
             if group.get("project_id"):
                 group["project_id"] = str(group["project_id"])
             # 轉換 datetime 為 ISO 字串

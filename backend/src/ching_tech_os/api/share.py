@@ -40,11 +40,6 @@ router = APIRouter(prefix="/api/share", tags=["share"])
 public_router = APIRouter(prefix="/api/public", tags=["public"])
 
 
-def is_admin(username: str) -> bool:
-    """檢查是否為管理員"""
-    return username == settings.admin_username
-
-
 @router.post(
     "",
     response_model=ShareLinkResponse,
@@ -62,22 +57,18 @@ async def create_link(
     # 取得租戶 ID
     tenant_id = getattr(session, "tenant_id", None)
 
-    # 權限檢查（tenant_admin 擁有租戶內所有權限）
-    is_tenant_admin = session.role == "tenant_admin"
-
     if data.resource_type == "knowledge":
         try:
             knowledge = get_knowledge(data.resource_id, tenant_id=tenant_id)
-            # tenant_admin 跳過權限檢查
-            if not is_tenant_admin:
-                preferences = await get_user_preferences(session.user_id) if session.user_id else None
-                if not check_knowledge_permission(
-                    session.username, preferences, knowledge.owner, knowledge.scope, "write"
-                ):
-                    raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        detail="您沒有分享此知識的權限",
-                    )
+            # 權限檢查（platform_admin 和 tenant_admin 已在 check_knowledge_permission 中處理）
+            preferences = await get_user_preferences(session.user_id) if session.user_id else None
+            if not check_knowledge_permission(
+                session.role, session.username, preferences, knowledge.owner, knowledge.scope, "write"
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="您沒有分享此知識的權限",
+                )
         except KnowledgeNotFoundError:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -132,7 +123,7 @@ async def list_links(
     """
     try:
         # 平台管理員或租戶管理員都可以看全部
-        user_is_admin = is_admin(session.username) or session.role == "tenant_admin"
+        user_is_admin = session.role in ("platform_admin", "tenant_admin")
         tenant_id = getattr(session, "tenant_id", None)
 
         # 管理員可以選擇查看全部
@@ -166,7 +157,9 @@ async def delete_link(
     連結建立者或管理員可以撤銷。
     """
     try:
-        await revoke_link(token, session.username, is_admin(session.username))
+        # 平台管理員或租戶管理員可以撤銷任何連結
+        is_admin_user = session.role in ("platform_admin", "tenant_admin")
+        await revoke_link(token, session.username, is_admin_user)
     except ShareLinkNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
