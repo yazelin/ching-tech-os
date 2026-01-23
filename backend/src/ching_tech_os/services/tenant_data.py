@@ -9,7 +9,7 @@ import zipfile
 import shutil
 from datetime import datetime
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid4
 from typing import Any
 
 from ..config import settings
@@ -199,6 +199,56 @@ class TenantImportService:
         "ai_logs",
     ]
 
+    # 外鍵定義：{表名: {外鍵欄位: 參考表}}
+    # 用於匯入時將舊 ID 替換為新 ID
+    FOREIGN_KEYS: dict[str, dict[str, str]] = {
+        "projects": {
+            "created_by": "users",
+        },
+        "project_members": {
+            "project_id": "projects",
+            "user_id": "users",
+        },
+        "project_meetings": {
+            "project_id": "projects",
+        },
+        "project_milestones": {
+            "project_id": "projects",
+        },
+        "project_attachments": {
+            "project_id": "projects",
+        },
+        "project_links": {
+            "project_id": "projects",
+        },
+        "project_delivery_schedules": {
+            "project_id": "projects",
+            "vendor_id": "vendors",
+            "item_id": "inventory_items",
+        },
+        "inventory_transactions": {
+            "item_id": "inventory_items",
+            "project_id": "projects",
+            "vendor_id": "vendors",
+        },
+        "line_messages": {
+            "line_group_id": "line_groups",
+            "line_user_id": "line_users",
+        },
+        "ai_chats": {
+            "user_id": "users",
+        },
+        "public_share_links": {
+            "created_by_user_id": "users",
+        },
+        "tenant_admins": {
+            "user_id": "users",
+        },
+        "ai_logs": {
+            "user_id": "users",
+        },
+    }
+
     def __init__(self, tenant_id: UUID):
         self.tenant_id = tenant_id
         self.id_mapping: dict[str, dict[str, str]] = {}  # table -> {old_id: new_id}
@@ -295,6 +345,11 @@ class TenantImportService:
     ) -> int:
         """匯入單一資料表
 
+        實作 ID re-mapping 機制：
+        1. 為每筆記錄生成新的 UUID
+        2. 記錄舊 ID → 新 ID 的對應關係
+        3. 將外鍵欄位的值替換為對應的新 ID
+
         Args:
             table_name: 資料表名稱
             data: 資料列表
@@ -306,31 +361,60 @@ class TenantImportService:
         if not data:
             return 0
 
+        # 初始化此表的 ID 映射
+        if table_name not in self.id_mapping:
+            self.id_mapping[table_name] = {}
+
+        # 取得此表的外鍵定義
+        foreign_keys = self.FOREIGN_KEYS.get(table_name, {})
+
         async with get_connection() as conn:
             count = 0
 
             for row in data:
                 try:
-                    # 更新 tenant_id 為目標租戶
-                    if "tenant_id" in row:
-                        row["tenant_id"] = self.tenant_id
+                    # 複製 row 以避免修改原始資料
+                    row_copy = row.copy()
 
-                    # 處理 ID 映射（某些表的 ID 可能需要重新生成）
-                    old_id = row.get("id")
+                    # 更新 tenant_id 為目標租戶
+                    if "tenant_id" in row_copy:
+                        row_copy["tenant_id"] = self.tenant_id
+
+                    # 記錄舊 ID 並生成新 ID
+                    old_id = row_copy.get("id")
+                    if old_id:
+                        old_id_str = str(old_id)
+                        # 生成新的 UUID
+                        new_id = uuid4()
+                        # 記錄映射關係
+                        self.id_mapping[table_name][old_id_str] = str(new_id)
+                        # 更新 row 中的 id
+                        row_copy["id"] = new_id
+
+                    # 替換外鍵欄位的值為新 ID
+                    for fk_column, ref_table in foreign_keys.items():
+                        if fk_column in row_copy and row_copy[fk_column]:
+                            old_fk_value = str(row_copy[fk_column])
+                            # 從參考表的映射中查找新 ID
+                            if ref_table in self.id_mapping:
+                                new_fk_value = self.id_mapping[ref_table].get(old_fk_value)
+                                if new_fk_value:
+                                    row_copy[fk_column] = UUID(new_fk_value)
+                                else:
+                                    # 外鍵參考的記錄不存在於映射中，設為 None
+                                    # （可能是參考的記錄未被匯入）
+                                    row_copy[fk_column] = None
 
                     # 動態建立 INSERT 語句
-                    columns = list(row.keys())
+                    columns = list(row_copy.keys())
                     placeholders = [f"${i+1}" for i in range(len(columns))]
-                    values = [self._convert_value(row[col]) for col in columns]
+                    values = [self._convert_value(row_copy[col]) for col in columns]
 
-                    # 如果是合併模式且記錄已存在，跳過
-                    if merge_mode == "merge" and old_id:
-                        exists = await conn.fetchval(f"""
-                            SELECT id FROM {table_name}
-                            WHERE id = $1 AND tenant_id = $2
-                        """, self._convert_value(old_id), self.tenant_id)
-                        if exists:
-                            continue
+                    # 如果是合併模式，檢查是否有相同的業務鍵（非 ID）
+                    # 對於合併模式，我們使用新生成的 ID，所以不需要檢查舊 ID
+                    if merge_mode == "merge":
+                        # 嘗試插入，衝突時跳過
+                        pass
 
                     await conn.execute(f"""
                         INSERT INTO {table_name} ({', '.join(columns)})
