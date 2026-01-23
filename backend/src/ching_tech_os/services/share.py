@@ -88,11 +88,12 @@ def get_full_url(token: str) -> str:
     return f"{settings.public_url}/s/{token}"
 
 
-def validate_nas_file_path(file_path: str) -> Path:
+def validate_nas_file_path(file_path: str, tenant_id: str | None = None) -> Path:
     """驗證 NAS 檔案路徑
 
     Args:
         file_path: 檔案路徑（完整路徑或相對路徑）
+        tenant_id: 租戶 ID（用於 CTOS zone 的租戶隔離，可以是 str 或 UUID）
 
     Returns:
         驗證後的完整路徑
@@ -105,15 +106,32 @@ def validate_nas_file_path(file_path: str) -> Path:
 
     ctos_path = Path(settings.ctos_mount_path)
 
+    # 確保 tenant_id 是字串（處理 UUID 類型）
+    tid_str = str(tenant_id) if tenant_id else None
+
     # 特殊處理：nanobanana 輸出路徑（/tmp/.../nanobanana-output/xxx.jpg）
     # 這些檔案已被複製到 NAS，需要映射到實際位置
     if "/nanobanana-output/" in file_path or file_path.startswith("nanobanana-output/"):
         filename = file_path.split("nanobanana-output/")[-1]
-        full_path = ctos_path / "linebot" / "files" / "ai-images" / filename
+        if tid_str:
+            # 多租戶模式：先嘗試租戶專屬路徑，再 fallback 到共用路徑
+            full_path = ctos_path / "tenants" / tid_str / "linebot" / "ai-images" / filename
+            if not full_path.exists():
+                # Fallback 到舊路徑（symlink 指向的共用目錄）
+                full_path = ctos_path / "linebot" / "files" / "ai-images" / filename
+        else:
+            full_path = ctos_path / "linebot" / "files" / "ai-images" / filename
     elif file_path.startswith("ai-images/"):
         # ai-images/ 相對路徑
         filename = file_path.split("/", 1)[1] if "/" in file_path else file_path
-        full_path = ctos_path / "linebot" / "files" / "ai-images" / filename
+        if tid_str:
+            # 多租戶模式：先嘗試租戶專屬路徑，再 fallback 到共用路徑
+            full_path = ctos_path / "tenants" / tid_str / "linebot" / "ai-images" / filename
+            if not full_path.exists():
+                # Fallback 到舊路徑
+                full_path = ctos_path / "linebot" / "files" / "ai-images" / filename
+        else:
+            full_path = ctos_path / "linebot" / "files" / "ai-images" / filename
     else:
         # 使用 PathManager 解析其他路徑格式
         try:
@@ -125,7 +143,7 @@ def validate_nas_file_path(file_path: str) -> Path:
         if parsed.zone not in (StorageZone.CTOS, StorageZone.SHARED):
             raise NasFileAccessDenied(f"不允許存取 {parsed.zone.value}:// 區域的檔案")
 
-        full_path = Path(path_manager.to_filesystem(file_path))
+        full_path = Path(path_manager.to_filesystem(file_path, tenant_id))
 
     # 安全檢查：確保路徑在 /mnt/nas/ 下
     nas_path = Path(settings.nas_mount_path)
@@ -147,18 +165,18 @@ def validate_nas_file_path(file_path: str) -> Path:
     return full_path
 
 
-async def get_resource_title(resource_type: str, resource_id: str) -> str:
+async def get_resource_title(resource_type: str, resource_id: str, tenant_id: str | None = None) -> str:
     """取得資源標題"""
     try:
         if resource_type == "knowledge":
-            knowledge = get_knowledge(resource_id)
+            knowledge = get_knowledge(resource_id, tenant_id=tenant_id)
             return knowledge.title
         elif resource_type == "project":
-            project = await get_project(UUID(resource_id))
+            project = await get_project(UUID(resource_id), tenant_id=tenant_id)
             return project.name
         elif resource_type == "nas_file":
             # 驗證路徑並回傳檔名
-            full_path = validate_nas_file_path(resource_id)
+            full_path = validate_nas_file_path(resource_id, tenant_id=tenant_id)
             return full_path.name
         elif resource_type == "project_attachment":
             # 取得專案附件資訊
@@ -189,10 +207,17 @@ async def get_project_attachment_info(attachment_id: str) -> dict:
 async def create_share_link(
     data: ShareLinkCreate,
     created_by: str,
+    tenant_id: str | UUID | None = None,
 ) -> ShareLinkResponse:
-    """建立分享連結"""
+    """建立分享連結
+
+    Args:
+        data: 分享連結資料
+        created_by: 建立者用戶名
+        tenant_id: 租戶 ID
+    """
     # 驗證資源存在
-    resource_title = await get_resource_title(data.resource_type, data.resource_id)
+    resource_title = await get_resource_title(data.resource_type, data.resource_id, tenant_id=str(tenant_id) if tenant_id else None)
 
     # 產生唯一 token
     async with get_connection() as conn:
@@ -212,12 +237,12 @@ async def create_share_link(
         # 計算過期時間
         expires_at = parse_expires_in(data.expires_in)
 
-        # 儲存到資料庫
+        # 儲存到資料庫（包含 tenant_id）
         now = datetime.now(timezone.utc)
         row = await conn.fetchrow(
             """
-            INSERT INTO public_share_links (token, resource_type, resource_id, created_by, expires_at, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO public_share_links (token, resource_type, resource_id, created_by, expires_at, created_at, tenant_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             RETURNING id, token, resource_type, resource_id, created_by, expires_at, access_count, created_at
             """,
             token,
@@ -226,6 +251,7 @@ async def create_share_link(
             created_by,
             expires_at,
             now,
+            (tenant_id if isinstance(tenant_id, UUID) else UUID(str(tenant_id))) if tenant_id else None,
         )
 
         return ShareLinkResponse(
@@ -242,18 +268,39 @@ async def create_share_link(
         )
 
 
-async def list_my_links(username: str) -> ShareLinkListResponse:
-    """列出使用者的分享連結"""
+async def list_my_links(
+    username: str, tenant_id: str | UUID | None = None
+) -> ShareLinkListResponse:
+    """列出使用者的分享連結
+
+    Args:
+        username: 用戶名
+        tenant_id: 租戶 ID（過濾特定租戶的連結）
+    """
     async with get_connection() as conn:
-        rows = await conn.fetch(
-            """
-            SELECT token, resource_type, resource_id, created_by, expires_at, access_count, created_at
-            FROM public_share_links
-            WHERE created_by = $1
-            ORDER BY created_at DESC
-            """,
-            username,
-        )
+        if tenant_id:
+            # 確保 tenant_id 是 UUID 類型
+            tenant_uuid = tenant_id if isinstance(tenant_id, UUID) else UUID(str(tenant_id))
+            rows = await conn.fetch(
+                """
+                SELECT token, resource_type, resource_id, created_by, expires_at, access_count, created_at
+                FROM public_share_links
+                WHERE created_by = $1 AND tenant_id = $2
+                ORDER BY created_at DESC
+                """,
+                username,
+                tenant_uuid,
+            )
+        else:
+            rows = await conn.fetch(
+                """
+                SELECT token, resource_type, resource_id, created_by, expires_at, access_count, created_at
+                FROM public_share_links
+                WHERE created_by = $1
+                ORDER BY created_at DESC
+                """,
+                username,
+            )
 
         now = datetime.now(timezone.utc)
         links = []
@@ -291,16 +338,33 @@ async def list_my_links(username: str) -> ShareLinkListResponse:
         return ShareLinkListResponse(links=links)
 
 
-async def list_all_links() -> ShareLinkListResponse:
-    """列出所有分享連結（管理員用）"""
+async def list_all_links(tenant_id: str | UUID | None = None) -> ShareLinkListResponse:
+    """列出所有分享連結（管理員用）
+
+    Args:
+        tenant_id: 租戶 ID（過濾特定租戶的連結，不指定則列出所有）
+    """
     async with get_connection() as conn:
-        rows = await conn.fetch(
-            """
-            SELECT token, resource_type, resource_id, created_by, expires_at, access_count, created_at
-            FROM public_share_links
-            ORDER BY created_at DESC
-            """
-        )
+        if tenant_id:
+            # 確保 tenant_id 是 UUID 類型
+            tenant_uuid = tenant_id if isinstance(tenant_id, UUID) else UUID(str(tenant_id))
+            rows = await conn.fetch(
+                """
+                SELECT token, resource_type, resource_id, created_by, expires_at, access_count, created_at
+                FROM public_share_links
+                WHERE tenant_id = $1
+                ORDER BY created_at DESC
+                """,
+                tenant_uuid,
+            )
+        else:
+            rows = await conn.fetch(
+                """
+                SELECT token, resource_type, resource_id, created_by, expires_at, access_count, created_at
+                FROM public_share_links
+                ORDER BY created_at DESC
+                """
+            )
 
         now = datetime.now(timezone.utc)
         links = []
@@ -370,10 +434,10 @@ async def revoke_link(token: str, username: str, is_admin: bool = False) -> None
 async def get_public_resource(token: str) -> PublicResourceResponse:
     """取得公開資源"""
     async with get_connection() as conn:
-        # 查詢連結
+        # 查詢連結（包含 tenant_id）
         row = await conn.fetchrow(
             """
-            SELECT token, resource_type, resource_id, created_by, expires_at, created_at
+            SELECT token, resource_type, resource_id, created_by, expires_at, created_at, tenant_id
             FROM public_share_links
             WHERE token = $1
             """,
@@ -397,10 +461,11 @@ async def get_public_resource(token: str) -> PublicResourceResponse:
         # 取得資源內容
         resource_type = row["resource_type"]
         resource_id = row["resource_id"]
+        tenant_id = str(row["tenant_id"]) if row["tenant_id"] else None
 
         if resource_type == "knowledge":
             try:
-                knowledge = get_knowledge(resource_id)
+                knowledge = get_knowledge(resource_id, tenant_id=tenant_id)
                 # 正規化附件路徑，將 ../assets/images/xxx 轉換為 local/images/xxx
                 normalized_attachments = []
                 for att in knowledge.attachments:
@@ -455,7 +520,7 @@ async def get_public_resource(token: str) -> PublicResourceResponse:
         elif resource_type == "nas_file":
             try:
                 # 驗證檔案存在且可存取
-                full_path = validate_nas_file_path(resource_id)
+                full_path = validate_nas_file_path(resource_id, tenant_id=tenant_id)
                 stat = full_path.stat()
 
                 # 格式化大小
@@ -526,7 +591,7 @@ async def get_link_info(token: str) -> dict:
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
-            SELECT token, resource_type, resource_id, expires_at
+            SELECT token, resource_type, resource_id, expires_at, tenant_id
             FROM public_share_links
             WHERE token = $1
             """,
@@ -544,6 +609,7 @@ async def get_link_info(token: str) -> dict:
         return {
             "resource_type": row["resource_type"],
             "resource_id": row["resource_id"],
+            "tenant_id": str(row["tenant_id"]) if row["tenant_id"] else None,
         }
 
 

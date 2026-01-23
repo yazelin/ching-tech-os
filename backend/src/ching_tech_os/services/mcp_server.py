@@ -54,31 +54,131 @@ async def ensure_db_connection():
 
 
 # ============================================================
+# 租戶 ID 輔助函數
+# ============================================================
+
+# 預設租戶 ID（與其他服務一致）
+DEFAULT_TENANT_ID = UUID("00000000-0000-0000-0000-000000000000")
+
+
+def _get_tenant_id(tenant_id: str | None) -> UUID:
+    """
+    轉換租戶 ID 字串為 UUID
+
+    Args:
+        tenant_id: 租戶 ID 字串或 UUID，None 則返回預設租戶
+
+    Returns:
+        租戶 UUID
+    """
+    if tenant_id is None:
+        return DEFAULT_TENANT_ID
+    if isinstance(tenant_id, UUID):
+        return tenant_id
+    try:
+        return UUID(tenant_id)
+    except ValueError:
+        logger.warning(f"無效的租戶 ID: {tenant_id}，使用預設租戶")
+        return DEFAULT_TENANT_ID
+
+
+# ============================================================
 # 權限檢查輔助函數
 # ============================================================
 
 
-async def check_project_member_permission(project_id: str, user_id: int) -> bool:
+async def check_mcp_tool_permission(
+    tool_name: str,
+    ctos_user_id: int | None,
+) -> tuple[bool, str]:
+    """
+    檢查使用者是否有權限使用 MCP 工具
+
+    此函數用於 MCP 工具執行時的權限檢查，防止使用者繞過 prompt 過濾直接呼叫工具。
+
+    Args:
+        tool_name: 工具名稱（不含 mcp__ching-tech-os__ 前綴）
+        ctos_user_id: CTOS 用戶 ID（None 表示未關聯帳號）
+
+    Returns:
+        (allowed, error_message): allowed=True 表示允許，False 表示拒絕並回傳錯誤訊息
+    """
+    from .permissions import (
+        check_tool_permission,
+        TOOL_APP_MAPPING,
+        APP_DISPLAY_NAMES,
+        DEFAULT_APP_PERMISSIONS,
+    )
+
+    # 不需要特定權限的工具，直接放行
+    required_app = TOOL_APP_MAPPING.get(tool_name)
+    if required_app is None:
+        return (True, "")
+
+    # 未關聯帳號的使用者，使用預設權限
+    if ctos_user_id is None:
+        # 檢查預設權限是否允許
+        if DEFAULT_APP_PERMISSIONS.get(required_app, False):
+            return (True, "")
+        app_name = APP_DISPLAY_NAMES.get(required_app, required_app)
+        return (False, f"需要「{app_name}」功能權限才能使用此工具")
+
+    # 查詢使用者角色和權限
+    await ensure_db_connection()
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            "SELECT role, preferences FROM users WHERE id = $1",
+            ctos_user_id,
+        )
+
+    if not row:
+        # 使用者不存在，使用預設權限
+        if DEFAULT_APP_PERMISSIONS.get(required_app, False):
+            return (True, "")
+        app_name = APP_DISPLAY_NAMES.get(required_app, required_app)
+        return (False, f"需要「{app_name}」功能權限才能使用此工具")
+
+    role = row["role"] or "user"
+    preferences = row["preferences"] or {}
+    permissions = {"apps": preferences.get("permissions", {}).get("apps", {})}
+
+    # 使用 check_tool_permission 檢查
+    if check_tool_permission(tool_name, role, permissions):
+        return (True, "")
+
+    app_name = APP_DISPLAY_NAMES.get(required_app, required_app)
+    return (False, f"您沒有「{app_name}」功能權限，無法使用此工具")
+
+
+async def check_project_member_permission(
+    project_id: str,
+    user_id: int,
+    tenant_id: str | None = None,
+) -> bool:
     """
     檢查用戶是否為專案成員
 
     Args:
         project_id: 專案 UUID 字串
         user_id: CTOS 用戶 ID
+        tenant_id: 租戶 ID 字串
 
     Returns:
         True 表示用戶是專案成員，可以操作
     """
     from uuid import UUID as UUID_type
+    tid = _get_tenant_id(tenant_id)
     await ensure_db_connection()
     async with get_connection() as conn:
         exists = await conn.fetchval(
             """
-            SELECT 1 FROM project_members
-            WHERE project_id = $1 AND user_id = $2
+            SELECT 1 FROM project_members pm
+            JOIN projects p ON pm.project_id = p.id
+            WHERE pm.project_id = $1 AND pm.user_id = $2 AND p.tenant_id = $3
             """,
             UUID_type(project_id),
             user_id,
+            tid,
         )
         return exists is not None
 
@@ -89,21 +189,36 @@ async def check_project_member_permission(project_id: str, user_id: int) -> bool
 
 
 @mcp.tool()
-async def query_project(project_id: str | None = None, keyword: str | None = None) -> str:
+async def query_project(
+    project_id: str | None = None,
+    keyword: str | None = None,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
+) -> str:
     """
     查詢專案資訊
 
     Args:
         project_id: 專案 UUID，查詢特定專案
         keyword: 搜尋關鍵字，搜尋專案名稱和描述
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     await ensure_db_connection()
+
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("query_project", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
+    tid = _get_tenant_id(ctos_tenant_id)
     async with get_connection() as conn:
         if project_id:
             # 查詢特定專案
             row = await conn.fetchrow(
-                "SELECT * FROM projects WHERE id = $1",
+                "SELECT * FROM projects WHERE id = $1 AND tenant_id = $2",
                 UUID(project_id),
+                tid,
             )
             if not row:
                 return f"找不到專案 ID: {project_id}"
@@ -141,11 +256,12 @@ async def query_project(project_id: str | None = None, keyword: str | None = Non
                 """
                 SELECT id, name, status, description
                 FROM projects
-                WHERE name ILIKE $1 OR description ILIKE $1
+                WHERE (name ILIKE $1 OR description ILIKE $1) AND tenant_id = $2
                 ORDER BY updated_at DESC
                 LIMIT 5
                 """,
                 f"%{keyword}%",
+                tid,
             )
             if not rows:
                 return f"找不到包含「{keyword}」的專案"
@@ -161,9 +277,11 @@ async def query_project(project_id: str | None = None, keyword: str | None = Non
                 """
                 SELECT id, name, status
                 FROM projects
+                WHERE tenant_id = $1
                 ORDER BY updated_at DESC
                 LIMIT 5
-                """
+                """,
+                tid,
             )
             if not rows:
                 return "目前沒有任何專案"
@@ -180,6 +298,8 @@ async def create_project(
     description: str | None = None,
     start_date: str | None = None,
     end_date: str | None = None,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     建立新專案
@@ -189,12 +309,19 @@ async def create_project(
         description: 專案描述
         start_date: 開始日期（格式：YYYY-MM-DD）
         end_date: 結束日期（格式：YYYY-MM-DD）
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     from datetime import date as date_type
     from ..models.project import ProjectCreate
     from .project import create_project as svc_create_project
 
     await ensure_db_connection()
+
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("create_project", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
 
     try:
         # 解析日期
@@ -212,7 +339,7 @@ async def create_project(
             start_date=parsed_start,
             end_date=parsed_end,
         )
-        result = await svc_create_project(data, created_by="linebot")
+        result = await svc_create_project(data, created_by="linebot", tenant_id=ctos_tenant_id)
 
         return f"✅ 已建立專案「{result.name}」\n專案 ID：{result.id}"
 
@@ -232,6 +359,7 @@ async def add_project_member(
     notes: str | None = None,
     is_internal: bool = True,
     ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     新增專案成員
@@ -246,6 +374,7 @@ async def add_project_member(
         notes: 備註
         is_internal: 是否為內部人員，預設 True（外部聯絡人如客戶、廠商設為 False）
         ctos_user_id: CTOS 用戶 ID（從對話識別取得，內部人員自動綁定帳號）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     from uuid import UUID as UUID_type
     from ..models.project import ProjectMemberCreate
@@ -253,12 +382,29 @@ async def add_project_member(
 
     await ensure_db_connection()
 
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("add_project_member", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
+    tid = _get_tenant_id(ctos_tenant_id)
+
     try:
         # 準備 user_id：內部人員且有 ctos_user_id 時自動綁定
         user_id = ctos_user_id if is_internal and ctos_user_id else None
 
-        # 檢查是否已有同名成員（避免重複新增）
+        # 驗證專案存在且屬於同一租戶，並檢查是否已有同名成員
         async with get_connection() as conn:
+            # 先驗證專案所屬租戶
+            project_exists = await conn.fetchval(
+                "SELECT 1 FROM projects WHERE id = $1 AND tenant_id = $2",
+                UUID_type(project_id),
+                tid,
+            )
+            if not project_exists:
+                return f"找不到專案 ID: {project_id}"
+
+            # 檢查是否已有同名成員（避免重複新增）
             existing = await conn.fetchrow(
                 """
                 SELECT id, user_id FROM project_members
@@ -319,6 +465,8 @@ async def add_project_milestone(
     actual_date: str | None = None,
     status: str = "pending",
     notes: str | None = None,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     新增專案里程碑
@@ -331,6 +479,8 @@ async def add_project_milestone(
         actual_date: 實際日期（格式：YYYY-MM-DD）
         status: 狀態，可選：pending（待處理）、in_progress（進行中）、completed（已完成）、delayed（延遲），預設 pending
         notes: 備註
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     from datetime import date as date_type
     from uuid import UUID as UUID_type
@@ -339,7 +489,24 @@ async def add_project_milestone(
 
     await ensure_db_connection()
 
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("add_project_milestone", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
+    tid = _get_tenant_id(ctos_tenant_id)
+
     try:
+        # 驗證專案存在且屬於同一租戶
+        async with get_connection() as conn:
+            project_exists = await conn.fetchval(
+                "SELECT 1 FROM projects WHERE id = $1 AND tenant_id = $2",
+                UUID_type(project_id),
+                tid,
+            )
+            if not project_exists:
+                return f"找不到專案 ID: {project_id}"
+
         # 解析日期
         parsed_planned = None
         parsed_actual = None
@@ -386,6 +553,7 @@ async def update_project(
     start_date: str | None = None,
     end_date: str | None = None,
     ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     更新專案資訊
@@ -398,6 +566,7 @@ async def update_project(
         start_date: 開始日期（格式：YYYY-MM-DD）
         end_date: 結束日期（格式：YYYY-MM-DD）
         ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     from datetime import date as date_type
     from uuid import UUID as UUID_type
@@ -406,10 +575,15 @@ async def update_project(
 
     await ensure_db_connection()
 
+    # App 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("update_project", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
     # 權限檢查：需要是專案成員才能更新
     if ctos_user_id is None:
         return "❌ 您的 Line 帳號尚未關聯 CTOS 用戶，無法進行專案更新操作。請聯繫管理員進行帳號關聯。"
-    if not await check_project_member_permission(project_id, ctos_user_id):
+    if not await check_project_member_permission(project_id, ctos_user_id, ctos_tenant_id):
         return "❌ 您不是此專案的成員，無法進行此操作。"
 
     try:
@@ -424,7 +598,7 @@ async def update_project(
             start_date=parsed_start,
             end_date=parsed_end,
         )
-        result = await svc_update_project(UUID_type(project_id), data)
+        result = await svc_update_project(UUID_type(project_id), data, tenant_id=ctos_tenant_id)
 
         updates = []
         if name:
@@ -459,6 +633,7 @@ async def update_milestone(
     status: str | None = None,
     notes: str | None = None,
     ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     更新專案里程碑
@@ -473,6 +648,7 @@ async def update_milestone(
         status: 狀態，可選：pending（待處理）、in_progress（進行中）、completed（已完成）、delayed（延遲）
         notes: 備註
         ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     from datetime import date as date_type
     from uuid import UUID as UUID_type
@@ -481,23 +657,35 @@ async def update_milestone(
 
     await ensure_db_connection()
 
+    # App 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("update_milestone", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
+    tid = _get_tenant_id(ctos_tenant_id)
+
     # 權限檢查前置：需要有 CTOS 用戶 ID
     if ctos_user_id is None:
         return "❌ 您的 Line 帳號尚未關聯 CTOS 用戶，無法進行專案更新操作。請聯繫管理員進行帳號關聯。"
 
     try:
-        # 取得里程碑所屬專案
+        # 取得里程碑所屬專案，同時驗證租戶
         async with get_connection() as conn:
             row = await conn.fetchrow(
-                "SELECT project_id FROM project_milestones WHERE id = $1",
+                """
+                SELECT pm.project_id FROM project_milestones pm
+                JOIN projects p ON pm.project_id = p.id
+                WHERE pm.id = $1 AND p.tenant_id = $2
+                """,
                 UUID_type(milestone_id),
+                tid,
             )
             if not row:
                 return f"找不到里程碑 ID: {milestone_id}"
             actual_project_id = row["project_id"]
 
         # 權限檢查：需要是專案成員才能更新
-        if not await check_project_member_permission(str(actual_project_id), ctos_user_id):
+        if not await check_project_member_permission(str(actual_project_id), ctos_user_id, ctos_tenant_id):
             return "❌ 您不是此專案的成員，無法進行此操作。"
 
         # 如果有提供 project_id，驗證是否匹配
@@ -549,6 +737,7 @@ async def update_project_member(
     is_internal: bool | None = None,
     ctos_user_id: int | None = None,
     bind_to_caller: bool = False,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     更新專案成員資訊
@@ -565,6 +754,7 @@ async def update_project_member(
         is_internal: 是否為內部人員
         ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查和綁定）
         bind_to_caller: 是否將此成員綁定到呼叫者的 CTOS 帳號（設為 True 以綁定）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     from uuid import UUID as UUID_type
     from ..models.project import ProjectMemberUpdate
@@ -572,23 +762,35 @@ async def update_project_member(
 
     await ensure_db_connection()
 
+    # App 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("update_project_member", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
+    tid = _get_tenant_id(ctos_tenant_id)
+
     # 權限檢查前置：需要有 CTOS 用戶 ID
     if ctos_user_id is None:
         return "❌ 您的 Line 帳號尚未關聯 CTOS 用戶，無法進行專案更新操作。請聯繫管理員進行帳號關聯。"
 
     try:
-        # 取得成員所屬專案
+        # 取得成員所屬專案（需要租戶過濾）
         async with get_connection() as conn:
             row = await conn.fetchrow(
-                "SELECT project_id FROM project_members WHERE id = $1",
+                """
+                SELECT pm.project_id FROM project_members pm
+                JOIN projects p ON pm.project_id = p.id
+                WHERE pm.id = $1 AND p.tenant_id = $2
+                """,
                 UUID_type(member_id),
+                tid,
             )
             if not row:
                 return f"找不到成員 ID: {member_id}"
             actual_project_id = row["project_id"]
 
         # 權限檢查：需要是專案成員才能更新
-        if not await check_project_member_permission(str(actual_project_id), ctos_user_id):
+        if not await check_project_member_permission(str(actual_project_id), ctos_user_id, ctos_tenant_id):
             return "❌ 您不是此專案的成員，無法進行此操作。"
 
         # 如果有提供 project_id，驗證是否匹配
@@ -630,6 +832,7 @@ async def add_project_meeting(
     attendees: str | None = None,
     content: str | None = None,
     ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     新增專案會議記錄
@@ -642,6 +845,7 @@ async def add_project_meeting(
         attendees: 參與者（逗號分隔）
         content: 會議內容（Markdown 格式）
         ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     from uuid import UUID as UUID_type
     from ..models.project import ProjectMeetingCreate
@@ -649,10 +853,15 @@ async def add_project_meeting(
 
     await ensure_db_connection()
 
+    # App 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("add_project_meeting", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
     # 權限檢查：需要是專案成員才能新增會議
     if ctos_user_id is None:
         return "❌ 您的 Line 帳號尚未關聯 CTOS 用戶，無法進行專案更新操作。請聯繫管理員進行帳號關聯。"
-    if not await check_project_member_permission(project_id, ctos_user_id):
+    if not await check_project_member_permission(project_id, ctos_user_id, ctos_tenant_id):
         return "❌ 您不是此專案的成員，無法進行此操作。"
 
     try:
@@ -701,6 +910,7 @@ async def update_project_meeting(
     attendees: str | None = None,
     content: str | None = None,
     ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     更新專案會議記錄
@@ -714,6 +924,7 @@ async def update_project_meeting(
         attendees: 參與者（逗號分隔）
         content: 會議內容（Markdown 格式）
         ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     from uuid import UUID as UUID_type
     from ..models.project import ProjectMeetingUpdate
@@ -721,23 +932,35 @@ async def update_project_meeting(
 
     await ensure_db_connection()
 
+    # App 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("update_project_meeting", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
+    tid = _get_tenant_id(ctos_tenant_id)
+
     # 權限檢查前置：需要有 CTOS 用戶 ID
     if ctos_user_id is None:
         return "❌ 您的 Line 帳號尚未關聯 CTOS 用戶，無法進行專案更新操作。請聯繫管理員進行帳號關聯。"
 
     try:
-        # 取得會議所屬專案
+        # 取得會議所屬專案（需要租戶過濾）
         async with get_connection() as conn:
             row = await conn.fetchrow(
-                "SELECT project_id FROM project_meetings WHERE id = $1",
+                """
+                SELECT pm.project_id FROM project_meetings pm
+                JOIN projects p ON pm.project_id = p.id
+                WHERE pm.id = $1 AND p.tenant_id = $2
+                """,
                 UUID_type(meeting_id),
+                tid,
             )
             if not row:
                 return f"找不到會議 ID: {meeting_id}"
             actual_project_id = row["project_id"]
 
         # 權限檢查：需要是專案成員才能更新
-        if not await check_project_member_permission(str(actual_project_id), ctos_user_id):
+        if not await check_project_member_permission(str(actual_project_id), ctos_user_id, ctos_tenant_id):
             return "❌ 您不是此專案的成員，無法進行此操作。"
 
         # 如果有提供 project_id，驗證是否匹配
@@ -782,6 +1005,8 @@ async def get_project_milestones(
     project_id: str,
     status: str | None = None,
     limit: int = 10,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     取得專案里程碑列表
@@ -790,33 +1015,46 @@ async def get_project_milestones(
         project_id: 專案 UUID
         status: 狀態過濾，可選值：pending, in_progress, completed, delayed
         limit: 最大數量，預設 10
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     await ensure_db_connection()
+
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("get_project_milestones", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
+    tid = _get_tenant_id(ctos_tenant_id)
     async with get_connection() as conn:
+        # 先驗證專案存在且屬於此租戶
+        project = await conn.fetchrow(
+            "SELECT name FROM projects WHERE id = $1 AND tenant_id = $2",
+            UUID(project_id),
+            tid,
+        )
+        if not project:
+            return f"找不到專案 ID: {project_id}"
+
         query = """
-            SELECT id, name, milestone_type, planned_date, actual_date, status, notes
-            FROM project_milestones
-            WHERE project_id = $1
+            SELECT m.id, m.name, m.milestone_type, m.planned_date, m.actual_date, m.status, m.notes
+            FROM project_milestones m
+            JOIN projects p ON m.project_id = p.id
+            WHERE m.project_id = $1 AND p.tenant_id = $2
         """
-        params: list = [UUID(project_id)]
+        params: list = [UUID(project_id), tid]
 
         if status:
-            query += " AND status = $2"
+            query += " AND m.status = $3"
             params.append(status)
 
-        query += " ORDER BY sort_order, planned_date LIMIT $" + str(len(params) + 1)
+        query += " ORDER BY m.sort_order, m.planned_date LIMIT $" + str(len(params) + 1)
         params.append(limit)
 
         rows = await conn.fetch(query, *params)
 
         if not rows:
             return "此專案目前沒有里程碑"
-
-        # 取得專案名稱
-        project = await conn.fetchrow(
-            "SELECT name FROM projects WHERE id = $1",
-            UUID(project_id),
-        )
         project_name = project["name"] if project else "未知專案"
 
         # 格式化里程碑
@@ -839,6 +1077,8 @@ async def get_project_milestones(
 async def get_project_meetings(
     project_id: str,
     limit: int = 5,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     取得專案會議記錄
@@ -846,30 +1086,44 @@ async def get_project_meetings(
     Args:
         project_id: 專案 UUID
         limit: 最大數量，預設 5
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     await ensure_db_connection()
+
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("get_project_meetings", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
+    tid = _get_tenant_id(ctos_tenant_id)
     async with get_connection() as conn:
+        # 先驗證專案存在且屬於此租戶
+        project = await conn.fetchrow(
+            "SELECT name FROM projects WHERE id = $1 AND tenant_id = $2",
+            UUID(project_id),
+            tid,
+        )
+        if not project:
+            return f"找不到專案 ID: {project_id}"
+        project_name = project["name"]
+
         rows = await conn.fetch(
             """
-            SELECT id, title, meeting_date, location, attendees, content
-            FROM project_meetings
-            WHERE project_id = $1
-            ORDER BY meeting_date DESC
-            LIMIT $2
+            SELECT m.id, m.title, m.meeting_date, m.location, m.attendees, m.content
+            FROM project_meetings m
+            JOIN projects p ON m.project_id = p.id
+            WHERE m.project_id = $1 AND p.tenant_id = $2
+            ORDER BY m.meeting_date DESC
+            LIMIT $3
             """,
             UUID(project_id),
+            tid,
             limit,
         )
 
         if not rows:
             return "此專案目前沒有會議記錄"
-
-        # 取得專案名稱
-        project = await conn.fetchrow(
-            "SELECT name FROM projects WHERE id = $1",
-            UUID(project_id),
-        )
-        project_name = project["name"] if project else "未知專案"
 
         # 格式化會議記錄
         meetings = [f"【{project_name}】最近會議：\n"]
@@ -897,6 +1151,8 @@ async def get_project_meetings(
 async def get_project_members(
     project_id: str,
     is_internal: bool | None = None,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     取得專案成員與聯絡人
@@ -904,33 +1160,46 @@ async def get_project_members(
     Args:
         project_id: 專案 UUID
         is_internal: 篩選內部或外部人員，不指定則顯示全部
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     await ensure_db_connection()
+
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("get_project_members", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
+    tid = _get_tenant_id(ctos_tenant_id)
     async with get_connection() as conn:
+        # 先驗證專案存在且屬於此租戶
+        project = await conn.fetchrow(
+            "SELECT name FROM projects WHERE id = $1 AND tenant_id = $2",
+            UUID(project_id),
+            tid,
+        )
+        if not project:
+            return f"找不到專案 ID: {project_id}"
+        project_name = project["name"]
+
         query = """
-            SELECT id, name, role, company, email, phone, is_internal
-            FROM project_members
-            WHERE project_id = $1
+            SELECT pm.id, pm.name, pm.role, pm.company, pm.email, pm.phone, pm.is_internal
+            FROM project_members pm
+            JOIN projects p ON pm.project_id = p.id
+            WHERE pm.project_id = $1 AND p.tenant_id = $2
         """
-        params: list = [UUID(project_id)]
+        params: list = [UUID(project_id), tid]
 
         if is_internal is not None:
-            query += " AND is_internal = $2"
+            query += " AND pm.is_internal = $3"
             params.append(is_internal)
 
-        query += " ORDER BY is_internal DESC, name"
+        query += " ORDER BY pm.is_internal DESC, pm.name"
 
         rows = await conn.fetch(query, *params)
 
         if not rows:
             return "此專案目前沒有成員"
-
-        # 取得專案名稱
-        project = await conn.fetchrow(
-            "SELECT name FROM projects WHERE id = $1",
-            UUID(project_id),
-        )
-        project_name = project["name"] if project else "未知專案"
 
         # 格式化成員
         members = [f"【{project_name}】成員/聯絡人：\n"]
@@ -967,6 +1236,7 @@ async def search_knowledge(
     limit: int = 5,
     line_user_id: str | None = None,
     ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     搜尋知識庫
@@ -978,14 +1248,21 @@ async def search_knowledge(
         limit: 最大結果數量，預設 5
         line_user_id: Line 用戶 ID（從對話識別取得，用於搜尋個人知識）
         ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於搜尋個人知識）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
+    await ensure_db_connection()
+
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("search_knowledge", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
     from . import knowledge as kb_service
 
     # 取得使用者名稱（用於搜尋個人知識）
     current_username: str | None = None
     if ctos_user_id:
         try:
-            await ensure_db_connection()
             async with get_connection() as conn:
                 user_row = await conn.fetchrow(
                     "SELECT username FROM users WHERE id = $1",
@@ -1002,6 +1279,7 @@ async def search_knowledge(
             project=project,
             category=category,
             current_username=current_username,
+            tenant_id=ctos_tenant_id,
         )
 
         if not result.items:
@@ -1029,18 +1307,31 @@ async def search_knowledge(
 
 
 @mcp.tool()
-async def get_knowledge_item(kb_id: str) -> str:
+async def get_knowledge_item(
+    kb_id: str,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
+) -> str:
     """
     取得知識庫文件的完整內容
 
     Args:
         kb_id: 知識 ID（如 kb-001、kb-002）
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
+    await ensure_db_connection()
+
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("get_knowledge_item", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
     from . import knowledge as kb_service
     from pathlib import Path
 
     try:
-        item = kb_service.get_knowledge(kb_id)
+        item = kb_service.get_knowledge(kb_id, tenant_id=ctos_tenant_id)
 
         # 格式化輸出
         tags_str = ", ".join(item.tags.topics) if item.tags.topics else "無標籤"
@@ -1084,6 +1375,7 @@ async def update_knowledge_item(
     level: str | None = None,
     type: str | None = None,
     ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     更新知識庫文件
@@ -1100,7 +1392,15 @@ async def update_knowledge_item(
         level: 難度層級，如 beginner、intermediate、advanced（不填則不更新）
         type: 知識類型，如 note、spec、guide（不填則不更新）
         ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於設定 personal 知識的 owner）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
+    await ensure_db_connection()
+
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("update_knowledge_item", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
     from ..models.knowledge import KnowledgeUpdate, KnowledgeTags
     from . import knowledge as kb_service
 
@@ -1108,7 +1408,6 @@ async def update_knowledge_item(
         # 如果改為 personal，需要設定 owner
         owner: str | None = None
         if scope == "personal" and ctos_user_id:
-            await ensure_db_connection()
             async with get_connection() as conn:
                 user_row = await conn.fetchrow(
                     "SELECT username FROM users WHERE id = $1",
@@ -1142,7 +1441,7 @@ async def update_knowledge_item(
             tags=tags,
         )
 
-        item = kb_service.update_knowledge(kb_id, update_data)
+        item = kb_service.update_knowledge(kb_id, update_data, tenant_id=ctos_tenant_id)
 
         scope_info = f"（{item.scope}）" if item.scope else ""
         return f"✅ 已更新 [{item.id}] {item.title}{scope_info}"
@@ -1157,6 +1456,8 @@ async def add_attachments_to_knowledge(
     kb_id: str,
     attachments: list[str],
     descriptions: list[str] | None = None,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     為現有知識庫新增附件
@@ -1165,7 +1466,16 @@ async def add_attachments_to_knowledge(
         kb_id: 知識 ID（如 kb-001）
         attachments: 附件的 NAS 路徑列表（從 get_message_attachments 取得）
         descriptions: 附件描述列表（與 attachments 一一對應，如「圖1 水切爐」）
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
+    await ensure_db_connection()
+
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("add_attachments_to_knowledge", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
     from . import knowledge as kb_service
 
     # 限制附件數量
@@ -1174,7 +1484,7 @@ async def add_attachments_to_knowledge(
 
     # 確認知識存在
     try:
-        knowledge = kb_service.get_knowledge(kb_id)
+        knowledge = kb_service.get_knowledge(kb_id, tenant_id=ctos_tenant_id)
     except Exception:
         return f"找不到知識 {kb_id}"
 
@@ -1188,7 +1498,7 @@ async def add_attachments_to_knowledge(
 
     for i, nas_path in enumerate(attachments):
         try:
-            kb_service.copy_linebot_attachment_to_knowledge(kb_id, nas_path)
+            kb_service.copy_linebot_attachment_to_knowledge(kb_id, nas_path, tenant_id=ctos_tenant_id)
             success_count += 1
 
             # 如果有對應的描述，更新附件描述
@@ -1221,17 +1531,30 @@ async def add_attachments_to_knowledge(
 
 
 @mcp.tool()
-async def delete_knowledge_item(kb_id: str) -> str:
+async def delete_knowledge_item(
+    kb_id: str,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
+) -> str:
     """
     刪除知識庫文件
 
     Args:
         kb_id: 知識 ID（如 kb-001）
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
+    await ensure_db_connection()
+
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("delete_knowledge_item", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
     from . import knowledge as kb_service
 
     try:
-        kb_service.delete_knowledge(kb_id)
+        kb_service.delete_knowledge(kb_id, tenant_id=ctos_tenant_id)
         return f"✅ 已刪除知識 {kb_id}"
 
     except Exception as e:
@@ -1240,18 +1563,31 @@ async def delete_knowledge_item(kb_id: str) -> str:
 
 
 @mcp.tool()
-async def get_knowledge_attachments(kb_id: str) -> str:
+async def get_knowledge_attachments(
+    kb_id: str,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
+) -> str:
     """
     取得知識庫的附件列表
 
     Args:
         kb_id: 知識 ID（如 kb-001、kb-002）
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
+    await ensure_db_connection()
+
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("get_knowledge_attachments", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
     from . import knowledge as kb_service
     from pathlib import Path
 
     try:
-        item = kb_service.get_knowledge(kb_id)
+        item = kb_service.get_knowledge(kb_id, tenant_id=ctos_tenant_id)
 
         if not item.attachments:
             return f"知識 {kb_id} 沒有附件"
@@ -1283,6 +1619,8 @@ async def update_knowledge_attachment(
     kb_id: str,
     attachment_index: int,
     description: str | None = None,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     更新知識庫附件的說明
@@ -1291,7 +1629,16 @@ async def update_knowledge_attachment(
         kb_id: 知識 ID（如 kb-001）
         attachment_index: 附件索引（從 0 開始，可用 get_knowledge_attachments 查詢）
         description: 附件說明（如「圖1 水切爐畫面」）
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
+    await ensure_db_connection()
+
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("update_knowledge_attachment", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
     from . import knowledge as kb_service
     from pathlib import Path
 
@@ -1300,6 +1647,7 @@ async def update_knowledge_attachment(
             kb_id=kb_id,
             attachment_idx=attachment_index,
             description=description,
+            tenant_id=ctos_tenant_id,
         )
 
         filename = Path(attachment.path).name
@@ -1316,6 +1664,8 @@ async def read_knowledge_attachment(
     kb_id: str,
     attachment_index: int = 0,
     max_chars: int = 15000,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     讀取知識庫附件的內容
@@ -1324,13 +1674,22 @@ async def read_knowledge_attachment(
         kb_id: 知識 ID（如 kb-001）
         attachment_index: 附件索引（從 0 開始，可用 get_knowledge_attachments 查詢）
         max_chars: 最大字元數限制，預設 15000（避免超過 CLI 的 25000 token 限制）
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
+    await ensure_db_connection()
+
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("read_knowledge_attachment", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
     from . import knowledge as kb_service
     from .path_manager import path_manager
     from pathlib import Path
 
     try:
-        item = kb_service.get_knowledge(kb_id)
+        item = kb_service.get_knowledge(kb_id, tenant_id=ctos_tenant_id)
 
         if not item.attachments:
             return f"知識 {kb_id} 沒有附件"
@@ -1342,9 +1701,9 @@ async def read_knowledge_attachment(
         filename = Path(attachment.path).name
         file_ext = Path(attachment.path).suffix.lower()
 
-        # 解析路徑並轉換為檔案系統路徑
+        # 解析路徑並轉換為檔案系統路徑（傳入 tenant_id 以正確解析 CTOS 路徑）
         try:
-            fs_path = path_manager.to_filesystem(attachment.path)
+            fs_path = path_manager.to_filesystem(attachment.path, tenant_id=ctos_tenant_id)
         except ValueError as e:
             return f"無法解析附件路徑：{e}"
 
@@ -1447,6 +1806,7 @@ async def add_note(
     line_group_id: str | None = None,
     line_user_id: str | None = None,
     ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     新增筆記到知識庫
@@ -1460,13 +1820,19 @@ async def add_note(
         line_group_id: Line 群組的內部 UUID（從對話識別取得，群組對話時使用）
         line_user_id: Line 用戶 ID（從對話識別取得，個人對話時使用）
         ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於判斷帳號綁定）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
+    await ensure_db_connection()
+
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("add_note", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
     from ..models.knowledge import KnowledgeCreate, KnowledgeTags, KnowledgeSource
     from . import knowledge as kb_service
 
     try:
-        await ensure_db_connection()
-
         # 自動判斷 scope 和相關屬性
         scope, owner_username, project_id = await _determine_knowledge_scope(
             line_group_id, line_user_id, ctos_user_id
@@ -1501,7 +1867,7 @@ async def add_note(
             author=owner_username or "linebot",
         )
 
-        result = kb_service.create_knowledge(data, owner=owner_username, project_id=project_id)
+        result = kb_service.create_knowledge(data, owner=owner_username, project_id=project_id, tenant_id=ctos_tenant_id)
 
         # 組裝回應訊息
         scope_text = {"global": "全域", "personal": "個人", "project": "專案"}.get(scope, scope)
@@ -1523,6 +1889,7 @@ async def add_note_with_attachments(
     line_group_id: str | None = None,
     line_user_id: str | None = None,
     ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     新增筆記到知識庫並加入附件
@@ -1537,7 +1904,15 @@ async def add_note_with_attachments(
         line_group_id: Line 群組的內部 UUID（從對話識別取得，群組對話時使用）
         line_user_id: Line 用戶 ID（從對話識別取得，個人對話時使用）
         ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於判斷帳號綁定）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
+    await ensure_db_connection()
+
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("add_note_with_attachments", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
     from ..models.knowledge import KnowledgeCreate, KnowledgeTags, KnowledgeSource
     from . import knowledge as kb_service
 
@@ -1546,8 +1921,6 @@ async def add_note_with_attachments(
         return "附件數量不能超過 10 個"
 
     try:
-        await ensure_db_connection()
-
         # 自動判斷 scope 和相關屬性
         scope, owner_username, knowledge_project_id = await _determine_knowledge_scope(
             line_group_id, line_user_id, ctos_user_id
@@ -1580,7 +1953,7 @@ async def add_note_with_attachments(
             author=owner_username or "linebot",
         )
 
-        result = kb_service.create_knowledge(data, owner=owner_username, project_id=knowledge_project_id)
+        result = kb_service.create_knowledge(data, owner=owner_username, project_id=knowledge_project_id, tenant_id=ctos_tenant_id)
         kb_id = result.id
 
         # 2. 處理附件
@@ -1589,7 +1962,7 @@ async def add_note_with_attachments(
 
         for nas_path in attachments:
             try:
-                kb_service.copy_linebot_attachment_to_knowledge(kb_id, nas_path)
+                kb_service.copy_linebot_attachment_to_knowledge(kb_id, nas_path, tenant_id=ctos_tenant_id)
                 success_count += 1
             except Exception as e:
                 logger.warning(f"附件複製失敗 {nas_path}: {e}")
@@ -1619,6 +1992,7 @@ async def summarize_chat(
     line_group_id: str,
     hours: int = 24,
     max_messages: int = 50,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     取得 Line 群組聊天記錄，供 AI 摘要使用
@@ -1627,8 +2001,11 @@ async def summarize_chat(
         line_group_id: Line 群組的內部 UUID
         hours: 取得最近幾小時的訊息，預設 24
         max_messages: 最大訊息數量，預設 50
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     await ensure_db_connection()
+    tid = _get_tenant_id(ctos_tenant_id)
+
     async with get_connection() as conn:
         # 計算時間範圍
         since = datetime.now() - timedelta(hours=hours)
@@ -1644,12 +2021,14 @@ async def summarize_chat(
               AND m.created_at >= $2
               AND m.message_type = 'text'
               AND m.content IS NOT NULL
+              AND m.tenant_id = $4
             ORDER BY m.created_at ASC
             LIMIT $3
             """,
             UUID(line_group_id),
             since,
             max_messages,
+            tid,
         )
 
         if not rows:
@@ -1657,8 +2036,9 @@ async def summarize_chat(
 
         # 取得群組名稱
         group = await conn.fetchrow(
-            "SELECT name FROM line_groups WHERE id = $1",
+            "SELECT name FROM line_groups WHERE id = $1 AND tenant_id = $2",
             UUID(line_group_id),
+            tid,
         )
         group_name = group["name"] if group else "未知群組"
 
@@ -1680,6 +2060,7 @@ async def get_message_attachments(
     days: int = 7,
     file_type: str | None = None,
     limit: int = 20,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     查詢對話中的附件（圖片、檔案等），用於將附件加入知識庫
@@ -1690,8 +2071,10 @@ async def get_message_attachments(
         days: 查詢最近幾天的附件，預設 7 天，可根據用戶描述調整
         file_type: 檔案類型過濾（image, file, video, audio），不填則查詢全部
         limit: 最大回傳數量，預設 20
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     await ensure_db_connection()
+    tid = _get_tenant_id(ctos_tenant_id)
 
     if not line_user_id and not line_group_id:
         return "請提供 line_user_id 或 line_group_id"
@@ -1700,10 +2083,10 @@ async def get_message_attachments(
         # 計算時間範圍
         since = datetime.now() - timedelta(days=days)
 
-        # 建立查詢條件
-        conditions = ["m.created_at >= $1"]
-        params: list = [since]
-        param_idx = 2
+        # 建立查詢條件（包含租戶過濾）
+        conditions = ["m.created_at >= $1", "m.tenant_id = $2"]
+        params: list = [since, tid]
+        param_idx = 3
 
         if line_group_id:
             conditions.append(f"m.line_group_id = ${param_idx}")
@@ -1787,6 +2170,8 @@ async def search_nas_files(
     keywords: str,
     file_types: str | None = None,
     limit: int = 100,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     搜尋 NAS 共享檔案
@@ -1795,7 +2180,19 @@ async def search_nas_files(
         keywords: 搜尋關鍵字，多個關鍵字用逗號分隔（AND 匹配，大小寫不敏感）
         file_types: 檔案類型過濾，多個類型用逗號分隔（如：pdf,xlsx,dwg）
         limit: 最大回傳數量，預設 100
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
+    await ensure_db_connection()
+
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("search_nas_files", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
+    # 此工具搜尋的是公司共用專案區（projects_mount_path），不是租戶隔離區
+    # 公司專案檔案是跨租戶共用的，因此不需要 tenant_id 過濾
+    _tid = _get_tenant_id(ctos_tenant_id)  # noqa: F841 保留以備日後需要
     from pathlib import Path
     from ..config import settings
 
@@ -1885,13 +2282,28 @@ async def search_nas_files(
 
 
 @mcp.tool()
-async def get_nas_file_info(file_path: str) -> str:
+async def get_nas_file_info(
+    file_path: str,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
+) -> str:
     """
     取得 NAS 檔案詳細資訊
 
     Args:
         file_path: 檔案路徑（相對於 /mnt/nas/projects 或完整路徑）
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
+    await ensure_db_connection()
+
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("get_nas_file_info", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
+    # 預留租戶 ID 參數，未來透過 config 的 get_tenant_nas_path() 處理路徑隔離
+    tid = _get_tenant_id(ctos_tenant_id)  # noqa: F841
     from pathlib import Path
     from ..config import settings
 
@@ -1976,6 +2388,8 @@ async def get_nas_file_info(file_path: str) -> str:
 async def read_document(
     file_path: str,
     max_chars: int = 50000,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     讀取文件內容（支援 Word、Excel、PowerPoint、PDF）
@@ -1985,7 +2399,18 @@ async def read_document(
     Args:
         file_path: NAS 檔案路徑（nas:// 格式、相對路徑或完整路徑）
         max_chars: 最大字元數限制，預設 50000
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
+    await ensure_db_connection()
+
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("read_document", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
+    # 支援 CTOS zone（需要 tenant_id）和 SHARED zone
+    tid = _get_tenant_id(ctos_tenant_id)
     from pathlib import Path
     from ..config import settings
     from . import document_reader
@@ -1998,8 +2423,8 @@ async def read_document(
     except ValueError as e:
         return f"錯誤：{e}"
 
-    # 取得實際檔案系統路徑
-    resolved_path = path_manager.to_filesystem(file_path)
+    # 取得實際檔案系統路徑（傳入 tenant_id 以正確解析 CTOS 路徑）
+    resolved_path = path_manager.to_filesystem(file_path, tenant_id=tid)
     full_path = Path(resolved_path)
 
     # 安全檢查：只允許 CTOS 和 SHARED 區域（不允許 TEMP/LOCAL）
@@ -2071,6 +2496,7 @@ async def create_share_link(
     resource_type: str,
     resource_id: str,
     expires_in: str | None = "24h",
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     建立公開分享連結，讓沒有帳號的人也能查看知識庫、專案或下載檔案
@@ -2083,7 +2509,10 @@ async def create_share_link(
             - project_attachment: 專案附件（附件 UUID）
         resource_id: 資源 ID（如 kb-001、專案 UUID、NAS 路徑或附件 UUID）
         expires_in: 有效期限，可選 1h、24h、7d、null（永久），預設 24h
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
+    # 預留租戶 ID 參數，未來用於驗證資源權限
+    tid = _get_tenant_id(ctos_tenant_id)  # noqa: F841
     await ensure_db_connection()
 
     from .share import (
@@ -2110,7 +2539,7 @@ async def create_share_link(
             expires_in=expires_in,
         )
         # 使用 system 作為建立者（Line Bot 代理建立）
-        result = await _create_share_link(data, "linebot")
+        result = await _create_share_link(data, "linebot", tenant_id=tid)
 
         # 轉換為台北時區顯示
         if result.expires_at:
@@ -2140,6 +2569,8 @@ async def send_nas_file(
     file_path: str,
     line_user_id: str | None = None,
     line_group_id: str | None = None,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     直接發送 NAS 檔案給用戶。圖片會直接顯示在對話中，其他檔案會發送下載連結。
@@ -2148,6 +2579,8 @@ async def send_nas_file(
         file_path: NAS 檔案的完整路徑（從 search_nas_files 取得）
         line_user_id: Line 用戶 ID（個人對話時使用，從【對話識別】取得）
         line_group_id: Line 群組的內部 UUID（群組對話時使用，從【對話識別】取得）
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
 
     注意：
     - 圖片（jpg/jpeg/png/gif/webp）< 10MB 會直接顯示
@@ -2155,6 +2588,14 @@ async def send_nas_file(
     - 必須提供 line_user_id 或 line_group_id 其中之一
     """
     await ensure_db_connection()
+
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("send_nas_file", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
+    # 取得租戶 ID 用於資料庫查詢過濾
+    tid = _get_tenant_id(ctos_tenant_id)
 
     from pathlib import Path
     from .share import (
@@ -2171,9 +2612,9 @@ async def send_nas_file(
     if not line_user_id and not line_group_id:
         return "錯誤：請從【對話識別】區塊取得 line_user_id 或 line_group_id"
 
-    # 驗證檔案路徑
+    # 驗證檔案路徑（傳入 tenant_id 以正確解析 CTOS 路徑）
     try:
-        full_path = validate_nas_file_path(file_path)
+        full_path = validate_nas_file_path(file_path, tenant_id=tid)
     except NasFileNotFoundError as e:
         return f"錯誤：{e}"
     except NasFileAccessDenied as e:
@@ -2198,7 +2639,7 @@ async def send_nas_file(
             resource_id=file_path,
             expires_in="24h",
         )
-        result = await _create_share_link(data, "linebot")
+        result = await _create_share_link(data, "linebot", tenant_id=tid)
     except Exception as e:
         return f"建立分享連結失敗：{e}"
 
@@ -2206,11 +2647,12 @@ async def send_nas_file(
     # line_group_id 是內部 UUID，需要轉換為 Line group ID
     target_id = None
     if line_group_id:
-        # 查詢 Line group ID
+        # 查詢 Line group ID（加入 tenant_id 過濾以確保安全）
         async with get_connection() as conn:
             row = await conn.fetchrow(
-                "SELECT line_group_id FROM line_groups WHERE id = $1",
+                "SELECT line_group_id FROM line_groups WHERE id = $1 AND tenant_id = $2",
                 UUID(line_group_id),
+                tid,
             )
             if row:
                 target_id = row["line_group_id"]
@@ -2257,17 +2699,29 @@ async def send_nas_file(
 @mcp.tool()
 async def prepare_file_message(
     file_path: str,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     準備檔案訊息供 Line Bot 回覆。圖片會直接顯示在回覆中，其他檔案會以連結形式呈現。
 
     Args:
         file_path: NAS 檔案的完整路徑（從 search_nas_files 取得）
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
 
     Returns:
         包含檔案訊息標記的字串，系統會自動處理並在回覆中顯示圖片或連結
     """
     await ensure_db_connection()
+
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("prepare_file_message", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
+    # 取得租戶 ID，用於 CTOS zone 路徑解析
+    tid = _get_tenant_id(ctos_tenant_id)
 
     import json
     from pathlib import Path
@@ -2280,9 +2734,9 @@ async def prepare_file_message(
     )
     from ..models.share import ShareLinkCreate
 
-    # 驗證檔案路徑
+    # 驗證檔案路徑（傳入 tenant_id 以正確解析 CTOS 路徑）
     try:
-        full_path = validate_nas_file_path(file_path)
+        full_path = validate_nas_file_path(file_path, tenant_id=tid)
     except NasFileNotFoundError as e:
         return f"錯誤：{e}"
     except NasFileAccessDenied as e:
@@ -2313,7 +2767,7 @@ async def prepare_file_message(
             resource_id=file_path,
             expires_in="24h",
         )
-        result = await _create_share_link(data, "linebot")
+        result = await _create_share_link(data, "linebot", tenant_id=tid)
     except Exception as e:
         return f"建立分享連結失敗：{e}"
 
@@ -2376,6 +2830,8 @@ async def add_delivery_schedule(
     expected_delivery_date: str | None = None,
     status: str = "pending",
     notes: str | None = None,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     新增專案發包/交貨記錄
@@ -2391,37 +2847,47 @@ async def add_delivery_schedule(
         expected_delivery_date: 預計交貨日期（格式:YYYY-MM-DD）
         status: 狀態，可選:pending(待發包)、ordered(已發包)、delivered(已到貨)、completed(已完成)，預設 pending
         notes: 備註
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     await ensure_db_connection()
     from datetime import date
 
-    # 驗證專案存在
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("add_delivery_schedule", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
+    tid = _get_tenant_id(ctos_tenant_id)
+
+    # 驗證專案存在且屬於該租戶
     async with get_connection() as conn:
         project = await conn.fetchrow(
-            "SELECT id, name FROM projects WHERE id = $1",
+            "SELECT id, name FROM projects WHERE id = $1 AND tenant_id = $2",
             project_id,
+            tid,
         )
         if not project:
             return f"錯誤：找不到專案 {project_id}"
 
-        # 處理廠商：若提供 vendor_id 則自動查詢廠商名稱
+        # 處理廠商：若提供 vendor_id 則自動查詢廠商名稱（加入 tenant_id 過濾）
         actual_vendor = vendor
         actual_vendor_id = vendor_id
         if vendor_id and not vendor:
             vendor_row = await conn.fetchrow(
-                "SELECT name FROM vendors WHERE id = $1", vendor_id
+                "SELECT name FROM vendors WHERE id = $1 AND tenant_id = $2", vendor_id, tid
             )
             if vendor_row:
                 actual_vendor = vendor_row["name"]
             else:
                 return f"錯誤：找不到廠商 {vendor_id}"
 
-        # 處理物料：若提供 item_id 則自動查詢物料名稱
+        # 處理物料：若提供 item_id 則自動查詢物料名稱（加入 tenant_id 過濾）
         actual_item = item
         actual_item_id = item_id
         if item_id and not item:
             item_row = await conn.fetchrow(
-                "SELECT name FROM inventory_items WHERE id = $1", item_id
+                "SELECT name FROM inventory_items WHERE id = $1 AND tenant_id = $2", item_id, tid
             )
             if item_row:
                 actual_item = item_row["name"]
@@ -2455,12 +2921,12 @@ async def add_delivery_schedule(
         if status not in valid_statuses:
             return f"錯誤：狀態必須是 {', '.join(valid_statuses)} 其中之一"
 
-        # 新增記錄
+        # 新增記錄（包含 tenant_id）
         row = await conn.fetchrow(
             """
             INSERT INTO project_delivery_schedules
-                (project_id, vendor, vendor_id, item, item_id, quantity, order_date, expected_delivery_date, status, notes, created_by)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'AI')
+                (project_id, vendor, vendor_id, item, item_id, quantity, order_date, expected_delivery_date, status, notes, created_by, tenant_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'AI', $11)
             RETURNING id, vendor, item
             """,
             project_id,
@@ -2473,6 +2939,7 @@ async def add_delivery_schedule(
             parsed_expected_date,
             status,
             notes,
+            tid,
         )
 
         status_names = {
@@ -2518,6 +2985,8 @@ async def update_delivery_schedule(
     actual_delivery_date: str | None = None,
     expected_delivery_date: str | None = None,
     new_notes: str | None = None,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     更新專案發包/交貨記錄
@@ -2535,15 +3004,25 @@ async def update_delivery_schedule(
         actual_delivery_date: 實際到貨日期（格式:YYYY-MM-DD）
         expected_delivery_date: 更新預計交貨日期（格式:YYYY-MM-DD）
         new_notes: 更新備註
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     await ensure_db_connection()
+
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("update_delivery_schedule", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
+    tid = _get_tenant_id(ctos_tenant_id)
     from datetime import date
 
     async with get_connection() as conn:
-        # 驗證專案存在
+        # 驗證專案存在且屬於該租戶
         project = await conn.fetchrow(
-            "SELECT id, name FROM projects WHERE id = $1",
+            "SELECT id, name FROM projects WHERE id = $1 AND tenant_id = $2",
             project_id,
+            tid,
         )
         if not project:
             return f"錯誤：找不到專案 {project_id}"
@@ -2690,6 +3169,8 @@ async def get_delivery_schedules(
     status: str | None = None,
     vendor: str | None = None,
     limit: int = 20,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     取得專案的發包/交貨記錄
@@ -2699,14 +3180,24 @@ async def get_delivery_schedules(
         status: 狀態過濾，可選值:pending(待發包), ordered(已發包), delivered(已到貨), completed(已完成)
         vendor: 廠商過濾
         limit: 最大數量，預設 20
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     await ensure_db_connection()
 
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("get_delivery_schedules", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
+    tid = _get_tenant_id(ctos_tenant_id)
+
     async with get_connection() as conn:
-        # 驗證專案存在
+        # 驗證專案存在且屬於該租戶
         project = await conn.fetchrow(
-            "SELECT id, name FROM projects WHERE id = $1",
+            "SELECT id, name FROM projects WHERE id = $1 AND tenant_id = $2",
             project_id,
+            tid,
         )
         if not project:
             return f"錯誤：找不到專案 {project_id}"
@@ -2773,6 +3264,8 @@ async def add_project_link(
     title: str,
     url: str,
     description: str | None = None,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     新增專案連結
@@ -2782,28 +3275,39 @@ async def add_project_link(
         title: 連結標題（必填）
         url: URL（必填）
         description: 描述
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     await ensure_db_connection()
 
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("add_project_link", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
+    tid = _get_tenant_id(ctos_tenant_id)
+
     async with get_connection() as conn:
-        # 驗證專案存在
+        # 驗證專案存在且屬於該租戶
         project = await conn.fetchrow(
-            "SELECT id, name FROM projects WHERE id = $1",
+            "SELECT id, name FROM projects WHERE id = $1 AND tenant_id = $2",
             project_id,
+            tid,
         )
         if not project:
             return f"錯誤：找不到專案 {project_id}"
 
-        # 新增連結
+        # 新增連結（包含 tenant_id）
         await conn.execute(
             """
-            INSERT INTO project_links (project_id, title, url, description)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO project_links (project_id, title, url, description, tenant_id)
+            VALUES ($1, $2, $3, $4, $5)
             """,
             project_id,
             title,
             url,
             description,
+            tid,
         )
 
         return f"✅ 已為專案「{project['name']}」新增連結「{title}」"
@@ -2813,6 +3317,8 @@ async def add_project_link(
 async def get_project_links(
     project_id: str,
     limit: int = 20,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     查詢專案連結列表
@@ -2820,14 +3326,24 @@ async def get_project_links(
     Args:
         project_id: 專案 UUID
         limit: 最大數量，預設 20
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     await ensure_db_connection()
 
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("get_project_links", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
+    tid = _get_tenant_id(ctos_tenant_id)
+
     async with get_connection() as conn:
-        # 驗證專案存在
+        # 驗證專案存在且屬於該租戶
         project = await conn.fetchrow(
-            "SELECT id, name FROM projects WHERE id = $1",
+            "SELECT id, name FROM projects WHERE id = $1 AND tenant_id = $2",
             project_id,
+            tid,
         )
         if not project:
             return f"錯誤：找不到專案 {project_id}"
@@ -2867,6 +3383,8 @@ async def update_project_link(
     title: str | None = None,
     url: str | None = None,
     description: str | None = None,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     更新專案連結
@@ -2877,19 +3395,36 @@ async def update_project_link(
         title: 新標題
         url: 新 URL
         description: 新描述
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     await ensure_db_connection()
+
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("update_project_link", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
+    tid = _get_tenant_id(ctos_tenant_id)
 
     if not any([title, url, description is not None]):
         return "錯誤：請提供要更新的欄位（title、url 或 description）"
 
     async with get_connection() as conn:
-        # 查詢連結
-        sql = "SELECT * FROM project_links WHERE id = $1"
-        params = [link_id]
+        # 查詢連結（通過 JOIN 驗證專案屬於該租戶）
+        sql = """
+            SELECT pl.* FROM project_links pl
+            JOIN projects p ON pl.project_id = p.id
+            WHERE pl.id = $1 AND p.tenant_id = $2
+        """
+        params = [link_id, tid]
 
         if project_id:
-            sql += " AND project_id = $2"
+            sql = """
+                SELECT pl.* FROM project_links pl
+                JOIN projects p ON pl.project_id = p.id
+                WHERE pl.id = $1 AND p.tenant_id = $2 AND pl.project_id = $3
+            """
             params.append(project_id)
 
         link = await conn.fetchrow(sql, *params)
@@ -2930,6 +3465,8 @@ async def update_project_link(
 async def delete_project_link(
     link_id: str,
     project_id: str | None = None,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     刪除專案連結
@@ -2937,16 +3474,33 @@ async def delete_project_link(
     Args:
         link_id: 連結 UUID
         project_id: 專案 UUID（可選，用於驗證）
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     await ensure_db_connection()
 
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("delete_project_link", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
+    tid = _get_tenant_id(ctos_tenant_id)
+
     async with get_connection() as conn:
-        # 查詢連結
-        sql = "SELECT * FROM project_links WHERE id = $1"
-        params = [link_id]
+        # 查詢連結（通過 JOIN 驗證專案屬於該租戶）
+        sql = """
+            SELECT pl.* FROM project_links pl
+            JOIN projects p ON pl.project_id = p.id
+            WHERE pl.id = $1 AND p.tenant_id = $2
+        """
+        params = [link_id, tid]
 
         if project_id:
-            sql += " AND project_id = $2"
+            sql = """
+                SELECT pl.* FROM project_links pl
+                JOIN projects p ON pl.project_id = p.id
+                WHERE pl.id = $1 AND p.tenant_id = $2 AND pl.project_id = $3
+            """
             params.append(project_id)
 
         link = await conn.fetchrow(sql, *params)
@@ -2969,6 +3523,8 @@ async def add_project_attachment(
     project_id: str,
     nas_path: str,
     description: str | None = None,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     從 NAS 路徑添加附件到專案
@@ -2977,6 +3533,8 @@ async def add_project_attachment(
         project_id: 專案 UUID
         nas_path: NAS 檔案路徑（從 get_message_attachments 或 search_nas_files 取得）
         description: 描述
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     import mimetypes
     from pathlib import Path as FilePath
@@ -2984,11 +3542,19 @@ async def add_project_attachment(
 
     await ensure_db_connection()
 
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("add_project_attachment", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
+    tid = _get_tenant_id(ctos_tenant_id)
+
     async with get_connection() as conn:
-        # 驗證專案存在
+        # 驗證專案存在且屬於該租戶
         project = await conn.fetchrow(
-            "SELECT id, name FROM projects WHERE id = $1",
+            "SELECT id, name FROM projects WHERE id = $1 AND tenant_id = $2",
             project_id,
+            tid,
         )
         if not project:
             return f"錯誤：找不到專案 {project_id}"
@@ -3004,8 +3570,8 @@ async def add_project_attachment(
         if parsed.zone != StorageZone.CTOS:
             return f"錯誤：只能添加 CTOS 區域的檔案，目前路徑屬於 {parsed.zone.value}://"
 
-        # 取得實際檔案系統路徑
-        actual_path = FilePath(path_manager.to_filesystem(nas_path))
+        # 取得實際檔案系統路徑（傳入 tenant_id 以正確解析 CTOS 路徑）
+        actual_path = FilePath(path_manager.to_filesystem(nas_path, tenant_id=tid))
 
         # 檢查檔案存在
         if not actual_path.exists():
@@ -3019,12 +3585,12 @@ async def add_project_attachment(
         file_size = actual_path.stat().st_size
         file_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
 
-        # 新增附件記錄
+        # 新增附件記錄（包含 tenant_id）
         await conn.execute(
             """
             INSERT INTO project_attachments
-            (project_id, filename, file_type, file_size, storage_path, description, uploaded_by)
-            VALUES ($1, $2, $3, $4, $5, $6, 'AI 助手')
+            (project_id, filename, file_type, file_size, storage_path, description, uploaded_by, tenant_id)
+            VALUES ($1, $2, $3, $4, $5, $6, 'AI 助手', $7)
             """,
             project_id,
             filename,
@@ -3032,6 +3598,7 @@ async def add_project_attachment(
             file_size,
             storage_path,
             description,
+            tid,
         )
 
         return f"✅ 已為專案「{project['name']}」新增附件「{filename}」"
@@ -3041,6 +3608,8 @@ async def add_project_attachment(
 async def get_project_attachments(
     project_id: str,
     limit: int = 20,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     查詢專案附件列表
@@ -3048,14 +3617,24 @@ async def get_project_attachments(
     Args:
         project_id: 專案 UUID
         limit: 最大數量，預設 20
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     await ensure_db_connection()
 
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("get_project_attachments", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
+    tid = _get_tenant_id(ctos_tenant_id)
+
     async with get_connection() as conn:
-        # 驗證專案存在
+        # 驗證專案存在且屬於該租戶
         project = await conn.fetchrow(
-            "SELECT id, name FROM projects WHERE id = $1",
+            "SELECT id, name FROM projects WHERE id = $1 AND tenant_id = $2",
             project_id,
+            tid,
         )
         if not project:
             return f"錯誤：找不到專案 {project_id}"
@@ -3106,6 +3685,8 @@ async def update_project_attachment(
     attachment_id: str,
     project_id: str | None = None,
     description: str | None = None,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     更新專案附件描述
@@ -3114,19 +3695,36 @@ async def update_project_attachment(
         attachment_id: 附件 UUID
         project_id: 專案 UUID（可選，用於驗證）
         description: 新描述
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     await ensure_db_connection()
+
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("update_project_attachment", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
+    tid = _get_tenant_id(ctos_tenant_id)
 
     if description is None:
         return "錯誤：請提供要更新的描述（description）"
 
     async with get_connection() as conn:
-        # 查詢附件
-        sql = "SELECT * FROM project_attachments WHERE id = $1"
-        params = [attachment_id]
+        # 查詢附件（通過 JOIN 驗證專案屬於該租戶）
+        sql = """
+            SELECT pa.* FROM project_attachments pa
+            JOIN projects p ON pa.project_id = p.id
+            WHERE pa.id = $1 AND p.tenant_id = $2
+        """
+        params = [attachment_id, tid]
 
         if project_id:
-            sql += " AND project_id = $2"
+            sql = """
+                SELECT pa.* FROM project_attachments pa
+                JOIN projects p ON pa.project_id = p.id
+                WHERE pa.id = $1 AND p.tenant_id = $2 AND pa.project_id = $3
+            """
             params.append(project_id)
 
         attachment = await conn.fetchrow(sql, *params)
@@ -3147,6 +3745,8 @@ async def update_project_attachment(
 async def delete_project_attachment(
     attachment_id: str,
     project_id: str | None = None,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     刪除專案附件
@@ -3154,16 +3754,33 @@ async def delete_project_attachment(
     Args:
         attachment_id: 附件 UUID
         project_id: 專案 UUID（可選，用於驗證）
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     await ensure_db_connection()
 
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("delete_project_attachment", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
+    tid = _get_tenant_id(ctos_tenant_id)
+
     async with get_connection() as conn:
-        # 查詢附件
-        sql = "SELECT * FROM project_attachments WHERE id = $1"
-        params = [attachment_id]
+        # 查詢附件（通過 JOIN 驗證專案屬於該租戶）
+        sql = """
+            SELECT pa.* FROM project_attachments pa
+            JOIN projects p ON pa.project_id = p.id
+            WHERE pa.id = $1 AND p.tenant_id = $2
+        """
+        params = [attachment_id, tid]
 
         if project_id:
-            sql += " AND project_id = $2"
+            sql = """
+                SELECT pa.* FROM project_attachments pa
+                JOIN projects p ON pa.project_id = p.id
+                WHERE pa.id = $1 AND p.tenant_id = $2 AND pa.project_id = $3
+            """
             params.append(project_id)
 
         attachment = await conn.fetchrow(sql, *params)
@@ -3188,6 +3805,8 @@ async def convert_pdf_to_images(
     output_format: str = "png",
     dpi: int = 150,
     max_pages: int = 20,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     將 PDF 轉換為圖片
@@ -3203,8 +3822,23 @@ async def convert_pdf_to_images(
         output_format: 輸出格式，可選 "png"（預設）或 "jpg"
         dpi: 解析度，預設 150，範圍 72-600
         max_pages: 最大頁數限制，預設 20
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
+    await ensure_db_connection()
+
     import json
+
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("convert_pdf_to_images", ctos_user_id)
+    if not allowed:
+        return json.dumps({
+            "success": False,
+            "error": error_msg
+        }, ensure_ascii=False)
+
+    # 取得租戶 ID，用於 CTOS zone 路徑解析
+    tid = _get_tenant_id(ctos_tenant_id)
     from pathlib import Path as FilePath
 
     from ..config import settings
@@ -3247,7 +3881,8 @@ async def convert_pdf_to_images(
             "error": f"不允許存取 {parsed.zone.value}:// 區域的檔案"
         }, ensure_ascii=False)
 
-    actual_path = path_manager.to_filesystem(pdf_path)
+    # 取得實際檔案系統路徑（傳入 tenant_id 以正確解析 CTOS 路徑）
+    actual_path = path_manager.to_filesystem(pdf_path, tenant_id=tid)
 
     # 檢查檔案存在
     if not FilePath(actual_path).exists():
@@ -3324,6 +3959,8 @@ async def query_vendors(
     keyword: str | None = None,
     erp_code: str | None = None,
     limit: int = 20,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     查詢廠商
@@ -3332,69 +3969,68 @@ async def query_vendors(
         keyword: 搜尋關鍵字（名稱、簡稱、ERP 編號）
         erp_code: ERP 編號（精確查詢）
         limit: 最大回傳數量，預設 20
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
+    from ..services.vendor import list_vendors, get_vendor_by_erp_code
+
     await ensure_db_connection()
 
-    async with get_connection() as conn:
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("query_vendors", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
+    try:
         if erp_code:
             # 精確查詢 ERP 編號
-            row = await conn.fetchrow(
-                "SELECT id, erp_code, name, short_name, contact_person, phone, is_active FROM vendors WHERE erp_code = $1",
-                erp_code
-            )
-            if not row:
+            vendor = await get_vendor_by_erp_code(erp_code, tenant_id=ctos_tenant_id)
+            if not vendor:
                 return f"找不到 ERP 編號為 {erp_code} 的廠商"
             result = "📋 廠商資訊：\n"
-            result += f"- ID：{row['id']}\n"
-            result += f"- ERP 編號：{row['erp_code'] or '無'}\n"
-            result += f"- 名稱：{row['name']}\n"
-            if row['short_name']:
-                result += f"- 簡稱：{row['short_name']}\n"
-            if row['contact_person']:
-                result += f"- 聯絡人：{row['contact_person']}\n"
-            if row['phone']:
-                result += f"- 電話：{row['phone']}\n"
-            result += f"- 狀態：{'啟用' if row['is_active'] else '停用'}"
+            result += f"- ID：{vendor.id}\n"
+            result += f"- ERP 編號：{vendor.erp_code or '無'}\n"
+            result += f"- 名稱：{vendor.name}\n"
+            if vendor.short_name:
+                result += f"- 簡稱：{vendor.short_name}\n"
+            if vendor.contact_person:
+                result += f"- 聯絡人：{vendor.contact_person}\n"
+            if vendor.phone:
+                result += f"- 電話：{vendor.phone}\n"
+            result += f"- 狀態：{'啟用' if vendor.is_active else '停用'}"
             return result
 
         # 關鍵字搜尋
-        sql = """
-            SELECT id, erp_code, name, short_name, contact_person, phone, is_active
-            FROM vendors
-            WHERE is_active = true
-        """
-        params = []
-        param_idx = 1
+        response = await list_vendors(
+            query=keyword,
+            active_only=True,
+            limit=limit,
+            tenant_id=ctos_tenant_id,
+        )
 
-        if keyword:
-            sql += f" AND (name ILIKE ${param_idx} OR short_name ILIKE ${param_idx} OR erp_code ILIKE ${param_idx})"
-            params.append(f"%{keyword}%")
-            param_idx += 1
-
-        sql += f" ORDER BY name LIMIT ${param_idx}"
-        params.append(limit)
-
-        rows = await conn.fetch(sql, *params)
-
-        if not rows:
+        if not response.items:
             return "找不到符合條件的廠商" + (f"（關鍵字：{keyword}）" if keyword else "")
 
-        result = f"📋 廠商列表（共 {len(rows)} 筆）：\n\n"
-        for i, row in enumerate(rows, 1):
-            result += f"{i}. {row['name']}"
-            if row['erp_code']:
-                result += f" [{row['erp_code']}]"
-            if row['short_name']:
-                result += f"（{row['short_name']}）"
-            if row['contact_person'] or row['phone']:
+        result = f"📋 廠商列表（共 {len(response.items)} 筆）：\n\n"
+        for i, vendor in enumerate(response.items, 1):
+            result += f"{i}. {vendor.name}"
+            if vendor.erp_code:
+                result += f" [{vendor.erp_code}]"
+            if vendor.short_name:
+                result += f"（{vendor.short_name}）"
+            if vendor.contact_person or vendor.phone:
                 result += f"\n   "
-                if row['contact_person']:
-                    result += f"聯絡人：{row['contact_person']}"
-                if row['phone']:
-                    result += f" | 電話：{row['phone']}"
+                if vendor.contact_person:
+                    result += f"聯絡人：{vendor.contact_person}"
+                if vendor.phone:
+                    result += f" | 電話：{vendor.phone}"
             result += "\n"
 
         return result
+
+    except Exception as e:
+        logger.error(f"查詢廠商失敗: {e}")
+        return f"❌ 查詢失敗：{str(e)}"
 
 
 @mcp.tool()
@@ -3410,6 +4046,8 @@ async def add_vendor(
     tax_id: str | None = None,
     payment_terms: str | None = None,
     notes: str | None = None,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     新增廠商
@@ -3426,50 +4064,54 @@ async def add_vendor(
         tax_id: 統一編號
         payment_terms: 付款條件
         notes: 備註
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
+    from ..services.vendor import create_vendor, VendorError
+    from ..models.vendor import VendorCreate
+
     await ensure_db_connection()
 
-    async with get_connection() as conn:
-        # 檢查 ERP 編號是否重複
-        if erp_code:
-            exists = await conn.fetchval(
-                "SELECT 1 FROM vendors WHERE erp_code = $1", erp_code
-            )
-            if exists:
-                return f"錯誤：ERP 編號 {erp_code} 已存在"
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("add_vendor", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
 
-        row = await conn.fetchrow(
-            """
-            INSERT INTO vendors (erp_code, name, short_name, contact_person, phone, fax, email, address, tax_id, payment_terms, notes, created_by)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'AI')
-            RETURNING id, name, erp_code
-            """,
-            erp_code,
-            name,
-            short_name,
-            contact_person,
-            phone,
-            fax,
-            email,
-            address,
-            tax_id,
-            payment_terms,
-            notes,
+    try:
+        data = VendorCreate(
+            name=name,
+            erp_code=erp_code,
+            short_name=short_name,
+            contact_person=contact_person,
+            phone=phone,
+            fax=fax,
+            email=email,
+            address=address,
+            tax_id=tax_id,
+            payment_terms=payment_terms,
+            notes=notes,
         )
+        vendor = await create_vendor(data, created_by="linebot", tenant_id=ctos_tenant_id)
 
         result = f"✅ 已新增廠商\n"
-        result += f"- ID：{row['id']}\n"
-        result += f"- 名稱：{row['name']}\n"
-        if row['erp_code']:
-            result += f"- ERP 編號：{row['erp_code']}\n"
-        if short_name:
-            result += f"- 簡稱：{short_name}\n"
-        if contact_person:
-            result += f"- 聯絡人：{contact_person}\n"
-        if phone:
-            result += f"- 電話：{phone}"
+        result += f"- ID：{vendor.id}\n"
+        result += f"- 名稱：{vendor.name}\n"
+        if vendor.erp_code:
+            result += f"- ERP 編號：{vendor.erp_code}\n"
+        if vendor.short_name:
+            result += f"- 簡稱：{vendor.short_name}\n"
+        if vendor.contact_person:
+            result += f"- 聯絡人：{vendor.contact_person}\n"
+        if vendor.phone:
+            result += f"- 電話：{vendor.phone}"
 
         return result
+
+    except VendorError as e:
+        return f"❌ {str(e)}"
+    except Exception as e:
+        logger.error(f"新增廠商失敗: {e}")
+        return f"❌ 新增失敗：{str(e)}"
 
 
 @mcp.tool()
@@ -3487,6 +4129,8 @@ async def update_vendor(
     payment_terms: str | None = None,
     notes: str | None = None,
     is_active: bool | None = None,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     更新廠商資訊
@@ -3505,64 +4149,49 @@ async def update_vendor(
         payment_terms: 付款條件
         notes: 備註
         is_active: 是否啟用
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
+    from ..services.vendor import update_vendor as update_vendor_service, VendorError
+    from ..models.vendor import VendorUpdate
+
     await ensure_db_connection()
 
-    async with get_connection() as conn:
-        # 檢查廠商是否存在
-        vendor = await conn.fetchrow(
-            "SELECT id, name FROM vendors WHERE id = $1", vendor_id
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("update_vendor", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
+    try:
+        data = VendorUpdate(
+            erp_code=erp_code,
+            name=name,
+            short_name=short_name,
+            contact_person=contact_person,
+            phone=phone,
+            fax=fax,
+            email=email,
+            address=address,
+            tax_id=tax_id,
+            payment_terms=payment_terms,
+            notes=notes,
+            is_active=is_active,
         )
-        if not vendor:
-            return f"錯誤：找不到廠商 {vendor_id}"
+        vendor = await update_vendor_service(UUID(vendor_id), data, tenant_id=ctos_tenant_id)
 
-        # 檢查 ERP 編號是否重複
-        if erp_code is not None:
-            dup = await conn.fetchval(
-                "SELECT 1 FROM vendors WHERE erp_code = $1 AND id != $2",
-                erp_code, vendor_id
-            )
-            if dup:
-                return f"錯誤：ERP 編號 {erp_code} 已存在"
-
-        # 動態建立更新語句
-        updates = []
-        params = []
-        param_idx = 1
-
-        for field, value in [
-            ("erp_code", erp_code),
-            ("name", name),
-            ("short_name", short_name),
-            ("contact_person", contact_person),
-            ("phone", phone),
-            ("fax", fax),
-            ("email", email),
-            ("address", address),
-            ("tax_id", tax_id),
-            ("payment_terms", payment_terms),
-            ("notes", notes),
-            ("is_active", is_active),
-        ]:
-            if value is not None:
-                updates.append(f"{field} = ${param_idx}")
-                params.append(value)
-                param_idx += 1
-
-        if not updates:
-            return "沒有需要更新的資料"
-
-        params.append(vendor_id)
-        sql = f"UPDATE vendors SET {', '.join(updates)} WHERE id = ${param_idx} RETURNING name, erp_code, is_active"
-        row = await conn.fetchrow(sql, *params)
-
-        result = f"✅ 已更新廠商 {row['name']}"
-        if row['erp_code']:
-            result += f" [{row['erp_code']}]"
+        result = f"✅ 已更新廠商 {vendor.name}"
+        if vendor.erp_code:
+            result += f" [{vendor.erp_code}]"
         if is_active is not None:
-            result += f"\n- 狀態：{'啟用' if row['is_active'] else '停用'}"
+            result += f"\n- 狀態：{'啟用' if vendor.is_active else '停用'}"
 
         return result
+
+    except VendorError as e:
+        return f"❌ {str(e)}"
+    except Exception as e:
+        logger.error(f"更新廠商失敗: {e}")
+        return f"❌ 更新失敗：{str(e)}"
 
 
 # ============================================================
@@ -3578,6 +4207,8 @@ async def query_inventory(
     vendor: str | None = None,
     low_stock: bool = False,
     limit: int = 20,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     查詢物料/庫存
@@ -3589,6 +4220,8 @@ async def query_inventory(
         vendor: 廠商名稱過濾（模糊搜尋）
         low_stock: 只顯示庫存不足的物料
         limit: 最大回傳數量，預設 20
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     from decimal import Decimal
     from ..services.inventory import (
@@ -3599,11 +4232,16 @@ async def query_inventory(
 
     await ensure_db_connection()
 
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("query_inventory", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
     try:
         # 如果指定了 item_id，查詢單一物料詳情
         if item_id:
             try:
-                data = await get_item_with_transactions(UUID(item_id))
+                data = await get_item_with_transactions(UUID(item_id), tenant_id=ctos_tenant_id)
             except Exception:
                 return f"❌ 找不到物料 ID: {item_id}"
 
@@ -3641,7 +4279,7 @@ async def query_inventory(
             return result
 
         # 查詢物料列表（使用 Service 層）
-        response = await list_inventory_items(query=keyword, category=category, vendor=vendor, low_stock=low_stock)
+        response = await list_inventory_items(query=keyword, category=category, vendor=vendor, low_stock=low_stock, tenant_id=ctos_tenant_id)
         items = response.items[:limit]
 
         if not items:
@@ -3674,6 +4312,8 @@ async def add_inventory_item(
     storage_location: str | None = None,
     min_stock: float | None = None,
     notes: str | None = None,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     新增物料
@@ -3688,12 +4328,19 @@ async def add_inventory_item(
         storage_location: 存放庫位（如 A-1-3 表示 A 區 1 排 3 號）
         min_stock: 最低庫存量（低於此數量會警告）
         notes: 備註
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     from decimal import Decimal
     from ..services.inventory import create_inventory_item, InventoryError
     from ..models.inventory import InventoryItemCreate
 
     await ensure_db_connection()
+
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("add_inventory_item", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
 
     try:
         data = InventoryItemCreate(
@@ -3707,7 +4354,7 @@ async def add_inventory_item(
             min_stock=Decimal(str(min_stock)) if min_stock else None,
             notes=notes,
         )
-        result = await create_inventory_item(data, created_by="linebot")
+        result = await create_inventory_item(data, created_by="linebot", tenant_id=ctos_tenant_id)
 
         location_info = f"\n存放庫位：{result.storage_location}" if result.storage_location else ""
         model_info = f"\n型號：{result.model}" if result.model else ""
@@ -3733,6 +4380,8 @@ async def update_inventory_item(
     storage_location: str | None = None,
     min_stock: float | None = None,
     notes: str | None = None,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     更新物料資訊
@@ -3749,6 +4398,8 @@ async def update_inventory_item(
         storage_location: 存放庫位
         min_stock: 最低庫存量
         notes: 備註
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     from decimal import Decimal
     from ..services.inventory import (
@@ -3760,14 +4411,19 @@ async def update_inventory_item(
 
     await ensure_db_connection()
 
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("update_inventory_item", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
     try:
-        # 找到物料
+        # 找到物料（使用 tenant_id 過濾）
         target_id = None
         if item_id:
             target_id = UUID(item_id)
         elif item_name:
             # 用名稱搜尋
-            response = await list_inventory_items(query=item_name)
+            response = await list_inventory_items(query=item_name, tenant_id=ctos_tenant_id)
             if not response.items:
                 return f"❌ 找不到物料：{item_name}"
             if len(response.items) > 1:
@@ -3833,6 +4489,8 @@ async def record_inventory_in(
     project_name: str | None = None,
     transaction_date: str | None = None,
     notes: str | None = None,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     記錄進貨
@@ -3846,6 +4504,8 @@ async def record_inventory_in(
         project_name: 關聯專案名稱（會搜尋匹配）
         transaction_date: 進貨日期（格式：YYYY-MM-DD，預設今日）
         notes: 備註
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     from datetime import date
     from decimal import Decimal
@@ -3857,12 +4517,17 @@ async def record_inventory_in(
 
     await ensure_db_connection()
 
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("record_inventory_in", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
     if quantity <= 0:
         return "❌ 進貨數量必須大於 0"
 
     try:
         # 查詢物料
-        item_result = await find_item_by_id_or_name(item_id=item_id, item_name=item_name)
+        item_result = await find_item_by_id_or_name(item_id=item_id, item_name=item_name, tenant_id=ctos_tenant_id)
         if not item_result.found:
             if item_result.has_multiple:
                 candidates = "\n".join([f"• {i['name']}（ID: {i['id']}）" for i in item_result.candidates])
@@ -3871,7 +4536,7 @@ async def record_inventory_in(
         item = item_result.item
 
         # 查詢專案（如果有指定）
-        project_result = await find_project_by_id_or_name(project_id=project_id, project_name=project_name)
+        project_result = await find_project_by_id_or_name(project_id=project_id, project_name=project_name, tenant_id=ctos_tenant_id)
         if project_result.error:
             if project_result.has_multiple:
                 candidates = "\n".join([f"• {p['name']}（ID: {p['id']}）" for p in project_result.candidates])
@@ -3898,6 +4563,7 @@ async def record_inventory_in(
             vendor=vendor,
             project_id=actual_project_id,
             notes=notes,
+            tenant_id=ctos_tenant_id,
         )
 
         return f"✅ 已記錄進貨\n物料：{item['name']}\n數量：+{quantity} {item['unit'] or ''}\n目前庫存：{new_stock} {item['unit'] or ''}{project_info}"
@@ -3916,6 +4582,8 @@ async def record_inventory_out(
     project_name: str | None = None,
     transaction_date: str | None = None,
     notes: str | None = None,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     記錄出貨/領料
@@ -3928,6 +4596,8 @@ async def record_inventory_out(
         project_name: 關聯專案名稱（會搜尋匹配）
         transaction_date: 出貨日期（格式：YYYY-MM-DD，預設今日）
         notes: 備註
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     from datetime import date
     from decimal import Decimal
@@ -3940,13 +4610,18 @@ async def record_inventory_out(
 
     await ensure_db_connection()
 
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("record_inventory_out", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
     if quantity <= 0:
         return "❌ 出貨數量必須大於 0"
 
     try:
         # 查找物料
         item_result = await find_item_by_id_or_name(
-            item_id=item_id, item_name=item_name, include_stock=True
+            item_id=item_id, item_name=item_name, include_stock=True, tenant_id=ctos_tenant_id
         )
         if not item_result.found:
             if item_result.has_multiple:
@@ -3968,7 +4643,7 @@ async def record_inventory_out(
         actual_project_id = None
         project_info = ""
         project_result = await find_project_by_id_or_name(
-            project_id=project_id, project_name=project_name
+            project_id=project_id, project_name=project_name, tenant_id=ctos_tenant_id
         )
         if project_result.error and project_result.has_multiple:
             candidates = "\n".join(
@@ -3995,6 +4670,7 @@ async def record_inventory_out(
             transaction_date=t_date,
             project_id=actual_project_id,
             notes=notes,
+            tenant_id=ctos_tenant_id,
         )
 
         return f"✅ 已記錄出貨/領料\n物料：{item['name']}\n數量：-{quantity} {item['unit'] or ''}\n目前庫存：{new_stock} {item['unit'] or ''}{project_info}{warning}"
@@ -4010,6 +4686,8 @@ async def adjust_inventory(
     reason: str,
     item_id: str | None = None,
     item_name: str | None = None,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     調整庫存（盤點校正）
@@ -4019,6 +4697,8 @@ async def adjust_inventory(
         reason: 調整原因（必填，如「盤點調整」、「損耗」）
         item_id: 物料 ID（與 item_name 擇一提供）
         item_name: 物料名稱（與 item_id 擇一提供）
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     from decimal import Decimal
 
@@ -4029,6 +4709,11 @@ async def adjust_inventory(
 
     await ensure_db_connection()
 
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("adjust_inventory", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
     if new_quantity < 0:
         return "❌ 庫存數量不能為負數"
 
@@ -4038,7 +4723,7 @@ async def adjust_inventory(
     try:
         # 查找物料
         item_result = await find_item_by_id_or_name(
-            item_id=item_id, item_name=item_name, include_stock=True
+            item_id=item_id, item_name=item_name, include_stock=True, tenant_id=ctos_tenant_id
         )
         if not item_result.found:
             if item_result.has_multiple:
@@ -4067,6 +4752,7 @@ async def adjust_inventory(
             transaction_type=t_type,
             quantity=t_quantity,
             notes=t_notes,
+            tenant_id=ctos_tenant_id,
         )
 
         direction = "增加" if diff > 0 else "減少"
@@ -4088,6 +4774,8 @@ async def add_inventory_order(
     project_id: str | None = None,
     project_name: str | None = None,
     notes: str | None = None,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     新增訂購記錄
@@ -4102,6 +4790,8 @@ async def add_inventory_order(
         project_id: 關聯專案 ID
         project_name: 關聯專案名稱（會搜尋匹配）
         notes: 備註
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
     """
     from datetime import date
     from decimal import Decimal
@@ -4114,6 +4804,11 @@ async def add_inventory_order(
     from ..models.inventory import InventoryOrderCreate
 
     await ensure_db_connection()
+
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("add_inventory_order", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
 
     if order_quantity <= 0:
         return "❌ 訂購數量必須大於 0"
@@ -4188,6 +4883,8 @@ async def update_inventory_order(
     vendor: str | None = None,
     project_id: str | None = None,
     notes: str | None = None,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     更新訂購記錄
@@ -4202,6 +4899,8 @@ async def update_inventory_order(
         vendor: 訂購廠商
         project_id: 關聯專案 ID
         notes: 備註
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     from datetime import date
     from decimal import Decimal
@@ -4213,6 +4912,11 @@ async def update_inventory_order(
     from ..models.inventory import InventoryOrderUpdate, OrderStatus
 
     await ensure_db_connection()
+
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("update_inventory_order", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
 
     # 驗證狀態值
     valid_statuses = ["pending", "ordered", "delivered", "cancelled"]

@@ -24,6 +24,13 @@ const FileManagerModule = (function() {
   let searchTimer = null;
   let mobilePreviewOverlay = null;
 
+  // NAS 連線狀態
+  let nasToken = null;
+  let nasHost = null;
+  let nasConnectDialog = null;
+  // localStorage key for remembering last NAS connection
+  const NAS_LAST_HOST_KEY = 'chingtech_nas_last_host';
+
   /**
    * Check if current view is mobile
    */
@@ -122,8 +129,254 @@ const FileManagerModule = (function() {
       height: 600,
       content: renderContent(),
       onClose: handleClose,
-      onInit: handleInit
+      onInit: handleInitWithNasCheck
     });
+  }
+
+  /**
+   * Handle window init with NAS connection check
+   */
+  async function handleInitWithNasCheck(windowEl, wId) {
+    windowId = wId;
+    bindEvents(windowEl);
+
+    // 檢查是否有活躍的 NAS 連線
+    const hasConnection = await checkExistingNasConnection();
+    if (hasConnection) {
+      loadDirectory(currentPath);
+    } else {
+      // 顯示 NAS 連線對話框
+      showNasConnectDialog();
+    }
+  }
+
+  /**
+   * 檢查是否有活躍的 NAS 連線
+   */
+  async function checkExistingNasConnection() {
+    try {
+      const response = await fetch('/api/nas/connections', {
+        headers: { 'Authorization': `Bearer ${getToken()}` }
+      });
+      if (!response.ok) return false;
+
+      const data = await response.json();
+      if (data.connections && data.connections.length > 0) {
+        // 使用第一個有效連線
+        const conn = data.connections[0];
+        nasToken = conn.token;
+        nasHost = conn.host;
+        updateNasStatusDisplay();
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('檢查 NAS 連線失敗:', error);
+      return false;
+    }
+  }
+
+  /**
+   * 顯示 NAS 連線對話框
+   */
+  function showNasConnectDialog() {
+    if (nasConnectDialog) return;
+
+    // 取得上次連線的主機位址
+    const lastHost = localStorage.getItem(NAS_LAST_HOST_KEY) || '';
+
+    nasConnectDialog = document.createElement('div');
+    nasConnectDialog.className = 'fm-nas-connect-overlay';
+    nasConnectDialog.innerHTML = `
+      <div class="fm-nas-connect-dialog">
+        <div class="fm-nas-connect-header">
+          <div class="fm-nas-connect-title">
+            <span class="icon">${getIcon('server-network')}</span>
+            連線至 NAS
+          </div>
+          <button class="fm-nas-connect-close" id="fmNasConnectClose">
+            <span class="icon">${getIcon('close')}</span>
+          </button>
+        </div>
+        <div class="fm-nas-connect-body">
+          <form id="fmNasConnectForm" class="fm-nas-connect-form">
+            <div class="fm-nas-connect-error" id="fmNasConnectError"></div>
+            <div class="fm-nas-connect-field">
+              <label for="fmNasHost">NAS 伺服器位址</label>
+              <input type="text" id="fmNasHost" placeholder="例如：192.168.1.100" value="${lastHost}" required>
+            </div>
+            <div class="fm-nas-connect-field">
+              <label for="fmNasUsername">使用者名稱</label>
+              <input type="text" id="fmNasUsername" placeholder="NAS 帳號" required>
+            </div>
+            <div class="fm-nas-connect-field">
+              <label for="fmNasPassword">密碼</label>
+              <input type="password" id="fmNasPassword" placeholder="NAS 密碼" required>
+            </div>
+          </form>
+        </div>
+        <div class="fm-nas-connect-footer">
+          <button class="fm-nas-connect-btn fm-nas-connect-btn-cancel" id="fmNasConnectCancel">取消</button>
+          <button class="fm-nas-connect-btn fm-nas-connect-btn-connect" id="fmNasConnectSubmit">連線</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(nasConnectDialog);
+
+    // 綁定事件
+    const closeBtn = nasConnectDialog.querySelector('#fmNasConnectClose');
+    const cancelBtn = nasConnectDialog.querySelector('#fmNasConnectCancel');
+    const submitBtn = nasConnectDialog.querySelector('#fmNasConnectSubmit');
+    const form = nasConnectDialog.querySelector('#fmNasConnectForm');
+    const hostInput = nasConnectDialog.querySelector('#fmNasHost');
+
+    closeBtn.addEventListener('click', closeNasConnectDialogAndWindow);
+    cancelBtn.addEventListener('click', closeNasConnectDialogAndWindow);
+
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      handleNasConnect();
+    });
+
+    submitBtn.addEventListener('click', handleNasConnect);
+
+    // 自動 focus
+    if (lastHost) {
+      nasConnectDialog.querySelector('#fmNasUsername').focus();
+    } else {
+      hostInput.focus();
+    }
+  }
+
+  /**
+   * 關閉 NAS 連線對話框並關閉檔案管理器視窗
+   */
+  function closeNasConnectDialogAndWindow() {
+    hideNasConnectDialog();
+    close();
+  }
+
+  /**
+   * 隱藏 NAS 連線對話框
+   */
+  function hideNasConnectDialog() {
+    if (nasConnectDialog) {
+      nasConnectDialog.remove();
+      nasConnectDialog = null;
+    }
+  }
+
+  /**
+   * 處理 NAS 連線
+   */
+  async function handleNasConnect() {
+    const hostInput = nasConnectDialog.querySelector('#fmNasHost');
+    const usernameInput = nasConnectDialog.querySelector('#fmNasUsername');
+    const passwordInput = nasConnectDialog.querySelector('#fmNasPassword');
+    const submitBtn = nasConnectDialog.querySelector('#fmNasConnectSubmit');
+    const errorDiv = nasConnectDialog.querySelector('#fmNasConnectError');
+
+    const host = hostInput.value.trim();
+    const username = usernameInput.value.trim();
+    const password = passwordInput.value;
+
+    if (!host || !username || !password) {
+      errorDiv.textContent = '請填寫所有欄位';
+      errorDiv.classList.add('show');
+      return;
+    }
+
+    // 禁用按鈕
+    submitBtn.disabled = true;
+    submitBtn.textContent = '連線中...';
+    errorDiv.classList.remove('show');
+
+    try {
+      const response = await fetch('/api/nas/connect', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${getToken()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ host, username, password })
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.token) {
+        // 連線成功
+        nasToken = data.token;
+        nasHost = data.host;
+
+        // 記住連線的主機位址（不儲存帳號密碼）
+        localStorage.setItem(NAS_LAST_HOST_KEY, host);
+
+        hideNasConnectDialog();
+        updateNasStatusDisplay();
+        loadDirectory(currentPath);
+
+        if (typeof DesktopModule !== 'undefined') {
+          DesktopModule.showToast(`已連線至 ${host}`, 'success');
+        }
+      } else {
+        errorDiv.textContent = data.error || '連線失敗';
+        errorDiv.classList.add('show');
+      }
+    } catch (error) {
+      console.error('NAS 連線錯誤:', error);
+      errorDiv.textContent = '無法連線至伺服器';
+      errorDiv.classList.add('show');
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = '連線';
+    }
+  }
+
+  /**
+   * 更新 NAS 連線狀態顯示
+   */
+  function updateNasStatusDisplay() {
+    const windowEl = document.getElementById(windowId);
+    if (!windowEl) return;
+
+    // 更新視窗標題顯示連線的 NAS
+    if (nasHost) {
+      WindowModule.updateWindowTitle(windowId, `檔案管理 - ${nasHost}`);
+    }
+  }
+
+  /**
+   * 取得帶有 NAS Token 的 headers
+   */
+  function getAuthHeaders() {
+    const headers = {
+      'Authorization': `Bearer ${getToken()}`
+    };
+    if (nasToken) {
+      headers['X-NAS-Token'] = nasToken;
+    }
+    return headers;
+  }
+
+  /**
+   * 處理 API 回應，檢查 Token 過期
+   */
+  async function handleNasApiResponse(response) {
+    if (response.status === 401) {
+      const expired = response.headers.get('X-NAS-Token-Expired');
+      if (expired === 'true') {
+        // NAS Token 已過期，需要重新連線
+        nasToken = null;
+        nasHost = null;
+        if (typeof DesktopModule !== 'undefined') {
+          DesktopModule.showToast('NAS 連線已過期，請重新連線', 'warning');
+        }
+        showNasConnectDialog();
+        return null;
+      }
+    }
+    return response;
   }
 
   /**
@@ -147,16 +400,10 @@ const FileManagerModule = (function() {
     selectedFiles.clear();
     hideContextMenu();
     closeMobilePreview();
+    hideNasConnectDialog();
+    // 注意：不清除 nasToken 和 nasHost，讓連線保持活躍供下次使用
   }
 
-  /**
-   * Handle window init
-   */
-  function handleInit(windowEl, wId) {
-    windowId = wId;
-    bindEvents(windowEl);
-    loadDirectory(currentPath);
-  }
 
   /**
    * Render main content
@@ -450,11 +697,15 @@ const FileManagerModule = (function() {
     try {
       if (path === '/') {
         const response = await fetch('/api/nas/shares', {
-          headers: { 'Authorization': `Bearer ${getToken()}` }
+          headers: getAuthHeaders()
         });
 
-        if (!response.ok) throw new Error('無法取得共享資料夾');
-        const data = await response.json();
+        // 檢查 Token 過期
+        const checkedResponse = await handleNasApiResponse(response);
+        if (!checkedResponse) return;
+
+        if (!checkedResponse.ok) throw new Error('無法取得共享資料夾');
+        const data = await checkedResponse.json();
 
         files = data.shares.map(share => ({
           name: share.name,
@@ -464,14 +715,18 @@ const FileManagerModule = (function() {
         }));
       } else {
         const response = await fetch(`/api/nas/browse?path=${encodeURIComponent(path)}`, {
-          headers: { 'Authorization': `Bearer ${getToken()}` }
+          headers: getAuthHeaders()
         });
 
-        if (!response.ok) {
-          const error = await response.json();
+        // 檢查 Token 過期
+        const checkedResponse = await handleNasApiResponse(response);
+        if (!checkedResponse) return;
+
+        if (!checkedResponse.ok) {
+          const error = await checkedResponse.json();
           throw new Error(error.detail || '載入失敗');
         }
-        const data = await response.json();
+        const data = await checkedResponse.json();
         files = data.items;
       }
 
@@ -537,15 +792,19 @@ const FileManagerModule = (function() {
     try {
       const response = await fetch(
         `/api/nas/search?path=${encodeURIComponent(currentPath)}&query=${encodeURIComponent(searchQuery)}&max_depth=5&max_results=100`,
-        { headers: { 'Authorization': `Bearer ${getToken()}` } }
+        { headers: getAuthHeaders() }
       );
 
-      if (!response.ok) {
-        const error = await response.json();
+      // 檢查 Token 過期
+      const checkedResponse = await handleNasApiResponse(response);
+      if (!checkedResponse) return;
+
+      if (!checkedResponse.ok) {
+        const error = await checkedResponse.json();
         throw new Error(error.detail || '搜尋失敗');
       }
 
-      const data = await response.json();
+      const data = await checkedResponse.json();
       searchResults = data.results;
 
       renderSearchResults();
@@ -809,7 +1068,12 @@ const FileManagerModule = (function() {
     // 使用 FileOpener 統一入口開啟檔案
     // 傳入統一格式的路徑，FileOpener 會透過 PathUtils 轉換為 API URL
     if (typeof FileOpener !== 'undefined' && FileOpener.canOpen(name)) {
-      const apiUrl = PathUtils.toApiUrl(filePath);
+      let apiUrl = PathUtils.toApiUrl(filePath);
+      // 若有 NAS Token，附加到 URL 以支援 NAS 檔案開啟
+      if (nasToken) {
+        const separator = apiUrl.includes('?') ? '&' : '?';
+        apiUrl = `${apiUrl}${separator}nas_token=${encodeURIComponent(nasToken)}`;
+      }
       FileOpener.open(apiUrl, name);
     }
   }
@@ -1108,11 +1372,15 @@ const FileManagerModule = (function() {
     // 使用統一的 Files API，PathUtils 會將 NAS 路徑轉換為 /api/files/nas/...
     const apiUrl = PathUtils.toApiUrl(filePath);
 
+    // 準備 headers（包含 NAS Token 以支援 NAS 預覽）
+    const previewHeaders = { 'Authorization': `Bearer ${getToken()}` };
+    if (nasToken) {
+      previewHeaders['X-NAS-Token'] = nasToken;
+    }
+
     if (FileUtils.isImageFile(file.name)) {
       try {
-        const response = await fetch(apiUrl, {
-          headers: { 'Authorization': `Bearer ${getToken()}` }
-        });
+        const response = await fetch(apiUrl, { headers: previewHeaders });
         if (response.ok) {
           const blob = await response.blob();
           const previewImage = windowEl.querySelector('#fmPreviewImage');
@@ -1129,9 +1397,7 @@ const FileManagerModule = (function() {
     // Load text content async
     if (FileUtils.isTextFile(file.name)) {
       try {
-        const response = await fetch(apiUrl, {
-          headers: { 'Authorization': `Bearer ${getToken()}` }
-        });
+        const response = await fetch(apiUrl, { headers: previewHeaders });
         if (response.ok) {
           const text = await response.text();
           const previewText = windowEl.querySelector('#fmPreviewText');
@@ -1247,11 +1513,15 @@ const FileManagerModule = (function() {
     // 使用統一的 Files API，PathUtils 會將 NAS 路徑轉換為 /api/files/nas/...
     const apiUrl = PathUtils.toApiUrl(filePath);
 
+    // 準備 headers（包含 NAS Token 以支援 NAS 預覽）
+    const mobilePreviewHeaders = { 'Authorization': `Bearer ${getToken()}` };
+    if (nasToken) {
+      mobilePreviewHeaders['X-NAS-Token'] = nasToken;
+    }
+
     if (FileUtils.isImageFile(file.name)) {
       try {
-        const response = await fetch(apiUrl, {
-          headers: { 'Authorization': `Bearer ${getToken()}` }
-        });
+        const response = await fetch(apiUrl, { headers: mobilePreviewHeaders });
         if (response.ok) {
           const blob = await response.blob();
           const previewImage = mobilePreviewOverlay.querySelector('#fmMobilePreviewImage');
@@ -1268,9 +1538,7 @@ const FileManagerModule = (function() {
     // Load text content async
     if (FileUtils.isTextFile(file.name)) {
       try {
-        const response = await fetch(apiUrl, {
-          headers: { 'Authorization': `Bearer ${getToken()}` }
-        });
+        const response = await fetch(apiUrl, { headers: mobilePreviewHeaders });
         if (response.ok) {
           const text = await response.text();
           const previewText = mobilePreviewOverlay.querySelector('#fmMobilePreviewText');
@@ -1347,16 +1615,20 @@ const FileManagerModule = (function() {
     try {
       // 使用 fetch 帶認證 token 下載
       const response = await fetch(`/api/nas/download?path=${encodeURIComponent(filePath)}`, {
-        headers: { 'Authorization': `Bearer ${getToken()}` }
+        headers: getAuthHeaders()
       });
 
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({ detail: '下載失敗' }));
+      // 檢查 Token 過期
+      const checkedResponse = await handleNasApiResponse(response);
+      if (!checkedResponse) return;
+
+      if (!checkedResponse.ok) {
+        const error = await checkedResponse.json().catch(() => ({ detail: '下載失敗' }));
         throw new Error(error.detail || '下載失敗');
       }
 
       // 將回應轉換為 Blob 並下載
-      const blob = await response.blob();
+      const blob = await checkedResponse.blob();
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -1378,6 +1650,13 @@ const FileManagerModule = (function() {
     const uploadFiles = e.target.files;
     if (!uploadFiles || uploadFiles.length === 0) return;
 
+    // FormData 不能直接設定 header，需要手動構建
+    const uploadHeaders = {};
+    if (nasToken) {
+      uploadHeaders['X-NAS-Token'] = nasToken;
+    }
+    uploadHeaders['Authorization'] = `Bearer ${getToken()}`;
+
     for (const file of uploadFiles) {
       const formData = new FormData();
       formData.append('path', currentPath);
@@ -1386,12 +1665,16 @@ const FileManagerModule = (function() {
       try {
         const response = await fetch('/api/nas/upload', {
           method: 'POST',
-          headers: { 'Authorization': `Bearer ${getToken()}` },
+          headers: uploadHeaders,
           body: formData
         });
 
-        if (!response.ok) {
-          const error = await response.json();
+        // 檢查 Token 過期
+        const checkedResponse = await handleNasApiResponse(response);
+        if (!checkedResponse) return;
+
+        if (!checkedResponse.ok) {
+          const error = await checkedResponse.json();
           throw new Error(error.detail || '上傳失敗');
         }
       } catch (error) {
@@ -1418,17 +1701,21 @@ const FileManagerModule = (function() {
 
         const path = currentPath === '/' ? `/${name}` : `${currentPath}/${name}`;
         try {
+          const headers = getAuthHeaders();
+          headers['Content-Type'] = 'application/json';
+
           const response = await fetch('/api/nas/mkdir', {
             method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${getToken()}`,
-              'Content-Type': 'application/json'
-            },
+            headers,
             body: JSON.stringify({ path })
           });
 
-          if (!response.ok) {
-            const error = await response.json();
+          // 檢查 Token 過期
+          const checkedResponse = await handleNasApiResponse(response);
+          if (!checkedResponse) return;
+
+          if (!checkedResponse.ok) {
+            const error = await checkedResponse.json();
             throw new Error(error.detail || '建立失敗');
           }
 
@@ -1459,17 +1746,21 @@ const FileManagerModule = (function() {
 
         const path = currentPath === '/' ? `/${oldName}` : `${currentPath}/${oldName}`;
         try {
+          const headers = getAuthHeaders();
+          headers['Content-Type'] = 'application/json';
+
           const response = await fetch('/api/nas/rename', {
             method: 'PATCH',
-            headers: {
-              'Authorization': `Bearer ${getToken()}`,
-              'Content-Type': 'application/json'
-            },
+            headers,
             body: JSON.stringify({ path, new_name: newName })
           });
 
-          if (!response.ok) {
-            const error = await response.json();
+          // 檢查 Token 過期
+          const checkedResponse = await handleNasApiResponse(response);
+          if (!checkedResponse) return;
+
+          if (!checkedResponse.ok) {
+            const error = await checkedResponse.json();
             throw new Error(error.detail || '重命名失敗');
           }
 
@@ -1503,20 +1794,24 @@ const FileManagerModule = (function() {
       confirmText: '刪除',
       confirmDanger: true,
       onConfirm: async () => {
+        const headers = getAuthHeaders();
+        headers['Content-Type'] = 'application/json';
+
         for (const name of names) {
           const path = currentPath === '/' ? `/${name}` : `${currentPath}/${name}`;
           try {
             const response = await fetch('/api/nas/file', {
               method: 'DELETE',
-              headers: {
-                'Authorization': `Bearer ${getToken()}`,
-                'Content-Type': 'application/json'
-              },
+              headers,
               body: JSON.stringify({ path, recursive: true })
             });
 
-            if (!response.ok) {
-              const error = await response.json();
+            // 檢查 Token 過期
+            const checkedResponse = await handleNasApiResponse(response);
+            if (!checkedResponse) return;
+
+            if (!checkedResponse.ok) {
+              const error = await checkedResponse.json();
               throw new Error(error.detail || '刪除失敗');
             }
           } catch (error) {

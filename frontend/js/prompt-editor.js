@@ -14,6 +14,14 @@ const PromptEditorApp = (function() {
   let isDirty = false;
 
   /**
+   * 取得認證 headers
+   */
+  function getAuthHeaders() {
+    const token = LoginModule?.getToken?.() || localStorage.getItem('chingtech_token');
+    return token ? { 'Authorization': `Bearer ${token}` } : {};
+  }
+
+  /**
    * Check if current view is mobile
    */
   function isMobileView() {
@@ -57,7 +65,9 @@ const PromptEditorApp = (function() {
    */
   async function loadPrompts() {
     try {
-      const response = await fetch(`/api/ai/prompts${currentCategory ? `?category=${currentCategory}` : ''}`);
+      const response = await fetch(`/api/ai/prompts${currentCategory ? `?category=${currentCategory}` : ''}`, {
+        headers: getAuthHeaders()
+      });
       if (!response.ok) throw new Error('Failed to load prompts');
       const data = await response.json();
       prompts = data.items || [];
@@ -72,7 +82,9 @@ const PromptEditorApp = (function() {
    */
   async function loadPromptDetail(promptId) {
     try {
-      const response = await fetch(`/api/ai/prompts/${promptId}`);
+      const response = await fetch(`/api/ai/prompts/${promptId}`, {
+        headers: getAuthHeaders()
+      });
       if (!response.ok) throw new Error('Failed to load prompt');
       return await response.json();
     } catch (e) {
@@ -91,7 +103,10 @@ const PromptEditorApp = (function() {
 
       const response = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        },
         body: JSON.stringify(data)
       });
 
@@ -113,7 +128,8 @@ const PromptEditorApp = (function() {
   async function deletePrompt(promptId) {
     try {
       const response = await fetch(`/api/ai/prompts/${promptId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: getAuthHeaders()
       });
 
       if (!response.ok) {

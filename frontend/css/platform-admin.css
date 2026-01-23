@@ -1,0 +1,1081 @@
+/* ==========================================================================
+   ChingTech OS - Platform Admin Styles
+   平台管理應用程式樣式
+   ========================================================================== */
+
+/* 主容器 */
+.platform-admin-container {
+  display: flex;
+  height: 100%;
+  background-color: var(--color-background);
+}
+
+/* 側邊欄 */
+.platform-admin-sidebar {
+  width: 180px;
+  background-color: var(--bg-surface);
+  border-right: 1px solid var(--border-light);
+  flex-shrink: 0;
+}
+
+.platform-admin-nav {
+  list-style: none;
+  padding: var(--spacing-sm);
+  margin: 0;
+}
+
+.platform-admin-nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all var(--transition-fast);
+}
+
+.platform-admin-nav-item:hover {
+  background-color: var(--interactive-hover);
+  color: var(--text-primary);
+}
+
+.platform-admin-nav-item.active {
+  background-color: var(--color-primary);
+  color: white;
+}
+
+.platform-admin-nav-item .icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* 主內容區域 */
+.platform-admin-content {
+  flex: 1;
+  padding: var(--spacing-lg);
+  overflow-y: auto;
+}
+
+.platform-admin-section {
+  display: none;
+}
+
+.platform-admin-section.active {
+  display: block;
+}
+
+.platform-admin-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-md);
+}
+
+.platform-admin-section-title {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+/* 篩選器 */
+.platform-admin-filters {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
+}
+
+.platform-admin-filter-select {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.platform-admin-filter-select option {
+  background-color: var(--color-background);
+  color: var(--text-primary);
+}
+
+.platform-admin-filter-select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+/* 載入狀態 */
+.platform-admin-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xl);
+  color: var(--text-secondary);
+}
+
+.platform-admin-loading .icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+/* 錯誤狀態 */
+.platform-admin-error {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-lg);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--color-error);
+  border-radius: var(--radius-md);
+  color: var(--color-error);
+}
+
+/* 空狀態 */
+.platform-admin-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-xl);
+  color: var(--text-muted);
+}
+
+.platform-admin-empty .icon svg {
+  width: 48px;
+  height: 48px;
+  opacity: 0.5;
+}
+
+/* 警告訊息 */
+.platform-admin-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  background-color: rgba(251, 191, 36, 0.1);
+  border: 1px solid var(--color-warning);
+  border-radius: var(--radius-md);
+  color: var(--color-warning);
+  margin-bottom: var(--spacing-md);
+  font-size: var(--font-size-sm);
+}
+
+.platform-admin-warning .icon svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+/* ==========================================================================
+   表格樣式
+   ========================================================================== */
+
+.platform-admin-table-container {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.platform-admin-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.platform-admin-table th,
+.platform-admin-table td {
+  padding: var(--spacing-sm) var(--spacing-md);
+  text-align: left;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.platform-admin-table th {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+  background-color: var(--bg-surface-dark);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.platform-admin-table td {
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+}
+
+.platform-admin-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.platform-admin-table tbody tr:hover {
+  background-color: var(--interactive-hover);
+}
+
+/* 代碼樣式 */
+.platform-admin-code {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  background-color: var(--bg-surface-dark);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  color: var(--color-accent);
+}
+
+/* 狀態標籤 */
+.platform-admin-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-surface-dark);
+  color: var(--text-secondary);
+}
+
+.platform-admin-badge.success {
+  background-color: rgba(34, 197, 94, 0.15);
+  color: var(--color-success);
+}
+
+.platform-admin-badge.info {
+  background-color: rgba(59, 130, 246, 0.15);
+  color: var(--color-primary);
+}
+
+.platform-admin-badge.error {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: var(--color-error);
+}
+
+/* 租戶標籤 */
+.platform-admin-tenant-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-size: var(--font-size-xs);
+  background-color: var(--bg-surface-dark);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+}
+
+/* 操作按鈕區 */
+.platform-admin-actions {
+  white-space: nowrap;
+}
+
+.platform-admin-actions .btn {
+  padding: var(--spacing-xs);
+}
+
+.platform-admin-actions .icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.platform-admin-actions .btn-danger-text {
+  color: var(--color-error);
+}
+
+.platform-admin-actions .btn-danger-text:hover {
+  background-color: rgba(229, 57, 53, 0.1);
+}
+
+/* ==========================================================================
+   對話框
+   ========================================================================== */
+
+.platform-admin-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--bg-overlay-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.platform-admin-dialog {
+  width: 450px;
+  max-width: 90vw;
+  max-height: 90vh;
+  background-color: var(--modal-bg);
+  border: 1px solid var(--modal-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+}
+
+.platform-admin-dialog-wide {
+  width: 600px;
+}
+
+.platform-admin-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-bottom: 1px solid var(--border-light);
+  flex-shrink: 0;
+}
+
+.platform-admin-dialog-header h3 {
+  margin: 0;
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.platform-admin-dialog-body {
+  padding: var(--spacing-lg);
+  overflow-y: auto;
+  flex: 1;
+}
+
+.platform-admin-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-top: 1px solid var(--border-light);
+  flex-shrink: 0;
+}
+
+/* 表單樣式 */
+.form-group {
+  margin-bottom: var(--spacing-md);
+}
+
+.form-group label {
+  display: block;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-xs);
+}
+
+.form-group .input {
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+}
+
+.form-group .input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb), 0.2);
+}
+
+.form-group select.input {
+  cursor: pointer;
+}
+
+.form-group select.input option {
+  background-color: var(--color-background);
+  color: var(--text-primary);
+}
+
+.form-hint {
+  display: block;
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  margin-top: var(--spacing-xs);
+}
+
+.form-static {
+  padding: var(--spacing-sm) 0;
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+}
+
+.form-row {
+  display: flex;
+  gap: var(--spacing-md);
+}
+
+.form-row .form-group {
+  flex: 1;
+}
+
+/* ==========================================================================
+   租戶詳情
+   ========================================================================== */
+
+.tenant-details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--spacing-md);
+}
+
+.tenant-details-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+}
+
+.tenant-details-card h4 {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-md) 0;
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.tenant-details-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-xs) 0;
+  font-size: var(--font-size-sm);
+}
+
+.tenant-details-row .label {
+  color: var(--text-secondary);
+}
+
+.tenant-details-row span:last-child,
+.tenant-details-row code {
+  color: var(--text-primary);
+}
+
+/* 統計數字 */
+.tenant-details-stats {
+  display: flex;
+  justify-content: space-around;
+  gap: var(--spacing-md);
+}
+
+.tenant-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.tenant-stat-value {
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.tenant-stat-label {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  margin-top: var(--spacing-xs);
+}
+
+/* 儲存空間進度條 */
+.tenant-storage-bar-container {
+  margin-top: var(--spacing-md);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--border-light);
+}
+
+.tenant-storage-label {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-xs);
+}
+
+.tenant-storage-bar {
+  height: 8px;
+  background-color: var(--bg-surface-dark);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.tenant-storage-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-primary), var(--color-accent));
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.tenant-storage-text {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  margin-top: var(--spacing-xs);
+  text-align: right;
+}
+
+/* ==========================================================================
+   手機版樣式
+   ========================================================================== */
+
+.platform-admin-mobile-tabs {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .platform-admin-sidebar {
+    display: none;
+  }
+
+  .platform-admin-mobile-tabs {
+    display: flex;
+  }
+
+  .platform-admin-content {
+    padding: var(--spacing-md);
+    padding-bottom: calc(60px + var(--spacing-md));
+  }
+
+  .platform-admin-section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-sm);
+  }
+
+  .platform-admin-filters {
+    flex-wrap: wrap;
+  }
+
+  .platform-admin-filter-select {
+    flex: 1;
+    min-width: 120px;
+  }
+
+  /* 表格響應式 */
+  .platform-admin-table-container {
+    overflow-x: auto;
+  }
+
+  .platform-admin-table th:nth-child(5),
+  .platform-admin-table td:nth-child(5),
+  .platform-admin-table th:nth-child(6),
+  .platform-admin-table td:nth-child(6) {
+    display: none;
+  }
+
+  /* 對話框全屏 */
+  .platform-admin-dialog {
+    width: 100%;
+    max-width: 100%;
+    height: 100%;
+    max-height: 100%;
+    border-radius: 0;
+  }
+
+  .form-row {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .tenant-details-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ==========================================================================
+   租戶詳情 Tab 樣式
+   ========================================================================== */
+
+.tenant-detail-tabs {
+  display: flex;
+  gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-md);
+  border-bottom: 1px solid var(--border-light);
+  padding-bottom: var(--spacing-xs);
+}
+
+.tenant-detail-tab {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: none;
+  border: none;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  position: relative;
+}
+
+.tenant-detail-tab:hover {
+  color: var(--text-primary);
+  background-color: var(--interactive-hover);
+}
+
+.tenant-detail-tab.active {
+  color: var(--color-primary);
+  background-color: var(--bg-surface);
+}
+
+.tenant-detail-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-color: var(--color-primary);
+}
+
+.tenant-detail-tab .icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.tenant-detail-tab-content {
+  display: none;
+}
+
+.tenant-detail-tab-content.active {
+  display: block;
+}
+
+/* ==========================================================================
+   租戶管理員列表樣式
+   ========================================================================== */
+
+.tenant-admins-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-md);
+}
+
+.tenant-admins-hint {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.tenant-admins-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-lg);
+  color: var(--text-secondary);
+}
+
+.tenant-admins-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xl);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.tenant-admins-empty .icon svg {
+  width: 48px;
+  height: 48px;
+  opacity: 0.5;
+}
+
+.tenant-admins-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.tenant-admin-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+}
+
+.tenant-admin-item:hover {
+  border-color: var(--border-medium);
+}
+
+.tenant-admin-info {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.tenant-admin-info > .icon svg {
+  width: 32px;
+  height: 32px;
+  color: var(--text-muted);
+}
+
+.tenant-admin-details {
+  display: flex;
+  flex-direction: column;
+}
+
+.tenant-admin-name {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.tenant-admin-username {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}
+
+.tenant-admin-actions .btn {
+  padding: var(--spacing-xs);
+}
+
+.tenant-admin-actions .icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Checkbox 樣式 */
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-primary);
+}
+
+/* ==========================================================================
+   租戶 Line Bot 設定樣式
+   ========================================================================== */
+
+.tenant-linebot-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-lg);
+  color: var(--text-secondary);
+}
+
+.tenant-linebot-status {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-md);
+  font-size: var(--font-size-sm);
+}
+
+.tenant-linebot-status.configured {
+  background-color: rgba(34, 197, 94, 0.1);
+  color: var(--color-success);
+}
+
+.tenant-linebot-status.unconfigured {
+  background-color: var(--bg-surface-dark);
+  color: var(--text-secondary);
+}
+
+.tenant-linebot-status .icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.tenant-linebot-status .linebot-channel-id {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  opacity: 0.8;
+}
+
+.tenant-linebot-form {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+}
+
+.tenant-linebot-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-md);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--border-light);
+  flex-wrap: wrap;
+}
+
+.tenant-linebot-test-result {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  margin-top: var(--spacing-md);
+  font-size: var(--font-size-sm);
+}
+
+.tenant-linebot-test-result.success {
+  background-color: rgba(34, 197, 94, 0.1);
+  color: var(--color-success);
+}
+
+.tenant-linebot-test-result.error {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: var(--color-error);
+}
+
+.tenant-linebot-test-result .icon svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.tenant-linebot-test-result div {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.tenant-linebot-test-result strong {
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   手機版 Tab 響應式
+   ========================================================================== */
+
+@media (max-width: 768px) {
+  .tenant-detail-tabs {
+    flex-wrap: wrap;
+  }
+
+  .tenant-detail-tab {
+    flex: 1;
+    justify-content: center;
+    min-width: 80px;
+  }
+
+  .tenant-detail-tab span:not(.icon) {
+    display: none;
+  }
+
+  .tenant-admins-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-sm);
+  }
+
+  .tenant-linebot-actions {
+    flex-direction: column;
+  }
+
+  .tenant-linebot-actions .btn {
+    width: 100%;
+  }
+}
+
+/* ==========================================================================
+   臨時密碼顯示框
+   ========================================================================== */
+.temp-password-box {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  background-color: var(--bg-surface-dark);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+}
+
+.temp-password-box code {
+  flex: 1;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: var(--font-size-lg);
+  color: var(--color-primary);
+  letter-spacing: 1px;
+  user-select: all;
+}
+
+.temp-password-box .copy-password-btn {
+  flex-shrink: 0;
+}
+
+/* ==========================================================================
+   新增管理員對話框 - 模式切換 Tab
+   ========================================================================== */
+
+.admin-mode-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: var(--spacing-md);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.admin-mode-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: var(--bg-surface);
+  border: none;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.admin-mode-tab:not(:last-child) {
+  border-right: 1px solid var(--border-medium);
+}
+
+.admin-mode-tab:hover {
+  background-color: var(--interactive-hover);
+  color: var(--text-primary);
+}
+
+.admin-mode-tab.active {
+  background-color: var(--color-primary);
+  color: white;
+}
+
+.admin-mode-tab .icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* 管理員模式內容區塊 */
+.admin-mode-content {
+  display: none;
+}
+
+.admin-mode-content.active {
+  display: block;
+}
+
+/* 現有使用者選擇下拉選單 */
+#existingUserSelect {
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+#existingUserSelect:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb), 0.2);
+}
+
+#existingUserSelect option {
+  background-color: var(--color-background);
+  color: var(--text-primary);
+  padding: var(--spacing-sm);
+}
+
+#existingUserSelect:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 手機版 Tab 響應式 */
+@media (max-width: 480px) {
+  .admin-mode-tab {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    font-size: var(--font-size-xs);
+  }
+
+  .admin-mode-tab .icon svg {
+    width: 14px;
+    height: 14px;
+  }
+}
+
+/* ==========================================================================
+   權限設定對話框樣式
+   ========================================================================== */
+
+.admin-perm-target {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin: 0 0 var(--spacing-md);
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.admin-perm-target strong {
+  color: var(--text-primary);
+}
+
+.perm-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-xs);
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  margin: 0 0 var(--spacing-md);
+  padding: var(--spacing-sm);
+  background-color: var(--bg-surface-dark);
+  border-radius: var(--radius-md);
+}
+
+.perm-hint .icon svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.perm-app-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.perm-app-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.perm-app-item:hover {
+  border-color: var(--border-medium);
+  background-color: var(--interactive-hover);
+}
+
+.perm-app-item input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
+.perm-app-name {
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  flex: 1;
+}

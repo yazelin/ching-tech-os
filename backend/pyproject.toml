@@ -32,6 +32,9 @@ dependencies = [
     # Image Generation Fallback
     "huggingface_hub>=0.20.0",
     "google-genai>=1.59.0",
+    # 認證相關
+    "bcrypt>=4.0.0",
+    "email-validator>=2.0.0",
 ]
 
 [project.optional-dependencies]

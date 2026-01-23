@@ -5,8 +5,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID
 
-from ..config import settings
+from ..config import settings, DEFAULT_TENANT_UUID
 from ..database import get_connection
+
+
+def _get_tenant_id(tenant_id: UUID | str | None) -> UUID:
+    """處理 tenant_id 參數"""
+    if tenant_id is None:
+        return UUID(settings.default_tenant_id)
+    if isinstance(tenant_id, str):
+        return UUID(tenant_id)
+    return tenant_id
 from ..models.project import (
     ProjectCreate,
     ProjectUpdate,
@@ -55,8 +64,11 @@ class ProjectNotFoundError(ProjectError):
 async def list_projects(
     status: str | None = None,
     query: str | None = None,
+    tenant_id: UUID | str | None = None,
 ) -> ProjectListResponse:
     """列出專案"""
+    tid = _get_tenant_id(tenant_id)
+
     async with get_connection() as conn:
         # 建立查詢
         sql = """
@@ -66,10 +78,10 @@ async def list_projects(
                 (SELECT COUNT(*) FROM project_meetings WHERE project_id = p.id) as meeting_count,
                 (SELECT COUNT(*) FROM project_attachments WHERE project_id = p.id) as attachment_count
             FROM projects p
-            WHERE 1=1
+            WHERE p.tenant_id = $1
         """
-        params = []
-        param_idx = 1
+        params = [tid]
+        param_idx = 2
 
         if status:
             sql += f" AND p.status = ${param_idx}"
@@ -103,12 +115,19 @@ async def list_projects(
         return ProjectListResponse(items=items, total=len(items))
 
 
-async def get_project(project_id: UUID) -> ProjectDetailResponse:
+async def get_project(
+    project_id: UUID,
+    tenant_id: UUID | str | None = None,
+) -> ProjectDetailResponse:
     """取得專案詳情"""
+    tid = _get_tenant_id(tenant_id)
+
     async with get_connection() as conn:
         # 取得專案基本資料
         row = await conn.fetchrow(
-            "SELECT * FROM projects WHERE id = $1", project_id
+            "SELECT * FROM projects WHERE id = $1 AND tenant_id = $2",
+            project_id,
+            tid,
         )
         if not row:
             raise ProjectNotFoundError(f"專案 {project_id} 不存在")
@@ -174,13 +193,19 @@ async def get_project(project_id: UUID) -> ProjectDetailResponse:
         )
 
 
-async def create_project(data: ProjectCreate, created_by: str | None = None) -> ProjectResponse:
+async def create_project(
+    data: ProjectCreate,
+    created_by: str | None = None,
+    tenant_id: UUID | str | None = None,
+) -> ProjectResponse:
     """建立專案"""
+    tid = _get_tenant_id(tenant_id)
+
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
-            INSERT INTO projects (name, description, status, start_date, end_date, created_by)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO projects (name, description, status, start_date, end_date, created_by, tenant_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             RETURNING *
             """,
             data.name,
@@ -189,16 +214,25 @@ async def create_project(data: ProjectCreate, created_by: str | None = None) -> 
             data.start_date,
             data.end_date,
             created_by,
+            tid,
         )
         return ProjectResponse(**dict(row))
 
 
-async def update_project(project_id: UUID, data: ProjectUpdate) -> ProjectResponse:
+async def update_project(
+    project_id: UUID,
+    data: ProjectUpdate,
+    tenant_id: UUID | str | None = None,
+) -> ProjectResponse:
     """更新專案"""
+    tid = _get_tenant_id(tenant_id)
+
     async with get_connection() as conn:
         # 檢查專案是否存在
         exists = await conn.fetchval(
-            "SELECT 1 FROM projects WHERE id = $1", project_id
+            "SELECT 1 FROM projects WHERE id = $1 AND tenant_id = $2",
+            project_id,
+            tid,
         )
         if not exists:
             raise ProjectNotFoundError(f"專案 {project_id} 不存在")
@@ -244,12 +278,19 @@ async def update_project(project_id: UUID, data: ProjectUpdate) -> ProjectRespon
         return ProjectResponse(**dict(row))
 
 
-async def delete_project(project_id: UUID) -> None:
+async def delete_project(
+    project_id: UUID,
+    tenant_id: UUID | str | None = None,
+) -> None:
     """刪除專案"""
+    tid = _get_tenant_id(tenant_id)
+
     async with get_connection() as conn:
         # 檢查專案是否存在
         exists = await conn.fetchval(
-            "SELECT 1 FROM projects WHERE id = $1", project_id
+            "SELECT 1 FROM projects WHERE id = $1 AND tenant_id = $2",
+            project_id,
+            tid,
         )
         if not exists:
             raise ProjectNotFoundError(f"專案 {project_id} 不存在")
@@ -261,11 +302,15 @@ async def delete_project(project_id: UUID) -> None:
         )
 
         # 刪除專案（會級聯刪除所有關聯資料）
-        await conn.execute("DELETE FROM projects WHERE id = $1", project_id)
+        await conn.execute(
+            "DELETE FROM projects WHERE id = $1 AND tenant_id = $2",
+            project_id,
+            tid,
+        )
 
-        # 刪除附件檔案
+        # 刪除附件檔案（傳入 tenant_id 以正確解析路徑）
         for att in attachments:
-            _delete_attachment_file(att["storage_path"])
+            _delete_attachment_file(att["storage_path"], tenant_id=tid)
 
 
 # ============================================
@@ -535,15 +580,15 @@ def _get_file_type(filename: str) -> str:
     return "other"
 
 
-def _delete_attachment_file(storage_path: str) -> None:
+def _delete_attachment_file(storage_path: str, tenant_id: str | None = None) -> None:
     """刪除附件檔案"""
     from .path_manager import path_manager, StorageZone
     try:
         parsed = path_manager.parse(storage_path)
         if parsed.zone == StorageZone.CTOS:
-            # CTOS 區檔案：使用 path_manager 解析完整路徑
+            # CTOS 區檔案：使用 path_manager 解析完整路徑（需要 tenant_id）
             try:
-                full_path = Path(path_manager.to_filesystem(storage_path))
+                full_path = Path(path_manager.to_filesystem(storage_path, tenant_id=tenant_id))
                 if full_path.exists():
                     full_path.unlink()
             except Exception:
@@ -634,7 +679,7 @@ async def get_attachment_content(project_id: UUID, attachment_id: UUID) -> tuple
     """取得附件內容"""
     async with get_connection() as conn:
         row = await conn.fetchrow(
-            "SELECT storage_path, filename FROM project_attachments WHERE id = $1 AND project_id = $2",
+            "SELECT storage_path, filename, tenant_id FROM project_attachments WHERE id = $1 AND project_id = $2",
             attachment_id, project_id,
         )
         if not row:
@@ -642,6 +687,7 @@ async def get_attachment_content(project_id: UUID, attachment_id: UUID) -> tuple
 
         storage_path = row["storage_path"]
         filename = row["filename"]
+        tenant_id = str(row["tenant_id"]) if row["tenant_id"] else None
 
         # 使用 PathManager 解析路徑
         from .path_manager import path_manager, StorageZone
@@ -651,7 +697,7 @@ async def get_attachment_content(project_id: UUID, attachment_id: UUID) -> tuple
             if parsed.zone == StorageZone.CTOS:
                 # CTOS 區檔案（透過掛載路徑存取）
                 try:
-                    fs_path = path_manager.to_filesystem(storage_path)
+                    fs_path = path_manager.to_filesystem(storage_path, tenant_id=tenant_id)
                     file_path = Path(fs_path)
                     if not file_path.exists():
                         raise ProjectError(f"檔案不存在：{storage_path}")
@@ -700,16 +746,17 @@ async def update_attachment(
 async def delete_attachment(project_id: UUID, attachment_id: UUID) -> None:
     """刪除附件"""
     async with get_connection() as conn:
-        # 取得附件資訊
+        # 取得附件資訊（包含 tenant_id）
         row = await conn.fetchrow(
-            "SELECT storage_path FROM project_attachments WHERE id = $1 AND project_id = $2",
+            "SELECT storage_path, tenant_id FROM project_attachments WHERE id = $1 AND project_id = $2",
             attachment_id, project_id,
         )
         if not row:
             raise ProjectNotFoundError(f"附件 {attachment_id} 不存在")
 
-        # 刪除檔案
-        _delete_attachment_file(row["storage_path"])
+        # 刪除檔案（傳入 tenant_id 以正確解析路徑）
+        tenant_id = str(row["tenant_id"]) if row["tenant_id"] else None
+        _delete_attachment_file(row["storage_path"], tenant_id=tenant_id)
 
         # 刪除資料庫記錄
         await conn.execute(

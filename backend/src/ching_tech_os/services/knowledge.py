@@ -8,6 +8,7 @@ import subprocess
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 import yaml
 
@@ -51,11 +52,27 @@ class KnowledgeNotFoundError(KnowledgeError):
     pass
 
 
-# 知識庫路徑
+# 預設知識庫路徑（單租戶模式或向後相容）
 KNOWLEDGE_BASE_PATH = Path(settings.knowledge_data_path)
 ENTRIES_PATH = KNOWLEDGE_BASE_PATH / "entries"
 ASSETS_PATH = KNOWLEDGE_BASE_PATH / "assets"
 INDEX_PATH = KNOWLEDGE_BASE_PATH / "index.json"
+
+
+def _get_tenant_paths(tenant_id: str | None = None) -> tuple[Path, Path, Path, Path]:
+    """取得租戶專屬的知識庫路徑
+
+    Args:
+        tenant_id: 租戶 ID，None 時使用預設租戶
+
+    Returns:
+        (base_path, entries_path, assets_path, index_path)
+    """
+    base_path = Path(settings.get_tenant_knowledge_path(tenant_id))
+    entries_path = base_path / "entries"
+    assets_path = base_path / "assets"
+    index_path = base_path / "index.json"
+    return base_path, entries_path, assets_path, index_path
 
 
 def _slugify(text: str) -> str:
@@ -67,25 +84,36 @@ def _slugify(text: str) -> str:
     return slug.strip("-")[:50]
 
 
-def _load_index() -> KnowledgeIndex:
-    """載入知識索引"""
-    if not INDEX_PATH.exists():
+def _load_index(tenant_id: str | None = None) -> KnowledgeIndex:
+    """載入知識索引
+
+    Args:
+        tenant_id: 租戶 ID
+    """
+    _, _, _, index_path = _get_tenant_paths(tenant_id)
+    if not index_path.exists():
         return KnowledgeIndex()
 
     try:
-        with open(INDEX_PATH, "r", encoding="utf-8") as f:
+        with open(index_path, "r", encoding="utf-8") as f:
             data = json.load(f)
         return KnowledgeIndex(**data)
     except Exception as e:
         raise KnowledgeError(f"載入索引失敗：{e}") from e
 
 
-def _save_index(index: KnowledgeIndex) -> None:
-    """儲存知識索引"""
+def _save_index(index: KnowledgeIndex, tenant_id: str | None = None) -> None:
+    """儲存知識索引
+
+    Args:
+        index: 索引物件
+        tenant_id: 租戶 ID
+    """
+    _, _, _, index_path = _get_tenant_paths(tenant_id)
     try:
-        INDEX_PATH.parent.mkdir(parents=True, exist_ok=True)
+        index_path.parent.mkdir(parents=True, exist_ok=True)
         index.last_updated = datetime.now().isoformat()
-        with open(INDEX_PATH, "w", encoding="utf-8") as f:
+        with open(index_path, "w", encoding="utf-8") as f:
             json.dump(index.model_dump(), f, ensure_ascii=False, indent=2)
     except Exception as e:
         raise KnowledgeError(f"儲存索引失敗：{e}") from e
@@ -127,10 +155,16 @@ def _generate_front_matter(metadata: dict[str, Any]) -> str:
     return f"---\n{yaml_content}---\n\n"
 
 
-def _find_knowledge_file(kb_id: str) -> Path | None:
-    """根據 ID 找到知識檔案"""
+def _find_knowledge_file(kb_id: str, tenant_id: str | None = None) -> Path | None:
+    """根據 ID 找到知識檔案
+
+    Args:
+        kb_id: 知識 ID
+        tenant_id: 租戶 ID
+    """
+    _, entries_path, _, _ = _get_tenant_paths(tenant_id)
     pattern = f"{kb_id}-*.md"
-    files = list(ENTRIES_PATH.glob(pattern))
+    files = list(entries_path.glob(pattern))
     return files[0] if files else None
 
 
@@ -192,16 +226,17 @@ def _metadata_to_response(
     )
 
 
-def get_knowledge(kb_id: str) -> KnowledgeResponse:
+def get_knowledge(kb_id: str, tenant_id: str | None = None) -> KnowledgeResponse:
     """取得單一知識
 
     Args:
         kb_id: 知識 ID（如 kb-001）
+        tenant_id: 租戶 ID
 
     Returns:
         知識完整內容
     """
-    file_path = _find_knowledge_file(kb_id)
+    file_path = _find_knowledge_file(kb_id, tenant_id=tenant_id)
     if not file_path:
         raise KnowledgeNotFoundError(f"知識 {kb_id} 不存在")
 
@@ -227,6 +262,7 @@ def search_knowledge(
     topics: list[str] | None = None,
     scope: str | None = None,
     current_username: str | None = None,
+    tenant_id: str | None = None,
 ) -> KnowledgeListResponse:
     """搜尋知識
 
@@ -240,11 +276,13 @@ def search_knowledge(
         topics: 主題過濾
         scope: 範圍過濾（global、personal、all）
         current_username: 目前使用者帳號（用於過濾個人知識）
+        tenant_id: 租戶 ID
 
     Returns:
         符合條件的知識列表
     """
-    index = _load_index()
+    _, entries_path, _, _ = _get_tenant_paths(tenant_id)
+    index = _load_index(tenant_id=tenant_id)
     results: list[KnowledgeListItem] = []
 
     # 先用 ripgrep 搜尋內容（如果有關鍵字）
@@ -270,7 +308,7 @@ def search_knowledge(
                             "--type",
                             "md",
                             term,
-                            str(ENTRIES_PATH),
+                            str(entries_path),
                         ],
                         capture_output=True,
                         text=True,
@@ -303,7 +341,7 @@ def search_knowledge(
                             "--type",
                             "md",
                             terms[0],
-                            str(ENTRIES_PATH),
+                            str(entries_path),
                         ],
                         capture_output=True,
                         text=True,
@@ -400,18 +438,25 @@ def search_knowledge(
     return KnowledgeListResponse(items=results, total=len(results), query=query)
 
 
-def create_knowledge(data: KnowledgeCreate, owner: str | None = None, project_id: str | None = None) -> KnowledgeResponse:
+def create_knowledge(
+    data: KnowledgeCreate,
+    owner: str | None = None,
+    project_id: str | None = None,
+    tenant_id: str | None = None,
+) -> KnowledgeResponse:
     """建立新知識
 
     Args:
         data: 知識資料
         owner: 擁有者帳號（建立個人知識時設定）
         project_id: 關聯專案 UUID（建立專案知識時設定，會覆蓋 data.project_id）
+        tenant_id: 租戶 ID
 
     Returns:
         建立的知識
     """
-    index = _load_index()
+    _, entries_path, _, _ = _get_tenant_paths(tenant_id)
+    index = _load_index(tenant_id=tenant_id)
 
     # 分配 ID
     kb_id = f"kb-{index.next_id:03d}"
@@ -432,7 +477,7 @@ def create_knowledge(data: KnowledgeCreate, owner: str | None = None, project_id
 
     # 檔名
     filename = f"{kb_id}-{slug}.md"
-    file_path = ENTRIES_PATH / filename
+    file_path = entries_path / filename
 
     # 準備元資料
     today = date.today()
@@ -502,22 +547,27 @@ def create_knowledge(data: KnowledgeCreate, owner: str | None = None, project_id
         if topic not in index.tags.topics:
             index.tags.topics.append(topic)
 
-    _save_index(index)
+    _save_index(index, tenant_id=tenant_id)
 
-    return get_knowledge(kb_id)
+    return get_knowledge(kb_id, tenant_id=tenant_id)
 
 
-def update_knowledge(kb_id: str, data: KnowledgeUpdate) -> KnowledgeResponse:
+def update_knowledge(
+    kb_id: str,
+    data: KnowledgeUpdate,
+    tenant_id: str | None = None,
+) -> KnowledgeResponse:
     """更新知識
 
     Args:
         kb_id: 知識 ID
         data: 更新資料
+        tenant_id: 租戶 ID
 
     Returns:
         更新後的知識
     """
-    file_path = _find_knowledge_file(kb_id)
+    file_path = _find_knowledge_file(kb_id, tenant_id=tenant_id)
     if not file_path:
         raise KnowledgeNotFoundError(f"知識 {kb_id} 不存在")
 
@@ -579,7 +629,7 @@ def update_knowledge(kb_id: str, data: KnowledgeUpdate) -> KnowledgeResponse:
         raise KnowledgeError(f"更新知識檔案失敗：{e}") from e
 
     # 更新索引
-    index = _load_index()
+    index = _load_index(tenant_id=tenant_id)
     for entry in index.entries:
         if entry.id == kb_id:
             if data.title is not None:
@@ -606,18 +656,19 @@ def update_knowledge(kb_id: str, data: KnowledgeUpdate) -> KnowledgeResponse:
             if topic not in index.tags.topics:
                 index.tags.topics.append(topic)
 
-    _save_index(index)
+    _save_index(index, tenant_id=tenant_id)
 
-    return get_knowledge(kb_id)
+    return get_knowledge(kb_id, tenant_id=tenant_id)
 
 
-def delete_knowledge(kb_id: str) -> None:
+def delete_knowledge(kb_id: str, tenant_id: str | None = None) -> None:
     """刪除知識
 
     Args:
         kb_id: 知識 ID
+        tenant_id: 租戶 ID
     """
-    file_path = _find_knowledge_file(kb_id)
+    file_path = _find_knowledge_file(kb_id, tenant_id=tenant_id)
     if not file_path:
         raise KnowledgeNotFoundError(f"知識 {kb_id} 不存在")
 
@@ -632,7 +683,10 @@ def delete_knowledge(kb_id: str) -> None:
 
     # 刪除所有附件（忽略錯誤，確保知識可以被刪除）
     from .path_manager import path_manager, StorageZone
-    file_service = create_knowledge_file_service()
+    _, _, assets_path, _ = _get_tenant_paths(tenant_id)
+    # 傳遞 tenant_id 以支援租戶隔離
+    tid_str = str(tenant_id) if tenant_id else None
+    file_service = create_knowledge_file_service(tid_str)
     for attachment in attachments:
         attachment_path = attachment.get("path", "")
         try:
@@ -644,7 +698,7 @@ def delete_knowledge(kb_id: str) -> None:
             elif parsed.zone == StorageZone.LOCAL:
                 # 本機檔案
                 filename = parsed.path.split("/")[-1]
-                local_path = ASSETS_PATH / "images" / filename
+                local_path = assets_path / "images" / filename
                 if local_path.exists():
                     local_path.unlink()
         except Exception:
@@ -664,20 +718,31 @@ def delete_knowledge(kb_id: str) -> None:
         raise KnowledgeError(f"刪除知識檔案失敗：{e}") from e
 
     # 更新索引
-    index = _load_index()
+    index = _load_index(tenant_id=tenant_id)
     index.entries = [e for e in index.entries if e.id != kb_id]
-    _save_index(index)
+    _save_index(index, tenant_id=tenant_id)
 
 
-async def get_all_tags() -> TagsResponse:
-    """取得所有標籤（專案從資料庫動態載入）"""
-    index = _load_index()
+async def get_all_tags(tenant_id: str | UUID | None = None) -> TagsResponse:
+    """取得所有標籤（專案從資料庫動態載入）
+
+    Args:
+        tenant_id: 租戶 ID
+    """
+    if tenant_id is None:
+        tid = UUID(settings.default_tenant_id)
+    elif isinstance(tenant_id, UUID):
+        tid = tenant_id
+    else:
+        tid = UUID(tenant_id)
+    index = _load_index(tenant_id=tenant_id)
 
     # 從資料庫取得專案列表
     try:
         async with get_connection() as conn:
             rows = await conn.fetch(
-                "SELECT name FROM projects WHERE status = 'active' ORDER BY name"
+                "SELECT name FROM projects WHERE status = 'active' AND tenant_id = $1 ORDER BY name",
+                tid,
             )
             db_projects = [row["name"] for row in rows]
     except Exception as e:
@@ -700,18 +765,22 @@ async def get_all_tags() -> TagsResponse:
     )
 
 
-def rebuild_index() -> dict[str, Any]:
+def rebuild_index(tenant_id: str | None = None) -> dict[str, Any]:
     """重建索引
+
+    Args:
+        tenant_id: 租戶 ID
 
     Returns:
         重建結果統計
     """
+    _, entries_path, _, _ = _get_tenant_paths(tenant_id)
     entries: list[IndexEntry] = []
     topics: set[str] = set()
     errors: list[str] = []
 
     # 掃描所有知識檔案
-    for file_path in ENTRIES_PATH.glob("kb-*.md"):
+    for file_path in entries_path.glob("kb-*.md"):
         try:
             with open(file_path, "r", encoding="utf-8") as f:
                 raw_content = f.read()
@@ -761,11 +830,11 @@ def rebuild_index() -> dict[str, Any]:
             max_id = max(max_id, int(match.group(1)))
 
     # 建立新索引
-    index = _load_index()
+    index = _load_index(tenant_id=tenant_id)
     index.entries = entries
     index.next_id = max_id + 1
     index.tags.topics = sorted(list(topics))
-    _save_index(index)
+    _save_index(index, tenant_id=tenant_id)
 
     return {
         "total": len(entries),
@@ -774,16 +843,18 @@ def rebuild_index() -> dict[str, Any]:
     }
 
 
-def get_history(kb_id: str) -> HistoryResponse:
+def get_history(kb_id: str, tenant_id: str | None = None) -> HistoryResponse:
     """取得知識版本歷史
 
     Args:
         kb_id: 知識 ID
+        tenant_id: 租戶 ID
 
     Returns:
         版本歷史列表
     """
-    file_path = _find_knowledge_file(kb_id)
+    base_path, _, _, _ = _get_tenant_paths(tenant_id)
+    file_path = _find_knowledge_file(kb_id, tenant_id=tenant_id)
     if not file_path:
         raise KnowledgeNotFoundError(f"知識 {kb_id} 不存在")
 
@@ -802,7 +873,7 @@ def get_history(kb_id: str) -> HistoryResponse:
             ],
             capture_output=True,
             text=True,
-            cwd=KNOWLEDGE_BASE_PATH,
+            cwd=base_path,
             timeout=10,
         )
 
@@ -829,29 +900,31 @@ def get_history(kb_id: str) -> HistoryResponse:
     return HistoryResponse(id=kb_id, entries=entries)
 
 
-def get_version(kb_id: str, commit: str) -> VersionResponse:
+def get_version(kb_id: str, commit: str, tenant_id: str | None = None) -> VersionResponse:
     """取得特定版本的知識內容
 
     Args:
         kb_id: 知識 ID
         commit: Git commit hash
+        tenant_id: 租戶 ID
 
     Returns:
         該版本的內容（不含 frontmatter）
     """
-    file_path = _find_knowledge_file(kb_id)
+    base_path, _, _, _ = _get_tenant_paths(tenant_id)
+    file_path = _find_knowledge_file(kb_id, tenant_id=tenant_id)
     if not file_path:
         raise KnowledgeNotFoundError(f"知識 {kb_id} 不存在")
 
     try:
         # 取得相對路徑
-        rel_path = file_path.relative_to(KNOWLEDGE_BASE_PATH.parent.parent)
+        rel_path = file_path.relative_to(base_path.parent.parent)
 
         result = subprocess.run(
             ["git", "show", f"{commit}:{rel_path}"],
             capture_output=True,
             text=True,
-            cwd=KNOWLEDGE_BASE_PATH.parent.parent,
+            cwd=base_path.parent.parent,
             timeout=10,
         )
 
@@ -871,7 +944,11 @@ def get_version(kb_id: str, commit: str) -> VersionResponse:
 
 
 def upload_attachment(
-    kb_id: str, filename: str, data: bytes, description: str | None = None
+    kb_id: str,
+    filename: str,
+    data: bytes,
+    description: str | None = None,
+    tenant_id: str | None = None,
 ) -> KnowledgeAttachment:
     """上傳附件
 
@@ -882,10 +959,12 @@ def upload_attachment(
         filename: 檔名
         data: 檔案內容
         description: 附件說明
+        tenant_id: 租戶 ID
 
     Returns:
         附件資訊
     """
+    _, _, assets_path, _ = _get_tenant_paths(tenant_id)
     file_size = len(data)
     size_str = f"{file_size / 1024:.1f}KB" if file_size < 1024 * 1024 else f"{file_size / 1024 / 1024:.1f}MB"
 
@@ -902,7 +981,7 @@ def upload_attachment(
 
     # 小於 1MB 存本機
     if file_size < 1024 * 1024:
-        local_path = ASSETS_PATH / "images" / f"{kb_id}-{filename}"
+        local_path = assets_path / "images" / f"{kb_id}-{filename}"
         local_path.parent.mkdir(parents=True, exist_ok=True)
 
         with open(local_path, "wb") as f:
@@ -914,7 +993,9 @@ def upload_attachment(
         nas_path = f"attachments/{kb_id}/{filename}"
 
         try:
-            file_service = create_knowledge_file_service()
+            # 傳遞 tenant_id 以支援租戶隔離
+            tid_str = str(tenant_id) if tenant_id else None
+            file_service = create_knowledge_file_service(tid_str)
             # 確保目錄存在並寫入檔案
             file_service.write_file(nas_path, data)
         except LocalFileError as e:
@@ -930,7 +1011,7 @@ def upload_attachment(
     )
 
     # 更新知識的附件列表
-    file_path = _find_knowledge_file(kb_id)
+    file_path = _find_knowledge_file(kb_id, tenant_id=tenant_id)
     if file_path:
         try:
             with open(file_path, "r", encoding="utf-8") as f:
@@ -957,7 +1038,10 @@ def upload_attachment(
 
 
 def copy_linebot_attachment_to_knowledge(
-    kb_id: str, linebot_nas_path: str, description: str | None = None
+    kb_id: str,
+    linebot_nas_path: str,
+    description: str | None = None,
+    tenant_id: str | None = None,
 ) -> KnowledgeAttachment:
     """從 Line Bot NAS 複製附件到知識庫
 
@@ -966,7 +1050,10 @@ def copy_linebot_attachment_to_knowledge(
         linebot_nas_path: Line Bot NAS 路徑，支援以下格式：
             - 相對路徑：groups/xxx/images/2026-01-05/abc.jpg
             - URI 格式：ctos://linebot/files/groups/xxx/images/2026-01-05/abc.jpg
+            - AI 圖片：ai-images/xxx.jpg
+            - AI 簡報：ctos://ai-presentations/xxx.html
         description: 附件說明
+        tenant_id: 租戶 ID
 
     Returns:
         附件資訊
@@ -974,6 +1061,8 @@ def copy_linebot_attachment_to_knowledge(
     Raises:
         KnowledgeError: 複製失敗
     """
+    from ..config import settings
+
     # 處理 URI 格式，移除 ctos://linebot/files/ 前綴
     relative_path = linebot_nas_path
     if relative_path.startswith("ctos://linebot/files/"):
@@ -983,27 +1072,58 @@ def copy_linebot_attachment_to_knowledge(
     filename = Path(relative_path).name
 
     # 從 Line Bot NAS 讀取檔案（透過掛載路徑）
-    try:
-        linebot_file_service = create_linebot_file_service()
-        data = linebot_file_service.read_file(relative_path)
-    except LocalFileError as e:
-        raise KnowledgeError(f"讀取 Line Bot 附件失敗 ({relative_path})：{e}") from e
+    # 傳遞 tenant_id 以支援租戶隔離
+    tid_str = str(tenant_id) if tenant_id else None
+    data = None
+    last_error = None
+
+    # 處理 ctos://ai-presentations/ 格式
+    if relative_path.startswith("ctos://ai-presentations/"):
+        presentation_relative = relative_path.replace("ctos://ai-presentations/", "", 1)
+        presentation_path = Path(settings.ctos_mount_path) / "ai-presentations" / presentation_relative
+        try:
+            data = presentation_path.read_bytes()
+        except Exception as e:
+            last_error = e
+
+    # 處理 ai-images/ 和其他 linebot 路徑
+    if data is None:
+        # 嘗試多租戶路徑
+        try:
+            linebot_file_service = create_linebot_file_service(tid_str)
+            data = linebot_file_service.read_file(relative_path)
+        except LocalFileError as e:
+            last_error = e
+
+            # 如果是 ai-images/ 路徑，嘗試 fallback 到舊的共用路徑
+            if relative_path.startswith("ai-images/") and tid_str:
+                try:
+                    # Fallback 到舊路徑：/mnt/nas/ctos/linebot/files/ai-images/
+                    fallback_path = Path(settings.linebot_local_path) / relative_path
+                    data = fallback_path.read_bytes()
+                    last_error = None
+                except Exception as fallback_e:
+                    last_error = fallback_e
+
+    if data is None:
+        raise KnowledgeError(f"讀取 Line Bot 附件失敗 ({relative_path})：{last_error}") from last_error
 
     # 使用現有的 upload_attachment 函數處理儲存邏輯
-    return upload_attachment(kb_id, filename, data, description)
+    return upload_attachment(kb_id, filename, data, description, tenant_id=tenant_id)
 
 
-def get_nas_attachment(path: str) -> bytes:
+def get_nas_attachment(path: str, tenant_id: str | None = None) -> bytes:
     """從 NAS 讀取附件
 
     Args:
         path: 附件路徑（不含 nas://knowledge/ 前綴）
+        tenant_id: 租戶 ID，用於租戶隔離
 
     Returns:
         檔案內容
     """
     try:
-        file_service = create_knowledge_file_service()
+        file_service = create_knowledge_file_service(tenant_id)
         return file_service.read_file(f"attachments/{path}")
     except LocalFileError as e:
         raise KnowledgeError(f"讀取 NAS 附件失敗：{e}") from e
@@ -1014,6 +1134,7 @@ def update_attachment(
     attachment_idx: int,
     description: str | None = None,
     attachment_type: str | None = None,
+    tenant_id: str | None = None,
 ) -> KnowledgeAttachment:
     """更新附件資訊
 
@@ -1022,11 +1143,12 @@ def update_attachment(
         attachment_idx: 附件索引（從 0 開始）
         description: 附件說明
         attachment_type: 附件類型 (file, image, video, document)
+        tenant_id: 租戶 ID
 
     Returns:
         更新後的附件資訊
     """
-    file_path = _find_knowledge_file(kb_id)
+    file_path = _find_knowledge_file(kb_id, tenant_id=tenant_id)
     if not file_path:
         raise KnowledgeNotFoundError(f"知識 {kb_id} 不存在")
 
@@ -1070,14 +1192,15 @@ def update_attachment(
         raise KnowledgeError(f"更新附件失敗：{e}") from e
 
 
-def delete_attachment(kb_id: str, attachment_idx: int) -> None:
+def delete_attachment(kb_id: str, attachment_idx: int, tenant_id: str | None = None) -> None:
     """刪除附件
 
     Args:
         kb_id: 知識 ID
         attachment_idx: 附件索引（從 0 開始）
+        tenant_id: 租戶 ID
     """
-    file_path = _find_knowledge_file(kb_id)
+    file_path = _find_knowledge_file(kb_id, tenant_id=tenant_id)
     if not file_path:
         raise KnowledgeNotFoundError(f"知識 {kb_id} 不存在")
 
@@ -1096,13 +1219,16 @@ def delete_attachment(kb_id: str, attachment_idx: int) -> None:
 
         # 刪除實體檔案（檔案不存在也繼續刪除參考）
         from .path_manager import path_manager, StorageZone
+        _, _, assets_path, _ = _get_tenant_paths(tenant_id)
         try:
             parsed = path_manager.parse(attachment_path)
             if parsed.zone == StorageZone.CTOS and parsed.path.startswith("knowledge/"):
                 # CTOS 區的知識庫檔案
                 nas_path = parsed.path.replace("knowledge/", "", 1)
                 try:
-                    file_service = create_knowledge_file_service()
+                    # 傳遞 tenant_id 以支援租戶隔離
+                    tid_str = str(tenant_id) if tenant_id else None
+                    file_service = create_knowledge_file_service(tid_str)
                     file_service.delete_file(nas_path)
                 except Exception:
                     # 檔案可能已不存在，忽略錯誤繼續刪除參考
@@ -1110,7 +1236,7 @@ def delete_attachment(kb_id: str, attachment_idx: int) -> None:
             elif parsed.zone == StorageZone.LOCAL:
                 # 本機檔案
                 filename = parsed.path.split("/")[-1]
-                local_path = ASSETS_PATH / "images" / filename
+                local_path = assets_path / "images" / filename
                 if local_path.exists():
                     local_path.unlink()
         except Exception:

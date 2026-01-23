@@ -53,7 +53,7 @@ const InventoryManagementModule = (function() {
    * Get authentication token
    */
   function getToken() {
-    return LoginModule?.getToken?.() || localStorage.getItem('auth_token') || '';
+    return LoginModule?.getToken?.() || localStorage.getItem('chingtech_token') || '';
   }
 
   /**

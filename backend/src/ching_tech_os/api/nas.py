@@ -3,8 +3,9 @@
 import mimetypes
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile, status
 from fastapi.responses import Response, StreamingResponse
+from pydantic import BaseModel
 
 from ..models.auth import ErrorResponse, SessionData
 from ..services.message import log_message
@@ -21,10 +22,167 @@ from ..models.nas import (
     SearchResponse,
     SearchItem,
 )
-from ..services.smb import create_smb_service, SMBError, SMBConnectionError
+from ..services.smb import create_smb_service, SMBError, SMBConnectionError, SMBAuthError, SMBService
+from ..services.nas_connection import nas_connection_manager, NASConnection
+from ..services.permissions import require_app_permission
 from .auth import get_current_session, get_session_from_token_or_query
 
 router = APIRouter(prefix="/api/nas", tags=["nas"])
+
+
+# ============================================================
+# NAS 連線管理 API
+# ============================================================
+
+class NASConnectRequest(BaseModel):
+    """NAS 連線請求"""
+    host: str
+    username: str
+    password: str
+
+
+class NASConnectResponse(BaseModel):
+    """NAS 連線回應"""
+    success: bool
+    token: str | None = None
+    error: str | None = None
+    host: str | None = None
+
+
+class NASDisconnectResponse(BaseModel):
+    """NAS 斷線回應"""
+    success: bool
+
+
+class NASConnectionInfo(BaseModel):
+    """NAS 連線資訊"""
+    token: str
+    host: str
+    username: str
+    created_at: str
+    expires_at: str
+    last_used_at: str
+
+
+class NASConnectionsResponse(BaseModel):
+    """使用者 NAS 連線列表"""
+    connections: list[NASConnectionInfo]
+
+
+@router.post(
+    "/connect",
+    response_model=NASConnectResponse,
+    responses={
+        401: {"model": ErrorResponse, "description": "NAS 認證失敗"},
+        503: {"model": ErrorResponse, "description": "無法連線至 NAS"},
+    },
+)
+async def nas_connect(
+    request: NASConnectRequest,
+    session: SessionData = Depends(require_app_permission("file-manager")),
+) -> NASConnectResponse:
+    """建立 NAS 連線
+
+    驗證 NAS 憑證後建立連線，回傳連線 Token。
+    Token 預設有效期為 30 分鐘，操作時會自動延長。
+    """
+    try:
+        token = nas_connection_manager.create_connection(
+            host=request.host,
+            username=request.username,
+            password=request.password,
+            user_id=session.user_id,
+        )
+        return NASConnectResponse(
+            success=True,
+            token=token,
+            host=request.host,
+        )
+    except SMBAuthError:
+        return NASConnectResponse(
+            success=False,
+            error="NAS 帳號或密碼錯誤",
+        )
+    except SMBConnectionError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"無法連線至 NAS {request.host}",
+        )
+
+
+@router.delete(
+    "/disconnect",
+    response_model=NASDisconnectResponse,
+)
+async def nas_disconnect(
+    x_nas_token: str = Header(..., alias="X-NAS-Token"),
+    session: SessionData = Depends(require_app_permission("file-manager")),
+) -> NASDisconnectResponse:
+    """斷開 NAS 連線
+
+    使用連線 Token 關閉 NAS 連線。
+    """
+    success = nas_connection_manager.close_connection(x_nas_token)
+    return NASDisconnectResponse(success=success)
+
+
+@router.get(
+    "/connections",
+    response_model=NASConnectionsResponse,
+)
+async def list_nas_connections(
+    session: SessionData = Depends(require_app_permission("file-manager")),
+) -> NASConnectionsResponse:
+    """列出使用者的 NAS 連線"""
+    if session.user_id is None:
+        return NASConnectionsResponse(connections=[])
+
+    connections = nas_connection_manager.get_user_connections(session.user_id)
+    return NASConnectionsResponse(
+        connections=[NASConnectionInfo(**c) for c in connections]
+    )
+
+
+def get_nas_connection(
+    x_nas_token: str | None = Header(None, alias="X-NAS-Token"),
+    session: SessionData = Depends(require_app_permission("file-manager")),
+) -> tuple[SMBService, str]:
+    """取得 NAS 連線（支援 Token 或 Session 密碼）
+
+    優先使用 X-NAS-Token header。
+    若沒有 Token 且 Session 有密碼（舊版 SMB 認證），fallback 使用 Session。
+
+    Returns:
+        (SMBService, host) tuple
+
+    Raises:
+        HTTPException: 若無有效連線
+    """
+    # 優先使用 NAS Token
+    if x_nas_token:
+        conn = nas_connection_manager.get_connection(x_nas_token)
+        if conn is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="NAS 連線已過期，請重新連線",
+                headers={"X-NAS-Token-Expired": "true"},
+            )
+        return conn.get_smb_service(), conn.host
+
+    # Fallback: 使用 Session 密碼（向後相容）
+    if session.password:
+        return create_smb_service(
+            username=session.username,
+            password=session.password,
+            host=session.nas_host,
+        ), session.nas_host
+
+    # 都沒有
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="請先連線 NAS",
+        headers={"X-NAS-Required": "true"},
+    )
 
 
 @router.get(
@@ -36,14 +194,13 @@ router = APIRouter(prefix="/api/nas", tags=["nas"])
     },
 )
 async def list_shares(
-    session: SessionData = Depends(get_current_session),
+    nas_conn: tuple[SMBService, str] = Depends(get_nas_connection),
 ) -> SharesResponse:
-    """列出 NAS 上的共享資料夾"""
-    smb = create_smb_service(
-        username=session.username,
-        password=session.password,
-        host=session.nas_host,
-    )
+    """列出 NAS 上的共享資料夾
+
+    需要 X-NAS-Token header（或使用舊版 SMB 認證 session）。
+    """
+    smb, _host = nas_conn
 
     try:
         with smb:
@@ -74,13 +231,17 @@ async def list_shares(
 )
 async def browse_directory(
     path: str = "/",
-    session: SessionData = Depends(get_current_session),
+    nas_conn: tuple[SMBService, str] = Depends(get_nas_connection),
 ) -> BrowseResponse:
     """瀏覽指定資料夾內容
+
+    需要 X-NAS-Token header（或使用舊版 SMB 認證 session）。
 
     Args:
         path: 資料夾路徑，格式為 /share_name 或 /share_name/folder/subfolder
     """
+    smb, _host = nas_conn
+
     # 解析路徑
     path = path.strip("/")
     if not path:
@@ -92,12 +253,6 @@ async def browse_directory(
     parts = path.split("/", 1)
     share_name = parts[0]
     sub_path = parts[1] if len(parts) > 1 else ""
-
-    smb = create_smb_service(
-        username=session.username,
-        password=session.password,
-        host=session.nas_host,
-    )
 
     try:
         with smb:
@@ -152,6 +307,52 @@ def _get_mime_type(filename: str) -> str:
     return mime_type or "application/octet-stream"
 
 
+def get_nas_connection_with_query(
+    x_nas_token: str | None = Header(None, alias="X-NAS-Token"),
+    nas_token: str | None = None,  # Query parameter for img src
+    session: SessionData = Depends(get_session_from_token_or_query),
+) -> tuple[SMBService, str]:
+    """取得 NAS 連線（支援 Header、Query Parameter 或 Session）
+
+    優先順序：
+    1. X-NAS-Token header
+    2. nas_token query parameter（用於 <img src> 等場景）
+    3. Session 密碼（向後相容）
+
+    Returns:
+        (SMBService, host) tuple
+
+    Raises:
+        HTTPException: 若無有效連線
+    """
+    # 優先使用 NAS Token（header 或 query parameter）
+    actual_nas_token = x_nas_token or nas_token
+    if actual_nas_token:
+        conn = nas_connection_manager.get_connection(actual_nas_token)
+        if conn is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="NAS 連線已過期，請重新連線",
+                headers={"X-NAS-Token-Expired": "true"},
+            )
+        return conn.get_smb_service(), conn.host
+
+    # Fallback: 使用 Session 密碼（向後相容）
+    if session.password:
+        return create_smb_service(
+            username=session.username,
+            password=session.password,
+            host=session.nas_host,
+        ), session.nas_host
+
+    # 都沒有
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="請先連線 NAS",
+        headers={"X-NAS-Required": "true"},
+    )
+
+
 @router.get(
     "/file",
     responses={
@@ -163,29 +364,26 @@ def _get_mime_type(filename: str) -> str:
 )
 async def read_file(
     path: str,
-    session: SessionData = Depends(get_session_from_token_or_query),
+    nas_conn: tuple[SMBService, str] = Depends(get_nas_connection_with_query),
 ) -> Response:
     """讀取檔案內容
 
-    支援 Authorization header 或 query parameter token 認證。
-    Query parameter 用於 <img src> 等無法設定 header 的情況。
+    支援三種認證方式：
+    1. X-NAS-Token header
+    2. nas_token query parameter（用於 <img src> 等無法設定 header 的情況）
+    3. Authorization header session token（向後相容）
 
     Args:
         path: 檔案路徑，格式為 /share_name/folder/file.txt
-        token: (可選) 認證 token，若未提供 Authorization header 則必須
     """
+    smb, _host = nas_conn
+
     share_name, sub_path = _parse_path(path)
     if not sub_path:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="請指定檔案路徑",
         )
-
-    smb = create_smb_service(
-        username=session.username,
-        password=session.password,
-        host=session.nas_host,
-    )
 
     try:
         with smb:
@@ -226,13 +424,17 @@ async def read_file(
 )
 async def download_file(
     path: str,
-    session: SessionData = Depends(get_current_session),
+    nas_conn: tuple[SMBService, str] = Depends(get_nas_connection),
 ) -> Response:
     """下載檔案
+
+    需要 X-NAS-Token header（或使用舊版 SMB 認證 session）。
 
     Args:
         path: 檔案路徑，格式為 /share_name/folder/file.txt
     """
+    smb, _host = nas_conn
+
     share_name, sub_path = _parse_path(path)
     if not sub_path:
         raise HTTPException(
@@ -242,12 +444,6 @@ async def download_file(
 
     # 取得檔名
     filename = sub_path.split("/")[-1]
-
-    smb = create_smb_service(
-        username=session.username,
-        password=session.password,
-        host=session.nas_host,
-    )
 
     try:
         with smb:
@@ -299,25 +495,24 @@ async def download_file(
 async def upload_file(
     path: Annotated[str, Form(description="目標資料夾路徑")],
     file: UploadFile = File(...),
-    session: SessionData = Depends(get_current_session),
+    nas_conn: tuple[SMBService, str] = Depends(get_nas_connection),
+    session: SessionData = Depends(require_app_permission("file-manager")),
 ) -> OperationResponse:
     """上傳檔案
+
+    需要 X-NAS-Token header（或使用舊版 SMB 認證 session）。
 
     Args:
         path: 目標資料夾路徑，格式為 /share_name/folder
         file: 上傳的檔案
     """
+    smb, _host = nas_conn
+
     share_name, sub_path = _parse_path(path)
 
     # 組合完整檔案路徑
     filename = file.filename or "unnamed"
     file_path = f"{sub_path}/{filename}" if sub_path else filename
-
-    smb = create_smb_service(
-        username=session.username,
-        password=session.password,
-        host=session.nas_host,
-    )
 
     try:
         content = await file.read()
@@ -368,25 +563,24 @@ async def upload_file(
 )
 async def delete_file(
     request: DeleteRequest,
-    session: SessionData = Depends(get_current_session),
+    nas_conn: tuple[SMBService, str] = Depends(get_nas_connection),
+    session: SessionData = Depends(require_app_permission("file-manager")),
 ) -> OperationResponse:
     """刪除檔案或資料夾
+
+    需要 X-NAS-Token header（或使用舊版 SMB 認證 session）。
 
     Args:
         request: 刪除請求，包含路徑和是否遞迴刪除
     """
+    smb, _host = nas_conn
+
     share_name, sub_path = _parse_path(request.path)
     if not sub_path:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="無法刪除共享根目錄",
         )
-
-    smb = create_smb_service(
-        username=session.username,
-        password=session.password,
-        host=session.nas_host,
-    )
 
     try:
         with smb:
@@ -447,25 +641,23 @@ async def delete_file(
 )
 async def rename_item(
     request: RenameRequest,
-    session: SessionData = Depends(get_current_session),
+    nas_conn: tuple[SMBService, str] = Depends(get_nas_connection),
 ) -> OperationResponse:
     """重命名檔案或資料夾
+
+    需要 X-NAS-Token header（或使用舊版 SMB 認證 session）。
 
     Args:
         request: 重命名請求，包含原始路徑和新名稱
     """
+    smb, _host = nas_conn
+
     share_name, sub_path = _parse_path(request.path)
     if not sub_path:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="無法重命名共享根目錄",
         )
-
-    smb = create_smb_service(
-        username=session.username,
-        password=session.password,
-        host=session.nas_host,
-    )
 
     try:
         with smb:
@@ -505,25 +697,23 @@ async def rename_item(
 )
 async def create_directory(
     request: MkdirRequest,
-    session: SessionData = Depends(get_current_session),
+    nas_conn: tuple[SMBService, str] = Depends(get_nas_connection),
 ) -> OperationResponse:
     """建立資料夾
+
+    需要 X-NAS-Token header（或使用舊版 SMB 認證 session）。
 
     Args:
         request: 建立資料夾請求，包含路徑
     """
+    smb, _host = nas_conn
+
     share_name, sub_path = _parse_path(request.path)
     if not sub_path:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="請指定資料夾名稱",
         )
-
-    smb = create_smb_service(
-        username=session.username,
-        password=session.password,
-        host=session.nas_host,
-    )
 
     try:
         with smb:
@@ -566,9 +756,11 @@ async def search_files(
     query: str,
     max_depth: int = 3,
     max_results: int = 100,
-    session: SessionData = Depends(get_current_session),
+    nas_conn: tuple[SMBService, str] = Depends(get_nas_connection),
 ) -> SearchResponse:
     """搜尋檔案和資料夾
+
+    需要 X-NAS-Token header（或使用舊版 SMB 認證 session）。
 
     Args:
         path: 搜尋起始路徑（如 /home/documents）
@@ -576,6 +768,8 @@ async def search_files(
         max_depth: 最大搜尋深度（預設 3 層，最大 10 層）
         max_results: 最大結果數量（預設 100，最大 500）
     """
+    smb, _host = nas_conn
+
     if not query or not query.strip():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -587,12 +781,6 @@ async def search_files(
     max_results = min(max(1, max_results), 500)
 
     share_name, sub_path = _parse_path(path)
-
-    smb = create_smb_service(
-        username=session.username,
-        password=session.password,
-        host=session.nas_host,
-    )
 
     try:
         with smb:

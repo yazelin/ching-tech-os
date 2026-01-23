@@ -36,8 +36,30 @@ def _get_env_int(key: str, default: int) -> int:
         return default
 
 
+def _get_env_bool(key: str, default: bool = False) -> bool:
+    """取得布林環境變數"""
+    value = os.getenv(key, "").lower()
+    if value in ("true", "1", "yes", "on"):
+        return True
+    if value in ("false", "0", "no", "off"):
+        return False
+    return default
+
+
+# 預設租戶 UUID（用於單租戶模式和現有資料遷移）
+DEFAULT_TENANT_UUID = "00000000-0000-0000-0000-000000000000"
+
+
 class Settings:
     """應用程式設定"""
+
+    # ===================
+    # 多租戶設定
+    # ===================
+    # 是否啟用多租戶模式（預設 False 保持單租戶相容）
+    multi_tenant_mode: bool = _get_env_bool("MULTI_TENANT_MODE", False)
+    # 預設租戶 ID（單租戶模式時自動使用）
+    default_tenant_id: str = _get_env("DEFAULT_TENANT_ID", DEFAULT_TENANT_UUID)
 
     # ===================
     # 管理員設定
@@ -100,6 +122,9 @@ class Settings:
     # ===================
     line_channel_secret: str = _get_env("LINE_CHANNEL_SECRET", required=True)
     line_channel_access_token: str = _get_env("LINE_CHANNEL_ACCESS_TOKEN", required=True)
+
+    # 租戶憑證加密金鑰（用於加密 Line Bot credentials）
+    tenant_secret_key: str = _get_env("TENANT_SECRET_KEY", "")
 
     # Bot 觸發名稱（用於群組 @ 觸發，檢查訊息是否包含 @名稱）
     line_bot_trigger_names: list[str] = [
@@ -179,6 +204,46 @@ class Settings:
     def linebot_local_path(self) -> str:
         """Line Bot 檔案本機路徑（透過 NAS 掛載）"""
         return f"{self.ctos_mount_path}/{self.line_files_nas_path}"
+
+    # ===================
+    # 多租戶路徑方法
+    # ===================
+    def get_tenant_base_path(self, tenant_id: str | None = None) -> str:
+        """取得租戶的基礎路徑
+
+        多租戶模式：/mnt/nas/ctos/tenants/{tenant_id}/
+        單租戶模式：/mnt/nas/ctos/tenants/{default_tenant_id}/
+        """
+        tid = tenant_id or self.default_tenant_id
+        return f"{self.ctos_mount_path}/tenants/{tid}"
+
+    def get_tenant_knowledge_path(self, tenant_id: str | None = None) -> str:
+        """取得租戶的知識庫路徑"""
+        return f"{self.get_tenant_base_path(tenant_id)}/knowledge"
+
+    def get_tenant_linebot_path(self, tenant_id: str | None = None) -> str:
+        """取得租戶的 Line Bot 檔案路徑"""
+        return f"{self.get_tenant_base_path(tenant_id)}/linebot"
+
+    def get_tenant_ai_generated_path(self, tenant_id: str | None = None) -> str:
+        """取得租戶的 AI 生成檔案路徑"""
+        return f"{self.get_tenant_base_path(tenant_id)}/ai-generated"
+
+    def get_tenant_attachments_path(self, tenant_id: str | None = None) -> str:
+        """取得租戶的附件路徑"""
+        return f"{self.get_tenant_base_path(tenant_id)}/attachments"
+
+    def tenant_data_path(self, tenant_id: str | None = None) -> str:
+        """取得租戶資料根目錄（用於匯出/匯入）
+
+        等同於 get_tenant_base_path，提供簡潔的別名。
+        """
+        return self.get_tenant_base_path(tenant_id)
+
+    def get_tenant_export_path(self, tenant_id: str | None = None) -> str:
+        """取得租戶匯出檔案的暫存路徑"""
+        tid = tenant_id or self.default_tenant_id
+        return f"{self.ctos_mount_path}/exports/{tid}"
 
     # ===================
     # 資料庫 URL

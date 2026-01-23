@@ -14,16 +14,41 @@ from .services.session import session_manager
 from .services.terminal import terminal_service
 from .services.scheduler import start_scheduler, stop_scheduler
 from .services.linebot_agents import ensure_default_linebot_agents
-from .api import auth, knowledge, login_records, messages, nas, user, ai_router, ai_management, project, linebot_router, share, files, inventory, vendor, presentation
+from .api import auth, knowledge, login_records, messages, nas, user, ai_router, ai_management, project, linebot_router, share, files, inventory, vendor, presentation, tenant, config_public
+from .api.admin import tenants as admin_tenants
 
 # 建立 Socket.IO 伺服器
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
+
+
+def ensure_directories():
+    """確保必要的目錄存在"""
+    from pathlib import Path
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    # 需要建立的目錄
+    directories = [
+        Path(settings.knowledge_local_path),  # 知識庫
+        Path(settings.project_local_path),    # 專案
+        Path(settings.linebot_local_path) / "ai-images",  # AI 生成圖片
+    ]
+
+    for dir_path in directories:
+        if not dir_path.exists():
+            try:
+                dir_path.mkdir(parents=True, exist_ok=True)
+                logger.info(f"建立目錄: {dir_path}")
+            except Exception as e:
+                logger.warning(f"無法建立目錄 {dir_path}: {e}")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """應用程式生命週期管理"""
     # 啟動時
+    ensure_directories()  # 確保必要目錄存在
     await init_db_pool()
     await ensure_default_linebot_agents()  # 確保 Line Bot Agent 存在
     await session_manager.start_cleanup_task()
@@ -64,6 +89,7 @@ app.include_router(login_records.router)
 app.include_router(nas.router)
 app.include_router(user.router)
 app.include_router(user.admin_router)  # 管理員 API
+app.include_router(user.tenant_router)  # 租戶管理員 API
 app.include_router(ai_router.router)
 app.include_router(ai_management.router)
 app.include_router(project.router)
@@ -74,6 +100,9 @@ app.include_router(files.router)
 app.include_router(inventory.router)
 app.include_router(vendor.router)
 app.include_router(presentation.router)
+app.include_router(tenant.router)  # 租戶自助服務
+app.include_router(admin_tenants.router)  # 平台管理員租戶管理
+app.include_router(config_public.router)  # 公開配置 API
 
 
 @app.get("/api/health")
@@ -124,11 +153,12 @@ async def short_share_url(token: str):
         link_info = await get_link_info(token)
         resource_type = link_info["resource_type"]
         resource_id = link_info["resource_id"]
+        tenant_id = link_info.get("tenant_id")
 
         if resource_type == "knowledge":
             from .services.knowledge import get_knowledge
             try:
-                kb = get_knowledge(resource_id)
+                kb = get_knowledge(resource_id, tenant_id=tenant_id)
                 og_title = f"{kb.title} - 擎添工業"
                 # 截取前 100 字作為描述
                 content_preview = (kb.content or "")[:100].replace("\n", " ").strip()

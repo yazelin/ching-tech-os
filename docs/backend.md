@@ -193,6 +193,37 @@ uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8089 --reload
 | DELETE | `/api/vendors/{id}` | 刪除廠商 |
 | GET | `/api/vendors/categories` | 取得廠商類別列表 |
 
+### 租戶管理（多租戶模式）
+
+詳細說明請參考 [多租戶架構](multi-tenant.md)。
+
+#### 租戶自助 API
+
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| GET | `/api/tenant/info` | 取得租戶資訊 |
+| GET | `/api/tenant/usage` | 取得使用量統計 |
+| PUT | `/api/tenant/settings` | 更新租戶設定 |
+| GET | `/api/tenant/admins` | 列出租戶管理員 |
+| POST | `/api/tenant/admins` | 新增租戶管理員 |
+| DELETE | `/api/tenant/admins/{user_id}` | 移除租戶管理員 |
+| POST | `/api/tenant/export` | 匯出租戶資料（ZIP） |
+| POST | `/api/tenant/import` | 匯入租戶資料 |
+| GET | `/api/tenant/validate` | 驗證資料完整性 |
+
+#### 平台管理 API（平台管理員）
+
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| GET | `/api/admin/tenants` | 列出所有租戶 |
+| POST | `/api/admin/tenants` | 建立新租戶 |
+| GET | `/api/admin/tenants/{id}` | 取得租戶詳情 |
+| PATCH | `/api/admin/tenants/{id}` | 更新租戶 |
+| DELETE | `/api/admin/tenants/{id}` | 刪除租戶 |
+| GET | `/api/admin/tenants/{id}/admins` | 列出租戶管理員 |
+| POST | `/api/admin/tenants/{id}/admins` | 新增租戶管理員 |
+| DELETE | `/api/admin/tenants/{id}/admins/{user_id}` | 移除租戶管理員 |
+
 ### 終端機 (WebSocket)
 
 | 端點 | 說明 |
@@ -211,6 +242,8 @@ uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8089 --reload
 | CHING_TECH_DB_USER | ching_tech | 資料庫使用者 |
 | CHING_TECH_DB_PASSWORD | REMOVED_PASSWORD | 資料庫密碼 |
 | CHING_TECH_SESSION_TTL_HOURS | 8 | Session 有效時間（小時）|
+| MULTI_TENANT_MODE | false | 是否啟用多租戶模式 |
+| DEFAULT_TENANT_ID | 00000000-0000-0000-0000-000000000000 | 預設租戶 UUID |
 
 ## 專案結構
 
@@ -233,7 +266,10 @@ backend/
 │   │   ├── ai_management.py # AI 管理 API (Prompts/Agents/Logs)
 │   │   ├── linebot_router.py # Line Bot API
 │   │   ├── inventory.py    # 物料/庫存 API
-│   │   └── vendor.py       # 廠商主檔 API
+│   │   ├── vendor.py       # 廠商主檔 API
+│   │   ├── tenant.py       # 租戶自助 API
+│   │   └── admin/
+│   │       └── tenants.py  # 平台管理 API
 │   ├── services/
 │   │   ├── session.py      # Session 管理
 │   │   ├── smb.py          # SMB 連線服務
@@ -246,14 +282,17 @@ backend/
 │   │   ├── linebot_ai.py   # Line Bot AI 處理
 │   │   ├── mcp_server.py   # MCP Server（FastMCP）
 │   │   ├── inventory.py    # 物料/庫存服務
-│   │   └── vendor.py       # 廠商主檔服務
+│   │   ├── vendor.py       # 廠商主檔服務
+│   │   ├── tenant.py       # 租戶服務
+│   │   └── tenant_data.py  # 租戶資料匯出/匯入
 │   └── models/
 │       ├── auth.py         # 認證模型
 │       ├── nas.py          # NAS 模型
 │       ├── ai.py           # AI 相關模型
 │       ├── linebot.py      # Line Bot 模型
 │       ├── inventory.py    # 物料/庫存模型
-│       └── vendor.py       # 廠商主檔模型
+│       ├── vendor.py       # 廠商主檔模型
+│       └── tenant.py       # 租戶模型
 └── tests/
 ```
 

@@ -108,6 +108,36 @@
   height: 16px;
 }
 
+/* Tenant Info */
+.header-tenant {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background-color: var(--bg-surface);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+  cursor: default;
+}
+
+.header-tenant .icon {
+  color: var(--color-primary);
+}
+
+.header-tenant .icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.header-tenant-name {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* User Info */
 .header-user {
   display: flex;
@@ -238,9 +268,9 @@
     padding: 0 var(--spacing-sm);
   }
 
-  /* 隱藏標題文字 */
+  /* 標題文字縮小 */
   .header-title {
-    display: none;
+    font-size: var(--font-size-xs);
   }
 
   /* 隱藏時間 */
@@ -288,5 +318,19 @@
   .header-messages-btn {
     width: 36px;
     height: 36px;
+  }
+
+  /* 租戶名稱縮短寬度 */
+  .header-tenant-name {
+    max-width: 60px;
+    font-size: var(--font-size-xs);
+  }
+
+  .header-tenant {
+    padding: var(--spacing-xs) var(--spacing-sm);
+  }
+
+  .header-tenant-divider {
+    display: none !important;
   }
 }

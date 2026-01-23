@@ -245,7 +245,14 @@ const SettingsApp = (function () {
 
     try {
       const token = LoginModule.getToken();
-      const response = await fetch('/api/admin/users', {
+      const session = LoginModule.getSession();
+      const userRole = session?.role || 'user';
+
+      // 根據角色選擇 API
+      // 租戶管理員使用 /api/tenant/users，平台管理員使用 /api/admin/users
+      const apiUrl = userRole === 'platform_admin' ? '/api/admin/users' : '/api/tenant/users';
+
+      const response = await fetch(apiUrl, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
 
@@ -254,7 +261,7 @@ const SettingsApp = (function () {
       }
 
       const data = await response.json();
-      renderUsersList(container, data.users);
+      renderUsersList(container, data.users, userRole);
     } catch (error) {
       container.innerHTML = `
         <div class="users-error">
@@ -266,40 +273,83 @@ const SettingsApp = (function () {
   }
 
   /**
+   * 檢查是否可以管理目標使用者
+   * 權限階層：platform_admin > tenant_admin > user
+   * @param {string} operatorRole - 操作者角色
+   * @param {string} targetRole - 目標使用者角色
+   * @returns {boolean}
+   */
+  function canManageUser(operatorRole, targetRole) {
+    const roleLevel = { 'user': 1, 'tenant_admin': 2, 'platform_admin': 3 };
+    const operatorLevel = roleLevel[operatorRole] || 1;
+    const targetLevel = roleLevel[targetRole] || 1;
+    return operatorLevel > targetLevel;
+  }
+
+  /**
+   * 取得角色顯示文字
+   * @param {string} role
+   * @returns {string}
+   */
+  function getRoleDisplay(role) {
+    const roleNames = {
+      'platform_admin': '平台管理員',
+      'tenant_admin': '租戶管理員',
+      'user': '一般使用者',
+    };
+    return roleNames[role] || '一般使用者';
+  }
+
+  /**
    * 渲染使用者列表
    * @param {HTMLElement} container
    * @param {Array} users
+   * @param {string} currentUserRole - 當前操作者的角色
    */
-  function renderUsersList(container, users) {
+  function renderUsersList(container, users, currentUserRole = 'user') {
+    const isPlatformAdmin = currentUserRole === 'platform_admin';
+
     container.innerHTML = `
       <table class="users-table">
         <thead>
           <tr>
             <th>使用者</th>
             <th>顯示名稱</th>
+            <th>角色</th>
+            ${isPlatformAdmin ? '<th>租戶</th>' : ''}
             <th>最後登入</th>
             <th>操作</th>
           </tr>
         </thead>
         <tbody>
-          ${users.map(user => `
-            <tr data-user-id="${user.id}">
-              <td>
-                ${user.is_admin ? `<span class="user-admin-badge icon" title="管理員">${getIcon('shield-crown')}</span>` : ''}
-                ${user.username}
-              </td>
-              <td>${user.display_name || '-'}</td>
-              <td>${user.last_login_at ? new Date(user.last_login_at).toLocaleString('zh-TW') : '-'}</td>
-              <td>
-                ${user.is_admin
-                  ? `<span class="user-admin-label">管理員</span>`
-                  : `<button class="btn btn-ghost btn-sm user-permissions-btn" data-user-id="${user.id}" data-username="${user.username}">
-                      <span class="icon">${getIcon('shield-edit')}</span> 設定權限
-                     </button>`
-                }
-              </td>
-            </tr>
-          `).join('')}
+          ${users.map(user => {
+            const userRole = user.role || 'user';
+            const canManage = canManageUser(currentUserRole, userRole);
+            const roleIcon = userRole === 'platform_admin' ? 'crown' :
+                           userRole === 'tenant_admin' ? 'shield-crown' : '';
+            const roleClass = userRole !== 'user' ? 'user-admin-badge' : '';
+
+            return `
+              <tr data-user-id="${user.id}">
+                <td>
+                  ${roleIcon ? `<span class="${roleClass} icon" title="${getRoleDisplay(userRole)}">${getIcon(roleIcon)}</span>` : ''}
+                  ${user.username}
+                </td>
+                <td>${user.display_name || '-'}</td>
+                <td><span class="role-badge role-${userRole}">${getRoleDisplay(userRole)}</span></td>
+                ${isPlatformAdmin ? `<td>${user.tenant_name || '-'}</td>` : ''}
+                <td>${user.last_login_at ? new Date(user.last_login_at).toLocaleString('zh-TW') : '-'}</td>
+                <td>
+                  ${canManage
+                    ? `<button class="btn btn-ghost btn-sm user-permissions-btn" data-user-id="${user.id}" data-username="${user.username}">
+                        <span class="icon">${getIcon('shield-edit')}</span> 設定權限
+                       </button>`
+                    : `<span class="user-admin-label">${getRoleDisplay(userRole)}</span>`
+                  }
+                </td>
+              </tr>
+            `;
+          }).join('')}
         </tbody>
       </table>
     `;

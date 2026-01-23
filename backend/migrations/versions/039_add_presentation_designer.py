@@ -153,30 +153,32 @@ PRESENTATION_DESIGNER_PROMPT = """你是專業的簡報視覺設計師。根據�
 
 
 def upgrade() -> None:
-    # 1. 新增 presentation_designer prompt
+    # 1. 新增 presentation_designer prompt（多租戶相容寫法）
+    # 先刪除舊的（如果存在），再插入新的
+    op.execute(
+        "DELETE FROM ai_prompts WHERE name = 'presentation-designer' AND tenant_id IS NULL"
+    )
     op.execute(
         f"""
-        INSERT INTO ai_prompts (name, display_name, category, content, description)
+        INSERT INTO ai_prompts (name, display_name, category, content, description, tenant_id)
         VALUES (
             'presentation-designer',
             '簡報設計師',
             'internal',
             $prompt${PRESENTATION_DESIGNER_PROMPT}$prompt$,
-            '簡報視覺設計：根據內容、對象、場景輸出 design_json'
+            '簡報視覺設計：根據內容、對象、場景輸出 design_json',
+            NULL
         )
-        ON CONFLICT (name) DO UPDATE SET
-            display_name = EXCLUDED.display_name,
-            category = EXCLUDED.category,
-            content = EXCLUDED.content,
-            description = EXCLUDED.description,
-            updated_at = NOW()
         """
     )
 
     # 2. 新增 presentation-designer agent
     op.execute(
+        "DELETE FROM ai_agents WHERE name = 'presentation-designer' AND tenant_id IS NULL"
+    )
+    op.execute(
         """
-        INSERT INTO ai_agents (name, display_name, description, model, system_prompt_id, is_active, tools)
+        INSERT INTO ai_agents (name, display_name, description, model, system_prompt_id, is_active, tools, tenant_id)
         SELECT
             'presentation-designer',
             '簡報設計師',
@@ -184,15 +186,10 @@ def upgrade() -> None:
             'claude-sonnet',
             p.id,
             true,
-            '[]'::jsonb
+            '[]'::jsonb,
+            NULL
         FROM ai_prompts p
-        WHERE p.name = 'presentation-designer'
-        ON CONFLICT (name) DO UPDATE SET
-            display_name = EXCLUDED.display_name,
-            description = EXCLUDED.description,
-            model = EXCLUDED.model,
-            system_prompt_id = EXCLUDED.system_prompt_id,
-            updated_at = NOW()
+        WHERE p.name = 'presentation-designer' AND p.tenant_id IS NULL
         """
     )
 

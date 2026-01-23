@@ -1,9 +1,10 @@
 """Session 管理服務"""
 
 import asyncio
-import uuid
+import uuid as uuid_lib
 from datetime import datetime, timedelta
 from typing import Optional
+from uuid import UUID
 
 from ..config import settings
 from ..models.auth import SessionData
@@ -20,7 +21,14 @@ class SessionManager:
         self._cleanup_task: asyncio.Task | None = None
 
     def create_session(
-        self, username: str, password: str, nas_host: str | None = None, user_id: int | None = None
+        self,
+        username: str,
+        password: str,
+        nas_host: str | None = None,
+        user_id: int | None = None,
+        tenant_id: UUID | str | None = None,
+        role: str = "user",
+        app_permissions: dict[str, bool] | None = None,
     ) -> str:
         """建立新 session
 
@@ -29,13 +37,23 @@ class SessionManager:
             password: 使用者密碼（供 SMB 操作使用）
             nas_host: NAS 主機位址
             user_id: 資料庫中的使用者 ID
+            tenant_id: 租戶 UUID（多租戶模式）
+            role: 用戶角色（user, tenant_admin, platform_admin）
+            app_permissions: App 權限設定（可選，若為 None 則根據 role 使用預設值）
 
         Returns:
             session token (UUID)
         """
-        token = str(uuid.uuid4())
+        token = str(uuid_lib.uuid4())
         now = datetime.now()
         expires_at = now + timedelta(hours=settings.session_ttl_hours)
+
+        # 處理 tenant_id 類型轉換
+        if isinstance(tenant_id, str):
+            tenant_id = UUID(tenant_id)
+        elif tenant_id is None and not settings.multi_tenant_mode:
+            # 單租戶模式使用預設租戶
+            tenant_id = UUID(settings.default_tenant_id)
 
         self._sessions[token] = SessionData(
             username=username,
@@ -44,6 +62,9 @@ class SessionManager:
             user_id=user_id,
             created_at=now,
             expires_at=expires_at,
+            tenant_id=tenant_id,
+            role=role,
+            app_permissions=app_permissions or {},
         )
 
         return token

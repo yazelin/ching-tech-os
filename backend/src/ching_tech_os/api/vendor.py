@@ -2,8 +2,9 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from ching_tech_os.models.auth import SessionData
 from ching_tech_os.models.vendor import (
     VendorCreate,
     VendorUpdate,
@@ -21,6 +22,8 @@ from ching_tech_os.services.vendor import (
     VendorNotFoundError,
     VendorDuplicateError,
 )
+from .auth import get_current_session
+from ..services.permissions import require_app_permission
 
 router = APIRouter(prefix="/api/vendors", tags=["vendors"])
 
@@ -34,10 +37,16 @@ async def api_list_vendors(
     q: str | None = Query(None, description="關鍵字搜尋（名稱、簡稱、ERP 編號）"),
     active: bool = Query(True, description="只顯示啟用的廠商"),
     limit: int = Query(100, description="最大回傳數量", ge=1, le=500),
+    session: SessionData = Depends(require_app_permission("inventory")),
 ) -> VendorListResponse:
     """列出廠商"""
     try:
-        return await list_vendors(query=q, active_only=active, limit=limit)
+        return await list_vendors(
+            query=q,
+            active_only=active,
+            limit=limit,
+            tenant_id=session.tenant_id,
+        )
     except VendorError as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
@@ -47,10 +56,13 @@ async def api_list_vendors(
     response_model=VendorResponse,
     summary="取得廠商詳情",
 )
-async def api_get_vendor(vendor_id: UUID) -> VendorResponse:
+async def api_get_vendor(
+    vendor_id: UUID,
+    session: SessionData = Depends(require_app_permission("inventory")),
+) -> VendorResponse:
     """取得廠商詳情"""
     try:
-        return await get_vendor(vendor_id)
+        return await get_vendor(vendor_id, tenant_id=session.tenant_id)
     except VendorNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except VendorError as e:
@@ -63,10 +75,17 @@ async def api_get_vendor(vendor_id: UUID) -> VendorResponse:
     status_code=status.HTTP_201_CREATED,
     summary="新增廠商",
 )
-async def api_create_vendor(data: VendorCreate) -> VendorResponse:
+async def api_create_vendor(
+    data: VendorCreate,
+    session: SessionData = Depends(require_app_permission("inventory")),
+) -> VendorResponse:
     """新增廠商"""
     try:
-        return await create_vendor(data)
+        return await create_vendor(
+            data,
+            created_by=session.username,
+            tenant_id=session.tenant_id,
+        )
     except VendorDuplicateError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except VendorError as e:
@@ -78,10 +97,14 @@ async def api_create_vendor(data: VendorCreate) -> VendorResponse:
     response_model=VendorResponse,
     summary="更新廠商",
 )
-async def api_update_vendor(vendor_id: UUID, data: VendorUpdate) -> VendorResponse:
+async def api_update_vendor(
+    vendor_id: UUID,
+    data: VendorUpdate,
+    session: SessionData = Depends(require_app_permission("inventory")),
+) -> VendorResponse:
     """更新廠商"""
     try:
-        return await update_vendor(vendor_id, data)
+        return await update_vendor(vendor_id, data, tenant_id=session.tenant_id)
     except VendorNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except VendorDuplicateError as e:
@@ -95,10 +118,13 @@ async def api_update_vendor(vendor_id: UUID, data: VendorUpdate) -> VendorRespon
     response_model=VendorResponse,
     summary="停用廠商",
 )
-async def api_deactivate_vendor(vendor_id: UUID) -> VendorResponse:
+async def api_deactivate_vendor(
+    vendor_id: UUID,
+    session: SessionData = Depends(require_app_permission("inventory")),
+) -> VendorResponse:
     """停用廠商（軟刪除）"""
     try:
-        return await deactivate_vendor(vendor_id)
+        return await deactivate_vendor(vendor_id, tenant_id=session.tenant_id)
     except VendorNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except VendorError as e:
@@ -110,10 +136,13 @@ async def api_deactivate_vendor(vendor_id: UUID) -> VendorResponse:
     response_model=VendorResponse,
     summary="啟用廠商",
 )
-async def api_activate_vendor(vendor_id: UUID) -> VendorResponse:
+async def api_activate_vendor(
+    vendor_id: UUID,
+    session: SessionData = Depends(require_app_permission("inventory")),
+) -> VendorResponse:
     """啟用廠商"""
     try:
-        return await activate_vendor(vendor_id)
+        return await activate_vendor(vendor_id, tenant_id=session.tenant_id)
     except VendorNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except VendorError as e:

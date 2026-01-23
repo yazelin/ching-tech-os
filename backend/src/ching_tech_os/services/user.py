@@ -1,70 +1,336 @@
 """使用者服務"""
 
 from datetime import datetime
+from uuid import UUID
 
+from ..config import settings, DEFAULT_TENANT_UUID
 from ..database import get_connection
 
 
-async def upsert_user(username: str) -> int:
+async def upsert_user(username: str, tenant_id: UUID | str | None = None) -> int:
     """建立或更新使用者記錄
 
     如果使用者不存在，建立新記錄；否則更新最後登入時間。
+    使用者唯一性在租戶範圍內驗證（同租戶不能有重複帳號）。
 
     Args:
         username: 使用者帳號
+        tenant_id: 租戶 UUID（可選，預設使用預設租戶）
 
     Returns:
         使用者 ID
     """
+    # 處理 tenant_id
+    if tenant_id is None:
+        tenant_id = UUID(settings.default_tenant_id)
+    elif isinstance(tenant_id, str):
+        tenant_id = UUID(tenant_id)
+
     async with get_connection() as conn:
-        # 嘗試插入或更新
+        # 嘗試插入或更新（使用 tenant_id + username 的複合唯一鍵）
         result = await conn.fetchrow(
             """
-            INSERT INTO users (username, last_login_at)
-            VALUES ($1, $2)
-            ON CONFLICT (username) DO UPDATE
-            SET last_login_at = $2
+            INSERT INTO users (username, tenant_id, last_login_at)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (tenant_id, username) DO UPDATE
+            SET last_login_at = $3
             RETURNING id
             """,
             username,
+            tenant_id,
             datetime.now(),
         )
         return result["id"]
 
 
-async def get_user_by_username(username: str) -> dict | None:
+async def get_user_by_username(
+    username: str,
+    tenant_id: UUID | str | None = None,
+) -> dict | None:
     """根據帳號取得使用者資料
 
     Args:
         username: 使用者帳號
+        tenant_id: 租戶 UUID（可選，預設使用預設租戶）
 
     Returns:
         使用者資料或 None
     """
+    # 處理 tenant_id
+    if tenant_id is None:
+        tenant_id = UUID(settings.default_tenant_id)
+    elif isinstance(tenant_id, str):
+        tenant_id = UUID(tenant_id)
+
     async with get_connection() as conn:
         row = await conn.fetchrow(
-            "SELECT id, username, display_name, created_at, last_login_at, preferences FROM users WHERE username = $1",
+            """
+            SELECT id, username, display_name, created_at, last_login_at,
+                   preferences, tenant_id, role, password_hash, email,
+                   password_changed_at, must_change_password, is_active
+            FROM users
+            WHERE username = $1 AND tenant_id = $2
+            """,
             username,
+            tenant_id,
         )
         if row:
             return dict(row)
         return None
 
 
-async def get_all_users() -> list[dict]:
+async def get_user_for_auth(
+    username: str,
+    tenant_id: UUID | str,
+) -> dict | None:
+    """取得用於認證的使用者資料（包含密碼雜湊）
+
+    Args:
+        username: 使用者帳號
+        tenant_id: 租戶 UUID
+
+    Returns:
+        使用者資料或 None
+    """
+    if isinstance(tenant_id, str):
+        tenant_id = UUID(tenant_id)
+
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT id, username, display_name, tenant_id, role,
+                   password_hash, must_change_password, is_active
+            FROM users
+            WHERE username = $1 AND tenant_id = $2
+            """,
+            username,
+            tenant_id,
+        )
+        if row:
+            return dict(row)
+        return None
+
+
+async def set_user_password(
+    user_id: int,
+    password_hash: str,
+    must_change: bool = False,
+) -> bool:
+    """設定使用者密碼
+
+    Args:
+        user_id: 使用者 ID
+        password_hash: bcrypt 密碼雜湊
+        must_change: 是否需要下次登入時變更密碼
+
+    Returns:
+        是否成功
+    """
+    async with get_connection() as conn:
+        result = await conn.execute(
+            """
+            UPDATE users
+            SET password_hash = $2,
+                password_changed_at = NOW(),
+                must_change_password = $3
+            WHERE id = $1
+            """,
+            user_id,
+            password_hash,
+            must_change,
+        )
+        return "UPDATE 1" in result
+
+
+async def update_last_login(user_id: int) -> None:
+    """更新最後登入時間
+
+    Args:
+        user_id: 使用者 ID
+    """
+    async with get_connection() as conn:
+        await conn.execute(
+            "UPDATE users SET last_login_at = NOW() WHERE id = $1",
+            user_id,
+        )
+
+
+async def clear_must_change_password(user_id: int) -> None:
+    """清除強制變更密碼標記
+
+    Args:
+        user_id: 使用者 ID
+    """
+    async with get_connection() as conn:
+        await conn.execute(
+            "UPDATE users SET must_change_password = false WHERE id = $1",
+            user_id,
+        )
+
+
+async def create_user(
+    username: str,
+    tenant_id: UUID | str,
+    password_hash: str | None = None,
+    display_name: str | None = None,
+    email: str | None = None,
+    role: str = "user",
+    must_change_password: bool = False,
+) -> int:
+    """建立新使用者
+
+    Args:
+        username: 使用者帳號
+        tenant_id: 租戶 UUID
+        password_hash: bcrypt 密碼雜湊（可選）
+        display_name: 顯示名稱
+        email: Email（可選）
+        role: 角色（user, tenant_admin）
+        must_change_password: 是否需要下次登入時變更密碼
+
+    Returns:
+        新建使用者 ID
+
+    Raises:
+        ValueError: 若帳號已存在
+    """
+    if isinstance(tenant_id, str):
+        tenant_id = UUID(tenant_id)
+
+    async with get_connection() as conn:
+        try:
+            # 判斷是否設定 password_changed_at
+            password_changed_at = datetime.now() if password_hash else None
+
+            row = await conn.fetchrow(
+                """
+                INSERT INTO users (
+                    username, tenant_id, password_hash, display_name, email,
+                    role, must_change_password, password_changed_at
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                RETURNING id
+                """,
+                username,
+                tenant_id,
+                password_hash,
+                display_name,
+                email,
+                role,
+                must_change_password,
+                password_changed_at,
+            )
+            return row["id"]
+        except Exception as e:
+            if "duplicate key" in str(e).lower() or "unique constraint" in str(e).lower():
+                raise ValueError("此帳號已存在")
+            raise
+
+
+async def deactivate_user(user_id: int) -> bool:
+    """停用使用者帳號
+
+    Args:
+        user_id: 使用者 ID
+
+    Returns:
+        是否成功
+    """
+    async with get_connection() as conn:
+        result = await conn.execute(
+            "UPDATE users SET is_active = false WHERE id = $1",
+            user_id,
+        )
+        return "UPDATE 1" in result
+
+
+async def activate_user(user_id: int) -> bool:
+    """啟用使用者帳號
+
+    Args:
+        user_id: 使用者 ID
+
+    Returns:
+        是否成功
+    """
+    async with get_connection() as conn:
+        result = await conn.execute(
+            "UPDATE users SET is_active = true WHERE id = $1",
+            user_id,
+        )
+        return "UPDATE 1" in result
+
+
+async def get_all_users(
+    tenant_id: UUID | str | None = None,
+    include_inactive: bool = False,
+) -> list[dict]:
     """取得所有使用者列表
+
+    Args:
+        tenant_id: 租戶 UUID（可選，預設使用預設租戶）
+        include_inactive: 是否包含停用的使用者
 
     Returns:
         使用者列表
     """
+    # 處理 tenant_id
+    if tenant_id is None:
+        tenant_id = UUID(settings.default_tenant_id)
+    elif isinstance(tenant_id, str):
+        tenant_id = UUID(tenant_id)
+
     async with get_connection() as conn:
-        rows = await conn.fetch(
-            """
-            SELECT id, username, display_name, created_at, last_login_at, preferences
+        query = """
+            SELECT id, username, display_name, created_at, last_login_at,
+                   preferences, tenant_id, role, is_active
             FROM users
-            ORDER BY created_at DESC
-            """
-        )
+            WHERE tenant_id = $1
+        """
+        if not include_inactive:
+            query += " AND is_active = true"
+        query += " ORDER BY created_at DESC"
+
+        rows = await conn.fetch(query, tenant_id)
+        return [dict(row) for row in rows]
+
+
+async def get_all_users_cross_tenant(
+    filter_tenant_id: UUID | str | None = None,
+) -> list[dict]:
+    """取得所有租戶的使用者列表（平台管理員專用）
+
+    Args:
+        filter_tenant_id: 可選的租戶篩選
+
+    Returns:
+        使用者列表（包含租戶資訊）
+    """
+    async with get_connection() as conn:
+        if filter_tenant_id is not None:
+            if isinstance(filter_tenant_id, str):
+                filter_tenant_id = UUID(filter_tenant_id)
+            rows = await conn.fetch(
+                """
+                SELECT u.id, u.username, u.display_name, u.created_at, u.last_login_at,
+                       u.preferences, u.tenant_id, u.role, u.is_active, t.name as tenant_name
+                FROM users u
+                LEFT JOIN tenants t ON u.tenant_id = t.id
+                WHERE u.tenant_id = $1
+                ORDER BY u.created_at DESC
+                """,
+                filter_tenant_id,
+            )
+        else:
+            rows = await conn.fetch(
+                """
+                SELECT u.id, u.username, u.display_name, u.created_at, u.last_login_at,
+                       u.preferences, u.tenant_id, u.role, u.is_active, t.name as tenant_name
+                FROM users u
+                LEFT JOIN tenants t ON u.tenant_id = t.id
+                ORDER BY t.name, u.created_at DESC
+                """,
+            )
         return [dict(row) for row in rows]
 
 
@@ -79,7 +345,11 @@ async def get_user_by_id(user_id: int) -> dict | None:
     """
     async with get_connection() as conn:
         row = await conn.fetchrow(
-            "SELECT id, username, display_name, created_at, last_login_at, preferences FROM users WHERE id = $1",
+            """
+            SELECT id, username, display_name, created_at, last_login_at,
+                   preferences, tenant_id, role
+            FROM users WHERE id = $1
+            """,
             user_id,
         )
         if row:
@@ -140,25 +410,38 @@ async def update_user_permissions(user_id: int, permissions: dict) -> dict:
         return current_prefs
 
 
-async def update_user_display_name(username: str, display_name: str) -> dict | None:
+async def update_user_display_name(
+    username: str,
+    display_name: str,
+    tenant_id: UUID | str | None = None,
+) -> dict | None:
     """更新使用者顯示名稱
 
     Args:
         username: 使用者帳號
         display_name: 新的顯示名稱
+        tenant_id: 租戶 UUID（可選，預設使用預設租戶）
 
     Returns:
         更新後的使用者資料或 None
     """
+    # 處理 tenant_id
+    if tenant_id is None:
+        tenant_id = UUID(settings.default_tenant_id)
+    elif isinstance(tenant_id, str):
+        tenant_id = UUID(tenant_id)
+
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
             UPDATE users SET display_name = $2
-            WHERE username = $1
-            RETURNING id, username, display_name, created_at, last_login_at
+            WHERE username = $1 AND tenant_id = $3
+            RETURNING id, username, display_name, created_at, last_login_at,
+                      preferences, tenant_id, role
             """,
             username,
             display_name,
+            tenant_id,
         )
         if row:
             return dict(row)
@@ -207,6 +490,36 @@ async def get_user_preferences(user_id: int) -> dict:
         return {"theme": "dark"}
 
 
+async def get_user_role_and_permissions(user_id: int) -> dict:
+    """取得使用者的角色和權限設定
+
+    Args:
+        user_id: 使用者 ID
+
+    Returns:
+        包含 role、permissions 和 user_data 的 dict
+        - role: 使用者角色（user/tenant_admin/platform_admin）
+        - permissions: 從 preferences 中提取的 permissions 設定
+        - user_data: 完整的使用者資料（供 get_user_app_permissions_sync 使用）
+    """
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            "SELECT role, preferences FROM users WHERE id = $1",
+            user_id,
+        )
+        if not row:
+            return {"role": "user", "permissions": None, "user_data": None}
+
+        role = row["role"] or "user"
+        preferences = _parse_preferences(row["preferences"])
+        permissions = preferences.get("permissions")
+
+        # 建立 user_data 供 get_user_app_permissions_sync 使用
+        user_data = {"preferences": preferences}
+
+        return {"role": role, "permissions": permissions, "user_data": user_data}
+
+
 async def update_user_preferences(user_id: int, preferences: dict) -> dict:
     """更新使用者偏好設定
 
@@ -234,3 +547,266 @@ async def update_user_preferences(user_id: int, preferences: dict) -> dict:
         if row and row["preferences"]:
             return _parse_preferences(row["preferences"])
         return {"theme": "dark"}
+
+
+# =============================================================
+# 使用者管理函數（供租戶管理員使用）
+# =============================================================
+
+
+async def list_tenant_users(
+    tenant_id: UUID | str,
+    include_inactive: bool = False,
+) -> list[dict]:
+    """列出租戶的所有使用者
+
+    Args:
+        tenant_id: 租戶 UUID
+        include_inactive: 是否包含停用的使用者
+
+    Returns:
+        使用者列表
+    """
+    if isinstance(tenant_id, str):
+        tenant_id = UUID(tenant_id)
+
+    async with get_connection() as conn:
+        if include_inactive:
+            rows = await conn.fetch(
+                """
+                SELECT id, username, display_name, email, role, is_active,
+                       must_change_password, created_at, last_login_at, password_changed_at
+                FROM users
+                WHERE tenant_id = $1
+                ORDER BY created_at DESC
+                """,
+                tenant_id,
+            )
+        else:
+            rows = await conn.fetch(
+                """
+                SELECT id, username, display_name, email, role, is_active,
+                       must_change_password, created_at, last_login_at, password_changed_at
+                FROM users
+                WHERE tenant_id = $1 AND is_active = true
+                ORDER BY created_at DESC
+                """,
+                tenant_id,
+            )
+        return [dict(row) for row in rows]
+
+
+async def get_user_detail(
+    user_id: int,
+    tenant_id: UUID | str,
+) -> dict | None:
+    """取得使用者詳細資料（用於管理）
+
+    會驗證使用者是否屬於該租戶。
+
+    Args:
+        user_id: 使用者 ID
+        tenant_id: 租戶 UUID
+
+    Returns:
+        使用者資料或 None
+    """
+    if isinstance(tenant_id, str):
+        tenant_id = UUID(tenant_id)
+
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT id, username, display_name, email, role, is_active,
+                   must_change_password, created_at, last_login_at,
+                   password_changed_at, preferences, tenant_id
+            FROM users
+            WHERE id = $1 AND tenant_id = $2
+            """,
+            user_id,
+            tenant_id,
+        )
+        if row:
+            return dict(row)
+        return None
+
+
+async def update_user_info(
+    user_id: int,
+    tenant_id: UUID | str,
+    display_name: str | None = None,
+    email: str | None = None,
+    role: str | None = None,
+) -> dict | None:
+    """更新使用者資訊（供管理員使用）
+
+    Args:
+        user_id: 使用者 ID
+        tenant_id: 租戶 UUID
+        display_name: 新的顯示名稱
+        email: 新的 Email
+        role: 新的角色
+
+    Returns:
+        更新後的使用者資料或 None
+    """
+    if isinstance(tenant_id, str):
+        tenant_id = UUID(tenant_id)
+
+    # 驗證角色值
+    if role is not None and role not in ("user", "tenant_admin"):
+        raise ValueError("角色必須是 user 或 tenant_admin")
+
+    async with get_connection() as conn:
+        # 先驗證使用者屬於該租戶
+        existing = await conn.fetchrow(
+            "SELECT id FROM users WHERE id = $1 AND tenant_id = $2",
+            user_id,
+            tenant_id,
+        )
+        if existing is None:
+            return None
+
+        # 建構動態更新
+        updates = []
+        params = [user_id, tenant_id]
+        param_index = 3
+
+        if display_name is not None:
+            updates.append(f"display_name = ${param_index}")
+            params.append(display_name)
+            param_index += 1
+
+        if email is not None:
+            updates.append(f"email = ${param_index}")
+            params.append(email)
+            param_index += 1
+
+        if role is not None:
+            updates.append(f"role = ${param_index}")
+            params.append(role)
+            param_index += 1
+
+        if not updates:
+            # 沒有要更新的欄位，直接返回現有資料
+            return await get_user_detail(user_id, tenant_id)
+
+        query = f"""
+            UPDATE users
+            SET {", ".join(updates)}
+            WHERE id = $1 AND tenant_id = $2
+            RETURNING id, username, display_name, email, role, is_active,
+                      must_change_password, created_at, last_login_at, password_changed_at
+        """
+
+        row = await conn.fetchrow(query, *params)
+        if row:
+            return dict(row)
+        return None
+
+
+async def reset_user_password(
+    user_id: int,
+    tenant_id: UUID | str,
+    new_password_hash: str,
+    must_change: bool = True,
+) -> bool:
+    """重設使用者密碼（供管理員使用）
+
+    Args:
+        user_id: 使用者 ID
+        tenant_id: 租戶 UUID
+        new_password_hash: 新密碼的雜湊值
+        must_change: 是否要求下次登入時變更密碼
+
+    Returns:
+        是否成功
+    """
+    if isinstance(tenant_id, str):
+        tenant_id = UUID(tenant_id)
+
+    async with get_connection() as conn:
+        result = await conn.execute(
+            """
+            UPDATE users
+            SET password_hash = $3,
+                password_changed_at = NOW(),
+                must_change_password = $4
+            WHERE id = $1 AND tenant_id = $2
+            """,
+            user_id,
+            tenant_id,
+            new_password_hash,
+            must_change,
+        )
+        return "UPDATE 1" in result
+
+
+async def delete_user(
+    user_id: int,
+    tenant_id: UUID | str,
+) -> bool:
+    """刪除使用者
+
+    注意：這是永久刪除，建議使用 deactivate_user 代替。
+
+    Args:
+        user_id: 使用者 ID
+        tenant_id: 租戶 UUID
+
+    Returns:
+        是否成功
+    """
+    if isinstance(tenant_id, str):
+        tenant_id = UUID(tenant_id)
+
+    async with get_connection() as conn:
+        result = await conn.execute(
+            "DELETE FROM users WHERE id = $1 AND tenant_id = $2",
+            user_id,
+            tenant_id,
+        )
+        return "DELETE 1" in result
+
+
+async def get_user_role(
+    username: str,
+    user_id: int | None,
+    tenant_id: UUID | str,
+) -> str:
+    """判斷使用者的角色
+
+    判斷優先順序：
+    1. 平台管理員（帳號在 PLATFORM_ADMINS 清單中）
+    2. 租戶管理員（在 tenant_admins 表中有記錄）
+    3. 一般使用者
+
+    Args:
+        username: 使用者帳號
+        user_id: 使用者 ID（可選，若無法提供會從資料庫查詢）
+        tenant_id: 租戶 UUID
+
+    Returns:
+        角色字串：platform_admin / tenant_admin / user
+    """
+    # 檢查是否為平台管理員
+    if username == settings.admin_username:
+        return "platform_admin"
+
+    if user_id is None:
+        return "user"
+
+    if isinstance(tenant_id, str):
+        tenant_id = UUID(tenant_id)
+
+    # 檢查是否為租戶管理員
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            "SELECT id FROM tenant_admins WHERE tenant_id = $1 AND user_id = $2",
+            tenant_id,
+            user_id,
+        )
+        if row:
+            return "tenant_admin"
+
+    return "user"

@@ -59,18 +59,25 @@ async def create_link(
 
     只有資源擁有者或有編輯權限的人可以建立連結。
     """
-    # 權限檢查
+    # 取得租戶 ID
+    tenant_id = getattr(session, "tenant_id", None)
+
+    # 權限檢查（tenant_admin 擁有租戶內所有權限）
+    is_tenant_admin = session.role == "tenant_admin"
+
     if data.resource_type == "knowledge":
         try:
-            knowledge = get_knowledge(data.resource_id)
-            preferences = await get_user_preferences(session.user_id) if session.user_id else None
-            if not check_knowledge_permission(
-                session.username, preferences, knowledge.owner, knowledge.scope, "write"
-            ):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="您沒有分享此知識的權限",
-                )
+            knowledge = get_knowledge(data.resource_id, tenant_id=tenant_id)
+            # tenant_admin 跳過權限檢查
+            if not is_tenant_admin:
+                preferences = await get_user_preferences(session.user_id) if session.user_id else None
+                if not check_knowledge_permission(
+                    session.username, preferences, knowledge.owner, knowledge.scope, "write"
+                ):
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="您沒有分享此知識的權限",
+                    )
         except KnowledgeNotFoundError:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -80,7 +87,7 @@ async def create_link(
     elif data.resource_type == "nas_file":
         # 驗證 NAS 檔案存在且在允許範圍內
         try:
-            validate_nas_file_path(data.resource_id)
+            validate_nas_file_path(data.resource_id, tenant_id)
         except NasFileNotFoundError as e:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -96,7 +103,7 @@ async def create_link(
     # 後續可以加入專案權限檢查
 
     try:
-        return await create_share_link(data, session.username)
+        return await create_share_link(data, session.username, tenant_id)
     except ResourceNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -121,17 +128,19 @@ async def list_links(
     """列出分享連結
 
     Args:
-        view: "mine" 只顯示自己的，"all" 顯示全部（僅管理員）
+        view: "mine" 只顯示自己的，"all" 顯示全部（管理員或租戶管理員）
     """
     try:
-        user_is_admin = is_admin(session.username)
+        # 平台管理員或租戶管理員都可以看全部
+        user_is_admin = is_admin(session.username) or session.role == "tenant_admin"
+        tenant_id = getattr(session, "tenant_id", None)
 
         # 管理員可以選擇查看全部
         if view == "all" and user_is_admin:
-            result = await list_all_links()
+            result = await list_all_links(tenant_id)
         else:
             # 非管理員或選擇「我的」
-            result = await list_my_links(session.username)
+            result = await list_my_links(session.username, tenant_id)
 
         # 設定管理員標誌（讓前端知道可以切換視圖）
         result.is_admin = user_is_admin
@@ -239,6 +248,7 @@ async def get_public_attachment(token: str, path: str) -> Response:
             )
 
         kb_id = link_info["resource_id"]
+        tenant_id = link_info.get("tenant_id")
         filename = path.split("/")[-1]
 
         # 安全檢查：防止路徑穿越
@@ -297,8 +307,8 @@ async def get_public_attachment(token: str, path: str) -> Response:
             # 將 local/ 轉換為 assets/
             assets_path = "assets/" + path[len("local/"):]
 
-            # 讀取本機檔案
-            assets_base = FilePath(settings.knowledge_data_path)
+            # 讀取本機檔案（使用租戶專屬路徑）
+            assets_base = FilePath(settings.get_tenant_knowledge_path(tenant_id))
             file_path = assets_base / assets_path
 
             if not file_path.exists():
@@ -319,7 +329,7 @@ async def get_public_attachment(token: str, path: str) -> Response:
 
             # get_nas_attachment 期望的 path 不含 attachments/ 前綴
             nas_path = path[len("attachments/"):]
-            content = get_nas_attachment(nas_path)
+            content = get_nas_attachment(nas_path, tenant_id=tenant_id)
 
         mime_type, _ = mimetypes.guess_type(filename)
         return Response(
@@ -361,12 +371,13 @@ async def download_shared_file(token: str) -> Response:
         # 驗證 token 有效
         link_info = await get_link_info(token)
         resource_type = link_info["resource_type"]
+        tenant_id = link_info.get("tenant_id")
 
         # 支援 NAS 檔案和專案附件
         if resource_type == "nas_file":
             file_path = link_info["resource_id"]
-            # 驗證並取得檔案路徑
-            full_path = validate_nas_file_path(file_path)
+            # 驗證並取得檔案路徑（傳遞 tenant_id）
+            full_path = validate_nas_file_path(file_path, tenant_id=tenant_id)
             # 讀取檔案內容
             content = full_path.read_bytes()
             filename = full_path.name

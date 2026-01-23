@@ -815,6 +815,22 @@ const WindowModule = (function() {
   }
 
   /**
+   * Update window title
+   * @param {string} windowId
+   * @param {string} newTitle
+   */
+  function updateWindowTitle(windowId, newTitle) {
+    const windowInfo = windows[windowId];
+    if (!windowInfo) return;
+
+    const titleEl = windowInfo.element.querySelector('.window-title');
+    if (titleEl) {
+      titleEl.textContent = newTitle;
+      windowInfo.title = newTitle;
+    }
+  }
+
+  /**
    * Get window by app ID (returns first match)
    * @param {string} appId
    * @returns {Object|null}
@@ -940,6 +956,7 @@ const WindowModule = (function() {
     maximizeWindow,
     unmaximizeWindow,
     toggleMaximize,
+    updateWindowTitle,
     getWindowByAppId,
     getWindowsByAppId,
     getWindows,
