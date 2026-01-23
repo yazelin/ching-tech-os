@@ -156,24 +156,29 @@ async def process_event(event, webhook_tenant_id: UUID | None = None) -> None:
         line_user_id = source.user_id if hasattr(source, "user_id") else None
         line_group_id = source.group_id if hasattr(source, "group_id") else None
 
-        # 決定租戶 ID
+        # 決定租戶 ID（用於業務邏輯）和 Bot 租戶 ID（用於回覆）
+        # bot_tenant_id: 決定回覆時使用哪個 Bot 的 credentials
+        #   - 獨立 Bot 模式：使用該租戶的 credentials
+        #   - 共用 Bot 模式：None，使用環境變數的 credentials
         if webhook_tenant_id:
-            # 獨立 Bot 模式：直接使用從簽章識別的租戶
+            # 獨立 Bot 模式：租戶和 Bot 相同
             tenant_id = webhook_tenant_id
+            bot_tenant_id = webhook_tenant_id
             logger.debug(f"獨立 Bot 模式，租戶: {tenant_id}")
         else:
-            # 共用 Bot 模式：從群組綁定或用戶綁定解析租戶
+            # 共用 Bot 模式：業務邏輯用解析的租戶，回覆用共用 Bot (None)
             tenant_id = await resolve_tenant_for_message(line_group_id, line_user_id)
-            logger.debug(f"共用 Bot 模式，解析租戶: {tenant_id}")
+            bot_tenant_id = None  # 使用環境變數的 credentials
+            logger.debug(f"共用 Bot 模式，業務邏輯租戶: {tenant_id}，回覆用共用 Bot")
 
         if isinstance(event, MessageEvent):
-            await process_message_event(event, tenant_id)
+            await process_message_event(event, tenant_id, bot_tenant_id)
         elif isinstance(event, JoinEvent):
-            await process_join_event(event, tenant_id)
+            await process_join_event(event, tenant_id, bot_tenant_id)
         elif isinstance(event, LeaveEvent):
             await process_leave_event(event, tenant_id)
         elif isinstance(event, FollowEvent):
-            await process_follow_event(event, tenant_id)
+            await process_follow_event(event, tenant_id, bot_tenant_id)
         elif isinstance(event, UnfollowEvent):
             await process_unfollow_event(event, tenant_id)
         else:
@@ -182,12 +187,17 @@ async def process_event(event, webhook_tenant_id: UUID | None = None) -> None:
         logger.error(f"處理事件失敗: {e}")
 
 
-async def process_message_event(event: MessageEvent, tenant_id: UUID) -> None:
+async def process_message_event(
+    event: MessageEvent, tenant_id: UUID, bot_tenant_id: UUID | None = None
+) -> None:
     """處理訊息事件
 
     Args:
         event: Line 訊息事件
-        tenant_id: 租戶 ID
+        tenant_id: 租戶 ID（用於業務邏輯：AI、知識庫等）
+        bot_tenant_id: Bot 租戶 ID（用於回覆訊息的 credentials）
+            - 有值：使用該租戶的 Line Bot credentials
+            - None：使用環境變數的 credentials（共用 Bot）
     """
     message = event.message
     source = event.source
@@ -235,14 +245,14 @@ async def process_message_event(event: MessageEvent, tenant_id: UUID) -> None:
         content = None
 
     # 取得或建立用戶
-    # 注意：傳遞 tenant_id 以使用租戶的 access_token（獨立 Bot 模式）
-    user_profile = await get_user_profile(line_user_id, tenant_id=tenant_id)
+    # API 調用使用 bot_tenant_id，業務邏輯（資料儲存）使用 tenant_id
+    user_profile = await get_user_profile(line_user_id, tenant_id=bot_tenant_id)
     user_uuid = await get_or_create_user(line_user_id, user_profile, tenant_id=tenant_id)
 
     # 取得群組 UUID（如果是群組訊息）
     group_uuid = None
     if line_group_id:
-        group_profile = await get_group_profile(line_group_id, tenant_id=tenant_id)
+        group_profile = await get_group_profile(line_group_id, tenant_id=bot_tenant_id)
         group_uuid = await get_or_create_group(line_group_id, group_profile, tenant_id=tenant_id)
 
     # 檢查是否為綁定驗證碼（僅個人對話、文字訊息、6 位數字）
@@ -252,7 +262,8 @@ async def process_message_event(event: MessageEvent, tenant_id: UUID) -> None:
         success, reply_msg = await verify_binding_code(user_uuid, content, tenant_id=tenant_id)
         if event.reply_token:
             try:
-                await reply_text(event.reply_token, reply_msg, tenant_id=tenant_id)
+                # 回覆時使用 bot_tenant_id（接收 webhook 的 Bot）
+                await reply_text(event.reply_token, reply_msg, tenant_id=bot_tenant_id)
             except Exception as e:
                 logger.warning(f"回覆綁定訊息失敗: {e}")
         return  # 不再繼續處理
@@ -282,8 +293,9 @@ async def process_message_event(event: MessageEvent, tenant_id: UUID) -> None:
 
             if event.reply_token:
                 try:
-                    # 注意：回覆時使用新的 tenant_id（如果綁定成功）
-                    await reply_text(event.reply_token, reply_msg, tenant_id=tenant_id)
+                    # 回覆時使用 bot_tenant_id（接收 webhook 的 Bot）
+                    # 注意：即使綁定成功改變了 tenant_id，回覆仍用原來的 Bot
+                    await reply_text(event.reply_token, reply_msg, tenant_id=bot_tenant_id)
                 except Exception as e:
                     logger.warning(f"回覆綁定訊息失敗: {e}")
             return  # 不再繼續處理
@@ -326,6 +338,7 @@ async def process_message_event(event: MessageEvent, tenant_id: UUID) -> None:
                 # 個人對話：回覆提示訊息
                 if not is_group and event.reply_token:
                     try:
+                        # 回覆時使用 bot_tenant_id（接收 webhook 的 Bot）
                         await reply_text(
                             event.reply_token,
                             "請先在 CTOS 系統綁定您的 Line 帳號才能使用此服務。\n\n"
@@ -334,7 +347,7 @@ async def process_message_event(event: MessageEvent, tenant_id: UUID) -> None:
                             "2. 進入 Line Bot 管理頁面\n"
                             "3. 點擊「綁定 Line 帳號」產生驗證碼\n"
                             "4. 將驗證碼發送給我完成綁定",
-                            tenant_id=tenant_id,
+                            tenant_id=bot_tenant_id,
                         )
                     except Exception as e:
                         logger.warning(f"回覆未綁定訊息失敗: {e}")
@@ -354,6 +367,7 @@ async def process_message_event(event: MessageEvent, tenant_id: UUID) -> None:
             reply_token=event.reply_token,
             quoted_message_id=quoted_message_id,
             tenant_id=tenant_id,
+            bot_tenant_id=bot_tenant_id,
         )
 
 
@@ -429,18 +443,22 @@ async def process_media_message(
         logger.error(f"處理媒體訊息失敗 {message_id}: {e}")
 
 
-async def process_join_event(event: JoinEvent, tenant_id: UUID) -> None:
+async def process_join_event(
+    event: JoinEvent, tenant_id: UUID, bot_tenant_id: UUID | None = None
+) -> None:
     """處理加入群組事件
 
     Args:
         event: Line 加入群組事件
-        tenant_id: 租戶 ID
+        tenant_id: 租戶 ID（用於業務邏輯）
+        bot_tenant_id: Bot 租戶 ID（用於 API 調用的 credentials）
     """
     source = event.source
     line_group_id = source.group_id if hasattr(source, "group_id") else None
 
     if line_group_id:
-        await handle_join_event(line_group_id, tenant_id=tenant_id)
+        # 使用 bot_tenant_id 進行 API 調用
+        await handle_join_event(line_group_id, tenant_id=bot_tenant_id or tenant_id)
 
 
 async def process_leave_event(event: LeaveEvent, tenant_id: UUID) -> None:
@@ -457,19 +475,23 @@ async def process_leave_event(event: LeaveEvent, tenant_id: UUID) -> None:
         await handle_leave_event(line_group_id, tenant_id=tenant_id)
 
 
-async def process_follow_event(event: FollowEvent, tenant_id: UUID) -> None:
+async def process_follow_event(
+    event: FollowEvent, tenant_id: UUID, bot_tenant_id: UUID | None = None
+) -> None:
     """處理用戶加好友事件
 
     Args:
         event: Line 加好友事件
-        tenant_id: 租戶 ID
+        tenant_id: 租戶 ID（用於業務邏輯）
+        bot_tenant_id: Bot 租戶 ID（用於 API 調用的 credentials）
     """
     source = event.source
     line_user_id = source.user_id if hasattr(source, "user_id") else None
 
     if line_user_id:
-        # 注意：傳遞 tenant_id 以使用租戶的 access_token
-        profile = await get_user_profile(line_user_id, tenant_id=tenant_id)
+        # 使用 bot_tenant_id 進行 API 調用（取得用戶資料）
+        profile = await get_user_profile(line_user_id, tenant_id=bot_tenant_id)
+        # 業務邏輯使用 tenant_id
         await get_or_create_user(line_user_id, profile, is_friend=True, tenant_id=tenant_id)
         # 更新現有用戶的好友狀態
         await update_user_friend_status(line_user_id, is_friend=True, tenant_id=tenant_id)

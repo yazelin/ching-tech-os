@@ -513,6 +513,7 @@ async def process_message_with_ai(
     user_display_name: str | None = None,
     quoted_message_id: str | None = None,
     tenant_id: UUID | None = None,
+    bot_tenant_id: UUID | None = None,
 ) -> str | None:
     """
     使用 AI 處理訊息
@@ -525,7 +526,10 @@ async def process_message_with_ai(
         reply_token: Line 回覆 token（可能已過期）
         user_display_name: 發送者顯示名稱
         quoted_message_id: 被回覆的訊息 ID（Line 的 quotedMessageId）
-        tenant_id: 租戶 ID
+        tenant_id: 租戶 ID（用於業務邏輯：AI、知識庫等）
+        bot_tenant_id: Bot 租戶 ID（用於回覆訊息的 credentials）
+            - 有值：使用該租戶的 Line Bot credentials
+            - None：使用環境變數的 credentials（共用 Bot）
 
     Returns:
         AI 回應文字，或 None（如果不需處理）
@@ -549,10 +553,11 @@ async def process_message_with_ai(
                 tenant_id=tenant_id,
             )
             # 回覆訊息（reply token 可能過期，失敗時改用 push message）
+            # 注意：回覆使用 bot_tenant_id（接收 webhook 的 Bot）
             reply_success = False
             if reply_token:
                 try:
-                    await reply_text(reply_token, reset_msg, tenant_id=tenant_id)
+                    await reply_text(reply_token, reset_msg, tenant_id=bot_tenant_id)
                     reply_success = True
                 except Exception as e:
                     logger.warning(f"回覆重置訊息失敗（reply token 可能過期）: {e}")
@@ -560,7 +565,7 @@ async def process_message_with_ai(
             # 如果沒有 reply_token 或回覆失敗，改用 push message
             if not reply_success and line_user_id:
                 try:
-                    await push_text(line_user_id, reset_msg, tenant_id=tenant_id)
+                    await push_text(line_user_id, reset_msg, tenant_id=bot_tenant_id)
                     logger.info(f"使用 push message 發送重置訊息給 {line_user_id}")
                 except Exception as e:
                     logger.error(f"Push 重置訊息也失敗: {e}")
@@ -592,7 +597,7 @@ async def process_message_with_ai(
             error_msg = f"⚠️ AI 設定錯誤：Agent '{agent_name}' 不存在"
             logger.error(error_msg)
             if reply_token:
-                await reply_text(reply_token, error_msg, tenant_id=tenant_id)
+                await reply_text(reply_token, error_msg, tenant_id=bot_tenant_id)
             return error_msg
 
         # 從 Agent 取得 model 和基礎 prompt
@@ -614,7 +619,7 @@ async def process_message_with_ai(
             error_msg = f"⚠️ AI 設定錯誤：Agent '{agent_name}' 沒有設定 system_prompt"
             logger.error(error_msg)
             if reply_token:
-                await reply_text(reply_token, error_msg, tenant_id=tenant_id)
+                await reply_text(reply_token, error_msg, tenant_id=bot_tenant_id)
             return error_msg
 
         # 先取得使用者權限（用於動態生成工具說明和過濾工具）
@@ -863,12 +868,13 @@ async def process_message_with_ai(
         reply_success = False
         if reply_token and (text_response or file_messages):
             try:
+                # 回覆時使用 bot_tenant_id（接收 webhook 的 Bot）
                 line_message_ids = await send_ai_response(
                     reply_token=reply_token,
                     text=text_response,
                     file_messages=file_messages,
                     mention_line_user_id=line_user_id if is_group else None,
-                    tenant_id=tenant_id,
+                    tenant_id=bot_tenant_id,
                 )
                 reply_success = True
             except Exception as e:
@@ -903,8 +909,9 @@ async def process_message_with_ai(
                         ))
 
                 # 合併發送所有訊息
+                # Push 時使用 bot_tenant_id（接收 webhook 的 Bot）
                 if push_message_list:
-                    sent_ids, error = await push_messages(push_target, push_message_list, tenant_id=tenant_id)
+                    sent_ids, error = await push_messages(push_target, push_message_list, tenant_id=bot_tenant_id)
                     if sent_ids:
                         line_message_ids.extend(sent_ids)
                         logger.info(f"Push 合併訊息成功，共 {len(sent_ids)} 則: {sent_ids}")
@@ -1420,6 +1427,7 @@ async def handle_text_message(
     reply_token: str | None,
     quoted_message_id: str | None = None,
     tenant_id: UUID | None = None,
+    bot_tenant_id: UUID | None = None,
 ) -> None:
     """
     處理文字訊息的 Webhook 入口
@@ -1432,7 +1440,10 @@ async def handle_text_message(
         line_group_id: 內部群組 UUID（個人對話為 None）
         reply_token: Line 回覆 token
         quoted_message_id: 被回覆的訊息 ID（用戶回覆舊訊息時）
-        tenant_id: 租戶 ID
+        tenant_id: 租戶 ID（用於業務邏輯：AI、知識庫等）
+        bot_tenant_id: Bot 租戶 ID（用於回覆訊息的 credentials）
+            - 有值：使用該租戶的 Line Bot credentials
+            - None：使用環境變數的 credentials（共用 Bot）
     """
     # 取得用戶顯示名稱
     user_display_name = None
@@ -1454,4 +1465,5 @@ async def handle_text_message(
         user_display_name=user_display_name,
         quoted_message_id=quoted_message_id,
         tenant_id=tenant_id,
+        bot_tenant_id=bot_tenant_id,
     )

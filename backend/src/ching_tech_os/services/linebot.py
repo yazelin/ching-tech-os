@@ -2103,48 +2103,19 @@ async def verify_binding_code(
                 return False, "此 Line 帳號在目標租戶已綁定其他 CTOS 帳號"
             target_line_user_uuid = target_line_user["id"]
         else:
-            # 檢查其他租戶是否有此 Line 用戶（共用 Bot 模式下常見情況）
-            # line_user_id 有全域唯一約束，所以只能有一筆記錄
-            existing_line_user = await conn.fetchrow(
+            # 目標租戶沒有此 Line 用戶記錄，建立新記錄
+            # 允許同一個 Line 用戶在不同租戶各有獨立的綁定
+            target_line_user_uuid = await conn.fetchval(
                 """
-                SELECT id, user_id, tenant_id FROM line_users
-                WHERE line_user_id = $1
+                INSERT INTO line_users (line_user_id, display_name, tenant_id)
+                VALUES ($1, $2, $3)
+                RETURNING id
                 """,
                 line_user_id,
+                display_name,
+                target_tid,
             )
-
-            if existing_line_user:
-                # 在其他租戶找到記錄
-                if existing_line_user["user_id"]:
-                    return False, "此 Line 帳號已在其他租戶綁定 CTOS 帳號"
-                # 將記錄遷移到目標租戶
-                await conn.execute(
-                    """
-                    UPDATE line_users
-                    SET tenant_id = $2, updated_at = NOW()
-                    WHERE id = $1
-                    """,
-                    existing_line_user["id"],
-                    target_tid,
-                )
-                target_line_user_uuid = existing_line_user["id"]
-                logger.info(
-                    f"已將 Line 用戶從租戶 {existing_line_user['tenant_id']} "
-                    f"遷移到 {target_tid}: {target_line_user_uuid}"
-                )
-            else:
-                # 完全新的 Line 用戶，建立記錄
-                target_line_user_uuid = await conn.fetchval(
-                    """
-                    INSERT INTO line_users (line_user_id, display_name, tenant_id)
-                    VALUES ($1, $2, $3)
-                    RETURNING id
-                    """,
-                    line_user_id,
-                    display_name,
-                    target_tid,
-                )
-                logger.info(f"已在目標租戶建立 Line 用戶記錄: {target_line_user_uuid}")
+            logger.info(f"已在目標租戶 {target_tid} 建立 Line 用戶記錄: {target_line_user_uuid}")
 
         # 檢查該 CTOS 用戶是否已綁定其他 Line 帳號
         existing_line = await conn.fetchrow(
