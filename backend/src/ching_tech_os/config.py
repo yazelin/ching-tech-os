@@ -62,11 +62,6 @@ class Settings:
     default_tenant_id: str = _get_env("DEFAULT_TENANT_ID", DEFAULT_TENANT_UUID)
 
     # ===================
-    # 管理員設定
-    # ===================
-    admin_username: str = _get_env("ADMIN_USERNAME", required=True)
-
-    # ===================
     # 資料庫設定
     # ===================
     db_host: str = _get_env("DB_HOST", "localhost")

@@ -244,7 +244,7 @@ async def create_new_knowledge(
     if data.scope == "global":
         preferences = await get_user_preferences(session.user_id) if session.user_id else None
         if not await check_knowledge_permission_async(
-            session.username, preferences, None, "global", "write",
+            session.role, session.username, preferences, None, "global", "write",
             user_id=session.user_id, project_id=data.project_id,
         ):
             raise HTTPException(
@@ -304,7 +304,7 @@ async def update_existing_knowledge(
     # 權限檢查
     preferences = await get_user_preferences(session.user_id) if session.user_id else None
     if not await check_knowledge_permission_async(
-        session.username, preferences, knowledge.owner, knowledge.scope, "write",
+        session.role, session.username, preferences, knowledge.owner, knowledge.scope, "write",
         user_id=session.user_id, project_id=knowledge.project_id,
     ):
         raise HTTPException(
@@ -362,7 +362,7 @@ async def delete_existing_knowledge(
     # 權限檢查
     preferences = await get_user_preferences(session.user_id) if session.user_id else None
     if not await check_knowledge_permission_async(
-        session.username, preferences, knowledge.owner, knowledge.scope, "delete",
+        session.role, session.username, preferences, knowledge.owner, knowledge.scope, "delete",
         user_id=session.user_id, project_id=knowledge.project_id,
     ):
         raise HTTPException(

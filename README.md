@@ -68,10 +68,14 @@ cp .env.example .env
 ```
 
 必要的環境變數：
-- `ADMIN_USERNAME` - 管理員帳號
 - `DB_PASSWORD` - 資料庫密碼
 - `NAS_USER` / `NAS_PASSWORD` - NAS 服務帳號
 - `LINE_CHANNEL_SECRET` / `LINE_CHANNEL_ACCESS_TOKEN` - Line Bot（如需使用）
+
+> **注意**：平台管理員帳號由資料庫中 `users.role = 'platform_admin'` 欄位決定，seed 資料會自動建立預設管理員：
+> - 帳號：`admin`
+> - 密碼：`admin`
+> - **首次登入後請立即變更密碼**
 
 多租戶模式（可選）：
 - `MULTI_TENANT_MODE` - 設為 `true` 啟用多租戶模式

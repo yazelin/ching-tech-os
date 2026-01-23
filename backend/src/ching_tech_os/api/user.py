@@ -26,7 +26,7 @@ from ..services.user import (
     _parse_preferences,
 )
 from ..services.permissions import (
-    get_user_permissions_for_admin,
+    get_user_permissions_for_role,
     get_default_permissions,
     get_app_display_names,
 )
@@ -110,7 +110,8 @@ async def get_current_user(
 
     # 取得權限資訊
     preferences = _parse_preferences(user.get("preferences"))
-    permissions = get_user_permissions_for_admin(user["username"], preferences)
+    user_role = user.get("role") or "user"
+    permissions = get_user_permissions_for_role(user_role, preferences)
 
     # 判斷是否已設定密碼
     has_password = bool(user.get("password_hash"))
@@ -153,7 +154,8 @@ async def update_current_user(
 
     # 取得權限資訊
     preferences = _parse_preferences(user.get("preferences"))
-    permissions = get_user_permissions_for_admin(user["username"], preferences)
+    user_role = user.get("role") or "user"
+    permissions = get_user_permissions_for_role(user_role, preferences)
 
     # is_admin 改為基於 role 判斷
     user_is_admin = session.role in ("tenant_admin", "platform_admin")
@@ -260,7 +262,8 @@ async def list_users(
         users = await get_all_users_cross_tenant(filter_tenant_id=tenant_id)
         for user in users:
             preferences = _parse_preferences(user.get("preferences"))
-            permissions = get_user_permissions_for_admin(user["username"], preferences)
+            user_role = user.get("role") or "user"
+            permissions = get_user_permissions_for_role(user_role, preferences)
             result.append(AdminUserInfo(
                 id=user["id"],
                 username=user["username"],
@@ -284,18 +287,19 @@ async def list_users(
         users = await get_all_users(tenant_id=session.tenant_id)
         for user in users:
             preferences = _parse_preferences(user.get("preferences"))
-            permissions = get_user_permissions_for_admin(user["username"], preferences)
+            user_role = user.get("role") or "user"
+            permissions = get_user_permissions_for_role(user_role, preferences)
             result.append(AdminUserInfo(
                 id=user["id"],
                 username=user["username"],
                 display_name=user["display_name"],
-                is_admin=user.get("role") in ("tenant_admin", "platform_admin"),
+                is_admin=user_role in ("tenant_admin", "platform_admin"),
                 permissions=UserPermissions(**permissions),
                 created_at=user["created_at"],
                 last_login_at=user["last_login_at"],
                 is_active=user.get("is_active", True),
                 tenant_id=user.get("tenant_id"),
-                role=user.get("role", "user"),
+                role=user_role,
             ))
 
     return AdminUserListResponse(users=result)
@@ -323,7 +327,7 @@ async def list_tenant_users_api(
             continue  # 跳過平台管理員
 
         preferences = _parse_preferences(user.get("preferences"))
-        permissions = get_user_permissions_for_admin(user["username"], preferences)
+        permissions = get_user_permissions_for_role(user_role, preferences)
         result.append(AdminUserInfo(
             id=user["id"],
             username=user["username"],
@@ -393,10 +397,7 @@ async def update_user_permissions_api(
 
     # 更新權限
     updated_prefs = await update_user_permissions(user_id, permissions_update)
-    updated_perms = get_user_permissions_for_admin(
-        target_user["username"],
-        updated_prefs,
-    )
+    updated_perms = get_user_permissions_for_role(target_role, updated_prefs)
 
     return UpdatePermissionsResponse(
         success=True,

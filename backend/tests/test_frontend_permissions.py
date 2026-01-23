@@ -48,8 +48,9 @@ skip_server_not_running = pytest.mark.skipif(
     reason=f"後端服務未運行於 {BASE_URL}，請先啟動：uv run uvicorn ching_tech_os.main:app"
 )
 
-# 測試帳號（需要在資料庫中存在）
-ADMIN_USERNAME = os.environ.get("TEST_ADMIN_USERNAME", "yazelin")
+# 測試帳號（需要在資料庫中存在，且 role = 'platform_admin'）
+# 預設使用 seed 資料建立的管理員帳號 admin/admin
+ADMIN_USERNAME = os.environ.get("TEST_ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "")
 USER_USERNAME = os.environ.get("TEST_USER_USERNAME", "")
 USER_PASSWORD = os.environ.get("TEST_USER_PASSWORD", "")
