@@ -1,5 +1,7 @@
 """認證 API"""
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
@@ -23,6 +25,8 @@ from ..services.tenant import (
     TenantSuspendedError,
 )
 from ..api.message_events import emit_new_message, emit_unread_count
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -372,8 +376,12 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
             user_id = await upsert_user(request.username, tenant_id=tenant_id)
             # 新建使用者預設為一般使用者
             user_role = "user"
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Failed to upsert user '{request.username}': {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="無法建立使用者記錄，請稍後再試。",
+            )
 
     # 取得使用者的 App 權限（供 session 快取使用）
     from ..services.permissions import get_user_app_permissions_sync
