@@ -55,13 +55,32 @@ TABLES_REQUIRE_NOT_NULL = [
 
 
 def upgrade() -> None:
-    # 先確認沒有 NULL 值
-    for table in TABLES_REQUIRE_NOT_NULL:
-        # 如果有 NULL 值，這個 migration 會失敗，這是預期行為
-        # 表示需要先執行資料遷移
-        pass
+    """設定 NOT NULL 約束前先驗證資料"""
+    from alembic import context
+    from sqlalchemy import text
 
-    # 設定 NOT NULL 約束
+    # 取得連線執行驗證
+    connection = context.get_context().connection
+
+    # 驗證每個表是否有未遷移的資料
+    errors = []
+    for table in TABLES_REQUIRE_NOT_NULL:
+        result = connection.execute(
+            text(f"SELECT COUNT(*) FROM {table} WHERE tenant_id IS NULL")
+        )
+        null_count = result.scalar()
+        if null_count > 0:
+            errors.append(f"  - {table}: {null_count} 筆資料的 tenant_id 為 NULL")
+
+    if errors:
+        error_msg = (
+            "無法設定 NOT NULL 約束，以下資料表有未遷移的資料：\n"
+            + "\n".join(errors)
+            + "\n\n請先執行資料遷移腳本將這些記錄遷移到正確的租戶。"
+        )
+        raise Exception(error_msg)
+
+    # 驗證通過，設定 NOT NULL 約束
     for table in TABLES_REQUIRE_NOT_NULL:
         op.alter_column(
             table,

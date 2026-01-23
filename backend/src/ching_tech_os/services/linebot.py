@@ -1374,6 +1374,62 @@ async def push_image(
         return None, _parse_line_error(e)
 
 
+async def push_messages(
+    to: str,
+    messages: list[TextMessage | ImageMessage],
+    tenant_id: UUID | str | None = None,
+) -> tuple[list[str], str | None]:
+    """主動推送多則訊息（最多 5 則）
+
+    Line API 支援單次請求發送多則訊息，可減少 API 呼叫次數。
+    超過 5 則時會自動分批發送。
+
+    Args:
+        to: 目標 ID（Line 用戶 ID 或群組 ID）
+        messages: 訊息列表（TextMessage 或 ImageMessage）
+        tenant_id: 租戶 ID（用於選擇正確的 access token）
+
+    Returns:
+        (Line 訊息 ID 列表, 錯誤訊息)，成功時錯誤訊息為 None
+    """
+    if not messages:
+        return [], None
+
+    MAX_MESSAGES_PER_REQUEST = 5
+    sent_message_ids: list[str] = []
+    last_error: str | None = None
+
+    try:
+        api = await get_messaging_api(tenant_id)
+
+        # 分批發送（每批最多 5 則）
+        for i in range(0, len(messages), MAX_MESSAGES_PER_REQUEST):
+            batch = messages[i:i + MAX_MESSAGES_PER_REQUEST]
+
+            response = await api.push_message(
+                PushMessageRequest(
+                    to=to,
+                    messages=batch,
+                )
+            )
+
+            if response and response.sent_messages:
+                for msg in response.sent_messages:
+                    sent_message_ids.append(msg.id)
+
+            logger.info(f"推送 {len(batch)} 則訊息到 {to}")
+
+        return sent_message_ids, None
+
+    except Exception as e:
+        logger.error(f"推送多則訊息失敗: {e}")
+        last_error = _parse_line_error(e)
+        # 如果部分成功，仍回傳已發送的 ID
+        if sent_message_ids:
+            return sent_message_ids, f"部分訊息發送失敗: {last_error}"
+        return [], last_error
+
+
 # ============================================================
 # AI 觸發判斷
 # ============================================================

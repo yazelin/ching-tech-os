@@ -767,3 +767,46 @@ async def delete_user(
             tenant_id,
         )
         return "DELETE 1" in result
+
+
+async def get_user_role(
+    username: str,
+    user_id: int | None,
+    tenant_id: UUID | str,
+) -> str:
+    """判斷使用者的角色
+
+    判斷優先順序：
+    1. 平台管理員（帳號在 PLATFORM_ADMINS 清單中）
+    2. 租戶管理員（在 tenant_admins 表中有記錄）
+    3. 一般使用者
+
+    Args:
+        username: 使用者帳號
+        user_id: 使用者 ID（可選，若無法提供會從資料庫查詢）
+        tenant_id: 租戶 UUID
+
+    Returns:
+        角色字串：platform_admin / tenant_admin / user
+    """
+    # 檢查是否為平台管理員
+    if username == settings.admin_username:
+        return "platform_admin"
+
+    if user_id is None:
+        return "user"
+
+    if isinstance(tenant_id, str):
+        tenant_id = UUID(tenant_id)
+
+    # 檢查是否為租戶管理員
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            "SELECT id FROM tenant_admins WHERE tenant_id = $1 AND user_id = $2",
+            tenant_id,
+            user_id,
+        )
+        if row:
+            return "tenant_admin"
+
+    return "user"

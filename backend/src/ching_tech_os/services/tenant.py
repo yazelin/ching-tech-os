@@ -314,6 +314,9 @@ async def delete_tenant(tenant_id: UUID | str) -> bool:
 
     警告：此操作不可逆！會刪除租戶的所有資料。
 
+    大部分關聯資料會透過資料庫的 ON DELETE CASCADE 機制自動刪除。
+    僅分區表（ai_logs, messages, login_records）因無法設定外鍵需手動刪除。
+
     Args:
         tenant_id: 租戶 UUID
 
@@ -342,100 +345,18 @@ async def delete_tenant(tenant_id: UUID | str) -> bool:
 
         # 使用交易確保一致性
         async with conn.transaction():
-            # 依照外鍵關係順序刪除
-
-            # 1. 刪除 AI 相關資料
+            # 手動刪除分區表資料（分區表無法設定外鍵，不支援 CASCADE）
             await conn.execute(
                 "DELETE FROM ai_logs WHERE tenant_id = $1", tenant_id
             )
             await conn.execute(
-                "DELETE FROM ai_chats WHERE tenant_id = $1", tenant_id
+                "DELETE FROM messages WHERE tenant_id = $1", tenant_id
             )
-            await conn.execute(
-                "DELETE FROM ai_agents WHERE tenant_id = $1", tenant_id
-            )
-            await conn.execute(
-                "DELETE FROM ai_prompts WHERE tenant_id = $1", tenant_id
-            )
-
-            # 2. 刪除專案相關資料
-            await conn.execute(
-                "DELETE FROM project_delivery_schedules WHERE tenant_id = $1", tenant_id
-            )
-            await conn.execute(
-                "DELETE FROM project_attachments WHERE tenant_id = $1", tenant_id
-            )
-            await conn.execute(
-                "DELETE FROM project_links WHERE tenant_id = $1", tenant_id
-            )
-            await conn.execute(
-                "DELETE FROM project_meetings WHERE tenant_id = $1", tenant_id
-            )
-            await conn.execute(
-                "DELETE FROM project_milestones WHERE tenant_id = $1", tenant_id
-            )
-            await conn.execute(
-                "DELETE FROM project_members WHERE tenant_id = $1", tenant_id
-            )
-            await conn.execute(
-                "DELETE FROM projects WHERE tenant_id = $1", tenant_id
-            )
-
-            # 3. 刪除庫存相關資料
-            await conn.execute(
-                "DELETE FROM inventory_orders WHERE tenant_id = $1", tenant_id
-            )
-            await conn.execute(
-                "DELETE FROM inventory_transactions WHERE tenant_id = $1", tenant_id
-            )
-            await conn.execute(
-                "DELETE FROM inventory_items WHERE tenant_id = $1", tenant_id
-            )
-            await conn.execute(
-                "DELETE FROM vendors WHERE tenant_id = $1", tenant_id
-            )
-
-            # 4. 刪除 Line 相關資料
-            await conn.execute(
-                "DELETE FROM line_messages WHERE tenant_id = $1", tenant_id
-            )
-            await conn.execute(
-                "DELETE FROM line_files WHERE tenant_id = $1", tenant_id
-            )
-            await conn.execute(
-                "DELETE FROM line_binding_codes WHERE tenant_id = $1", tenant_id
-            )
-            await conn.execute(
-                "DELETE FROM line_groups WHERE tenant_id = $1", tenant_id
-            )
-            await conn.execute(
-                "DELETE FROM line_users WHERE tenant_id = $1", tenant_id
-            )
-
-            # 5. 刪除公開分享連結
-            await conn.execute(
-                "DELETE FROM public_share_links WHERE tenant_id = $1", tenant_id
-            )
-
-            # 6. 刪除登入記錄和訊息
             await conn.execute(
                 "DELETE FROM login_records WHERE tenant_id = $1", tenant_id
             )
-            await conn.execute(
-                "DELETE FROM messages WHERE tenant_id = $1", tenant_id
-            )
 
-            # 7. 刪除租戶管理員記錄
-            await conn.execute(
-                "DELETE FROM tenant_admins WHERE tenant_id = $1", tenant_id
-            )
-
-            # 8. 刪除使用者
-            await conn.execute(
-                "DELETE FROM users WHERE tenant_id = $1", tenant_id
-            )
-
-            # 9. 最後刪除租戶本身
+            # 刪除租戶本身，其他關聯表會透過 ON DELETE CASCADE 自動刪除
             await conn.execute(
                 "DELETE FROM tenants WHERE id = $1", tenant_id
             )

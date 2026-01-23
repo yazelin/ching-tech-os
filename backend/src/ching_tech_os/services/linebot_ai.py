@@ -18,6 +18,7 @@ from .linebot import (
     reply_messages,
     push_text,
     push_image,
+    push_messages,
     get_line_group_external_id,
     create_text_message_with_mention,
     MENTION_PLACEHOLDER,
@@ -873,7 +874,7 @@ async def process_message_with_ai(
             except Exception as e:
                 logger.warning(f"回覆訊息失敗（token 可能已過期）: {e}")
 
-        # Reply 失敗時 fallback 到 push message
+        # Reply 失敗時 fallback 到 push message（合併發送）
         if not reply_success and (text_response or file_messages):
             logger.info("嘗試使用 push message 發送訊息...")
             # 取得發送目標（個人對話用 line_user_id，群組用 line_group_external_id）
@@ -884,26 +885,31 @@ async def process_message_with_ai(
                 push_target = line_user_id
 
             if push_target:
-                # 發送文字訊息
-                if text_response:
-                    msg_id, error = await push_text(push_target, text_response, tenant_id=tenant_id)
-                    if msg_id:
-                        line_message_ids.append(msg_id)
-                        logger.info(f"Push 文字訊息成功: {msg_id}")
-                    elif error:
-                        logger.warning(f"Push 文字訊息失敗: {error}")
+                # 建立訊息列表（合併文字和圖片訊息）
+                from linebot.v3.messaging import TextMessage as LBTextMessage, ImageMessage as LBImageMessage
 
-                # 發送圖片訊息
+                push_message_list: list[LBTextMessage | LBImageMessage] = []
+
+                # 文字訊息放在前面
+                if text_response:
+                    push_message_list.append(LBTextMessage(text=text_response))
+
+                # 圖片訊息放在後面
                 for file_info in file_messages:
                     if file_info.get("type") == "image" and file_info.get("url"):
-                        msg_id, error = await push_image(
-                            push_target, file_info["url"], tenant_id=tenant_id
-                        )
-                        if msg_id:
-                            line_message_ids.append(msg_id)
-                            logger.info(f"Push 圖片訊息成功: {msg_id}")
-                        elif error:
-                            logger.warning(f"Push 圖片訊息失敗: {error}")
+                        push_message_list.append(LBImageMessage(
+                            original_content_url=file_info["url"],
+                            preview_image_url=file_info.get("preview_url") or file_info["url"],
+                        ))
+
+                # 合併發送所有訊息
+                if push_message_list:
+                    sent_ids, error = await push_messages(push_target, push_message_list, tenant_id=tenant_id)
+                    if sent_ids:
+                        line_message_ids.extend(sent_ids)
+                        logger.info(f"Push 合併訊息成功，共 {len(sent_ids)} 則: {sent_ids}")
+                    if error:
+                        logger.warning(f"Push 訊息失敗或部分失敗: {error}")
             else:
                 logger.warning("無法取得 push 發送目標")
 

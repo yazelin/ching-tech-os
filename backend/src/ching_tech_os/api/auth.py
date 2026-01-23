@@ -9,7 +9,7 @@ from ..models.login_record import DeviceInfo as LoginRecordDeviceInfo, DeviceTyp
 from ..models.message import MessageSeverity, MessageSource
 from ..services.session import session_manager, SessionData
 from ..services.smb import create_smb_service, SMBAuthError, SMBConnectionError
-from ..services.user import upsert_user, get_user_by_username, get_user_for_auth, update_last_login
+from ..services.user import upsert_user, get_user_by_username, get_user_for_auth, update_last_login, get_user_role
 from ..services.password import verify_password
 from ..services.login_record import record_login
 from ..services.message import log_message
@@ -373,14 +373,8 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
         except Exception:
             pass
 
-    # 檢查是否為平台管理員
-    if request.username == settings.admin_username:
-        user_role = "platform_admin"
-    elif user_role == "user" and user_id:
-        # 檢查是否在 tenant_admins 表中
-        admin_role = await get_tenant_admin_role(tenant_id, user_id)
-        if admin_role:
-            user_role = "tenant_admin"
+    # 判斷使用者角色
+    user_role = await get_user_role(request.username, user_id, tenant_id)
 
     # 取得使用者的 App 權限（供 session 快取使用）
     from ..services.permissions import get_user_app_permissions_sync
