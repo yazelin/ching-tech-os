@@ -62,10 +62,14 @@ PROJECT_TOOLS_PROMPT = """【專案管理】
 - update_project_attachment: 更新附件描述
 - delete_project_attachment: 刪除附件
 
-【專案權限控制】（重要）
+【重要：工具呼叫參數】
+所有工具呼叫時，必須從【對話識別】區塊取得並傳入以下參數：
+- ctos_tenant_id: 租戶 ID（必傳，用於多租戶資料隔離）
+- ctos_user_id: 用戶 ID（權限檢查用，若顯示「未關聯」則不傳）
+範例：query_project(keyword="...", ctos_tenant_id=從對話識別取得的值, ctos_user_id=從對話識別取得的值)
+
+【專案權限控制】
 標記「⚠️需權限」的工具需要傳入 ctos_user_id 參數：
-- 從【對話識別】區塊取得 ctos_user_id 值
-- 呼叫工具時傳入：update_project(..., ctos_user_id=從對話識別取得的值)
 - 若用戶未關聯 CTOS 帳號（顯示「未關聯」），告知用戶需要聯繫管理員關聯帳號
 - 只有專案成員才能更新該專案的資料
 
@@ -461,10 +465,14 @@ LINEBOT_PERSONAL_PROMPT = """你是擎添工業的 AI 助理，透過 Line 與�
 - update_project_attachment: 更新附件描述
 - delete_project_attachment: 刪除附件
 
-【專案權限控制】（重要）
+【重要：工具呼叫參數】
+所有工具呼叫時，必須從【對話識別】區塊取得並傳入以下參數：
+- ctos_tenant_id: 租戶 ID（必傳，用於多租戶資料隔離）
+- ctos_user_id: 用戶 ID（權限檢查用，若顯示「未關聯」則不傳）
+範例：query_project(keyword="...", ctos_tenant_id=從對話識別取得的值, ctos_user_id=從對話識別取得的值)
+
+【專案權限控制】
 標記「⚠️需權限」的工具需要傳入 ctos_user_id 參數：
-- 從【對話識別】區塊取得 ctos_user_id 值
-- 呼叫工具時傳入：update_project(..., ctos_user_id=從對話識別取得的值)
 - 若用戶未關聯 CTOS 帳號（顯示「未關聯」），告知用戶需要聯繫管理員關聯帳號
 - 只有專案成員才能更新該專案的資料
 
@@ -712,8 +720,13 @@ LINEBOT_GROUP_PROMPT = """你是擎添工業的 AI 助理，在 Line 群組中�
 - 若用戶要求操作其他專案，應說明「此群組只能操作綁定的專案」
 - 若群組未綁定專案，可操作任意專案
 
-【專案權限控制】（重要）
-標記「⚠️」的工具需要傳入 ctos_user_id 參數（從【對話識別】取得）
+【重要：工具呼叫參數】
+所有工具呼叫時，必須從【對話識別】區塊取得並傳入以下參數：
+- ctos_tenant_id: 租戶 ID（必傳，用於多租戶資料隔離）
+- ctos_user_id: 用戶 ID（權限檢查用，若顯示「未關聯」則不傳）
+
+【專案權限控制】
+標記「⚠️」的工具需要傳入 ctos_user_id 參數：
 - 若 ctos_user_id 顯示「未關聯」，告知用戶需要聯繫管理員關聯帳號
 - 只有專案成員才能更新該專案的資料
 

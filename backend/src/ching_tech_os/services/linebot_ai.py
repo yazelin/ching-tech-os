@@ -547,12 +547,23 @@ async def process_message_with_ai(
                 responding_to_line_user_id=line_user_id,
                 tenant_id=tenant_id,
             )
-            # 回覆訊息
+            # 回覆訊息（reply token 可能過期，失敗時改用 push message）
+            reply_success = False
             if reply_token:
                 try:
-                    await reply_text(reply_token, reset_msg)
+                    await reply_text(reply_token, reset_msg, tenant_id=tenant_id)
+                    reply_success = True
                 except Exception as e:
-                    logger.warning(f"回覆重置訊息失敗: {e}")
+                    logger.warning(f"回覆重置訊息失敗（reply token 可能過期）: {e}")
+
+            # 如果沒有 reply_token 或回覆失敗，改用 push message
+            if not reply_success and line_user_id:
+                try:
+                    await push_text(line_user_id, reset_msg, tenant_id=tenant_id)
+                    logger.info(f"使用 push message 發送重置訊息給 {line_user_id}")
+                except Exception as e:
+                    logger.error(f"Push 重置訊息也失敗: {e}")
+
             return reset_msg
         return None
 
@@ -580,7 +591,7 @@ async def process_message_with_ai(
             error_msg = f"⚠️ AI 設定錯誤：Agent '{agent_name}' 不存在"
             logger.error(error_msg)
             if reply_token:
-                await reply_text(reply_token, error_msg)
+                await reply_text(reply_token, error_msg, tenant_id=tenant_id)
             return error_msg
 
         # 從 Agent 取得 model 和基礎 prompt
@@ -602,7 +613,7 @@ async def process_message_with_ai(
             error_msg = f"⚠️ AI 設定錯誤：Agent '{agent_name}' 沒有設定 system_prompt"
             logger.error(error_msg)
             if reply_token:
-                await reply_text(reply_token, error_msg)
+                await reply_text(reply_token, error_msg, tenant_id=tenant_id)
             return error_msg
 
         # 先取得使用者權限（用於動態生成工具說明和過濾工具）
@@ -1370,6 +1381,8 @@ async def build_system_prompt(
                     base_prompt += f"\n專案 ID（供工具查詢用）：{group['project_id']}"
         # 加入群組 ID 和用戶身份識別
         base_prompt += f"\n\n【對話識別】\nline_group_id: {line_group_id}"
+        if tenant_id:
+            base_prompt += f"\nctos_tenant_id: {tenant_id}"
         if ctos_user_id:
             base_prompt += f"\nctos_user_id: {ctos_user_id}"
         else:
@@ -1377,6 +1390,8 @@ async def build_system_prompt(
     elif line_user_id:
         # 個人對話：加入用戶 ID 和身份識別
         base_prompt += f"\n\n【對話識別】\nline_user_id: {line_user_id}"
+        if tenant_id:
+            base_prompt += f"\nctos_tenant_id: {tenant_id}"
         if ctos_user_id:
             base_prompt += f"\nctos_user_id: {ctos_user_id}"
         else:

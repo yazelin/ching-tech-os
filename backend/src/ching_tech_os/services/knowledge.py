@@ -1050,6 +1050,8 @@ def copy_linebot_attachment_to_knowledge(
         linebot_nas_path: Line Bot NAS 路徑，支援以下格式：
             - 相對路徑：groups/xxx/images/2026-01-05/abc.jpg
             - URI 格式：ctos://linebot/files/groups/xxx/images/2026-01-05/abc.jpg
+            - AI 圖片：ai-images/xxx.jpg
+            - AI 簡報：ctos://ai-presentations/xxx.html
         description: 附件說明
         tenant_id: 租戶 ID
 
@@ -1059,6 +1061,8 @@ def copy_linebot_attachment_to_knowledge(
     Raises:
         KnowledgeError: 複製失敗
     """
+    from ..config import settings
+
     # 處理 URI 格式，移除 ctos://linebot/files/ 前綴
     relative_path = linebot_nas_path
     if relative_path.startswith("ctos://linebot/files/"):
@@ -1070,11 +1074,39 @@ def copy_linebot_attachment_to_knowledge(
     # 從 Line Bot NAS 讀取檔案（透過掛載路徑）
     # 傳遞 tenant_id 以支援租戶隔離
     tid_str = str(tenant_id) if tenant_id else None
-    try:
-        linebot_file_service = create_linebot_file_service(tid_str)
-        data = linebot_file_service.read_file(relative_path)
-    except LocalFileError as e:
-        raise KnowledgeError(f"讀取 Line Bot 附件失敗 ({relative_path})：{e}") from e
+    data = None
+    last_error = None
+
+    # 處理 ctos://ai-presentations/ 格式
+    if relative_path.startswith("ctos://ai-presentations/"):
+        presentation_relative = relative_path.replace("ctos://ai-presentations/", "", 1)
+        presentation_path = Path(settings.ctos_mount_path) / "ai-presentations" / presentation_relative
+        try:
+            data = presentation_path.read_bytes()
+        except Exception as e:
+            last_error = e
+
+    # 處理 ai-images/ 和其他 linebot 路徑
+    if data is None:
+        # 嘗試多租戶路徑
+        try:
+            linebot_file_service = create_linebot_file_service(tid_str)
+            data = linebot_file_service.read_file(relative_path)
+        except LocalFileError as e:
+            last_error = e
+
+            # 如果是 ai-images/ 路徑，嘗試 fallback 到舊的共用路徑
+            if relative_path.startswith("ai-images/") and tid_str:
+                try:
+                    # Fallback 到舊路徑：/mnt/nas/ctos/linebot/files/ai-images/
+                    fallback_path = Path(settings.linebot_local_path) / relative_path
+                    data = fallback_path.read_bytes()
+                    last_error = None
+                except Exception as fallback_e:
+                    last_error = fallback_e
+
+    if data is None:
+        raise KnowledgeError(f"讀取 Line Bot 附件失敗 ({relative_path})：{last_error}") from last_error
 
     # 使用現有的 upload_attachment 函數處理儲存邏輯
     return upload_attachment(kb_id, filename, data, description, tenant_id=tenant_id)

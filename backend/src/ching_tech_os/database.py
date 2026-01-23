@@ -1,5 +1,6 @@
 """資料庫連線管理"""
 
+import json
 import asyncpg
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
@@ -7,6 +8,22 @@ from typing import AsyncGenerator
 from .config import settings
 
 _pool: asyncpg.Pool | None = None
+
+
+async def _setup_json_codec(conn: asyncpg.Connection) -> None:
+    """設定 JSON/JSONB 類型的編解碼器"""
+    await conn.set_type_codec(
+        "jsonb",
+        encoder=json.dumps,
+        decoder=json.loads,
+        schema="pg_catalog",
+    )
+    await conn.set_type_codec(
+        "json",
+        encoder=json.dumps,
+        decoder=json.loads,
+        schema="pg_catalog",
+    )
 
 
 async def init_db_pool() -> None:
@@ -20,6 +37,7 @@ async def init_db_pool() -> None:
         database=settings.db_name,
         min_size=2,
         max_size=10,
+        init=_setup_json_codec,  # 每個連線建立時自動設定 JSON 編解碼器
     )
 
 
