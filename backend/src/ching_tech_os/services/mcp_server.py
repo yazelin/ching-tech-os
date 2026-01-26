@@ -5217,6 +5217,7 @@ async def generate_presentation(
     image_source: str = "pexels",
     outline_json: str | dict | None = None,
     output_format: str = "html",
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     生成簡報（HTML 或 PDF，使用 Marp）
@@ -5303,6 +5304,9 @@ async def generate_presentation(
     if isinstance(outline_json, dict):
         outline_json = _json.dumps(outline_json, ensure_ascii=False)
 
+    # 取得租戶 ID
+    tid = _get_tenant_id(ctos_tenant_id)
+
     try:
         result = await generate_html_presentation(
             topic=topic or "簡報",
@@ -5312,6 +5316,7 @@ async def generate_presentation(
             image_source=image_source,
             outline_json=outline_json,
             output_format=output_format,
+            tenant_id=tid,
         )
 
         theme_names = {
