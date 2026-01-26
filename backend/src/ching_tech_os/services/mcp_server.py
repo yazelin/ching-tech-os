@@ -5873,21 +5873,11 @@ async def generate_md2ppt(
     max_retries = 3
     last_error = ""
 
-    # DEBUG: 使用文件日誌追蹤 MCP Server 執行
-    import time
-    debug_log_path = "/tmp/mcp_server_debug.log"
-    def debug_log(msg):
-        with open(debug_log_path, "a") as f:
-            f.write(f"[{time.strftime('%H:%M:%S')}] {msg}\n")
-            f.flush()
-
     for attempt in range(max_retries):
         try:
-            debug_log(f"generate_md2ppt: 開始 attempt={attempt}")
-            debug_log(f"generate_md2ppt: prompt 長度={len(user_prompt)}")
+            logger.debug(f"generate_md2ppt: attempt={attempt}, prompt_len={len(user_prompt)}")
 
             # 呼叫 Claude 產生內容
-            debug_log("generate_md2ppt: 準備呼叫 call_claude...")
             response = await call_claude(
                 prompt=user_prompt if attempt == 0 else f"{user_prompt}\n\n⚠️ 上次產生的內容有格式錯誤，請修正：\n{last_error}",
                 model="sonnet",
@@ -5895,14 +5885,11 @@ async def generate_md2ppt(
                 timeout=180,
             )
 
-            debug_log(f"generate_md2ppt: call_claude 完成，success={response.success}")
-
             if not response.success:
-                debug_log(f"generate_md2ppt: AI 失敗: {response.error}")
+                logger.warning(f"generate_md2ppt: AI 失敗: {response.error}")
                 return f"❌ AI 產生失敗：{response.error}"
 
             generated_content = response.message.strip()
-            debug_log(f"generate_md2ppt: 原始回應長度={len(generated_content)}")
 
             # 移除可能的 markdown 標記
             if generated_content.startswith("```"):
@@ -5912,8 +5899,6 @@ async def generate_md2ppt(
                 if lines and lines[-1].strip() == "```":
                     lines = lines[:-1]
                 generated_content = "\n".join(lines)
-
-            debug_log(f"generate_md2ppt: 處理後內容長度={len(generated_content)}")
 
             # 自動修正常見格式問題
             import re
@@ -5960,26 +5945,12 @@ async def generate_md2ppt(
 
                 return '\n'.join(result)
 
-            # DEBUG: 輸出 :: right :: 前後的上下文（5行範圍）
-            lines = generated_content.split('\n')
-            for i, l in enumerate(lines):
-                if 'right' in l.lower() and '::' in l:
-                    start = max(0, i-3)
-                    end = min(len(lines), i+3)
-                    context = [(j+1, repr(lines[j])) for j in range(start, end)]
-                    debug_log(f"generate_md2ppt: right 上下文: {context}")
-
             generated_content = fix_md2ppt_format(generated_content)
-
-            after_lines = [f"{i+1}: {repr(l)}" for i, l in enumerate(generated_content.split('\n')) if 'right' in l.lower() or '::' in l]
-            debug_log(f"generate_md2ppt: 修正後關鍵行: {after_lines[:5]}")
-            debug_log(f"generate_md2ppt: 自動修正後長度={len(generated_content)}")
 
             # 驗證格式
             validation = validate_md2ppt(generated_content)
-            debug_log(f"generate_md2ppt: 驗證結果 valid={validation.valid}")
             if not validation.valid:
-                debug_log(f"generate_md2ppt: 驗證錯誤: {validation.to_error_message()[:500]}")
+                logger.debug(f"generate_md2ppt: 驗證失敗 attempt={attempt}: {validation.to_error_message()[:200]}")
 
             if validation.valid:
                 # 驗證通過，建立分享連結

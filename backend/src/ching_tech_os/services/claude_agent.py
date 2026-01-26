@@ -6,6 +6,7 @@
 
 import asyncio
 import json
+import logging
 import os
 import shutil
 import time
@@ -13,6 +14,8 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from ..config import settings
+
+logger = logging.getLogger(__name__)
 from . import ai_manager
 
 
@@ -412,16 +415,8 @@ async def call_claude(
     # 不需要工具時使用乾淨的目錄，避免 Claude 自動載入 MCP tools 造成循環呼叫
     work_dir = WORKING_DIR if tools else WORKING_DIR_PURE
 
-    # DEBUG: 使用文件日誌追蹤執行
-    debug_log_path = "/tmp/mcp_server_debug.log"
-    def debug_log(msg):
-        with open(debug_log_path, "a") as f:
-            f.write(f"[{time.strftime('%H:%M:%S')}] [claude_agent] {msg}\n")
-            f.flush()
-
-    debug_log(f"cmd: {' '.join(cmd[:5])}... (truncated)")
-    debug_log(f"cwd: {work_dir}")
-    debug_log(f"tools: {tools}")
+    logger.debug(f"claude_agent cmd: {' '.join(cmd[:5])}... (truncated)")
+    logger.debug(f"claude_agent cwd: {work_dir}, tools: {tools}")
 
     proc = None
     stdout_lines_with_time: list[tuple[float, str]] = []
@@ -441,7 +436,7 @@ async def call_claude(
             limit=10 * 1024 * 1024,  # 10MB limit per line
         )
 
-        debug_log(f"子進程已啟動，pid={proc.pid}")
+        logger.debug(f"claude_agent 子進程已啟動，pid={proc.pid}")
 
         # Streaming 讀取 stdout（邊讀邊收集，記錄時間戳）
         async def read_stdout():
@@ -453,8 +448,8 @@ async def call_claude(
                 line_count += 1
                 stdout_lines_with_time.append((time.time(), line.decode("utf-8")))
                 if line_count <= 3 or line_count % 10 == 0:
-                    debug_log(f"stdout: 已讀取 {line_count} 行")
-            debug_log(f"stdout: 讀取完成，共 {line_count} 行")
+                    logger.debug(f"claude_agent stdout: 已讀取 {line_count} 行")
+            logger.debug(f"claude_agent stdout: 讀取完成，共 {line_count} 行")
 
         async def read_stderr():
             return await proc.stderr.read()
@@ -468,14 +463,14 @@ async def call_claude(
             stderr = stderr_bytes[1].decode("utf-8").strip() if stderr_bytes[1] else ""
         except asyncio.TimeoutError:
             # 超時：終止程序，但保留已讀取的 stdout
-            debug_log(f"TIMEOUT! 已讀取 {len(stdout_lines_with_time)} 行 stdout")
+            logger.warning(f"claude_agent TIMEOUT! 已讀取 {len(stdout_lines_with_time)} 行 stdout")
             if proc:
-                debug_log(f"終止進程 pid={proc.pid}")
+                logger.debug(f"claude_agent 終止進程 pid={proc.pid}")
                 proc.terminate()
                 try:
                     await asyncio.wait_for(proc.wait(), timeout=5)
                 except asyncio.TimeoutError:
-                    debug_log("terminate 超時，強制 kill")
+                    logger.warning("claude_agent terminate 超時，強制 kill")
                     proc.kill()
 
             # 解析已讀取的部分（含時間統計）
@@ -483,7 +478,7 @@ async def call_claude(
 
             # 輸出診斷資訊
             elapsed = time.time() - start_time
-            debug_log(f"超時後解析結果: text_len={len(parse_result.text)}, tools={len(parse_result.tool_calls)}")
+            logger.debug(f"claude_agent 超時後解析結果: text_len={len(parse_result.text)}, tools={len(parse_result.tool_calls)}")
             print(f"[claude_agent] TIMEOUT after {elapsed:.1f}s")
             print(f"[claude_agent] 已完成的 tools ({len(parse_result.tool_calls)}):")
             for timing in parse_result.tool_timings:
