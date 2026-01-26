@@ -9,6 +9,7 @@ from ching_tech_os.models.share import (
     ShareLinkResponse,
     ShareLinkListResponse,
     PublicResourceResponse,
+    PasswordRequiredResponse,
 )
 from ching_tech_os.services.share import (
     create_share_link,
@@ -21,6 +22,9 @@ from ching_tech_os.services.share import (
     ShareError,
     ShareLinkNotFoundError,
     ShareLinkExpiredError,
+    ShareLinkLockedError,
+    PasswordRequiredError,
+    PasswordIncorrectError,
     ResourceNotFoundError,
     NasFileNotFoundError,
     NasFileAccessDenied,
@@ -57,7 +61,15 @@ async def create_link(
     # 取得租戶 ID
     tenant_id = getattr(session, "tenant_id", None)
 
-    if data.resource_type == "knowledge":
+    if data.resource_type == "content":
+        # content 類型：直接儲存內容，不需要資源權限檢查
+        if not data.content:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="content 類型必須提供 content 參數",
+            )
+
+    elif data.resource_type == "knowledge":
         try:
             knowledge = get_knowledge(data.resource_id, tenant_id=tenant_id)
             # 權限檢查（platform_admin 和 tenant_admin 已在 check_knowledge_permission 中處理）
@@ -181,14 +193,31 @@ async def delete_link(
     "/{token}",
     response_model=PublicResourceResponse,
     summary="取得公開資源",
+    responses={
+        401: {"model": PasswordRequiredResponse, "description": "需要密碼"},
+        410: {"description": "連結已過期"},
+        423: {"description": "連結已鎖定"},
+    },
 )
-async def get_resource(token: str) -> PublicResourceResponse:
+async def get_resource(
+    token: str,
+    password: str | None = None,
+) -> PublicResourceResponse | PasswordRequiredResponse:
     """取得公開分享的資源內容
 
-    無需登入即可存取。
+    無需登入即可存取。如果連結有密碼保護，需要在 query parameter 中提供 password。
     """
     try:
-        return await get_public_resource(token)
+        result = await get_public_resource(token, password)
+
+        # 如果返回的是 PasswordRequiredResponse，表示需要密碼
+        if isinstance(result, PasswordRequiredResponse):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=result.model_dump(),
+            )
+
+        return result
     except ShareLinkNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -198,6 +227,16 @@ async def get_resource(token: str) -> PublicResourceResponse:
         raise HTTPException(
             status_code=status.HTTP_410_GONE,
             detail="此連結已過期",
+        )
+    except ShareLinkLockedError:
+        raise HTTPException(
+            status_code=status.HTTP_423_LOCKED,
+            detail="此連結因密碼錯誤次數過多而被鎖定",
+        )
+    except PasswordIncorrectError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e),
         )
     except ResourceNotFoundError:
         raise HTTPException(

@@ -8,9 +8,15 @@ from pydantic import BaseModel, Field
 class ShareLinkCreate(BaseModel):
     """建立分享連結請求"""
 
-    resource_type: Literal["knowledge", "project", "nas_file", "project_attachment"]
-    resource_id: str
+    resource_type: Literal["knowledge", "project", "nas_file", "project_attachment", "content"]
+    resource_id: str = ""  # content 類型時可為空
     expires_in: str | None = "24h"  # 1h, 24h, 7d, null（永久）
+    # 密碼保護（可選）
+    password: str | None = None  # 4 位數字密碼
+    # content 類型專用欄位
+    content: str | None = None  # 直接儲存的內容
+    content_type: str | None = None  # MIME type（如 text/markdown）
+    filename: str | None = None  # 檔案名稱
 
 
 class ShareLinkResponse(BaseModel):
@@ -27,6 +33,8 @@ class ShareLinkResponse(BaseModel):
     created_at: datetime
     created_by: str | None = None  # 建立者（管理員檢視時會用到）
     is_expired: bool = False
+    has_password: bool = False  # 是否有密碼保護
+    password: str | None = None  # 原始密碼（僅建立時回傳）
 
 
 class ShareLinkListResponse(BaseModel):
@@ -64,8 +72,16 @@ class PublicProjectData(BaseModel):
 class PublicResourceResponse(BaseModel):
     """公開資源回應"""
 
-    type: Literal["knowledge", "project", "nas_file", "project_attachment"]
+    type: Literal["knowledge", "project", "nas_file", "project_attachment", "content"]
     data: dict[str, Any]
     shared_by: str
     shared_at: datetime
     expires_at: datetime | None
+
+
+class PasswordRequiredResponse(BaseModel):
+    """需要密碼回應"""
+
+    requires_password: bool = True
+    message: str = "此連結需要密碼才能存取"
+    is_locked: bool = False  # 是否因錯誤次數過多而鎖定
