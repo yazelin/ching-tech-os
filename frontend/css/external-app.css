@@ -1,0 +1,97 @@
+/* ==========================================================================
+   ChingTech OS - External App Styles
+   通用外部應用程式（iframe 整合）樣式
+   ========================================================================== */
+
+.external-app-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  background-color: var(--bg-surface);
+}
+
+.external-app-loading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-md);
+  color: var(--text-secondary);
+  font-size: var(--font-size-md);
+  z-index: 1;
+}
+
+.external-app-loading .icon {
+  font-size: 32px;
+  color: var(--color-accent);
+}
+
+.external-app-loading .icon svg {
+  animation: external-app-spin 1s linear infinite;
+}
+
+@keyframes external-app-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.external-app-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.external-app-error {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-md);
+  color: var(--text-secondary);
+  font-size: var(--font-size-md);
+  z-index: 2;
+  background-color: var(--bg-surface);
+}
+
+.external-app-error .icon {
+  font-size: 48px;
+  color: var(--color-warning);
+}
+
+.external-app-open-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: var(--color-primary);
+  color: var(--text-primary);
+  border-radius: var(--border-radius-md);
+  text-decoration: none;
+  margin-top: var(--spacing-md);
+  transition: background-color 0.2s ease;
+}
+
+.external-app-open-link:hover {
+  background-color: var(--color-primary-hover);
+}
+
+.external-app-open-link .icon {
+  font-size: 16px;
+  color: inherit;
+}
