@@ -128,13 +128,110 @@ const FileOpener = (function() {
     return JSON.parse(JSON.stringify(FILE_TYPES));
   }
 
+  // md2ppt / md2doc 外部 App 配置
+  const EXTERNAL_APP_CONFIG = {
+    md2ppt: {
+      appId: 'md2ppt',
+      title: 'md2ppt',
+      icon: 'file-powerpoint',
+      url: 'https://md-2-ppt-evolution.vercel.app/',
+      maximized: true
+    },
+    md2doc: {
+      appId: 'md2doc',
+      title: 'md2doc',
+      icon: 'file-word',
+      url: 'https://md-2-doc-evolution.vercel.app/',
+      maximized: true
+    }
+  };
+
+  /**
+   * 開啟 md2ppt / md2doc 檔案
+   * @param {string} filePath - 檔案路徑或 URL
+   * @param {string} filename - 檔案名稱
+   * @param {string} appType - 'md2ppt' 或 'md2doc'
+   * @returns {Promise<boolean>}
+   */
+  async function openExternalApp(filePath, filename, appType) {
+    const config = EXTERNAL_APP_CONFIG[appType];
+    if (!config) {
+      console.error(`[FileOpener] 未知的外部 App 類型: ${appType}`);
+      return false;
+    }
+
+    try {
+      // 讀取檔案內容
+      const response = await fetch(filePath);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const content = await response.text();
+
+      // 開啟外部 App 並傳送內容
+      if (typeof ExternalAppModule !== 'undefined') {
+        ExternalAppModule.openWithContent(config, {
+          filename,
+          content
+        });
+        return true;
+      } else {
+        console.error('[FileOpener] ExternalAppModule 未載入');
+        return false;
+      }
+    } catch (error) {
+      console.error(`[FileOpener] 開啟 ${appType} 檔案失敗:`, error);
+      NotificationModule?.show?.(`開啟檔案失敗: ${error.message}`, 'error');
+      return false;
+    }
+  }
+
+  /**
+   * 開啟檔案（擴充版，支援外部 App）
+   * @param {string} filePath - 檔案路徑或 URL
+   * @param {string} [filename] - 檔案名稱
+   * @returns {boolean|Promise<boolean>}
+   */
+  function openExtended(filePath, filename) {
+    const displayName = filename || filePath.split('/').pop().split('?')[0];
+    const ext = getExtension(displayName);
+
+    // 檢查是否為 md2ppt / md2doc 檔案
+    if (ext === 'md2ppt') {
+      return openExternalApp(filePath, displayName, 'md2ppt');
+    }
+    if (ext === 'md2doc') {
+      return openExternalApp(filePath, displayName, 'md2doc');
+    }
+
+    // 使用原有的 open 方法
+    return open(filePath, filename);
+  }
+
+  /**
+   * 判斷檔案是否支援開啟（擴充版）
+   * @param {string} filename
+   * @returns {boolean}
+   */
+  function canOpenExtended(filename) {
+    const ext = getExtension(filename);
+    // 加入 md2ppt / md2doc 支援
+    if (ext === 'md2ppt' || ext === 'md2doc') {
+      return true;
+    }
+    return canOpen(filename);
+  }
+
   // 公開 API
   return {
-    open,
-    canOpen,
+    open: openExtended,  // 使用擴充版
+    canOpen: canOpenExtended,  // 使用擴充版
     getViewerType,
     registerViewer,
     getSupportedExtensions,
-    getFileTypes
+    getFileTypes,
+    // 保留原始方法供內部使用
+    openOriginal: open,
+    canOpenOriginal: canOpen
   };
 })();
