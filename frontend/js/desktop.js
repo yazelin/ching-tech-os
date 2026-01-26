@@ -174,25 +174,13 @@ const DesktopModule = (function() {
         }
         break;
       case 'md2ppt':
-        if (typeof ExternalAppModule !== 'undefined') {
-          ExternalAppModule.open({
-            appId: 'md2ppt',
-            title: 'md2ppt',
-            icon: 'file-powerpoint',
-            url: 'https://md-2-ppt-evolution.vercel.app/',
-            maximized: true
-          });
+        if (typeof ExternalAppModule !== 'undefined' && window.EXTERNAL_APP_CONFIG?.md2ppt) {
+          ExternalAppModule.open(window.EXTERNAL_APP_CONFIG.md2ppt);
         }
         break;
       case 'md2doc':
-        if (typeof ExternalAppModule !== 'undefined') {
-          ExternalAppModule.open({
-            appId: 'md2doc',
-            title: 'md2doc',
-            icon: 'file-word',
-            url: 'https://md-2-doc-evolution.vercel.app/',
-            maximized: true
-          });
+        if (typeof ExternalAppModule !== 'undefined' && window.EXTERNAL_APP_CONFIG?.md2doc) {
+          ExternalAppModule.open(window.EXTERNAL_APP_CONFIG.md2doc);
         }
         break;
       default:

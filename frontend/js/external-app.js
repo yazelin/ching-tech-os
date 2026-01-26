@@ -15,6 +15,9 @@ const ExternalAppModule = (function() {
   // 追蹤 iframe 元素
   const iframeRefs = {};
 
+  // 追蹤各 App 的 URL（用於 postMessage targetOrigin）
+  const appUrls = {};
+
   /**
    * 開啟外部應用程式視窗
    * @param {Object} config - 應用程式配置
@@ -69,6 +72,22 @@ const ExternalAppModule = (function() {
     });
 
     openWindows[appId] = windowId;
+    // 記錄 URL 供 postMessage targetOrigin 使用
+    appUrls[appId] = url;
+  }
+
+  /**
+   * 取得 URL 的 origin
+   * @param {string} url - 完整 URL
+   * @returns {string} origin (如 https://example.com)
+   */
+  function getOrigin(url) {
+    try {
+      const urlObj = new URL(url);
+      return urlObj.origin;
+    } catch {
+      return '*';
+    }
   }
 
   /**
@@ -105,12 +124,35 @@ const ExternalAppModule = (function() {
         iframe.style.opacity = '1';
       });
 
+      // 監聽 iframe 錯誤事件
+      iframe.addEventListener('error', () => {
+        if (loading) loading.style.display = 'none';
+        if (error) error.style.display = 'flex';
+      });
+
       // 設定超時檢測（某些跨域情況下 load 事件可能不觸發）
       setTimeout(() => {
-        // 如果載入狀態還在顯示，假設載入成功
         if (loading && loading.style.display !== 'none') {
-          loading.style.display = 'none';
-          iframe.style.opacity = '1';
+          // 嘗試檢查 iframe 是否真的載入成功
+          // 注意：跨域 iframe 無法存取 contentDocument，會拋出錯誤
+          let loadedSuccessfully = true;
+          try {
+            // 如果可以存取且內容為空，可能載入失敗
+            if (iframe.contentDocument && !iframe.contentDocument.body?.innerHTML) {
+              loadedSuccessfully = false;
+            }
+          } catch {
+            // 跨域情況下無法存取，假設載入成功
+            loadedSuccessfully = true;
+          }
+
+          if (loadedSuccessfully) {
+            loading.style.display = 'none';
+            iframe.style.opacity = '1';
+          } else {
+            loading.style.display = 'none';
+            if (error) error.style.display = 'flex';
+          }
         }
         // 超時後如果有待傳送內容，嘗試傳送（外部 App 可能沒有實作 ready 訊號）
         if (pendingContent[appId]) {
@@ -128,6 +170,7 @@ const ExternalAppModule = (function() {
     delete openWindows[appId];
     delete pendingContent[appId];
     delete iframeRefs[appId];
+    delete appUrls[appId];
   }
 
   /**
@@ -162,6 +205,7 @@ const ExternalAppModule = (function() {
   function sendContentToIframe(appId) {
     const iframe = iframeRefs[appId];
     const fileInfo = pendingContent[appId];
+    const targetOrigin = appUrls[appId] ? getOrigin(appUrls[appId]) : '*';
 
     if (!iframe || !fileInfo) return;
 
@@ -170,12 +214,12 @@ const ExternalAppModule = (function() {
         type: 'load-file',
         filename: fileInfo.filename,
         content: fileInfo.content
-      }, '*');
-      console.log(`[ExternalAppModule] 已傳送檔案內容至 ${appId}:`, fileInfo.filename);
+      }, targetOrigin);
+      console.log(`[ExternalAppModule] 已傳送檔案內容至 ${appId} (${targetOrigin}):`, fileInfo.filename);
       // 傳送後清除待傳送內容
       delete pendingContent[appId];
-    } catch (error) {
-      console.error(`[ExternalAppModule] 傳送檔案內容失敗:`, error);
+    } catch (err) {
+      console.error(`[ExternalAppModule] 傳送檔案內容失敗:`, err);
     }
   }
 

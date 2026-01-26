@@ -277,6 +277,7 @@ const FileUtils = (function() {
     isAudioFile,
     isPdfFile,
     downloadWithAuth,
+    getToken,
     // 匯出常數供進階使用
     EXTENSIONS,
     ICON_MAP,

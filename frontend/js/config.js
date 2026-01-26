@@ -35,6 +35,24 @@
     }
   };
 
+  // 外部應用程式配置
+  window.EXTERNAL_APP_CONFIG = {
+    md2ppt: {
+      appId: 'md2ppt',
+      title: 'md2ppt',
+      icon: 'file-powerpoint',
+      url: 'https://md-2-ppt-evolution.vercel.app/',
+      maximized: true
+    },
+    md2doc: {
+      appId: 'md2doc',
+      title: 'md2doc',
+      icon: 'file-word',
+      url: 'https://md-2-doc-evolution.vercel.app/',
+      maximized: true
+    }
+  };
+
   // 覆寫 fetch，自動為 /api/ 和 /socket.io/ 請求加上 base path
   const originalFetch = window.fetch;
   window.fetch = function(input, init) {

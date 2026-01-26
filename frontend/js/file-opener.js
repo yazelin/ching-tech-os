@@ -128,29 +128,24 @@ const FileOpener = (function() {
     return JSON.parse(JSON.stringify(FILE_TYPES));
   }
 
-  // md2ppt / md2doc 外部 App 配置
-  const EXTERNAL_APP_CONFIG = {
-    md2ppt: {
-      appId: 'md2ppt',
-      title: 'md2ppt',
-      icon: 'file-powerpoint',
-      url: 'https://md-2-ppt-evolution.vercel.app/',
-      maximized: true
-    },
-    md2doc: {
-      appId: 'md2doc',
-      title: 'md2doc',
-      icon: 'file-word',
-      url: 'https://md-2-doc-evolution.vercel.app/',
-      maximized: true
-    }
-  };
+  /**
+   * 取得外部 App 配置
+   * @param {string} appType - 'md2ppt' 或 'md2doc'
+   * @returns {Object|null}
+   */
+  function getExternalAppConfig(appType) {
+    return window.EXTERNAL_APP_CONFIG?.[appType] || null;
+  }
 
   /**
-   * 取得認證 Token
+   * 取得認證 Token（使用 FileUtils 或回退到本地實作）
    * @returns {string}
    */
   function getToken() {
+    // 優先使用 FileUtils 的實作
+    if (typeof FileUtils !== 'undefined' && FileUtils.getToken) {
+      return FileUtils.getToken();
+    }
     return (typeof LoginModule !== 'undefined' && LoginModule.getToken?.())
       || localStorage.getItem('chingtech_token')
       || '';
@@ -164,7 +159,7 @@ const FileOpener = (function() {
    * @returns {Promise<boolean>}
    */
   async function openExternalApp(filePath, filename, appType) {
-    const config = EXTERNAL_APP_CONFIG[appType];
+    const config = getExternalAppConfig(appType);
     if (!config) {
       console.error(`[FileOpener] 未知的外部 App 類型: ${appType}`);
       return false;
