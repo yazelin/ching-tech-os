@@ -12,7 +12,7 @@ class ShareLinkCreate(BaseModel):
     resource_id: str = ""  # content 類型時可為空
     expires_in: str | None = "24h"  # 1h, 24h, 7d, null（永久）
     # 密碼保護（可選）
-    password: str | None = None  # 6 位數字密碼
+    password: str | None = None  # 4 位數字密碼
     # content 類型專用欄位
     content: str | None = None  # 直接儲存的內容
     content_type: str | None = None  # MIME type（如 text/markdown）

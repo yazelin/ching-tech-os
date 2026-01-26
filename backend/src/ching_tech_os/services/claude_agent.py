@@ -14,10 +14,9 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from ..config import settings
-
-logger = logging.getLogger(__name__)
 from . import ai_manager
 
+logger = logging.getLogger(__name__)
 
 # Claude CLI 超時設定（秒）
 DEFAULT_TIMEOUT = 180  # 延長至 3 分鐘，以支援複雜搜尋任務
