@@ -212,9 +212,9 @@ def _clean_overgenerated_response(text: str) -> str:
 
     for line in lines:
         # 檢測 AI 過度生成的對話行
-        # 這些行通常以 "user: " 或 "user[" 開頭（可能有前導空白）
+        # 這些行通常以 "user:" 或 "user[" 開頭（可能有前導空白）
         stripped = line.strip()
-        if stripped.startswith("user: ") or stripped.startswith("user:") or stripped.startswith("user["):
+        if stripped.startswith("user:") or stripped.startswith("user["):
             # 發現過度生成，停止收集
             break
         cleaned_lines.append(line)

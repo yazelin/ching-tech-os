@@ -23,6 +23,9 @@ logger = logging.getLogger("mcp_server")
 # 台北時區 (UTC+8)
 TAIPEI_TZ = timezone(timedelta(hours=8))
 
+# 知識庫「列出全部」的特殊查詢關鍵字
+_LIST_ALL_KNOWLEDGE_QUERIES = {"*", "all", "全部", "列表", ""}
+
 
 def to_taipei_time(dt: datetime) -> datetime:
     """將 datetime 轉換為台北時區"""
@@ -1261,7 +1264,7 @@ async def search_knowledge(
 
     # 處理特殊查詢：* 或空字串表示列出全部
     search_query: str | None = query
-    if query in ("*", "all", "全部", "列表", ""):
+    if query in _LIST_ALL_KNOWLEDGE_QUERIES:
         search_query = None  # 不進行關鍵字搜尋，列出全部
 
     # 取得使用者名稱（用於搜尋個人知識）
@@ -2708,6 +2711,69 @@ async def send_nas_file(
         return f"發送訊息失敗：{e}，連結：{result.full_url}"
 
 
+# Line ImageMessage 支援的圖片格式
+_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp"}
+# Line ImageMessage 限制 10MB
+_MAX_IMAGE_SIZE = 10 * 1024 * 1024
+
+
+def _format_file_size(size_bytes: int) -> str:
+    """格式化檔案大小為人類可讀的字串"""
+    if size_bytes >= 1024 * 1024:
+        return f"{size_bytes / 1024 / 1024:.1f}MB"
+    return f"{size_bytes / 1024:.1f}KB"
+
+
+def _build_file_message_info(
+    file_name: str,
+    file_size: int,
+    download_url: str,
+    fallback_url: str | None = None,
+    extra_fields: dict | None = None,
+    is_knowledge: bool = False,
+) -> tuple[dict, str]:
+    """
+    建立檔案訊息資訊
+
+    Args:
+        file_name: 檔案名稱
+        file_size: 檔案大小（bytes）
+        download_url: 下載 URL（圖片用）
+        fallback_url: 備用 URL（非圖片檔案用，如果為 None 則使用 download_url）
+        extra_fields: 額外欄位（如 nas_path, kb_path）
+        is_knowledge: 是否為知識庫附件
+
+    Returns:
+        (file_info, hint) 元組
+    """
+    file_ext = file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ""
+    is_image = file_ext in _IMAGE_EXTENSIONS
+    size_str = _format_file_size(file_size)
+    prefix = "知識庫" if is_knowledge else ""
+
+    if is_image and file_size <= _MAX_IMAGE_SIZE:
+        file_info = {
+            "type": "image",
+            "url": download_url,
+            "name": file_name,
+        }
+        hint = f"已準備好{prefix}圖片 {file_name}，會顯示在回覆中"
+    else:
+        file_info = {
+            "type": "file",
+            "url": fallback_url or download_url,
+            "name": file_name,
+            "size": size_str,
+        }
+        hint = f"已準備好{prefix}檔案 {file_name}（{size_str}），會以連結形式顯示"
+
+    # 加入額外欄位
+    if extra_fields:
+        file_info.update(extra_fields)
+
+    return file_info, hint
+
+
 @mcp.tool()
 async def prepare_file_message(
     file_path: str,
@@ -2754,11 +2820,6 @@ async def prepare_file_message(
     from ..models.share import ShareLinkCreate
     from ..config import settings
 
-    # 判斷是否為圖片（Line ImageMessage 支援的格式）
-    image_extensions = {"jpg", "jpeg", "png", "gif", "webp"}
-    # Line ImageMessage 限制 10MB
-    max_image_size = 10 * 1024 * 1024
-
     # 檢測是否為知識庫附件路徑（local:// 或含有 knowledge 的 ctos://）
     is_knowledge_attachment = (
         file_path.startswith("local://knowledge/") or
@@ -2800,15 +2861,6 @@ async def prepare_file_message(
 
         # 取得檔案資訊
         file_size = fs_path.stat().st_size
-        file_ext = fs_path.suffix.lower().lstrip(".")
-
-        # 格式化檔案大小
-        if file_size >= 1024 * 1024:
-            size_str = f"{file_size / 1024 / 1024:.1f}MB"
-        else:
-            size_str = f"{file_size / 1024:.1f}KB"
-
-        is_image = file_ext in image_extensions
 
         # 為知識文章建立分享連結
         try:
@@ -2826,27 +2878,17 @@ async def prepare_file_message(
         encoded_path = quote(file_path, safe="")
         download_url = f"{settings.public_url}/api/public/{result.token}/attachments/{encoded_path}"
 
-        # 組合檔案訊息標記
-        if is_image and file_size <= max_image_size:
-            file_info = {
-                "type": "image",
-                "url": download_url,
-                "name": file_name,
-                "kb_path": file_path,  # 知識庫附件路徑
-            }
-            hint = f"已準備好知識庫圖片 {file_name}，會顯示在回覆中"
-        else:
-            file_info = {
-                "type": "file",
-                "url": download_url,
-                "name": file_name,
-                "size": size_str,
-                "kb_path": file_path,
-            }
-            hint = f"已準備好知識庫檔案 {file_name}（{size_str}），會以連結形式顯示"
+        # 使用輔助函式組合檔案訊息
+        file_info, hint = _build_file_message_info(
+            file_name=file_name,
+            file_size=file_size,
+            download_url=download_url,
+            extra_fields={"kb_path": file_path},
+            is_knowledge=True,
+        )
 
     else:
-        # ===== NAS 檔案處理（原有邏輯）=====
+        # ===== NAS 檔案處理 =====
         # 驗證檔案路徑（傳入 tenant_id 以正確解析 CTOS 路徑）
         try:
             full_path = validate_nas_file_path(file_path, tenant_id=tid)
@@ -2858,15 +2900,6 @@ async def prepare_file_message(
         # 取得檔案資訊
         file_name = full_path.name
         file_size = full_path.stat().st_size
-        file_ext = full_path.suffix.lower().lstrip(".")
-
-        # 格式化檔案大小
-        if file_size >= 1024 * 1024:
-            size_str = f"{file_size / 1024 / 1024:.1f}MB"
-        else:
-            size_str = f"{file_size / 1024:.1f}KB"
-
-        is_image = file_ext in image_extensions
 
         # 產生分享連結
         try:
@@ -2879,7 +2912,7 @@ async def prepare_file_message(
         except Exception as e:
             return f"建立分享連結失敗：{e}"
 
-        # 下載連結需要加上 /download
+        # 下載連結需要加上 /download（圖片用）
         download_url = result.full_url.replace("/s/", "/api/public/") + "/download"
 
         # 計算相對於 linebot_local_path 的路徑（用於存 line_files）
@@ -2890,24 +2923,15 @@ async def prepare_file_message(
         else:
             relative_nas_path = full_path_str  # 其他路徑保持原樣
 
-        # 組合檔案訊息標記
-        if is_image and file_size <= max_image_size:
-            file_info = {
-                "type": "image",
-                "url": download_url,
-                "name": file_name,
-                "nas_path": relative_nas_path,
-            }
-            hint = f"已準備好圖片 {file_name}，會顯示在回覆中"
-        else:
-            file_info = {
-                "type": "file",
-                "url": result.full_url,
-                "name": file_name,
-                "size": size_str,
-                "nas_path": relative_nas_path,
-            }
-            hint = f"已準備好檔案 {file_name}（{size_str}），會以連結形式顯示"
+        # 使用輔助函式組合檔案訊息
+        file_info, hint = _build_file_message_info(
+            file_name=file_name,
+            file_size=file_size,
+            download_url=download_url,
+            fallback_url=result.full_url,  # 非圖片檔案使用分享連結頁面
+            extra_fields={"nas_path": relative_nas_path},
+            is_knowledge=False,
+        )
 
     # 回傳標記（linebot_ai.py 會解析這個標記）
     marker = f"[FILE_MESSAGE:{json.dumps(file_info, ensure_ascii=False)}]"
