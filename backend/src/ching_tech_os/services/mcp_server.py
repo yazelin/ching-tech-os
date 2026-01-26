@@ -5618,6 +5618,293 @@ async def delete_memory(memory_id: str) -> str:
 
 
 # ============================================================
+# MD2PPT / MD2DOC 簡報與文件生成
+# ============================================================
+
+# MD2PPT System Prompt
+MD2PPT_SYSTEM_PROMPT = '''你現在是一位精通「MD2PPT-Evolution v0.12+」的專業簡報設計師。
+
+### ⚠️ 核心指令 (Core Instructions)
+
+1. **嚴格遵守語法**：你生成的代碼將直接被程式解析。任何語法錯誤都會導致崩潰。
+2. **設計決策**：
+   - 根據內容關鍵字（如：醫療、金融、遊戲），自動選擇最適合的配色。
+   - **標題/重點頁** (`layout: impact/center/quote`) -> 使用 `bg: mesh` 搭配配色盤。
+   - **資訊頁** (`layout: grid/two-column/default`) -> **必須使用純色背景** (淺色用 `#F8FAFC`；深色用 `#1E293B`)。
+   - **嚴禁**在每一頁都使用 Mesh。
+3. **只輸出代碼**：直接輸出 Markdown 代碼，不要包含解釋文字、註釋或 ``` 標記。
+
+### ⚠️ 致命錯誤預防 (Critical Rules)
+
+1. **全域設定**：第一行必須是 `---`，theme 只能是 `amber`, `midnight`, `academic`, `material`
+2. **分頁符號**：`===` 前後**必須有空行**
+3. **圖表**：
+   - JSON 屬性必須使用**雙引號** `"`
+   - `::: chart-xxx` 與表格之間**必須空一行**
+   - 表格與結尾 `:::` 之間**必須空一行**
+4. **雙欄**：
+   - `:: right ::` 的**上下必須是空行**
+   - 欄位內標題**必須使用 H3 (`###`)**
+
+### 配色盤 (Curated Palettes)
+
+**科技藍 (Tech Blue)**：theme: `midnight`, mesh: `["#0F172A", "#1E40AF", "#3B82F6"]`
+**溫暖橙 (Sunset Glow)**：theme: `amber`, mesh: `["#FFF7ED", "#FB923C", "#EA580C"]`
+**清新綠 (Fresh Mint)**：theme: `material`, mesh: `["#ECFDF5", "#10B981", "#047857"]`
+**極簡灰 (Clean Slate)**：theme: `academic`, mesh: `["#F8FAFC", "#94A3B8", "#475569"]`
+**電競紫 (Cyber Neon)**：theme: `midnight`, mesh: `["#111827", "#7C3AED", "#DB2777"]`
+
+### Layout 選項
+- `default`: 標準頁面
+- `impact`: 強調頁（適合重點）
+- `center`: 置中頁
+- `grid`: 網格（搭配 columns: 2）
+- `two-column`: 雙欄
+- `quote`: 引言頁
+- `alert`: 警告頁
+'''
+
+# MD2DOC System Prompt
+MD2DOC_SYSTEM_PROMPT = '''你現在是一位精通「MD2DOC-Evolution」的技術文件重構專家。
+
+### 核心任務
+產出一份**機器可讀性完美**的文件，確保轉換後的檔案能直接生成無格式錯誤的 Word 書稿。
+
+### ⚠️ 核心規範
+
+1. **Frontmatter (YAML)**：
+   - 必須位於檔案第一行，用 `---` 包裹
+   - **必要欄位**：title, author
+   - YAML 區塊內**嚴禁**出現 # 符號
+
+2. **標題層級**：
+   - 僅允許 **H1 (#)** 到 **H3 (###)**
+   - H4 以下請轉換為**粗體文字**或**列表項目**
+
+3. **對話模式 (Chat Syntax)**：
+   - **靠左 (AI)**：`角色 "::` 然後換行寫內容
+   - **靠右 (User)**：`角色 ::"` 然後換行寫內容
+   - **置中 (System)**：`角色 :":` 然後換行寫內容
+
+4. **程式碼區塊**：
+   - 所有 ``` 區塊必須標註語言
+   - 短設定檔使用 `:no-ln` 隱藏行號（如 ```json:no-ln）
+
+5. **提示區塊 (Callouts)**：
+   - 只支援 `> [!TIP]`、`> [!NOTE]`、`> [!WARNING]`
+   - 標籤後必須換行再寫內容
+
+6. **列表縮排**：巢狀列表必須比父層級多 **2 個空白**
+
+### 行內樣式
+- UI 按鈕/選單：`【文字】`
+- 快捷鍵：`[Ctrl]` + `[S]`
+- 書名/專案名：`『文字』`
+
+### 只輸出代碼
+直接輸出 Markdown 代碼，不要包含解釋文字或 ``` 標記。
+'''
+
+
+@mcp.tool()
+async def generate_presentation(
+    content: str,
+    style: str | None = None,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
+) -> str:
+    """
+    產生 MD2PPT 格式的簡報內容，並建立帶密碼保護的分享連結
+
+    Args:
+        content: 要轉換為簡報的內容或主題
+        style: 風格需求（如：科技藍、簡約深色），不填則自動選擇
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
+
+    Returns:
+        分享連結和存取密碼
+    """
+    from .claude_agent import call_claude
+    from .md_validators import validate_md2ppt
+    from .share import create_share_link
+    from ..models.share import ShareLinkCreate
+
+    await ensure_db_connection()
+    tid = _get_tenant_id(ctos_tenant_id)
+
+    # 組合 prompt
+    style_hint = f"【風格需求】：{style}\n" if style else ""
+    user_prompt = f"{style_hint}【內容】：\n{content}"
+
+    max_retries = 3
+    last_error = ""
+
+    for attempt in range(max_retries):
+        try:
+            # 呼叫 Claude 產生內容
+            response = await call_claude(
+                prompt=user_prompt if attempt == 0 else f"{user_prompt}\n\n⚠️ 上次產生的內容有格式錯誤，請修正：\n{last_error}",
+                model="sonnet",
+                system_prompt=MD2PPT_SYSTEM_PROMPT,
+                timeout=180,
+            )
+
+            if not response.success:
+                return f"❌ AI 產生失敗：{response.error}"
+
+            generated_content = response.message.strip()
+
+            # 移除可能的 markdown 標記
+            if generated_content.startswith("```"):
+                lines = generated_content.split("\n")
+                if lines[0].startswith("```"):
+                    lines = lines[1:]
+                if lines and lines[-1].strip() == "```":
+                    lines = lines[:-1]
+                generated_content = "\n".join(lines)
+
+            # 驗證格式
+            validation = validate_md2ppt(generated_content)
+
+            if validation.valid:
+                # 驗證通過，建立分享連結
+                share_data = ShareLinkCreate(
+                    resource_type="content",
+                    content=generated_content,
+                    content_type="text/markdown",
+                    filename="presentation.md2ppt",
+                    expires_in="24h",
+                )
+
+                share_link = await create_share_link(
+                    data=share_data,
+                    created_by="linebot-ai",
+                    tenant_id=tid,
+                )
+
+                # 產生 MD2PPT 連結
+                md2ppt_url = f"https://md-2-ppt-evolution.vercel.app/?shareToken={share_link.token}"
+
+                return f"""✅ 簡報產生成功！
+
+🔗 開啟連結：{md2ppt_url}
+🔑 存取密碼：{share_link.password}
+
+⏰ 連結有效期限：24 小時
+💡 開啟後可直接編輯並匯出為 PPT"""
+
+            else:
+                # 驗證失敗，記錄錯誤訊息供下次嘗試
+                last_error = validation.to_error_message()
+                logger.warning(f"MD2PPT 驗證失敗 (嘗試 {attempt + 1}/{max_retries}): {last_error}")
+
+        except Exception as e:
+            logger.error(f"generate_presentation 錯誤: {e}")
+            return f"❌ 產生簡報時發生錯誤：{str(e)}"
+
+    # 所有嘗試都失敗
+    return f"❌ 無法產生符合格式的簡報，請稍後重試或簡化內容。\n\n最後的錯誤：\n{last_error}"
+
+
+@mcp.tool()
+async def generate_document(
+    content: str,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
+) -> str:
+    """
+    產生 MD2DOC 格式的文件內容，並建立帶密碼保護的分享連結
+
+    Args:
+        content: 要轉換為文件的內容
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
+
+    Returns:
+        分享連結和存取密碼
+    """
+    from .claude_agent import call_claude
+    from .md_validators import validate_md2doc
+    from .share import create_share_link
+    from ..models.share import ShareLinkCreate
+
+    await ensure_db_connection()
+    tid = _get_tenant_id(ctos_tenant_id)
+
+    user_prompt = f"請將以下內容轉換為 MD2DOC 格式的文件：\n\n{content}"
+
+    max_retries = 3
+    last_error = ""
+
+    for attempt in range(max_retries):
+        try:
+            # 呼叫 Claude 產生內容
+            response = await call_claude(
+                prompt=user_prompt if attempt == 0 else f"{user_prompt}\n\n⚠️ 上次產生的內容有格式錯誤，請修正：\n{last_error}",
+                model="sonnet",
+                system_prompt=MD2DOC_SYSTEM_PROMPT,
+                timeout=180,
+            )
+
+            if not response.success:
+                return f"❌ AI 產生失敗：{response.error}"
+
+            generated_content = response.message.strip()
+
+            # 移除可能的 markdown 標記
+            if generated_content.startswith("```"):
+                lines = generated_content.split("\n")
+                if lines[0].startswith("```"):
+                    lines = lines[1:]
+                if lines and lines[-1].strip() == "```":
+                    lines = lines[:-1]
+                generated_content = "\n".join(lines)
+
+            # 驗證格式
+            validation = validate_md2doc(generated_content)
+
+            if validation.valid:
+                # 驗證通過，建立分享連結
+                share_data = ShareLinkCreate(
+                    resource_type="content",
+                    content=generated_content,
+                    content_type="text/markdown",
+                    filename="document.md2doc",
+                    expires_in="24h",
+                )
+
+                share_link = await create_share_link(
+                    data=share_data,
+                    created_by="linebot-ai",
+                    tenant_id=tid,
+                )
+
+                # 產生 MD2DOC 連結
+                md2doc_url = f"https://md-2-doc-evolution.vercel.app/?shareToken={share_link.token}"
+
+                return f"""✅ 文件產生成功！
+
+🔗 開啟連結：{md2doc_url}
+🔑 存取密碼：{share_link.password}
+
+⏰ 連結有效期限：24 小時
+💡 開啟後可直接編輯並匯出為 Word"""
+
+            else:
+                # 驗證失敗，記錄錯誤訊息供下次嘗試
+                last_error = validation.to_error_message()
+                logger.warning(f"MD2DOC 驗證失敗 (嘗試 {attempt + 1}/{max_retries}): {last_error}")
+
+        except Exception as e:
+            logger.error(f"generate_document 錯誤: {e}")
+            return f"❌ 產生文件時發生錯誤：{str(e)}"
+
+    # 所有嘗試都失敗
+    return f"❌ 無法產生符合格式的文件，請稍後重試或簡化內容。\n\n最後的錯誤：\n{last_error}"
+
+
+# ============================================================
 # 工具存取介面（供 Line Bot 和其他服務使用）
 # ============================================================
 

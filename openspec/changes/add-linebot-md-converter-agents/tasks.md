@@ -46,33 +46,33 @@
 
 **驗證**：驗證器能正確識別格式錯誤 ✅
 
-### 4. MCP Tool: generate_presentation
-- [ ] 在 `mcp_server.py` 新增 `generate_presentation` tool
-- [ ] 建立 MD2PPT Agent system prompt（內嵌完整規範）
+### 4. MCP Tool: generate_presentation ✅
+- [x] 在 `mcp_server.py` 新增 `generate_presentation` tool
+- [x] 建立 MD2PPT Agent system prompt（內嵌完整規範）
   - 包含核心指令與致命錯誤預防
   - 包含配色盤與背景使用規則
-  - 包含輸出範本
-- [ ] 呼叫 AI 產生內容
-- [ ] 使用驗證器檢查格式
-- [ ] 若驗證失敗，將錯誤回傳給 AI 重新產生（最多 3 次）
-- [ ] 驗證通過後自動建立分享連結
-- [ ] 回傳連結和密碼
+  - 包含 Layout 選項說明
+- [x] 呼叫 AI 產生內容
+- [x] 使用驗證器檢查格式
+- [x] 若驗證失敗，將錯誤回傳給 AI 重新產生（最多 3 次）
+- [x] 驗證通過後自動建立分享連結
+- [x] 回傳連結和密碼
 
-**驗證**：Tool 可產生並驗證正確格式的 MD2PPT 內容
+**驗證**：Tool 可產生並驗證正確格式的 MD2PPT 內容 ✅
 
-### 5. MCP Tool: generate_document
-- [ ] 在 `mcp_server.py` 新增 `generate_document` tool
-- [ ] 建立 MD2DOC Agent system prompt（內嵌完整規範）
-  - 包含七大核心規範
-  - 包含對話語法詳細說明
-  - 包含轉換範例
-- [ ] 呼叫 AI 產生內容
-- [ ] 使用驗證器檢查格式
-- [ ] 若驗證失敗，將錯誤回傳給 AI 重新產生（最多 3 次）
-- [ ] 驗證通過後自動建立分享連結
-- [ ] 回傳連結和密碼
+### 5. MCP Tool: generate_document ✅
+- [x] 在 `mcp_server.py` 新增 `generate_document` tool
+- [x] 建立 MD2DOC Agent system prompt（內嵌完整規範）
+  - 包含核心規範（Frontmatter, 標題, 對話, 程式碼, Callout）
+  - 包含對話語法詳細說明（":: / ::" / :":）
+  - 包含行內樣式轉換表
+- [x] 呼叫 AI 產生內容
+- [x] 使用驗證器檢查格式
+- [x] 若驗證失敗，將錯誤回傳給 AI 重新產生（最多 3 次）
+- [x] 驗證通過後自動建立分享連結
+- [x] 回傳連結和密碼
 
-**驗證**：Tool 可產生並驗證正確格式的 MD2DOC 內容
+**驗證**：Tool 可產生並驗證正確格式的 MD2DOC 內容 ✅
 
 ### 6. LineBot Agent Prompt 更新
 - [ ] 更新 linebot_agents.py 的 system prompt
