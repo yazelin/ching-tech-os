@@ -74,13 +74,13 @@
 
 **驗證**：Tool 可產生並驗證正確格式的 MD2DOC 內容 ✅
 
-### 6. LineBot Agent Prompt 更新
-- [ ] 更新 linebot_agents.py 的 system prompt
-- [ ] 新增判斷「產生簡報/文件」意圖的指引
-- [ ] 說明何時呼叫 generate_presentation / generate_document
-- [ ] 建立 migration 更新資料庫 prompt
+### 6. LineBot Agent Prompt 更新 ✅
+- [x] 更新 linebot_agents.py 的 system prompt
+- [x] 新增判斷「產生簡報/文件」意圖的指引
+- [x] 說明何時呼叫 generate_presentation / generate_document
+- [x] 建立 migration 更新資料庫 prompt
 
-**驗證**：LineBot AI 可正確判斷並呼叫 MCP Tools
+**驗證**：LineBot AI 可正確判斷並呼叫 MCP Tools ✅
 
 ### 7. MD2PPT shareToken 支援
 - [ ] 檢測 URL 中的 shareToken 參數

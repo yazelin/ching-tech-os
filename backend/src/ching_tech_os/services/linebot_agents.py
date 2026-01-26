@@ -216,6 +216,43 @@ BASE_TOOLS_PROMPT = """【對話附件管理】
   · resource_id: 檔案路徑、知識ID、專案UUID 或 附件UUID
   · expires_in: 1h/24h/7d（預設 24h）"""
 
+# AI 文件生成工具說明（對應 app: ai-assistant）
+AI_DOCUMENT_TOOLS_PROMPT = """【AI 文件/簡報生成】
+- generate_presentation: 產生專業簡報（MD2PPT 格式）
+  · content: 簡報內容說明或大綱（必填）
+  · style: 風格/主題色（可選，amber/midnight/academic/material）
+  · slides_count: 希望的頁數（可選，預設讓 AI 決定）
+  · ctos_tenant_id: 租戶 ID（必傳，從【對話識別】取得）
+  · 回傳包含 url（分享連結）和 password（4 位數密碼）
+- generate_document: 產生專業文件（MD2DOC 格式）
+  · content: 文件內容說明或大綱（必填）
+  · document_type: 文件類型（可選，如：教學、報告、說明書、SOP）
+  · ctos_tenant_id: 租戶 ID（必傳，從【對話識別】取得）
+  · 回傳包含 url（分享連結）和 password（4 位數密碼）
+
+【文件/簡報使用情境】
+1. 用戶說「幫我做一份簡報介紹公司產品」
+   → generate_presentation(content="公司產品介紹簡報，包含...", ctos_tenant_id=...)
+2. 用戶說「製作一份 5 頁的技術報告」
+   → generate_presentation(content="技術報告...", slides_count=5, ctos_tenant_id=...)
+3. 用戶說「幫我寫一份操作說明書」
+   → generate_document(content="操作說明書...", document_type="說明書", ctos_tenant_id=...)
+4. 用戶說「做一份教學文件說明如何使用系統」
+   → generate_document(content="系統使用教學...", document_type="教學", ctos_tenant_id=...)
+
+【回覆格式】
+生成完成後，回覆用戶：
+「已為您生成簡報/文件 👇
+🔗 連結：{url}
+🔑 密碼：{password}
+
+連結有效期限 24 小時，請盡快下載。」
+
+【意圖判斷】
+- 「做簡報」「投影片」「PPT」「presentation」→ generate_presentation
+- 「寫文件」「做報告」「說明書」「教學」「SOP」「document」→ generate_document
+- 如果不確定，詢問用戶是需要「簡報（投影片）」還是「文件（Word）」"""
+
 # AI 圖片生成工具說明（對應 app: ai-assistant）
 AI_IMAGE_TOOLS_PROMPT = """【AI 圖片生成】
 - mcp__nanobanana__generate_image: 根據文字描述生成圖片
@@ -267,7 +304,7 @@ APP_PROMPT_MAPPING: dict[str, str] = {
     "inventory": INVENTORY_TOOLS_PROMPT,
     "knowledge-base": KNOWLEDGE_TOOLS_PROMPT,
     "file-manager": FILE_TOOLS_PROMPT,
-    "ai-assistant": AI_IMAGE_TOOLS_PROMPT,
+    "ai-assistant": AI_IMAGE_TOOLS_PROMPT + "\n\n" + AI_DOCUMENT_TOOLS_PROMPT,
 }
 
 
@@ -596,6 +633,27 @@ LINEBOT_PERSONAL_PROMPT = """你是擎添工業的 AI 助理，透過 Line 與�
 · ❌ 錯誤：自己寫 [FILE_MESSAGE:/tmp/...] ← 格式錯誤！
 · ❌ 錯誤：用 Read 看圖後回覆「已完成」← 用戶看不到圖！
 
+【AI 文件/簡報生成】
+- generate_presentation: 產生專業簡報（MD2PPT 格式）
+  · content: 簡報內容說明或大綱（必填）
+  · style: 風格/主題色（可選，amber/midnight/academic/material）
+  · slides_count: 希望的頁數（可選，預設讓 AI 決定）
+  · ctos_tenant_id: 租戶 ID（必傳，從【對話識別】取得）
+  · 回傳包含 url（分享連結）和 password（4 位數密碼）
+- generate_document: 產生專業文件（MD2DOC 格式）
+  · content: 文件內容說明或大綱（必填）
+  · document_type: 文件類型（可選，如：教學、報告、說明書、SOP）
+  · ctos_tenant_id: 租戶 ID（必傳，從【對話識別】取得）
+  · 回傳包含 url（分享連結）和 password（4 位數密碼）
+
+【文件/簡報使用情境】
+- 「做簡報」「投影片」「PPT」「presentation」→ generate_presentation
+- 「寫文件」「做報告」「說明書」「教學」「SOP」「document」→ generate_document
+- 如果不確定，詢問用戶是需要「簡報（投影片）」還是「文件（Word）」
+
+【文件/簡報回覆格式】
+生成完成後，回覆用戶包含連結和密碼，連結有效 24 小時。
+
 使用工具的流程：
 1. 先用 query_project 搜尋專案名稱取得 ID，若不存在可用 create_project 建立
 2. 建立專案後，可用 add_project_member 新增成員，add_project_milestone 新增里程碑
@@ -714,6 +772,11 @@ LINEBOT_GROUP_PROMPT = """你是擎添工業的 AI 助理，在 Line 群組中�
   · pages: "0"=只查頁數、"1"/"1-3"/"all" 指定頁面
   · 1 頁直接轉；多頁先詢問用戶要轉哪幾頁
   · 轉換後用 prepare_file_message 發送圖片
+- generate_presentation: 產生簡報（content 必填，style/slides_count 可選，回傳 url 和 password）
+- generate_document: 產生文件（content 必填，document_type 可選，回傳 url 和 password）
+  · 「做簡報」「PPT」→ generate_presentation
+  · 「寫文件」「報告」「說明書」→ generate_document
+  · 生成後回覆連結和密碼（4 位數），有效 24 小時
 
 【群組專案規則】（重要）
 - 若群組有綁定專案（會在下方提示），只能操作該綁定專案，不可操作其他專案
