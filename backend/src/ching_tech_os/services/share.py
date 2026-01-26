@@ -2,6 +2,7 @@
 
 import secrets
 import string
+import bcrypt
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -14,9 +15,13 @@ from ..models.share import (
     ShareLinkResponse,
     ShareLinkListResponse,
     PublicResourceResponse,
+    PasswordRequiredResponse,
 )
 from .knowledge import get_knowledge, KnowledgeNotFoundError
 from .project import get_project, ProjectNotFoundError
+
+# 密碼錯誤最大嘗試次數
+MAX_PASSWORD_ATTEMPTS = 5
 
 
 class NasFileNotFoundError(Exception):
@@ -44,6 +49,21 @@ class ShareLinkExpiredError(ShareError):
     pass
 
 
+class ShareLinkLockedError(ShareError):
+    """連結已鎖定（密碼錯誤次數過多）"""
+    pass
+
+
+class PasswordRequiredError(ShareError):
+    """需要密碼"""
+    pass
+
+
+class PasswordIncorrectError(ShareError):
+    """密碼錯誤"""
+    pass
+
+
 class ResourceNotFoundError(ShareError):
     """資源不存在"""
     pass
@@ -56,6 +76,24 @@ def generate_token(length: int = 6) -> str:
     """
     alphabet = string.ascii_letters + string.digits
     return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+def generate_password(length: int = 6) -> str:
+    """產生隨機數字密碼
+
+    使用加密安全的隨機產生器，只使用數字方便手機輸入
+    """
+    return "".join(secrets.choice(string.digits) for _ in range(length))
+
+
+def hash_password(password: str) -> str:
+    """使用 bcrypt 加密密碼"""
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+
+def verify_password(password: str, password_hash: str) -> bool:
+    """驗證密碼"""
+    return bcrypt.checkpw(password.encode(), password_hash.encode())
 
 
 def parse_expires_in(expires_in: str | None) -> datetime | None:
@@ -171,7 +209,7 @@ def validate_nas_file_path(file_path: str, tenant_id: str | None = None) -> Path
     return full_path
 
 
-async def get_resource_title(resource_type: str, resource_id: str, tenant_id: str | None = None) -> str:
+async def get_resource_title(resource_type: str, resource_id: str, tenant_id: str | None = None, filename: str | None = None) -> str:
     """取得資源標題"""
     try:
         if resource_type == "knowledge":
@@ -188,6 +226,9 @@ async def get_resource_title(resource_type: str, resource_id: str, tenant_id: st
             # 取得專案附件資訊
             attachment = await get_project_attachment_info(resource_id)
             return attachment["filename"]
+        elif resource_type == "content":
+            # content 類型使用 filename 或預設標題
+            return filename or "分享內容"
         else:
             return "未知資源"
     except (KnowledgeNotFoundError, ProjectNotFoundError):
@@ -222,8 +263,14 @@ async def create_share_link(
         created_by: 建立者用戶名
         tenant_id: 租戶 ID
     """
-    # 驗證資源存在
-    resource_title = await get_resource_title(data.resource_type, data.resource_id, tenant_id=str(tenant_id) if tenant_id else None)
+    # content 類型驗證
+    if data.resource_type == "content":
+        if not data.content:
+            raise ShareError("content 類型必須提供 content 參數")
+        resource_title = data.filename or "分享內容"
+    else:
+        # 驗證資源存在
+        resource_title = await get_resource_title(data.resource_type, data.resource_id, tenant_id=str(tenant_id) if tenant_id else None)
 
     # 產生唯一 token
     async with get_connection() as conn:
@@ -243,21 +290,39 @@ async def create_share_link(
         # 計算過期時間
         expires_at = parse_expires_in(data.expires_in)
 
-        # 儲存到資料庫（包含 tenant_id）
+        # 處理密碼
+        password_raw = None
+        password_hashed = None
+        if data.password:
+            # 如果提供密碼，使用提供的密碼
+            password_raw = data.password
+            password_hashed = hash_password(password_raw)
+        elif data.resource_type == "content":
+            # content 類型預設產生密碼
+            password_raw = generate_password()
+            password_hashed = hash_password(password_raw)
+
+        # 儲存到資料庫
         now = datetime.now(timezone.utc)
         row = await conn.fetchrow(
             """
-            INSERT INTO public_share_links (token, resource_type, resource_id, created_by, expires_at, created_at, tenant_id)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            INSERT INTO public_share_links
+            (token, resource_type, resource_id, created_by, expires_at, created_at, tenant_id,
+             content, content_type, filename, password_hash)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             RETURNING id, token, resource_type, resource_id, created_by, expires_at, access_count, created_at
             """,
             token,
             data.resource_type,
-            data.resource_id,
+            data.resource_id or "",
             created_by,
             expires_at,
             now,
             (tenant_id if isinstance(tenant_id, UUID) else UUID(str(tenant_id))) if tenant_id else None,
+            data.content if data.resource_type == "content" else None,
+            data.content_type if data.resource_type == "content" else None,
+            data.filename if data.resource_type == "content" else None,
+            password_hashed,
         )
 
         return ShareLinkResponse(
@@ -271,6 +336,8 @@ async def create_share_link(
             access_count=row["access_count"],
             created_at=row["created_at"],
             is_expired=False,
+            has_password=password_hashed is not None,
+            password=password_raw,  # 僅建立時回傳
         )
 
 
@@ -437,13 +504,29 @@ async def revoke_link(token: str, username: str, is_admin: bool = False) -> None
         )
 
 
-async def get_public_resource(token: str) -> PublicResourceResponse:
-    """取得公開資源"""
+async def get_public_resource(token: str, password: str | None = None) -> PublicResourceResponse | PasswordRequiredResponse:
+    """取得公開資源
+
+    Args:
+        token: 分享連結 token
+        password: 密碼（如果連結有密碼保護）
+
+    Returns:
+        PublicResourceResponse: 資源內容
+        PasswordRequiredResponse: 需要密碼（401）
+
+    Raises:
+        ShareLinkNotFoundError: 連結不存在
+        ShareLinkExpiredError: 連結已過期
+        ShareLinkLockedError: 連結已鎖定
+        PasswordIncorrectError: 密碼錯誤
+    """
     async with get_connection() as conn:
-        # 查詢連結（包含 tenant_id）
+        # 查詢連結（包含密碼相關欄位）
         row = await conn.fetchrow(
             """
-            SELECT token, resource_type, resource_id, created_by, expires_at, created_at, tenant_id
+            SELECT token, resource_type, resource_id, created_by, expires_at, created_at, tenant_id,
+                   content, content_type, filename, password_hash, attempt_count, locked_at
             FROM public_share_links
             WHERE token = $1
             """,
@@ -457,6 +540,59 @@ async def get_public_resource(token: str) -> PublicResourceResponse:
         now = datetime.now(timezone.utc)
         if row["expires_at"] and row["expires_at"] < now:
             raise ShareLinkExpiredError("此連結已過期")
+
+        # 檢查是否鎖定
+        if row["locked_at"]:
+            raise ShareLinkLockedError("此連結因密碼錯誤次數過多而被鎖定")
+
+        # 密碼驗證
+        if row["password_hash"]:
+            if not password:
+                # 需要密碼但未提供
+                return PasswordRequiredResponse(
+                    requires_password=True,
+                    message="此連結需要密碼才能存取",
+                    is_locked=False,
+                )
+
+            if not verify_password(password, row["password_hash"]):
+                # 密碼錯誤，增加嘗試次數
+                new_attempt_count = row["attempt_count"] + 1
+                if new_attempt_count >= MAX_PASSWORD_ATTEMPTS:
+                    # 鎖定連結
+                    await conn.execute(
+                        """
+                        UPDATE public_share_links
+                        SET attempt_count = $1, locked_at = $2
+                        WHERE token = $3
+                        """,
+                        new_attempt_count,
+                        now,
+                        token,
+                    )
+                    raise ShareLinkLockedError("密碼錯誤次數過多，連結已被鎖定")
+                else:
+                    await conn.execute(
+                        """
+                        UPDATE public_share_links
+                        SET attempt_count = $1
+                        WHERE token = $2
+                        """,
+                        new_attempt_count,
+                        token,
+                    )
+                    raise PasswordIncorrectError(f"密碼錯誤，還剩 {MAX_PASSWORD_ATTEMPTS - new_attempt_count} 次嘗試機會")
+
+            # 密碼正確，重設嘗試次數
+            if row["attempt_count"] > 0:
+                await conn.execute(
+                    """
+                    UPDATE public_share_links
+                    SET attempt_count = 0
+                    WHERE token = $1
+                    """,
+                    token,
+                )
 
         # 更新存取次數（異步，不阻塞）
         await conn.execute(
@@ -579,6 +715,14 @@ async def get_public_resource(token: str) -> PublicResourceResponse:
                 raise
             except Exception as e:
                 raise ResourceNotFoundError(f"無法存取附件：{e}")
+
+        elif resource_type == "content":
+            # 直接儲存的內容
+            data = {
+                "content": row["content"],
+                "content_type": row["content_type"] or "text/plain",
+                "filename": row["filename"] or "content.txt",
+            }
 
         else:
             raise ShareError(f"不支援的資源類型：{resource_type}")

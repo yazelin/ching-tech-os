@@ -145,6 +145,9 @@ class Settings:
         "http://0.0.0.0:8088",
         "http://127.0.0.1:8080",
         "http://127.0.0.1:8088",
+        # MD2PPT/MD2DOC 外部應用程式
+        "https://md-2-ppt-evolution.vercel.app",
+        "https://md-2-doc-evolution.vercel.app",
     ]
 
     # ===================
