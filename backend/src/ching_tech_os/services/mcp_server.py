@@ -1242,7 +1242,7 @@ async def search_knowledge(
     搜尋知識庫
 
     Args:
-        query: 搜尋關鍵字
+        query: 搜尋關鍵字（使用 * 或空字串可列出全部知識）
         project: 專案過濾（如：專案 ID 或名稱）
         category: 分類過濾（如：technical, process, tool）
         limit: 最大結果數量，預設 5
@@ -1258,6 +1258,11 @@ async def search_knowledge(
         return f"❌ {error_msg}"
 
     from . import knowledge as kb_service
+
+    # 處理特殊查詢：* 或空字串表示列出全部
+    search_query: str | None = query
+    if query in ("*", "all", "全部", "列表", ""):
+        search_query = None  # 不進行關鍵字搜尋，列出全部
 
     # 取得使用者名稱（用於搜尋個人知識）
     current_username: str | None = None
@@ -1275,7 +1280,7 @@ async def search_knowledge(
 
     try:
         result = kb_service.search_knowledge(
-            query=query,
+            query=search_query,
             project=project,
             category=category,
             current_username=current_username,
@@ -1283,11 +1288,17 @@ async def search_knowledge(
         )
 
         if not result.items:
-            return f"找不到包含「{query}」的知識"
+            if search_query:
+                return f"找不到包含「{query}」的知識"
+            else:
+                return "知識庫目前是空的"
 
         # 格式化結果
         items = result.items[:limit]
-        output = [f"搜尋「{query}」找到 {len(result.items)} 筆結果：\n"]
+        if search_query:
+            output = [f"搜尋「{query}」找到 {len(result.items)} 筆結果：\n"]
+        else:
+            output = [f"📚 知識庫共有 {len(result.items)} 筆知識：\n"]
 
         for item in items:
             tags_str = ", ".join(item.tags.topics) if item.tags.topics else "無標籤"
@@ -1598,6 +1609,7 @@ async def get_knowledge_attachments(
             filename = Path(att.path).name
             output.append(f"[{idx}] {att.type}")
             output.append(f"    檔名：{filename}")
+            output.append(f"    路徑：{att.path}")  # 完整路徑，供 prepare_file_message 使用
             if att.size:
                 output.append(f"    大小：{att.size}")
             if att.description:
@@ -1606,7 +1618,7 @@ async def get_knowledge_attachments(
                 output.append("    說明：（無）")
             output.append("")
 
-        output.append("提示：使用 update_knowledge_attachment 更新附件說明")
+        output.append("提示：使用 prepare_file_message(file_path=路徑) 準備附件發送")
         return "\n".join(output)
 
     except Exception as e:
@@ -2706,7 +2718,11 @@ async def prepare_file_message(
     準備檔案訊息供 Line Bot 回覆。圖片會直接顯示在回覆中，其他檔案會以連結形式呈現。
 
     Args:
-        file_path: NAS 檔案的完整路徑（從 search_nas_files 取得）
+        file_path: 檔案路徑，支援以下格式：
+            - NAS 檔案路徑（從 search_nas_files 取得）
+            - 知識庫附件路徑（從 get_knowledge_attachments 取得的 attachment.path）
+              例如：local://knowledge/assets/images/kb-001-demo.png
+                   ctos://knowledge/attachments/kb-001/file.pdf
         ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
         ctos_tenant_id: 租戶 ID（從對話識別取得）
 
@@ -2724,7 +2740,9 @@ async def prepare_file_message(
     tid = _get_tenant_id(ctos_tenant_id)
 
     import json
+    import re
     from pathlib import Path
+    from urllib.parse import quote
     from .share import (
         create_share_link as _create_share_link,
         validate_nas_file_path,
@@ -2732,80 +2750,164 @@ async def prepare_file_message(
         NasFileNotFoundError,
         NasFileAccessDenied,
     )
+    from .path_manager import path_manager, StorageZone
     from ..models.share import ShareLinkCreate
-
-    # 驗證檔案路徑（傳入 tenant_id 以正確解析 CTOS 路徑）
-    try:
-        full_path = validate_nas_file_path(file_path, tenant_id=tid)
-    except NasFileNotFoundError as e:
-        return f"錯誤：{e}"
-    except NasFileAccessDenied as e:
-        return f"錯誤：{e}"
-
-    # 取得檔案資訊
-    file_name = full_path.name
-    file_size = full_path.stat().st_size
-    file_ext = full_path.suffix.lower().lstrip(".")
-
-    # 格式化檔案大小
-    if file_size >= 1024 * 1024:
-        size_str = f"{file_size / 1024 / 1024:.1f}MB"
-    else:
-        size_str = f"{file_size / 1024:.1f}KB"
+    from ..config import settings
 
     # 判斷是否為圖片（Line ImageMessage 支援的格式）
     image_extensions = {"jpg", "jpeg", "png", "gif", "webp"}
-    is_image = file_ext in image_extensions
-
     # Line ImageMessage 限制 10MB
     max_image_size = 10 * 1024 * 1024
 
-    # 產生分享連結
-    try:
-        data = ShareLinkCreate(
-            resource_type="nas_file",
-            resource_id=file_path,
-            expires_in="24h",
-        )
-        result = await _create_share_link(data, "linebot", tenant_id=tid)
-    except Exception as e:
-        return f"建立分享連結失敗：{e}"
+    # 檢測是否為知識庫附件路徑（local:// 或含有 knowledge 的 ctos://）
+    is_knowledge_attachment = (
+        file_path.startswith("local://knowledge/") or
+        file_path.startswith("ctos://knowledge/") or
+        file_path.startswith("nas://knowledge/")
+    )
 
-    # 下載連結需要加上 /download
-    download_url = result.full_url.replace("/s/", "/api/public/") + "/download"
+    if is_knowledge_attachment:
+        # ===== 知識庫附件處理 =====
+        # 使用 path_manager 解析路徑
+        try:
+            parsed = path_manager.parse(file_path)
+            fs_path = Path(path_manager.to_filesystem(file_path, tenant_id=tid))
+        except ValueError as e:
+            return f"錯誤：無法解析路徑 - {e}"
 
-    # 計算相對於 linebot_local_path 的路徑（用於存 line_files）
-    # full_path: /mnt/nas/ctos/linebot/files/ai-images/xxx.jpg
-    # linebot_local_path: /mnt/nas/ctos/linebot/files
-    # relative_nas_path: ai-images/xxx.jpg
-    from ..config import settings
-    linebot_base = settings.linebot_local_path
-    full_path_str = str(full_path)
-    if full_path_str.startswith(linebot_base):
-        relative_nas_path = full_path_str[len(linebot_base):].lstrip("/")
+        if not fs_path.exists():
+            return f"錯誤：檔案不存在 - {fs_path.name}"
+
+        # 從檔名或路徑中提取 kb_id
+        # 本機附件格式：local://knowledge/assets/images/{kb_id}-{filename}
+        # NAS 附件格式：ctos://knowledge/attachments/{kb_id}/{filename}
+        file_name = fs_path.name
+        kb_id = None
+
+        if parsed.zone == StorageZone.LOCAL:
+            # 本機附件：從檔名提取 kb_id（格式：{kb_id}-{filename}）
+            match = re.match(r"^(kb-\d+)-", file_name)
+            if match:
+                kb_id = match.group(1)
+        else:
+            # NAS 附件：從路徑提取 kb_id（格式：knowledge/attachments/{kb_id}/...）
+            path_match = re.search(r"knowledge/attachments/(kb-\d+)/", parsed.path)
+            if path_match:
+                kb_id = path_match.group(1)
+
+        if not kb_id:
+            return f"錯誤：無法從路徑中識別知識庫 ID - {file_path}"
+
+        # 取得檔案資訊
+        file_size = fs_path.stat().st_size
+        file_ext = fs_path.suffix.lower().lstrip(".")
+
+        # 格式化檔案大小
+        if file_size >= 1024 * 1024:
+            size_str = f"{file_size / 1024 / 1024:.1f}MB"
+        else:
+            size_str = f"{file_size / 1024:.1f}KB"
+
+        is_image = file_ext in image_extensions
+
+        # 為知識文章建立分享連結
+        try:
+            data = ShareLinkCreate(
+                resource_type="knowledge",
+                resource_id=kb_id,
+                expires_in="24h",
+            )
+            result = await _create_share_link(data, "linebot", tenant_id=tid)
+        except Exception as e:
+            return f"建立分享連結失敗：{e}"
+
+        # 組合附件下載 URL
+        # 格式：/api/public/{token}/attachments/{encoded_path}
+        encoded_path = quote(file_path, safe="")
+        download_url = f"{settings.public_url}/api/public/{result.token}/attachments/{encoded_path}"
+
+        # 組合檔案訊息標記
+        if is_image and file_size <= max_image_size:
+            file_info = {
+                "type": "image",
+                "url": download_url,
+                "name": file_name,
+                "kb_path": file_path,  # 知識庫附件路徑
+            }
+            hint = f"已準備好知識庫圖片 {file_name}，會顯示在回覆中"
+        else:
+            file_info = {
+                "type": "file",
+                "url": download_url,
+                "name": file_name,
+                "size": size_str,
+                "kb_path": file_path,
+            }
+            hint = f"已準備好知識庫檔案 {file_name}（{size_str}），會以連結形式顯示"
+
     else:
-        relative_nas_path = full_path_str  # 其他路徑保持原樣
+        # ===== NAS 檔案處理（原有邏輯）=====
+        # 驗證檔案路徑（傳入 tenant_id 以正確解析 CTOS 路徑）
+        try:
+            full_path = validate_nas_file_path(file_path, tenant_id=tid)
+        except NasFileNotFoundError as e:
+            return f"錯誤：{e}"
+        except NasFileAccessDenied as e:
+            return f"錯誤：{e}"
 
-    # 組合檔案訊息標記
-    if is_image and file_size <= max_image_size:
-        # 小圖片：標記為 image 類型
-        file_info = {
-            "type": "image",
-            "url": download_url,
-            "name": file_name,
-            "nas_path": relative_nas_path,  # 相對路徑，用於 line_files 存儲
-        }
-        hint = f"已準備好圖片 {file_name}，會顯示在回覆中"
-    else:
-        # 其他檔案或大圖片：標記為 file 類型
-        file_info = {
-            "type": "file",
-            "url": result.full_url,
-            "name": file_name,
-            "size": size_str,
-            "nas_path": relative_nas_path,  # 相對路徑，用於 line_files 存儲
-        }
-        hint = f"已準備好檔案 {file_name}（{size_str}），會以連結形式顯示"
+        # 取得檔案資訊
+        file_name = full_path.name
+        file_size = full_path.stat().st_size
+        file_ext = full_path.suffix.lower().lstrip(".")
+
+        # 格式化檔案大小
+        if file_size >= 1024 * 1024:
+            size_str = f"{file_size / 1024 / 1024:.1f}MB"
+        else:
+            size_str = f"{file_size / 1024:.1f}KB"
+
+        is_image = file_ext in image_extensions
+
+        # 產生分享連結
+        try:
+            data = ShareLinkCreate(
+                resource_type="nas_file",
+                resource_id=file_path,
+                expires_in="24h",
+            )
+            result = await _create_share_link(data, "linebot", tenant_id=tid)
+        except Exception as e:
+            return f"建立分享連結失敗：{e}"
+
+        # 下載連結需要加上 /download
+        download_url = result.full_url.replace("/s/", "/api/public/") + "/download"
+
+        # 計算相對於 linebot_local_path 的路徑（用於存 line_files）
+        linebot_base = settings.linebot_local_path
+        full_path_str = str(full_path)
+        if full_path_str.startswith(linebot_base):
+            relative_nas_path = full_path_str[len(linebot_base):].lstrip("/")
+        else:
+            relative_nas_path = full_path_str  # 其他路徑保持原樣
+
+        # 組合檔案訊息標記
+        if is_image and file_size <= max_image_size:
+            file_info = {
+                "type": "image",
+                "url": download_url,
+                "name": file_name,
+                "nas_path": relative_nas_path,
+            }
+            hint = f"已準備好圖片 {file_name}，會顯示在回覆中"
+        else:
+            file_info = {
+                "type": "file",
+                "url": result.full_url,
+                "name": file_name,
+                "size": size_str,
+                "nas_path": relative_nas_path,
+            }
+            hint = f"已準備好檔案 {file_name}（{size_str}），會以連結形式顯示"
 
     # 回傳標記（linebot_ai.py 會解析這個標記）
     marker = f"[FILE_MESSAGE:{json.dumps(file_info, ensure_ascii=False)}]"
