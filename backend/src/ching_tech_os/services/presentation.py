@@ -489,8 +489,6 @@ async def generate_html_presentation(
 
     except Exception as e:
         logger.error(f"上傳 NAS 失敗: {e}")
-        local_dir = f"{settings.ctos_mount_path}/{relative_path}"
-        os.makedirs(local_dir, exist_ok=True)
         local_path = f"{local_dir}/{filename}"
 
         write_mode = "wb" if output_format == "pdf" else "w"

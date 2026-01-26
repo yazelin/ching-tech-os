@@ -5316,7 +5316,7 @@ async def generate_presentation(
             image_source=image_source,
             outline_json=outline_json,
             output_format=output_format,
-            tenant_id=tid,
+            tenant_id=str(tid),
         )
 
         theme_names = {
