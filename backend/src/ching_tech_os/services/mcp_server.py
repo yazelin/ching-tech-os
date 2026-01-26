@@ -2582,6 +2582,136 @@ async def create_share_link(
 
 
 @mcp.tool()
+async def share_knowledge_attachment(
+    kb_id: str,
+    attachment_idx: int,
+    expires_in: str | None = "24h",
+    ctos_tenant_id: str | None = None,
+) -> str:
+    """
+    分享知識庫附件（適用於 .md2ppt 或 .md2doc 檔案）
+
+    此工具會：
+    1. 讀取知識庫附件內容
+    2. 建立分享連結
+    3. 根據檔案類型產生對應的前端 URL
+
+    Args:
+        kb_id: 知識庫 ID（如 kb-001）
+        attachment_idx: 附件索引（從 0 開始，依照知識庫中的附件順序）
+        expires_in: 有效期限，可選 1h、24h、7d、null（永久），預設 24h
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
+
+    Returns:
+        分享連結資訊，包含密碼
+    """
+    tid = _get_tenant_id(ctos_tenant_id)
+    await ensure_db_connection()
+
+    from pathlib import Path
+    from .knowledge import get_knowledge, get_nas_attachment, KnowledgeNotFoundError, KnowledgeError
+    from .share import (
+        create_share_link as _create_share_link,
+        ShareError,
+    )
+    from ..models.share import ShareLinkCreate
+    from .path_manager import path_manager, StorageZone
+
+    # 驗證有效期限
+    valid_expires = {"1h", "24h", "7d", "null", None}
+    if expires_in not in valid_expires:
+        return f"錯誤：有效期限必須是 1h、24h、7d 或 null（永久），收到：{expires_in}"
+
+    try:
+        # 取得知識庫
+        knowledge = get_knowledge(kb_id, tenant_id=tid)
+
+        # 檢查附件索引
+        if attachment_idx < 0 or attachment_idx >= len(knowledge.attachments):
+            return f"錯誤：附件索引 {attachment_idx} 超出範圍，知識 {kb_id} 共有 {len(knowledge.attachments)} 個附件"
+
+        attachment = knowledge.attachments[attachment_idx]
+        attachment_path = attachment.path
+        filename = Path(attachment_path).name
+
+        # 判斷檔案類型
+        ext = Path(filename).suffix.lower()
+        if ext not in (".md2ppt", ".md2doc"):
+            return f"錯誤：此工具僅支援 .md2ppt 或 .md2doc 檔案，收到：{filename}"
+
+        # 讀取附件內容
+        parsed = path_manager.parse(attachment_path)
+        if parsed.zone == StorageZone.CTOS and parsed.path.startswith("knowledge/"):
+            # CTOS 區的知識庫檔案
+            nas_path = parsed.path.replace("knowledge/", "", 1)
+            content = get_nas_attachment(nas_path, tenant_id=tid).decode('utf-8')
+        elif parsed.zone == StorageZone.LOCAL:
+            # 本機檔案
+            from .local_file import create_knowledge_file_service
+            _, _, assets_path, _ = _get_tenant_paths_for_knowledge(tid)
+            file_name_only = parsed.path.split("/")[-1]
+            local_path = assets_path / "images" / file_name_only
+            content = local_path.read_text(encoding='utf-8')
+        else:
+            return f"錯誤：不支援的附件路徑格式：{attachment_path}"
+
+        # 建立分享連結（使用 content 類型）
+        data = ShareLinkCreate(
+            resource_type="content",
+            resource_id="",
+            content=content,
+            content_type="text/markdown",
+            filename=filename,
+            expires_in=expires_in,
+        )
+        result = await _create_share_link(data, "linebot", tenant_id=tid)
+
+        # 根據檔案類型產生前端 URL
+        if ext == ".md2ppt":
+            app_url = f"https://md2ppt.ching-tech.com/?shareToken={result.token}"
+            app_name = "MD2PPT"
+        else:  # .md2doc
+            app_url = f"https://md2doc.ching-tech.com/?shareToken={result.token}"
+            app_name = "MD2DOC"
+
+        # 轉換為台北時區顯示
+        if result.expires_at:
+            expires_taipei = to_taipei_time(result.expires_at)
+            expires_text = f"有效至 {expires_taipei.strftime('%Y-%m-%d %H:%M')}"
+        else:
+            expires_text = "永久有效"
+
+        return f"""已建立 {app_name} 分享連結！
+
+📎 連結：{app_url}
+🔑 密碼：{result.password}
+📄 檔案：{filename}
+⏰ {expires_text}
+
+請將連結和密碼一起傳給需要查看的人。"""
+
+    except KnowledgeNotFoundError as e:
+        return f"錯誤：{e}"
+    except KnowledgeError as e:
+        return f"錯誤：{e}"
+    except ShareError as e:
+        return f"錯誤：{e}"
+    except Exception as e:
+        return f"建立分享連結時發生錯誤：{e}"
+
+
+def _get_tenant_paths_for_knowledge(tenant_id: str | None = None):
+    """取得租戶專屬的知識庫路徑（內部輔助函數）"""
+    from ..config import settings
+    from pathlib import Path
+    base_path = Path(settings.get_tenant_knowledge_path(tenant_id))
+    entries_path = base_path / "entries"
+    assets_path = base_path / "assets"
+    index_path = base_path / "index.json"
+    return base_path, entries_path, assets_path, index_path
+
+
+@mcp.tool()
 async def send_nas_file(
     file_path: str,
     line_user_id: str | None = None,
@@ -5743,9 +5873,21 @@ async def generate_md2ppt(
     max_retries = 3
     last_error = ""
 
+    # DEBUG: 使用文件日誌追蹤 MCP Server 執行
+    import time
+    debug_log_path = "/tmp/mcp_server_debug.log"
+    def debug_log(msg):
+        with open(debug_log_path, "a") as f:
+            f.write(f"[{time.strftime('%H:%M:%S')}] {msg}\n")
+            f.flush()
+
     for attempt in range(max_retries):
         try:
+            debug_log(f"generate_md2ppt: 開始 attempt={attempt}")
+            debug_log(f"generate_md2ppt: prompt 長度={len(user_prompt)}")
+
             # 呼叫 Claude 產生內容
+            debug_log("generate_md2ppt: 準備呼叫 call_claude...")
             response = await call_claude(
                 prompt=user_prompt if attempt == 0 else f"{user_prompt}\n\n⚠️ 上次產生的內容有格式錯誤，請修正：\n{last_error}",
                 model="sonnet",
@@ -5753,10 +5895,14 @@ async def generate_md2ppt(
                 timeout=180,
             )
 
+            debug_log(f"generate_md2ppt: call_claude 完成，success={response.success}")
+
             if not response.success:
+                debug_log(f"generate_md2ppt: AI 失敗: {response.error}")
                 return f"❌ AI 產生失敗：{response.error}"
 
             generated_content = response.message.strip()
+            debug_log(f"generate_md2ppt: 原始回應長度={len(generated_content)}")
 
             # 移除可能的 markdown 標記
             if generated_content.startswith("```"):
@@ -5767,8 +5913,73 @@ async def generate_md2ppt(
                     lines = lines[:-1]
                 generated_content = "\n".join(lines)
 
+            debug_log(f"generate_md2ppt: 處理後內容長度={len(generated_content)}")
+
+            # 自動修正常見格式問題
+            import re
+
+            def fix_md2ppt_format(content: str) -> str:
+                """修正 MD2PPT 常見格式問題"""
+                lines = content.split('\n')
+                result = []
+
+                # 用於匹配 :: right :: 的各種變體
+                right_col_pattern = re.compile(r'^(\s*)::[\s]*right[\s]*::[\s]*$', re.IGNORECASE)
+                # 用於匹配 === 分頁符
+                page_break_pattern = re.compile(r'^[\s]*===[\s]*$')
+                # 用於匹配 ::: 結束標記
+                block_end_pattern = re.compile(r'^[\s]*:::[\s]*$')
+                # 用於匹配 ::: chart-xxx 開始標記
+                chart_start_pattern = re.compile(r'^[\s]*:::[\s]*chart', re.IGNORECASE)
+
+                for i, line in enumerate(lines):
+                    stripped = line.strip()
+                    is_right_col = right_col_pattern.match(line)
+                    is_page_break = page_break_pattern.match(line)
+                    is_block_end = block_end_pattern.match(line)
+                    is_chart_start = chart_start_pattern.match(line)
+
+                    # 這些模式前面需要空行
+                    if is_right_col or is_page_break or is_block_end or is_chart_start:
+                        # 確保前面有空行
+                        if result and result[-1].strip() != '':
+                            result.append('')
+                        result.append(line)
+                    else:
+                        # 檢查前一行是否是需要後面空行的模式
+                        if result:
+                            prev_line = result[-1]
+                            need_blank = (
+                                right_col_pattern.match(prev_line) or
+                                page_break_pattern.match(prev_line) or
+                                chart_start_pattern.match(prev_line)
+                            )
+                            if need_blank and stripped != '':
+                                result.append('')
+                        result.append(line)
+
+                return '\n'.join(result)
+
+            # DEBUG: 輸出 :: right :: 前後的上下文（5行範圍）
+            lines = generated_content.split('\n')
+            for i, l in enumerate(lines):
+                if 'right' in l.lower() and '::' in l:
+                    start = max(0, i-3)
+                    end = min(len(lines), i+3)
+                    context = [(j+1, repr(lines[j])) for j in range(start, end)]
+                    debug_log(f"generate_md2ppt: right 上下文: {context}")
+
+            generated_content = fix_md2ppt_format(generated_content)
+
+            after_lines = [f"{i+1}: {repr(l)}" for i, l in enumerate(generated_content.split('\n')) if 'right' in l.lower() or '::' in l]
+            debug_log(f"generate_md2ppt: 修正後關鍵行: {after_lines[:5]}")
+            debug_log(f"generate_md2ppt: 自動修正後長度={len(generated_content)}")
+
             # 驗證格式
             validation = validate_md2ppt(generated_content)
+            debug_log(f"generate_md2ppt: 驗證結果 valid={validation.valid}")
+            if not validation.valid:
+                debug_log(f"generate_md2ppt: 驗證錯誤: {validation.to_error_message()[:500]}")
 
             if validation.valid:
                 # 驗證通過，建立分享連結
@@ -5789,10 +6000,34 @@ async def generate_md2ppt(
                 # 產生 MD2PPT 連結
                 md2ppt_url = f"https://md-2-ppt-evolution.vercel.app/?shareToken={share_link.token}"
 
+                # 同時保存檔案到 NAS，以便加入知識庫附件
+                from ..config import settings
+                from pathlib import Path
+                import uuid
+
+                file_id = str(uuid.uuid4())[:8]
+                filename = f"presentation-{file_id}.md2ppt"
+
+                # 保存到 ai-generated 目錄（多租戶支援）
+                if tid:
+                    save_dir = Path(settings.ctos_mount_path) / "tenants" / str(tid) / "linebot" / "ai-generated"
+                else:
+                    save_dir = Path(settings.ctos_mount_path) / "linebot" / "files" / "ai-generated"
+
+                save_dir.mkdir(parents=True, exist_ok=True)
+                save_path = save_dir / filename
+                save_path.write_text(generated_content, encoding="utf-8")
+
+                # 產生可用於 add_attachments_to_knowledge 的路徑
+                attachment_path = f"ai-generated/{filename}"
+
                 return f"""✅ 簡報產生成功！
 
 🔗 開啟連結：{md2ppt_url}
 🔑 存取密碼：{share_link.password}
+
+📎 檔案路徑：{attachment_path}
+（可用 add_attachments_to_knowledge 加入知識庫附件）
 
 ⏰ 連結有效期限：24 小時
 💡 開啟後可直接編輯並匯出為 PPT"""
@@ -5888,10 +6123,34 @@ async def generate_md2doc(
                 # 產生 MD2DOC 連結
                 md2doc_url = f"https://md-2-doc-evolution.vercel.app/?shareToken={share_link.token}"
 
+                # 同時保存檔案到 NAS，以便加入知識庫附件
+                from ..config import settings
+                from pathlib import Path
+                import uuid
+
+                file_id = str(uuid.uuid4())[:8]
+                filename = f"document-{file_id}.md2doc"
+
+                # 保存到 ai-generated 目錄（多租戶支援）
+                if tid:
+                    save_dir = Path(settings.ctos_mount_path) / "tenants" / str(tid) / "linebot" / "ai-generated"
+                else:
+                    save_dir = Path(settings.ctos_mount_path) / "linebot" / "files" / "ai-generated"
+
+                save_dir.mkdir(parents=True, exist_ok=True)
+                save_path = save_dir / filename
+                save_path.write_text(generated_content, encoding="utf-8")
+
+                # 產生可用於 add_attachments_to_knowledge 的路徑
+                attachment_path = f"ai-generated/{filename}"
+
                 return f"""✅ 文件產生成功！
 
 🔗 開啟連結：{md2doc_url}
 🔑 存取密碼：{share_link.password}
+
+📎 檔案路徑：{attachment_path}
+（可用 add_attachments_to_knowledge 加入知識庫附件）
 
 ⏰ 連結有效期限：24 小時
 💡 開啟後可直接編輯並匯出為 Word"""

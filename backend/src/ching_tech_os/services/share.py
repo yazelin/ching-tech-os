@@ -78,10 +78,11 @@ def generate_token(length: int = 6) -> str:
     return "".join(secrets.choice(alphabet) for _ in range(length))
 
 
-def generate_password(length: int = 6) -> str:
+def generate_password(length: int = 4) -> str:
     """產生隨機數字密碼
 
     使用加密安全的隨機產生器，只使用數字方便手機輸入
+    預設 4 位數，與前端 UI 一致
     """
     return "".join(secrets.choice(string.digits) for _ in range(length))
 

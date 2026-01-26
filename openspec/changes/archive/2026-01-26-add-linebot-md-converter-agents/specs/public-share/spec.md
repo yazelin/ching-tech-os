@@ -1,6 +1,6 @@
 # public-share spec delta
 
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: Share Link with Password
 系統 SHALL 支援建立帶密碼保護的分享連結。

@@ -171,7 +171,8 @@ def validate_md2ppt(content: str) -> ValidationResult:
                 ))
 
     # 檢查圖表結束標記 ::: 前是否有空行
-    chart_end_pattern = re.compile(r'\n(\s*):::\s*$', re.MULTILINE)
+    # 注意：使用 [ \t]* 而不是 \s*，避免匹配到換行符
+    chart_end_pattern = re.compile(r'\n([ \t]*):::[ \t]*$', re.MULTILINE)
     for match in chart_end_pattern.finditer(content):
         line_num = content[:match.start()].count('\n') + 2
         # 檢查前一行是否為空
@@ -189,16 +190,23 @@ def validate_md2ppt(content: str) -> ValidationResult:
                 ))
 
     # 5. 檢查 :: right :: 前後空行
-    right_col_pattern = re.compile(r'^(\s*)::[\s]*right[\s]*::', re.MULTILINE | re.IGNORECASE)
+    # 注意：使用 [ \t]* 而不是 \s*，避免匹配到換行符
+    right_col_pattern = re.compile(r'^[ \t]*::[ \t]*right[ \t]*::', re.MULTILINE | re.IGNORECASE)
     for match in right_col_pattern.finditer(content):
         line_num = content[:match.start()].count('\n') + 1
 
-        # 檢查前一行
+        # 檢查前一行（緊接著 :: right :: 的那一行）
         if match.start() > 0:
-            prev_idx = content.rfind('\n', 0, match.start())
-            if prev_idx >= 0:
-                prev_line_start = content.rfind('\n', 0, prev_idx) + 1 if prev_idx > 0 else 0
-                prev_line = content[prev_line_start:prev_idx]
+            prev_newline_idx = content.rfind('\n', 0, match.start())
+            if prev_newline_idx >= 0:
+                # 取得緊接著的前一行內容
+                prev_line_start = content.rfind('\n', 0, prev_newline_idx)
+                if prev_line_start == -1:
+                    # :: right :: 在第二行，前一行是第一行
+                    prev_line = content[0:prev_newline_idx]
+                else:
+                    prev_line = content[prev_line_start + 1:prev_newline_idx]
+
                 if prev_line.strip() != "":
                     errors.append(ValidationError(
                         line=line_num,
@@ -206,13 +214,13 @@ def validate_md2ppt(content: str) -> ValidationResult:
                         suggestion="在 :: right :: 前面加一個空行"
                     ))
 
-        # 檢查後一行
-        next_idx = content.find('\n', match.end())
-        if next_idx >= 0:
-            next_line_end = content.find('\n', next_idx + 1)
+        # 檢查後一行（緊接著 :: right :: 的那一行）
+        next_newline_idx = content.find('\n', match.end())
+        if next_newline_idx >= 0:
+            next_line_end = content.find('\n', next_newline_idx + 1)
             if next_line_end == -1:
                 next_line_end = len(content)
-            next_line = content[next_idx + 1:next_line_end]
+            next_line = content[next_newline_idx + 1:next_line_end]
             if next_line.strip() != "":
                 errors.append(ValidationError(
                     line=line_num,
