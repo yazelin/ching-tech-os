@@ -145,6 +145,12 @@ def validate_nas_file_path(file_path: str, tenant_id: str | None = None) -> Path
 
         full_path = Path(path_manager.to_filesystem(file_path, tenant_id))
 
+        # CTOS zone 多租戶 fallback：如果租戶路徑不存在，嘗試共用路徑
+        if parsed.zone == StorageZone.CTOS and tid_str and not full_path.exists():
+            fallback_path = Path(path_manager.to_filesystem(file_path, None))
+            if fallback_path.exists():
+                full_path = fallback_path
+
     # 安全檢查：確保路徑在 /mnt/nas/ 下
     nas_path = Path(settings.nas_mount_path)
     try:

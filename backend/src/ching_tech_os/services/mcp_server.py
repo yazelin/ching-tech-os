@@ -64,25 +64,27 @@ async def ensure_db_connection():
 DEFAULT_TENANT_ID = UUID("00000000-0000-0000-0000-000000000000")
 
 
-def _get_tenant_id(tenant_id: str | None) -> UUID:
+def _get_tenant_id(tenant_id: str | None) -> str:
     """
-    轉換租戶 ID 字串為 UUID
+    取得租戶 ID 字串
 
     Args:
-        tenant_id: 租戶 ID 字串或 UUID，None 則返回預設租戶
+        tenant_id: 租戶 ID 字串，None 則返回預設租戶
 
     Returns:
-        租戶 UUID
+        租戶 ID 字串（UUID 格式）
     """
     if tenant_id is None:
-        return DEFAULT_TENANT_ID
+        return str(DEFAULT_TENANT_ID)
     if isinstance(tenant_id, UUID):
-        return tenant_id
+        return str(tenant_id)
+    # 驗證是否為有效的 UUID 格式
     try:
-        return UUID(tenant_id)
+        UUID(tenant_id)  # 只驗證，不使用
+        return tenant_id
     except ValueError:
         logger.warning(f"無效的租戶 ID: {tenant_id}，使用預設租戶")
-        return DEFAULT_TENANT_ID
+        return str(DEFAULT_TENANT_ID)
 
 
 # ============================================================
@@ -5217,6 +5219,7 @@ async def generate_presentation(
     image_source: str = "pexels",
     outline_json: str | dict | None = None,
     output_format: str = "html",
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     生成簡報（HTML 或 PDF，使用 Marp）
@@ -5303,6 +5306,9 @@ async def generate_presentation(
     if isinstance(outline_json, dict):
         outline_json = _json.dumps(outline_json, ensure_ascii=False)
 
+    # 取得租戶 ID
+    tid = _get_tenant_id(ctos_tenant_id)
+
     try:
         result = await generate_html_presentation(
             topic=topic or "簡報",
@@ -5312,6 +5318,7 @@ async def generate_presentation(
             image_source=image_source,
             outline_json=outline_json,
             output_format=output_format,
+            tenant_id=tid,
         )
 
         theme_names = {

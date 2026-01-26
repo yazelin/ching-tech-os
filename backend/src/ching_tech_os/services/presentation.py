@@ -367,6 +367,7 @@ async def generate_html_presentation(
     image_source: str = "pexels",
     outline_json: Optional[str | dict] = None,
     output_format: str = "html",
+    tenant_id: Optional[str] = None,
 ) -> dict:
     """
     生成 Marp 簡報（HTML 或 PDF）
@@ -379,6 +380,7 @@ async def generate_html_presentation(
         image_source: 圖片來源（pexels, huggingface, nanobanana）
         outline_json: 直接傳入大綱 JSON
         output_format: 輸出格式（html 或 pdf）
+        tenant_id: 租戶 ID（多租戶模式下存到租戶專屬目錄）
 
     Returns:
         包含簡報資訊和 NAS 路徑的 dict
@@ -460,6 +462,16 @@ async def generate_html_presentation(
     safe_topic = sanitize_filename(pres_title)
     filename = f"{safe_topic}_{timestamp}{output_ext}"
 
+    # 多租戶模式：存到租戶專屬目錄
+    if tenant_id:
+        relative_path = f"tenants/{tenant_id}/{PRESENTATION_NAS_PATH}"
+    else:
+        relative_path = PRESENTATION_NAS_PATH
+
+    # 確保目錄存在（使用本機掛載點建立）
+    local_dir = f"{settings.ctos_mount_path}/{relative_path}"
+    os.makedirs(local_dir, exist_ok=True)
+
     try:
         smb = SMBService(
             host=settings.nas_host,
@@ -468,7 +480,7 @@ async def generate_html_presentation(
         )
         smb.connect()
 
-        nas_file_path = f"ching-tech-os/{PRESENTATION_NAS_PATH}/{filename}"
+        nas_file_path = f"ching-tech-os/{relative_path}/{filename}"
         file_data = output_content if output_format == "pdf" else output_content.encode("utf-8")
         smb.write_file(settings.nas_share, nas_file_path, file_data)
         smb.disconnect()
@@ -477,8 +489,6 @@ async def generate_html_presentation(
 
     except Exception as e:
         logger.error(f"上傳 NAS 失敗: {e}")
-        local_dir = f"{settings.ctos_mount_path}/{PRESENTATION_NAS_PATH}"
-        os.makedirs(local_dir, exist_ok=True)
         local_path = f"{local_dir}/{filename}"
 
         write_mode = "wb" if output_format == "pdf" else "w"
@@ -490,7 +500,7 @@ async def generate_html_presentation(
         "success": True,
         "title": outline.get("title", topic),
         "slides_count": len(outline.get("slides", [])),
-        "nas_path": f"{PRESENTATION_NAS_PATH}/{filename}",
+        "nas_path": f"{relative_path}/{filename}",
         "filename": filename,
         "format": output_format,
     }
