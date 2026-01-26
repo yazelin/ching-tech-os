@@ -5707,7 +5707,7 @@ MD2DOC_SYSTEM_PROMPT = '''你現在是一位精通「MD2DOC-Evolution」的技�
 
 
 @mcp.tool()
-async def generate_presentation(
+async def generate_md2ppt(
     content: str,
     style: str | None = None,
     ctos_user_id: int | None = None,
@@ -5715,6 +5715,9 @@ async def generate_presentation(
 ) -> str:
     """
     產生 MD2PPT 格式的簡報內容，並建立帶密碼保護的分享連結
+
+    用戶說「做簡報」「投影片」「PPT」時呼叫此工具。
+    與 generate_presentation（Marp HTML/PDF）不同，此工具產生可線上編輯的簡報。
 
     Args:
         content: 要轉換為簡報的內容或主題
@@ -5800,7 +5803,7 @@ async def generate_presentation(
                 logger.warning(f"MD2PPT 驗證失敗 (嘗試 {attempt + 1}/{max_retries}): {last_error}")
 
         except Exception as e:
-            logger.error(f"generate_presentation 錯誤: {e}")
+            logger.error(f"generate_md2ppt 錯誤: {e}")
             return f"❌ 產生簡報時發生錯誤：{str(e)}"
 
     # 所有嘗試都失敗
@@ -5808,13 +5811,15 @@ async def generate_presentation(
 
 
 @mcp.tool()
-async def generate_document(
+async def generate_md2doc(
     content: str,
     ctos_user_id: int | None = None,
     ctos_tenant_id: str | None = None,
 ) -> str:
     """
     產生 MD2DOC 格式的文件內容，並建立帶密碼保護的分享連結
+
+    用戶說「寫文件」「做報告」「說明書」「教學」「SOP」時呼叫此工具。
 
     Args:
         content: 要轉換為文件的內容
@@ -5897,7 +5902,7 @@ async def generate_document(
                 logger.warning(f"MD2DOC 驗證失敗 (嘗試 {attempt + 1}/{max_retries}): {last_error}")
 
         except Exception as e:
-            logger.error(f"generate_document 錯誤: {e}")
+            logger.error(f"generate_md2doc 錯誤: {e}")
             return f"❌ 產生文件時發生錯誤：{str(e)}"
 
     # 所有嘗試都失敗
