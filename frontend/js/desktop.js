@@ -24,7 +24,9 @@ const DesktopModule = (function() {
     { id: 'share-manager', name: '分享管理', icon: 'mdi-share-variant' },
     { id: 'tenant-admin', name: '租戶管理', icon: 'office-building' },
     { id: 'platform-admin', name: '平台管理', icon: 'shield-crown', requireRole: 'platform_admin' },
-    { id: 'settings', name: '系統設定', icon: 'mdi-cog' }
+    { id: 'settings', name: '系統設定', icon: 'mdi-cog' },
+    { id: 'md2ppt', name: 'md2ppt', icon: 'file-powerpoint' },
+    { id: 'md2doc', name: 'md2doc', icon: 'file-word' }
   ];
 
   /**
@@ -169,6 +171,16 @@ const DesktopModule = (function() {
       case 'platform-admin':
         if (typeof PlatformAdminApp !== 'undefined') {
           PlatformAdminApp.open();
+        }
+        break;
+      case 'md2ppt':
+        if (typeof ExternalAppModule !== 'undefined' && window.EXTERNAL_APP_CONFIG?.md2ppt) {
+          ExternalAppModule.open(window.EXTERNAL_APP_CONFIG.md2ppt);
+        }
+        break;
+      case 'md2doc':
+        if (typeof ExternalAppModule !== 'undefined' && window.EXTERNAL_APP_CONFIG?.md2doc) {
+          ExternalAppModule.open(window.EXTERNAL_APP_CONFIG.md2doc);
         }
         break;
       default:

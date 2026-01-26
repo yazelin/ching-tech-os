@@ -210,6 +210,60 @@ const FileUtils = (function() {
     return getFileCategory(filename) === 'pdf';
   }
 
+  /**
+   * 取得認證 Token
+   * @returns {string}
+   */
+  function getToken() {
+    return (typeof LoginModule !== 'undefined' && LoginModule.getToken?.())
+      || localStorage.getItem('chingtech_token')
+      || '';
+  }
+
+  /**
+   * 認證下載檔案
+   * 使用 fetch + blob 方式下載，自動帶入認證 token
+   * @param {string} url - 下載 URL（可以是相對路徑如 /api/...）
+   * @param {string} [filename] - 下載後的檔名（可選，預設從 URL 取得）
+   * @returns {Promise<void>}
+   */
+  async function downloadWithAuth(url, filename) {
+    const basePath = window.API_BASE || '';
+    const fullUrl = url.startsWith('http') ? url : `${basePath}${url}`;
+    const downloadFilename = filename || url.split('/').pop() || 'download';
+
+    try {
+      const token = getToken();
+      const response = await fetch(fullUrl, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = downloadFilename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      console.error('[FileUtils] 下載失敗:', error);
+      if (typeof NotificationModule !== 'undefined') {
+        NotificationModule.show({
+          title: '下載失敗',
+          message: error.message,
+          icon: 'alert-circle'
+        });
+      }
+      throw error;
+    }
+  }
+
   // 公開 API
   return {
     getExtension,
@@ -222,6 +276,8 @@ const FileUtils = (function() {
     isVideoFile,
     isAudioFile,
     isPdfFile,
+    downloadWithAuth,
+    getToken,
     // 匯出常數供進階使用
     EXTENSIONS,
     ICON_MAP,

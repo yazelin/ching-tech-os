@@ -1299,15 +1299,15 @@ const ProjectManagementModule = (function() {
     if (typeof FileOpener !== 'undefined' && FileOpener.canOpen(att.filename)) {
       FileOpener.open(url, att.filename);
     } else {
-      // 回退到新視窗開啟
-      const basePath = window.API_BASE || '';
-      window.open(`${basePath}${url}`, '_blank');
+      // 回退到認證下載
+      FileUtils.downloadWithAuth(url, att.filename);
     }
   }
 
   function downloadAttachment(attachmentId) {
-    const basePath = window.API_BASE || '';
-    window.open(`${basePath}${API_BASE}/${selectedProject.id}/attachments/${attachmentId}/download`, '_blank');
+    const att = selectedProject.attachments?.find(a => a.id === attachmentId);
+    const filename = att?.filename || 'download';
+    FileUtils.downloadWithAuth(`${API_BASE}/${selectedProject.id}/attachments/${attachmentId}/download`, filename);
   }
 
   async function confirmDeleteAttachment(attachmentId) {

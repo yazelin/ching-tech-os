@@ -17,8 +17,6 @@
 - **WHEN** 用戶不是平台管理員也不是租戶管理員
 - **THEN** 回傳角色 `user`
 
-## MODIFIED Requirements
-
 ### Requirement: Tenant Deletion with CASCADE
 系統 SHALL 在刪除租戶時利用資料庫 CASCADE 機制自動刪除關聯資料，僅對無法設定外鍵的分割資料表執行手動刪除。
 

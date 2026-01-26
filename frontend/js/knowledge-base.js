@@ -956,8 +956,8 @@ const KnowledgeBaseModule = (function() {
    */
   function downloadAttachment(kbId, path) {
     const url = getAttachmentUrl(path);
-    const basePath = window.API_BASE || '';
-    window.open(`${basePath}${url}`, '_blank');
+    const filename = path.split('/').pop();
+    FileUtils.downloadWithAuth(url, filename);
   }
 
   /**
