@@ -1155,7 +1155,7 @@ const LineBotApp = (function () {
                     openFile(file);
                     break;
                 case 'download':
-                    window.open(`${window.API_BASE || ''}/api/linebot/files/${file.id}/download`, '_blank');
+                    FileUtils.downloadWithAuth(`/api/linebot/files/${file.id}/download`, file.file_name);
                     break;
                 case 'delete':
                     const fileName = card?.querySelector('.linebot-file-name')?.textContent || '此檔案';
@@ -1204,7 +1204,7 @@ const LineBotApp = (function () {
             FileOpener.open(fileUrl, fileName);
         } else {
             // 不支援的類型，直接下載
-            window.open(`${window.API_BASE || ''}${fileUrl}`, '_blank');
+            FileUtils.downloadWithAuth(fileUrl, fileName);
         }
     }
 

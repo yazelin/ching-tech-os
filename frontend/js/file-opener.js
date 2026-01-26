@@ -147,6 +147,16 @@ const FileOpener = (function() {
   };
 
   /**
+   * 取得認證 Token
+   * @returns {string}
+   */
+  function getToken() {
+    return (typeof LoginModule !== 'undefined' && LoginModule.getToken?.())
+      || localStorage.getItem('chingtech_token')
+      || '';
+  }
+
+  /**
    * 開啟 md2ppt / md2doc 檔案
    * @param {string} filePath - 檔案路徑或 URL
    * @param {string} filename - 檔案名稱
@@ -161,8 +171,10 @@ const FileOpener = (function() {
     }
 
     try {
-      // 讀取檔案內容
-      const response = await fetch(filePath);
+      // 讀取檔案內容（帶認證 token）
+      const token = getToken();
+      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+      const response = await fetch(filePath, { headers });
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }

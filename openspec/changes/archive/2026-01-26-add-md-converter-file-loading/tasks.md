@@ -49,28 +49,28 @@
 **驗證**：從 Line Bot 載入檔案到外部 App ✓
 
 ### 8. 外部 App 修改（md2ppt）
-- [ ] 監聽 `message` 事件
-- [ ] 發送 `ready` 訊號給父視窗
-- [ ] 接收 `load-file` 訊息
-- [ ] 載入內容到編輯器
+- [x] 監聽 `message` 事件
+- [x] 發送 `ready` 訊號給父視窗
+- [x] 接收 `load-file` 訊息
+- [x] 載入內容到編輯器
 
-**驗證**：md2ppt 可接收並載入檔案（待外部實作）
+**驗證**：md2ppt 可接收並載入檔案 ✓（hooks/useCTOSMessage.ts + useEditorState.ts）
 
 ### 9. 外部 App 修改（md2doc）
-- [ ] 監聽 `message` 事件
-- [ ] 發送 `ready` 訊號給父視窗
-- [ ] 接收 `load-file` 訊息
-- [ ] 載入內容到編輯器
+- [x] 監聽 `message` 事件
+- [x] 發送 `ready` 訊號給父視窗
+- [x] 接收 `load-file` 訊息
+- [x] 載入內容到編輯器
 
-**驗證**：md2doc 可接收並載入檔案（待外部實作）
+**驗證**：md2doc 可接收並載入檔案 ✓（hooks/useCTOSMessage.ts + useEditorState.ts）
 
 ### 10. 整合測試
-- [ ] 測試從 NAS 載入
-- [ ] 測試從知識庫載入
-- [ ] 測試從專案會議載入
-- [ ] 測試從 Line Bot 載入
+- [x] 測試從 NAS 載入
+- [x] 測試從知識庫載入
+- [x] 測試從專案會議載入
+- [x] 測試從 Line Bot 載入
 
-**驗證**：所有來源都能正常載入（待測試）
+**驗證**：所有來源都能正常載入 ✓
 
 ## 完成的檔案變更
 

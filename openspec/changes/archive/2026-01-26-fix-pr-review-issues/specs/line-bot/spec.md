@@ -13,8 +13,6 @@
 - **WHEN** 需要發送超過 5 則訊息
 - **THEN** 自動分批發送，每批最多 5 則
 
-## MODIFIED Requirements
-
 ### Requirement: Reply Fallback to Push
 當 reply_message 失敗時 fallback 到 push_message，SHALL 合併多則訊息為單一請求。
 

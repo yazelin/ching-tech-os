@@ -51,7 +51,8 @@ const ExternalAppModule = (function() {
           <iframe
             class="external-app-iframe"
             src="${url}"
-            allow="clipboard-read; clipboard-write"
+            allow="clipboard-read; clipboard-write; fullscreen; autoplay; camera; microphone; display-capture; window-management"
+            sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-forms allow-modals allow-downloads"
           ></iframe>
           <div class="external-app-error" style="display: none;">
             <span class="icon">${getIcon('mdi-alert-circle')}</span>
@@ -81,9 +82,11 @@ const ExternalAppModule = (function() {
   function handleInit(windowEl, windowId, appId, url, maximized) {
     openWindows[appId] = windowId;
 
-    // 如果需要最大化，在初始化後立即最大化視窗
+    // 如果需要最大化，延遲執行確保 DOM 完全渲染
     if (maximized && typeof WindowModule !== 'undefined') {
-      WindowModule.maximizeWindow(windowId);
+      requestAnimationFrame(() => {
+        WindowModule.maximizeWindow(windowId);
+      });
     }
 
     const iframe = windowEl.querySelector('.external-app-iframe');
