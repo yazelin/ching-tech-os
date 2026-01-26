@@ -703,10 +703,11 @@ async def process_message_with_ai(
 
         # 註：對話歷史中的圖片/檔案暫存已在 get_conversation_context 中處理
 
-        # 準備用戶訊息
-        user_message = content
+        # 準備用戶訊息（格式：user[發送者]: 內容）
         if user_display_name:
-            user_message = f"{user_display_name}: {content}"
+            user_message = f"user[{user_display_name}]: {content}"
+        else:
+            user_message = f"user: {content}"
 
         # 如果是回覆圖片、檔案或文字，在訊息開頭標註
         if quoted_image_path:
@@ -1229,11 +1230,12 @@ async def get_conversation_context(
             else:
                 content = row["content"]
 
-            # 群組對話才加發送者名稱，個人對話不需要
+            # 群組對話才記錄發送者名稱，個人對話不需要
+            sender = None
             if line_group_id and not row["is_from_bot"] and row["display_name"]:
-                content = f"{row['display_name']}: {content}"
+                sender = row["display_name"]
 
-            context.append({"role": role, "content": content})
+            context.append({"role": role, "content": content, "sender": sender})
 
         return context, images, files
 

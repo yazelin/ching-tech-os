@@ -249,12 +249,20 @@ class PathManager:
         if parsed.zone == StorageZone.TEMP and parsed.path.startswith("linebot/"):
             return f"/tmp/linebot-files/{parsed.path[8:]}"
 
-        # 特殊處理 LOCAL zone 的舊格式知識庫圖片路徑
-        # local://knowledge/images/... → data/knowledge/assets/images/...
-        if parsed.zone == StorageZone.LOCAL and parsed.path.startswith("knowledge/images/"):
-            # 將 knowledge/images/ 轉換為 knowledge/assets/images/
-            new_path = "knowledge/assets/images/" + parsed.path[len("knowledge/images/"):]
-            return f"{mount_path}/{new_path}"
+        # LOCAL zone 知識庫路徑的多租戶支援
+        # 多租戶模式下，local://knowledge/... 實際存在租戶的 NAS 目錄
+        if parsed.zone == StorageZone.LOCAL and parsed.path.startswith("knowledge/"):
+            if tenant_id:
+                # 多租戶：映射到租戶專屬目錄
+                # local://knowledge/assets/images/... → /mnt/nas/ctos/tenants/{tenant_id}/knowledge/assets/images/...
+                return f"{self._settings.ctos_mount_path}/tenants/{tenant_id}/{parsed.path}"
+            else:
+                # 單租戶：使用本機 data 目錄
+                # 處理舊格式 knowledge/images/ → knowledge/assets/images/
+                if parsed.path.startswith("knowledge/images/"):
+                    new_path = "knowledge/assets/images/" + parsed.path[len("knowledge/images/"):]
+                    return f"{mount_path}/{new_path}"
+                return f"{mount_path}/{parsed.path}"
 
         # CTOS zone 支援租戶隔離
         if parsed.zone == StorageZone.CTOS and tenant_id:

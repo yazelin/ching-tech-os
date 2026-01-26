@@ -143,14 +143,19 @@ def compose_prompt_with_history(
         for msg in recent_history:
             role = msg.get("role", "user")
             content = msg.get("content", "")
+            sender = msg.get("sender")  # 發送者名稱（群組對話用）
             # 跳過摘要訊息（它會在 system prompt 中處理）
             if msg.get("is_summary"):
                 continue
-            parts.append(f"{role}: {content}")
+            # 格式：user[發送者]: 內容 或 user: 內容（無發送者時）
+            if sender:
+                parts.append(f"{role}[{sender}]: {content}")
+            else:
+                parts.append(f"{role}: {content}")
         parts.append("")
 
-    # 加入新訊息
-    parts.append(f"user: {new_message}")
+    # 加入新訊息（sender 資訊已包含在 new_message 參數中，由呼叫端處理）
+    parts.append(new_message)
 
     return "\n".join(parts)
 
@@ -178,6 +183,45 @@ class ParseResult:
     output_tokens: int | None
     tool_timings: list[ToolTiming]
     pending_tools: dict[str, ToolTiming]  # 尚未完成的 tools
+
+
+def _clean_overgenerated_response(text: str) -> str:
+    """清理 AI 過度生成的對話預測
+
+    Claude 模型在對話格式下，有時會繼續預測後續的用戶訊息，
+    導致回應中混入虛構的對話內容，例如：
+
+        AI 的正常回應...
+        user: 用戶名: 虛構的訊息
+        user: [回覆...] 更多虛構內容
+
+    這個函數會截斷這些多餘的內容。
+
+    Args:
+        text: AI 的原始回應文字
+
+    Returns:
+        清理後的回應文字
+    """
+    if not text:
+        return text
+
+    # 按行分割
+    lines = text.split("\n")
+    cleaned_lines = []
+
+    for line in lines:
+        # 檢測 AI 過度生成的對話行
+        # 這些行通常以 "user:" 或 "user[" 開頭（可能有前導空白）
+        stripped = line.strip()
+        if stripped.startswith("user:") or stripped.startswith("user["):
+            # 發現過度生成，停止收集
+            break
+        cleaned_lines.append(line)
+
+    # 重新組合，移除尾端多餘的空行
+    result = "\n".join(cleaned_lines).rstrip()
+    return result
 
 
 def _parse_stream_json_with_timing(
@@ -274,6 +318,11 @@ def _parse_stream_json_with_timing(
     # 分離已完成和未完成的 tool timings
     completed_timings = [t for t in tool_timings.values() if t.finished_at]
     pending_timings = {k: v for k, v in tool_timings.items() if not v.finished_at}
+
+    # 清理 AI 過度生成的對話預測
+    # AI 有時會在回應中繼續預測後續的 user 訊息
+    # 這會導致 raw_response 中混入虛構的對話內容
+    result_text = _clean_overgenerated_response(result_text)
 
     return ParseResult(
         text=result_text,
