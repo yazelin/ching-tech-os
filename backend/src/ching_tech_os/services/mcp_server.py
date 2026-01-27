@@ -6304,7 +6304,8 @@ def fix_md2ppt_format(content: str) -> str:
                 need_blank = (
                     right_col_pattern.match(prev_line) or
                     page_break_pattern.match(prev_line) or
-                    chart_start_pattern.match(prev_line)
+                    chart_start_pattern.match(prev_line) or
+                    block_end_pattern.match(prev_line)
                 )
                 if need_blank and stripped != '':
                     result.append('')
