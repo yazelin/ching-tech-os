@@ -2667,11 +2667,12 @@ async def share_knowledge_attachment(
         result = await _create_share_link(data, "linebot", tenant_id=tid)
 
         # 根據檔案類型產生前端 URL
+        from ..config import settings
         if ext == ".md2ppt":
-            app_url = f"https://md2ppt.ching-tech.com/?shareToken={result.token}"
+            app_url = f"{settings.md2ppt_url}/?shareToken={result.token}"
             app_name = "MD2PPT"
         else:  # .md2doc
-            app_url = f"https://md2doc.ching-tech.com/?shareToken={result.token}"
+            app_url = f"{settings.md2doc_url}/?shareToken={result.token}"
             app_name = "MD2DOC"
 
         # 轉換為台北時區顯示
@@ -6446,10 +6447,10 @@ async def generate_md2ppt(
         )
 
         # 產生 MD2PPT 連結
-        md2ppt_url = f"https://md-2-ppt-evolution.vercel.app/?shareToken={share_link.token}"
+        from ..config import settings
+        md2ppt_url = f"{settings.md2ppt_url}/?shareToken={share_link.token}"
 
         # 同時保存檔案到 NAS，以便加入知識庫附件
-        from ..config import settings
         from pathlib import Path
         import uuid
 
@@ -6549,10 +6550,10 @@ async def generate_md2doc(
         )
 
         # 產生 MD2DOC 連結
-        md2doc_url = f"https://md-2-doc-evolution.vercel.app/?shareToken={share_link.token}"
+        from ..config import settings
+        md2doc_url = f"{settings.md2doc_url}/?shareToken={share_link.token}"
 
         # 同時保存檔案到 NAS，以便加入知識庫附件
-        from ..config import settings
         from pathlib import Path
         import uuid
 

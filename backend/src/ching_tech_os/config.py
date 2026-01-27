@@ -135,6 +135,12 @@ class Settings:
     public_url: str = _get_env("PUBLIC_URL", "https://ching-tech.ddns.net/ctos")
 
     # ===================
+    # MD2PPT/MD2DOC 外部應用程式 URL
+    # ===================
+    md2ppt_url: str = _get_env("MD2PPT_URL", "https://md-2-ppt-evolution.vercel.app")
+    md2doc_url: str = _get_env("MD2DOC_URL", "https://md-2-doc-evolution.vercel.app")
+
+    # ===================
     # CORS 設定
     # ===================
     # credentials=True 時不能用 "*"
