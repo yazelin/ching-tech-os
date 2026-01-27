@@ -450,7 +450,7 @@ AI：（使用 generate_md2doc 生成）
 AI：文件已產生！
     🔗 編輯連結：https://md-2-doc-evolution.vercel.app/?shareToken=xxx
     🔑 存取密碼：5678
-    📥 可線上編輯後匯出 Word 或 PDF
+    📥 可線上編輯後匯出 Word
 ```
 
 ## 設定
