@@ -56,8 +56,15 @@ sudo apt install smbclient cifs-utils ripgrep git
 # uv (Python 套件管理)
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Claude CLI (Line Bot AI 功能)
-npm install -g @anthropic-ai/claude-code
+# Claude Code (Line Bot AI 功能)
+curl -fsSL https://claude.ai/install.sh | bash
+
+# Marp CLI (HTML 簡報生成，可選)
+cd backend && npm install @marp-team/marp-cli && cd ..
+
+# Nanobanana MCP (AI 圖片生成，可選)
+# 需要 Gemini API Key: https://aistudio.google.com/apikey
+curl -fsSL https://raw.githubusercontent.com/yazelin/nanobanana/main/install.sh | bash
 ```
 
 #### 環境變數設定
