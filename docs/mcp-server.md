@@ -161,7 +161,10 @@ uv run python -m ching_tech_os.mcp_cli
 
 | 工具名稱 | 說明 | 參數 |
 |----------|------|------|
-| `create_share_link` | 建立公開分享連結 | `resource_type`（必填，knowledge/project/nas_file/project_attachment）, `resource_id`（必填）, `expires_in`（1h/24h/7d/null） |
+| `create_share_link` | 建立公開分享連結 | `resource_type`（必填，knowledge/project/nas_file/project_attachment/content）, `resource_id`（必填）, `expires_in`（1h/24h/7d/null）, `password`（選填，4 位數密碼） |
+| `share_knowledge_attachment` | 分享知識庫附件（.md2ppt/.md2doc） | `kb_id`（必填，如 kb-001）, `attachment_idx`（必填，附件索引從 0 開始）, `expires_in`（1h/24h/7d/null） |
+
+> **密碼保護**：分享連結可設定 4 位數密碼保護，5 次輸入錯誤後將鎖定 30 分鐘。
 
 ### 簡報生成
 
@@ -241,6 +244,39 @@ result = await execute_tool("generate_presentation", {
 | `nature` | 薄荷白背景、深森林綠標題 | 環保、健康主題 |
 | `warm` | 奶油白背景、磚紅標題 | 激勵演講、活動推廣 |
 | `elegant` | 象牙白背景、深金棕標題 | 奢華品牌、高端提案 |
+
+### MD2PPT/MD2DOC 文件轉換
+
+| 工具名稱 | 說明 | 參數 |
+|----------|------|------|
+| `generate_md2ppt` | 產生 MD2PPT 格式簡報 | `content`（必填，要轉換的內容或主題）, `style`（選填，風格需求如「科技藍」「簡約深色」） |
+| `generate_md2doc` | 產生 MD2DOC 格式文件 | `content`（必填，要轉換的內容） |
+
+> **與 generate_presentation 的差異**：
+> - `generate_presentation`：直接生成 PowerPoint 檔案（使用 Marp）
+> - `generate_md2ppt`：產生可線上編輯的 MD2PPT 格式內容，透過分享連結在 MD2PPT 網站編輯後匯出 PPTX
+>
+> MD2PPT/MD2DOC 的優勢：
+> - 可線上即時編輯內容
+> - 支援更豐富的排版功能（圖表、雙欄、動畫等）
+> - 可匯出為多種格式（PPTX、Word、PDF）
+
+#### 使用範例
+
+```python
+# 產生簡報
+result = await execute_tool("generate_md2ppt", {
+    "content": "介紹我們公司的 AI 解決方案，包含產品特色和應用案例",
+    "style": "科技藍"
+})
+# 回傳：分享連結 + 4 位數密碼
+
+# 產生文件
+result = await execute_tool("generate_md2doc", {
+    "content": "撰寫設備操作 SOP，包含開機、操作流程、關機步驟"
+})
+# 回傳：分享連結 + 4 位數密碼
+```
 
 ### AI 圖片生成（外部 MCP Server）
 

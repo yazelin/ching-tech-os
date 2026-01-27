@@ -153,6 +153,7 @@ Line Platform
 | 自訂記憶 | 群組/個人可設定自訂記憶，讓 AI 記住特定指示 |
 | AI 圖片生成 | 根據文字描述生成圖片、編輯圖片（支援 Hugging Face FLUX 備用） |
 | 簡報生成 | 根據主題或大綱生成 PowerPoint 簡報 |
+| MD2PPT/MD2DOC 文件轉換 | 透過對話產生可線上編輯的簡報（PPT）或文件（Word） |
 | 文件讀取 | 支援讀取 Word、Excel、PowerPoint、PDF 文件內容 |
 | 專案管理 | 透過對話建立專案、新增成員和里程碑 |
 | 知識庫 | 透過對話新增筆記、搜尋知識、管理附件、讀取附件內容 |
@@ -327,6 +328,11 @@ AI 助理可使用的工具（完整列表見 [docs/mcp-server.md](mcp-server.md
 **簡報生成**
 - `generate_presentation` - 生成 PowerPoint 簡報（可指定主題或傳入大綱 JSON）
 
+**MD2PPT/MD2DOC 文件轉換**
+- `generate_md2ppt` - 產生 MD2PPT 格式簡報，建立帶密碼的分享連結，可線上編輯並匯出 PPTX
+- `generate_md2doc` - 產生 MD2DOC 格式文件，建立帶密碼的分享連結，可線上編輯並匯出 Word
+- `share_knowledge_attachment` - 分享知識庫中的 .md2ppt 或 .md2doc 附件
+
 **AI 圖片生成**（需設定 nanobanana MCP Server，支援 Hugging Face FLUX 備用）
 - `mcp__nanobanana__generate_image` - 根據文字描述生成圖片
 - `mcp__nanobanana__edit_image` - 編輯/修改現有圖片
@@ -425,6 +431,26 @@ AI：目前有 2 條記憶：
 AI：（使用 generate_presentation 生成）
 AI：簡報已生成，共 5 頁！
     下載連結：https://xxx/share/abc123
+```
+
+**MD2PPT 製作可編輯簡報**
+```
+用戶：幫我做產品介紹的投影片，要科技感
+AI：（使用 generate_md2ppt 生成）
+AI：簡報已產生！
+    🔗 編輯連結：https://md-2-ppt-evolution.vercel.app/?shareToken=xxx
+    🔑 存取密碼：1234
+    📥 可線上編輯後匯出 PPTX
+```
+
+**MD2DOC 製作可編輯文件**
+```
+用戶：幫我寫一份設備操作 SOP
+AI：（使用 generate_md2doc 生成）
+AI：文件已產生！
+    🔗 編輯連結：https://md-2-doc-evolution.vercel.app/?shareToken=xxx
+    🔑 存取密碼：5678
+    📥 可線上編輯後匯出 Word 或 PDF
 ```
 
 ## 設定
