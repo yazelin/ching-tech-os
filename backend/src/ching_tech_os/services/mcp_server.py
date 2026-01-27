@@ -5545,20 +5545,12 @@ async def add_memory(
     elif line_user_id:
         # 個人記憶：需要查詢用戶的內部 UUID
         # 同一個 Line 用戶可能在多個租戶有記錄，必須用 tenant_id 過濾
-        async with get_connection() as conn:
-            if ctos_tenant_id:
-                user_row = await conn.fetchrow(
-                    "SELECT id FROM line_users WHERE line_user_id = $1 AND tenant_id = $2",
-                    line_user_id, UUID(ctos_tenant_id),
-                )
-            else:
-                user_row = await conn.fetchrow(
-                    "SELECT id FROM line_users WHERE line_user_id = $1",
-                    line_user_id,
-                )
-            if not user_row:
-                return "❌ 找不到用戶"
+        from .linebot import get_line_user_record
+        user_row = await get_line_user_record(line_user_id, ctos_tenant_id, "id")
+        if not user_row:
+            return "❌ 找不到用戶"
 
+        async with get_connection() as conn:
             row = await conn.fetchrow(
                 """
                 INSERT INTO line_user_memories (line_user_id, title, content)
@@ -5624,20 +5616,12 @@ async def get_memories(
     elif line_user_id:
         # 個人記憶
         # 同一個 Line 用戶可能在多個租戶有記錄，必須用 tenant_id 過濾
-        async with get_connection() as conn:
-            if ctos_tenant_id:
-                user_row = await conn.fetchrow(
-                    "SELECT id FROM line_users WHERE line_user_id = $1 AND tenant_id = $2",
-                    line_user_id, UUID(ctos_tenant_id),
-                )
-            else:
-                user_row = await conn.fetchrow(
-                    "SELECT id FROM line_users WHERE line_user_id = $1",
-                    line_user_id,
-                )
-            if not user_row:
-                return "❌ 找不到用戶"
+        from .linebot import get_line_user_record
+        user_row = await get_line_user_record(line_user_id, ctos_tenant_id, "id")
+        if not user_row:
+            return "❌ 找不到用戶"
 
+        async with get_connection() as conn:
             rows = await conn.fetch(
                 """
                 SELECT id, title, content, is_active, created_at
@@ -5648,18 +5632,18 @@ async def get_memories(
                 user_row["id"],
             )
 
-            if not rows:
-                return "目前沒有設定任何記憶"
+        if not rows:
+            return "目前沒有設定任何記憶"
 
-            result = "📝 **個人記憶列表**\n\n"
-            for row in rows:
-                status = "✅" if row["is_active"] else "❌"
-                created = to_taipei_time(row["created_at"]).strftime("%Y-%m-%d %H:%M")
-                result += f"**{row['title']}** {status}\n"
-                result += f"ID: `{row['id']}`\n"
-                result += f"內容: {row['content'][:100]}{'...' if len(row['content']) > 100 else ''}\n"
-                result += f"建立時間: {created}\n\n"
-            return result
+        result = "📝 **個人記憶列表**\n\n"
+        for row in rows:
+            status = "✅" if row["is_active"] else "❌"
+            created = to_taipei_time(row["created_at"]).strftime("%Y-%m-%d %H:%M")
+            result += f"**{row['title']}** {status}\n"
+            result += f"ID: `{row['id']}`\n"
+            result += f"內容: {row['content'][:100]}{'...' if len(row['content']) > 100 else ''}\n"
+            result += f"建立時間: {created}\n\n"
+        return result
     else:
         return "❌ 請提供 line_group_id 或 line_user_id"
 

@@ -10,9 +10,26 @@ from ..database import get_connection
 
 
 def _get_tenant_id(tenant_id: UUID | str | None) -> UUID:
-    """處理 tenant_id 參數"""
+    """處理 tenant_id 參數（使用預設租戶作為 fallback）"""
     if tenant_id is None:
         return UUID(settings.default_tenant_id)
+    if isinstance(tenant_id, str):
+        return UUID(tenant_id)
+    return tenant_id
+
+
+def _resolve_tenant_id(tenant_id: UUID | str | None, fallback: UUID) -> UUID:
+    """解析 tenant_id（使用指定的 fallback）
+
+    Args:
+        tenant_id: 傳入的 tenant_id（可能是 UUID、字串或 None）
+        fallback: 當 tenant_id 為 None 時使用的預設值
+
+    Returns:
+        解析後的 UUID
+    """
+    if tenant_id is None:
+        return fallback
     if isinstance(tenant_id, str):
         return UUID(tenant_id)
     return tenant_id
@@ -348,13 +365,7 @@ async def create_member(
         if not project_row:
             raise ProjectNotFoundError(f"專案 {project_id} 不存在")
 
-        # 使用傳入的 tenant_id 或從專案取得
-        if tenant_id is None:
-            tid = project_row["tenant_id"]
-        elif isinstance(tenant_id, str):
-            tid = UUID(tenant_id)
-        else:
-            tid = tenant_id
+        tid = _resolve_tenant_id(tenant_id, project_row["tenant_id"])
 
         row = await conn.fetchrow(
             """
@@ -496,13 +507,7 @@ async def create_meeting(
         if not project_row:
             raise ProjectNotFoundError(f"專案 {project_id} 不存在")
 
-        # 使用傳入的 tenant_id 或從專案取得
-        if tenant_id is None:
-            tid = project_row["tenant_id"]
-        elif isinstance(tenant_id, str):
-            tid = UUID(tenant_id)
-        else:
-            tid = tenant_id
+        tid = _resolve_tenant_id(tenant_id, project_row["tenant_id"])
 
         # 處理日期時間時區問題
         meeting_date = data.meeting_date
@@ -657,13 +662,7 @@ async def upload_attachment(
         if not project_row:
             raise ProjectNotFoundError(f"專案 {project_id} 不存在")
 
-        # 使用傳入的 tenant_id 或從專案取得
-        if tenant_id is None:
-            tid = project_row["tenant_id"]
-        elif isinstance(tenant_id, str):
-            tid = UUID(tenant_id)
-        else:
-            tid = tenant_id
+        tid = _resolve_tenant_id(tenant_id, project_row["tenant_id"])
 
         file_size = len(data)
         file_type = _get_file_type(filename)
@@ -828,13 +827,7 @@ async def create_link(
         if not project_row:
             raise ProjectNotFoundError(f"專案 {project_id} 不存在")
 
-        # 使用傳入的 tenant_id 或從專案取得
-        if tenant_id is None:
-            tid = project_row["tenant_id"]
-        elif isinstance(tenant_id, str):
-            tid = UUID(tenant_id)
-        else:
-            tid = tenant_id
+        tid = _resolve_tenant_id(tenant_id, project_row["tenant_id"])
 
         row = await conn.fetchrow(
             """
@@ -934,13 +927,7 @@ async def create_milestone(
         if not project_row:
             raise ProjectNotFoundError(f"專案 {project_id} 不存在")
 
-        # 使用傳入的 tenant_id 或從專案取得
-        if tenant_id is None:
-            tid = project_row["tenant_id"]
-        elif isinstance(tenant_id, str):
-            tid = UUID(tenant_id)
-        else:
-            tid = tenant_id
+        tid = _resolve_tenant_id(tenant_id, project_row["tenant_id"])
 
         row = await conn.fetchrow(
             """
@@ -1051,13 +1038,7 @@ async def create_delivery(
         if not project_row:
             raise ProjectNotFoundError(f"專案 {project_id} 不存在")
 
-        # 使用傳入的 tenant_id 或從專案取得
-        if tenant_id is None:
-            tid = project_row["tenant_id"]
-        elif isinstance(tenant_id, str):
-            tid = UUID(tenant_id)
-        else:
-            tid = tenant_id
+        tid = _resolve_tenant_id(tenant_id, project_row["tenant_id"])
 
         # 處理廠商：若提供 vendor_id 則自動查詢廠商名稱
         vendor = data.vendor

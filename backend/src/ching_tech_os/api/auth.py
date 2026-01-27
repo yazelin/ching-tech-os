@@ -11,7 +11,7 @@ from ..models.login_record import DeviceInfo as LoginRecordDeviceInfo, DeviceTyp
 from ..models.message import MessageSeverity, MessageSource
 from ..services.session import session_manager, SessionData
 from ..services.smb import create_smb_service, SMBAuthError, SMBConnectionError
-from ..services.user import upsert_user, get_user_by_username, get_user_for_auth, update_last_login
+from ..services.user import upsert_user, get_user_by_username, get_user_for_auth, update_last_login, get_user_role
 from ..services.password import verify_password
 from ..services.login_record import record_login
 from ..services.message import log_message
@@ -381,7 +381,6 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
             )
 
     # 從 tenant_admins 表判斷角色（而非 users.role 欄位）
-    from ..services.user import get_user_role
     user_role = await get_user_role(user_id, tenant_id)
 
     # 取得使用者的 App 權限（供 session 快取使用）
