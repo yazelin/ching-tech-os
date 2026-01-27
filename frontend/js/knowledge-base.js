@@ -924,9 +924,13 @@ const KnowledgeBaseModule = (function() {
       try {
         const formData = new FormData();
         formData.append('file', file);
+        const token = getToken();
 
         const response = await fetch(`${API_BASE}/${kbId}/attachments`, {
           method: 'POST',
+          headers: {
+            ...(token && { 'Authorization': `Bearer ${token}` }),
+          },
           body: formData,
         });
 
@@ -987,14 +991,9 @@ const KnowledgeBaseModule = (function() {
     }
 
     try {
-      const response = await fetch(`${API_BASE}/${kbId}/attachments/${attachmentIdx}`, {
+      await apiRequest(`/${kbId}/attachments/${attachmentIdx}`, {
         method: 'DELETE',
       });
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
-        throw new Error(error.detail || `HTTP ${response.status}`);
-      }
 
       // Reload knowledge to get updated attachments
       await selectKnowledge(kbId);
@@ -1067,19 +1066,13 @@ const KnowledgeBaseModule = (function() {
       const newDesc = descInput.value.trim();
 
       try {
-        const response = await fetch(`${API_BASE}/${kbId}/attachments/${attachmentIdx}`, {
+        await apiRequest(`/${kbId}/attachments/${attachmentIdx}`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             type: newType,
             description: newDesc || null,
           }),
         });
-
-        if (!response.ok) {
-          const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
-          throw new Error(error.detail || `HTTP ${response.status}`);
-        }
 
         closeModal();
         await selectKnowledge(kbId);

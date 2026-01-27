@@ -5752,88 +5752,629 @@ async def delete_memory(memory_id: str) -> str:
 # ============================================================
 
 # MD2PPT System Prompt
-MD2PPT_SYSTEM_PROMPT = '''你現在是一位精通「MD2PPT-Evolution v0.12+」的專業簡報設計師。
+MD2PPT_SYSTEM_PROMPT = '''你是專業的 MD2PPT-Evolution 簡報設計師。直接輸出 Markdown 代碼，不要包含解釋文字或 ``` 標記。
 
-### ⚠️ 核心指令 (Core Instructions)
+## 格式結構
 
-1. **嚴格遵守語法**：你生成的代碼將直接被程式解析。任何語法錯誤都會導致崩潰。
-2. **設計決策**：
-   - 根據內容關鍵字（如：醫療、金融、遊戲），自動選擇最適合的配色。
-   - **標題/重點頁** (`layout: impact/center/quote`) -> 使用 `bg: mesh` 搭配配色盤。
-   - **資訊頁** (`layout: grid/two-column/default`) -> **必須使用純色背景** (淺色用 `#F8FAFC`；深色用 `#1E293B`)。
-   - **嚴禁**在每一頁都使用 Mesh。
-3. **只輸出代碼**：直接輸出 Markdown 代碼，不要包含解釋文字、註釋或 ``` 標記。
+### 1. 全域 Frontmatter（檔案開頭必須有）
+```
+---
+title: "簡報標題"
+author: "作者"
+bg: "#FFFFFF"
+transition: fade
+---
+```
+- theme 可選：amber, midnight, academic, material
+- transition 可選：slide, fade, zoom, none
 
-### ⚠️ 致命錯誤預防 (Critical Rules)
+### 2. 分頁符號
+用 `===` 分隔頁面，前後必須有空行：
+```
+（前一頁內容）
 
-1. **全域設定**：第一行必須是 `---`，theme 只能是 `amber`, `midnight`, `academic`, `material`
-2. **分頁符號**：`===` 前後**必須有空行**
-3. **圖表**：
-   - JSON 屬性必須使用**雙引號** `"`
-   - `::: chart-xxx` 與表格之間**必須空一行**
-   - 表格與結尾 `:::` 之間**必須空一行**
-4. **雙欄**：
-   - `:: right ::` 的**上下必須是空行**
-   - 欄位內標題**必須使用 H3 (`###`)**
+===
 
-### 配色盤 (Curated Palettes)
+（下一頁內容）
+```
 
-**科技藍 (Tech Blue)**：theme: `midnight`, mesh: `["#0F172A", "#1E40AF", "#3B82F6"]`
-**溫暖橙 (Sunset Glow)**：theme: `amber`, mesh: `["#FFF7ED", "#FB923C", "#EA580C"]`
-**清新綠 (Fresh Mint)**：theme: `material`, mesh: `["#ECFDF5", "#10B981", "#047857"]`
-**極簡灰 (Clean Slate)**：theme: `academic`, mesh: `["#F8FAFC", "#94A3B8", "#475569"]`
-**電競紫 (Cyber Neon)**：theme: `midnight`, mesh: `["#111827", "#7C3AED", "#DB2777"]`
+### 3. 每頁 Frontmatter（在 === 後）
+```
+===
 
-### Layout 選項
-- `default`: 標準頁面
-- `impact`: 強調頁（適合重點）
-- `center`: 置中頁
-- `grid`: 網格（搭配 columns: 2）
-- `two-column`: 雙欄
-- `quote`: 引言頁
-- `alert`: 警告頁
+---
+layout: impact
+bg: "#EA580C"
+---
+
+# 標題
+```
+
+### 4. Layout 選項
+- `default`：標準頁面
+- `impact`：強調頁（適合重點、開場）
+- `center`：置中頁
+- `grid`：網格（搭配 `columns: 2`）
+- `two-column`：雙欄（用 `:: right ::` 分隔）
+- `quote`：引言頁
+- `alert`：警告/重點提示頁
+
+### 5. 雙欄語法（two-column 或 grid）
+`:: right ::` 前後必須有空行：
+```
+### 左欄標題
+左欄內容
+
+:: right ::
+
+### 右欄標題
+右欄內容
+```
+
+### 6. 圖表語法
+JSON 必須用雙引號，前後必須有空行：
+```
+::: chart-bar { "title": "標題", "showValues": true }
+
+| 類別 | 數值 |
+| :--- | :--- |
+| A | 100 |
+| B | 200 |
+
+:::
+```
+圖表類型：chart-bar, chart-line, chart-pie, chart-area
+
+### 7. Mesh 漸層背景
+```
+---
+bg: mesh
+mesh:
+  colors: ["#4158D0", "#C850C0", "#FFCC70"]
+  seed: 12345
+---
+```
+
+### 8. 背景圖片
+```
+---
+bgImage: "https://images.unsplash.com/..."
+---
+```
+
+### 9. 備忘錄（演講者筆記）
+```
+<!-- note:
+這是演講者備忘錄，觀眾看不到。
+-->
+```
+
+### 10. 對話模式
+```
+User ":: 這是用戶說的話（靠左）
+
+AI ::" 這是 AI 回覆（靠右）
+
+系統 :": 這是系統提示（置中）
+```
+
+### 11. 程式碼區塊
+```typescript
+const hello = "world";
+```
+
+## 配色建議
+
+| 風格 | theme | mesh 配色 | 適用場景 |
+|------|-------|----------|---------|
+| 科技藍 | midnight | ["#0F172A", "#1E40AF", "#3B82F6"] | 科技、AI、軟體 |
+| 溫暖橙 | amber | ["#FFF7ED", "#FB923C", "#EA580C"] | 行銷、活動、創意 |
+| 清新綠 | material | ["#ECFDF5", "#10B981", "#047857"] | 環保、健康、自然 |
+| 極簡灰 | academic | ["#F8FAFC", "#94A3B8", "#475569"] | 學術、報告、正式 |
+| 電競紫 | midnight | ["#111827", "#7C3AED", "#DB2777"] | 遊戲、娛樂、年輕 |
+
+## 設計原則
+
+1. **標題/重點頁**（impact/center/quote）→ 用 `bg: mesh` 或鮮明純色
+2. **資訊頁**（grid/two-column/default）→ 用淺色純色（#F8FAFC）或深色（#1E293B）
+3. **不要每頁都用 mesh**，會視覺疲勞
+4. **圖表數據要合理**，數值要有意義
+
+## 完整範例
+
+---
+title: "產品發表會"
+author: "產品團隊"
+bg: "#FFFFFF"
+transition: fade
+---
+
+# 產品發表會
+## 創新解決方案 2026
+
+===
+
+---
+layout: impact
+bg: mesh
+mesh:
+  colors: ["#0F172A", "#1E40AF", "#3B82F6"]
+---
+
+# 歡迎各位
+## 今天我們將介紹全新產品線
+
+===
+
+---
+layout: grid
+columns: 2
+bg: "#F8FAFC"
+---
+
+# 市場分析
+
+### 現況
+- 市場規模持續成長
+- 客戶需求多元化
+- 競爭日益激烈
+
+### 機會
+- 數位轉型趨勢
+- AI 技術成熟
+- 新興市場開拓
+
+===
+
+---
+layout: two-column
+bg: "#F8FAFC"
+---
+
+# 產品特色
+
+### 核心功能
+- 智能分析
+- 即時監控
+- 自動化流程
+
+:: right ::
+
+### 技術優勢
+- 高效能運算
+- 安全加密
+- 彈性擴展
+
+===
+
+---
+layout: grid
+columns: 2
+bg: "#F8FAFC"
+---
+
+# 業績表現
+
+::: chart-bar { "title": "季度營收", "showValues": true }
+
+| 季度 | 營收 |
+| :--- | :--- |
+| Q1 | 150 |
+| Q2 | 200 |
+| Q3 | 280 |
+| Q4 | 350 |
+
+:::
+
+::: chart-pie { "title": "市場佔比" }
+
+| 區域 | 佔比 |
+| :--- | :--- |
+| 北區 | 40 |
+| 中區 | 35 |
+| 南區 | 25 |
+
+:::
+
+===
+
+---
+layout: center
+bg: mesh
+mesh:
+  colors: ["#0F172A", "#1E40AF", "#3B82F6"]
+---
+
+# 感謝聆聽
+## 歡迎提問
 '''
 
 # MD2DOC System Prompt
-MD2DOC_SYSTEM_PROMPT = '''你現在是一位精通「MD2DOC-Evolution」的技術文件重構專家。
+MD2DOC_SYSTEM_PROMPT = '''你是專業的 MD2DOC-Evolution 技術文件撰寫專家。直接輸出 Markdown 代碼，不要包含解釋文字或 ``` 標記。
 
-### 核心任務
-產出一份**機器可讀性完美**的文件，確保轉換後的檔案能直接生成無格式錯誤的 Word 書稿。
+## 格式結構
 
-### ⚠️ 核心規範
+### 1. Frontmatter（檔案開頭必須有）
+```
+---
+title: "文件標題"
+author: "作者名稱"
+header: true
+footer: true
+---
+```
+- title 和 author 為必填欄位
+- header/footer 控制頁首頁尾顯示
 
-1. **Frontmatter (YAML)**：
-   - 必須位於檔案第一行，用 `---` 包裹
-   - **必要欄位**：title, author
-   - YAML 區塊內**嚴禁**出現 # 符號
+### 2. 標題層級
+- 只支援 H1 (#)、H2 (##)、H3 (###)
+- H4 以下請改用 **粗體文字** 或列表項目
 
-2. **標題層級**：
-   - 僅允許 **H1 (#)** 到 **H3 (###)**
-   - H4 以下請轉換為**粗體文字**或**列表項目**
+### 3. 目錄（可選）
+```
+[TOC]
+- 第一章 章節名稱 1
+- 第二章 章節名稱 2
+```
 
-3. **對話模式 (Chat Syntax)**：
-   - **靠左 (AI)**：`角色 "::` 然後換行寫內容
-   - **靠右 (User)**：`角色 ::"` 然後換行寫內容
-   - **置中 (System)**：`角色 :":` 然後換行寫內容
+### 4. 提示區塊 (Callouts)
+只支援三種類型：
+```
+> [!TIP]
+> **提示標題**
+> 提示內容，用於分享小撇步或最佳實踐。
 
-4. **程式碼區塊**：
-   - 所有 ``` 區塊必須標註語言
-   - 短設定檔使用 `:no-ln` 隱藏行號（如 ```json:no-ln）
+> [!NOTE]
+> **筆記標題**
+> 筆記內容，用於補充背景知識。
 
-5. **提示區塊 (Callouts)**：
-   - 只支援 `> [!TIP]`、`> [!NOTE]`、`> [!WARNING]`
-   - 標籤後必須換行再寫內容
+> [!WARNING]
+> **警告標題**
+> 警告內容，用於重要注意事項。
+```
 
-6. **列表縮排**：巢狀列表必須比父層級多 **2 個空白**
+### 5. 對話模式 (Chat Syntax)
+```
+系統 :": 這是置中的系統訊息。
 
-### 行內樣式
-- UI 按鈕/選單：`【文字】`
-- 快捷鍵：`[Ctrl]` + `[S]`
-- 書名/專案名：`『文字』`
+AI助手 ":: 這是靠左的 AI 回覆，使用 `"::` 語法。
 
-### 只輸出代碼
-直接輸出 Markdown 代碼，不要包含解釋文字或 ``` 標記。
+用戶 ::" 這是靠右的用戶訊息，使用 `::"` 語法。
+```
+
+### 6. 程式碼區塊
+```typescript
+// 預設顯示行號，右上角顯示語言名稱
+const config = {
+  name: "example"
+};
+```
+
+隱藏行號（適合短設定檔）：
+```json:no-ln
+{
+  "name": "config",
+  "version": "1.0.0"
+}
+```
+
+強制顯示行號：
+```bash:ln
+npm install
+npm run dev
+```
+
+### 7. 行內樣式
+- **粗體**：`**文字**` → **文字**
+- *斜體*：`*文字*` → *文字*
+- <u>底線</u>：`<u>文字</u>` → <u>底線</u>
+- `行內程式碼`：反引號包覆
+- UI 按鈕：`【確定】` → 【確定】
+- 快捷鍵：`[Ctrl]` + `[S]` → [Ctrl] + [S]
+- 書名/專案名：`『書名』` → 『書名』
+- 智慧連結：`[文字](URL)` → 匯出 Word 時自動生成 QR Code
+
+### 8. 表格
+```
+| 欄位一 | 欄位二 | 欄位三 |
+| --- | --- | --- |
+| 內容 | 內容 | 內容 |
+```
+
+### 9. 列表
+- 第一項
+- 第二項
+  - 巢狀項目（縮排 2 空格）
+  - 巢狀項目
+
+### 10. 分隔線
+```
+---
+```
+
+### 11. Mermaid 圖表（可選）
+```mermaid
+graph TD
+    A[開始] --> B{判斷}
+    B -- Yes --> C[執行]
+    B -- No --> D[結束]
+```
+
+## 設計原則
+
+1. **結構清晰**：使用 H1 作為大章節，H2 作為小節，H3 作為細項
+2. **善用 Callouts**：重要提示用 TIP，補充說明用 NOTE，警告事項用 WARNING
+3. **程式碼標註語言**：所有程式碼區塊都要標註語言（typescript, json, bash, python 等）
+4. **表格對齊**：表格內容盡量簡潔，複雜內容用列表呈現
+
+## 完整範例
+
+---
+title: "系統操作手冊"
+author: "技術團隊"
+header: true
+footer: true
+---
+
+# 系統操作手冊
+
+[TOC]
+- 第一章 系統介紹 1
+- 第二章 基本操作 2
+- 第三章 進階功能 3
+
+## 1. 系統介紹
+
+本系統是專為企業設計的管理平台，提供 **完整的資料管理** 與 *即時監控* 功能。
+
+> [!TIP]
+> **快速開始**
+> 首次使用請先完成帳號設定，詳見第二章說明。
+
+---
+
+## 2. 基本操作
+
+### 2.1 登入系統
+
+1. 開啟瀏覽器，輸入系統網址
+2. 輸入帳號密碼
+3. 點擊 【登入】 按鈕
+
+> [!NOTE]
+> **帳號格式**
+> 帳號格式為 `員工編號@公司代碼`，例如：`A001@acme`
+
+### 2.2 常用快捷鍵
+
+| 功能 | Windows | Mac |
+| --- | --- | --- |
+| 儲存 | [Ctrl] + [S] | [Cmd] + [S] |
+| 搜尋 | [Ctrl] + [F] | [Cmd] + [F] |
+| 列印 | [Ctrl] + [P] | [Cmd] + [P] |
+
+---
+
+## 3. 進階功能
+
+### 3.1 API 整合
+
+系統提供 RESTful API，可與外部系統整合：
+
+```typescript
+// 取得使用者資料
+const response = await fetch('/api/users', {
+  method: 'GET',
+  headers: {
+    'Authorization': 'Bearer ' + token
+  }
+});
+```
+
+設定檔範例：
+
+```json:no-ln
+{
+  "apiUrl": "https://api.example.com",
+  "timeout": 30000
+}
+```
+
+> [!WARNING]
+> **安全注意**
+> API Token 請妥善保管，切勿分享給他人或提交到版本控制系統。
+
+---
+
+### 3.2 常見問題
+
+系統 :": 以下是常見問題的對話範例。
+
+用戶 ::" 我忘記密碼了，該怎麼辦？
+
+客服 ":: 您可以點擊登入頁面的「忘記密碼」連結，系統會發送重設信件到您的註冊信箱。
+
+---
+
+更多資訊請參考『系統管理指南』或聯繫技術支援。
 '''
+
+
+def fix_md2ppt_format(content: str) -> str:
+    """
+    自動修正 MD2PPT 常見格式問題
+
+    修正項目：
+    1. === 分頁符前後空行
+    2. :: right :: 前後空行
+    3. ::: chart-xxx 前後空行
+    4. ::: 結束標記前空行
+    5. JSON 單引號改雙引號
+    6. 無效 theme 替換為 midnight
+    7. 無效 layout 替換為 default
+    8. 移除 ``` 標記
+    """
+    import re
+    import json
+
+    # 移除可能的 markdown 標記
+    if content.startswith("```"):
+        lines = content.split("\n")
+        if lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        content = "\n".join(lines)
+
+    # 有效的 theme 和 layout 值
+    valid_themes = {"amber", "midnight", "academic", "material"}
+    valid_layouts = {"default", "impact", "center", "grid", "two-column", "quote", "alert"}
+
+    # 修正 theme 無效值
+    def fix_theme(match):
+        theme = match.group(1).strip('"\'')
+        if theme not in valid_themes:
+            return "theme: midnight"
+        return match.group(0)
+
+    content = re.sub(r'^theme:\s*(\S+)', fix_theme, content, flags=re.MULTILINE)
+
+    # 修正 layout 無效值
+    def fix_layout(match):
+        layout = match.group(1).strip('"\'')
+        if layout not in valid_layouts:
+            return "layout: default"
+        return match.group(0)
+
+    content = re.sub(r'^layout:\s*(\S+)', fix_layout, content, flags=re.MULTILINE)
+
+    # 修正圖表 JSON 中的單引號
+    def fix_chart_json(match):
+        prefix = match.group(1)  # ::: chart-xxx
+        json_str = match.group(2)  # { ... }
+        if json_str:
+            # 嘗試修正單引號
+            try:
+                json.loads(json_str)
+            except json.JSONDecodeError:
+                # 嘗試將單引號替換為雙引號
+                fixed_json = json_str.replace("'", '"')
+                try:
+                    json.loads(fixed_json)
+                    return f"{prefix} {fixed_json}"
+                except json.JSONDecodeError:
+                    pass  # 無法修正，保持原樣
+        return match.group(0)
+
+    content = re.sub(
+        r'^(:::[\s]*chart-\w+)\s*(\{[^}]+\})',
+        fix_chart_json,
+        content,
+        flags=re.MULTILINE
+    )
+
+    # 修正空行問題
+    lines = content.split('\n')
+    result = []
+
+    # 正則模式
+    right_col_pattern = re.compile(r'^(\s*)::[\s]*right[\s]*::[\s]*$', re.IGNORECASE)
+    page_break_pattern = re.compile(r'^[\s]*===[\s]*$')
+    block_end_pattern = re.compile(r'^[\s]*:::[\s]*$')
+    chart_start_pattern = re.compile(r'^[\s]*:::[\s]*chart', re.IGNORECASE)
+    frontmatter_pattern = re.compile(r'^---\s*$')
+
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        is_right_col = right_col_pattern.match(line)
+        is_page_break = page_break_pattern.match(line)
+        is_block_end = block_end_pattern.match(line)
+        is_chart_start = chart_start_pattern.match(line)
+
+        # 這些模式前面需要空行
+        if is_right_col or is_page_break or is_block_end or is_chart_start:
+            # 確保前面有空行（除非是檔案開頭或前一行是 frontmatter）
+            if result and result[-1].strip() != '' and not frontmatter_pattern.match(result[-1]):
+                result.append('')
+            result.append(line)
+        else:
+            # 檢查前一行是否是需要後面空行的模式
+            if result:
+                prev_line = result[-1]
+                need_blank = (
+                    right_col_pattern.match(prev_line) or
+                    page_break_pattern.match(prev_line) or
+                    chart_start_pattern.match(prev_line) or
+                    block_end_pattern.match(prev_line)
+                )
+                if need_blank and stripped != '':
+                    result.append('')
+            result.append(line)
+
+    return '\n'.join(result)
+
+
+def fix_md2doc_format(content: str) -> str:
+    """
+    自動修正 MD2DOC 常見格式問題
+
+    修正項目：
+    1. 移除 ``` 標記
+    2. 確保有 frontmatter
+    3. H4+ 標題轉換為粗體
+    4. 修正 Callout 格式
+    """
+    import re
+
+    # 移除可能的 markdown 標記
+    if content.startswith("```"):
+        lines = content.split("\n")
+        if lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        content = "\n".join(lines)
+
+    # 確保有 frontmatter（如果沒有就加上基本的）
+    if not content.strip().startswith("---"):
+        content = """---
+title: "文件"
+author: "AI Assistant"
+---
+
+""" + content
+
+    # 修正 H4+ 標題為粗體
+    def fix_heading(match):
+        level = len(match.group(1))
+        text = match.group(2).strip()
+        if level >= 4:
+            return f"**{text}**"
+        return match.group(0)
+
+    content = re.sub(r'^(#{4,})\s+(.+)$', fix_heading, content, flags=re.MULTILINE)
+
+    # 修正 Callout 類型（只允許 TIP, NOTE, WARNING）
+    valid_callouts = {"TIP", "NOTE", "WARNING"}
+
+    def fix_callout(match):
+        callout_type = match.group(1).upper()
+        if callout_type not in valid_callouts:
+            # 映射常見的錯誤類型
+            mapping = {
+                "INFO": "NOTE",
+                "IMPORTANT": "WARNING",
+                "CAUTION": "WARNING",
+                "DANGER": "WARNING",
+                "HINT": "TIP",
+            }
+            fixed_type = mapping.get(callout_type, "NOTE")
+            return f"> [!{fixed_type}]"
+        return match.group(0)
+
+    content = re.sub(r'>\s*\[!(\w+)\]', fix_callout, content)
+
+    return content
 
 
 @mcp.tool()
@@ -5859,7 +6400,6 @@ async def generate_md2ppt(
         分享連結和存取密碼
     """
     from .claude_agent import call_claude
-    from .md_validators import validate_md2ppt
     from .share import create_share_link
     from ..models.share import ShareLinkCreate
 
@@ -5870,129 +6410,66 @@ async def generate_md2ppt(
     style_hint = f"【風格需求】：{style}\n" if style else ""
     user_prompt = f"{style_hint}【內容】：\n{content}"
 
-    max_retries = 3
-    last_error = ""
+    try:
+        logger.debug(f"generate_md2ppt: prompt_len={len(user_prompt)}")
 
-    for attempt in range(max_retries):
-        try:
-            logger.debug(f"generate_md2ppt: attempt={attempt}, prompt_len={len(user_prompt)}")
+        # 呼叫 Claude 產生內容
+        response = await call_claude(
+            prompt=user_prompt,
+            model="sonnet",
+            system_prompt=MD2PPT_SYSTEM_PROMPT,
+            timeout=180,
+        )
 
-            # 呼叫 Claude 產生內容
-            response = await call_claude(
-                prompt=user_prompt if attempt == 0 else f"{user_prompt}\n\n⚠️ 上次產生的內容有格式錯誤，請修正：\n{last_error}",
-                model="sonnet",
-                system_prompt=MD2PPT_SYSTEM_PROMPT,
-                timeout=180,
-            )
+        if not response.success:
+            logger.warning(f"generate_md2ppt: AI 失敗: {response.error}")
+            return f"❌ AI 產生失敗：{response.error}"
 
-            if not response.success:
-                logger.warning(f"generate_md2ppt: AI 失敗: {response.error}")
-                return f"❌ AI 產生失敗：{response.error}"
+        generated_content = response.message.strip()
 
-            generated_content = response.message.strip()
+        # 自動修正格式問題（不驗證、不重試）
+        generated_content = fix_md2ppt_format(generated_content)
 
-            # 移除可能的 markdown 標記
-            if generated_content.startswith("```"):
-                lines = generated_content.split("\n")
-                if lines[0].startswith("```"):
-                    lines = lines[1:]
-                if lines and lines[-1].strip() == "```":
-                    lines = lines[:-1]
-                generated_content = "\n".join(lines)
+        # 建立分享連結
+        share_data = ShareLinkCreate(
+            resource_type="content",
+            content=generated_content,
+            content_type="text/markdown",
+            filename="presentation.md2ppt",
+            expires_in="24h",
+        )
 
-            # 自動修正常見格式問題
-            import re
+        share_link = await create_share_link(
+            data=share_data,
+            created_by="linebot-ai",
+            tenant_id=tid,
+        )
 
-            def fix_md2ppt_format(content: str) -> str:
-                """修正 MD2PPT 常見格式問題"""
-                lines = content.split('\n')
-                result = []
+        # 產生 MD2PPT 連結
+        md2ppt_url = f"https://md-2-ppt-evolution.vercel.app/?shareToken={share_link.token}"
 
-                # 用於匹配 :: right :: 的各種變體
-                right_col_pattern = re.compile(r'^(\s*)::[\s]*right[\s]*::[\s]*$', re.IGNORECASE)
-                # 用於匹配 === 分頁符
-                page_break_pattern = re.compile(r'^[\s]*===[\s]*$')
-                # 用於匹配 ::: 結束標記
-                block_end_pattern = re.compile(r'^[\s]*:::[\s]*$')
-                # 用於匹配 ::: chart-xxx 開始標記
-                chart_start_pattern = re.compile(r'^[\s]*:::[\s]*chart', re.IGNORECASE)
+        # 同時保存檔案到 NAS，以便加入知識庫附件
+        from ..config import settings
+        from pathlib import Path
+        import uuid
 
-                for i, line in enumerate(lines):
-                    stripped = line.strip()
-                    is_right_col = right_col_pattern.match(line)
-                    is_page_break = page_break_pattern.match(line)
-                    is_block_end = block_end_pattern.match(line)
-                    is_chart_start = chart_start_pattern.match(line)
+        file_id = str(uuid.uuid4())[:8]
+        filename = f"presentation-{file_id}.md2ppt"
 
-                    # 這些模式前面需要空行
-                    if is_right_col or is_page_break or is_block_end or is_chart_start:
-                        # 確保前面有空行
-                        if result and result[-1].strip() != '':
-                            result.append('')
-                        result.append(line)
-                    else:
-                        # 檢查前一行是否是需要後面空行的模式
-                        if result:
-                            prev_line = result[-1]
-                            need_blank = (
-                                right_col_pattern.match(prev_line) or
-                                page_break_pattern.match(prev_line) or
-                                chart_start_pattern.match(prev_line)
-                            )
-                            if need_blank and stripped != '':
-                                result.append('')
-                        result.append(line)
+        # 保存到 ai-generated 目錄（多租戶支援）
+        if tid:
+            save_dir = Path(settings.ctos_mount_path) / "tenants" / str(tid) / "linebot" / "ai-generated"
+        else:
+            save_dir = Path(settings.ctos_mount_path) / "linebot" / "files" / "ai-generated"
 
-                return '\n'.join(result)
+        save_dir.mkdir(parents=True, exist_ok=True)
+        save_path = save_dir / filename
+        save_path.write_text(generated_content, encoding="utf-8")
 
-            generated_content = fix_md2ppt_format(generated_content)
+        # 產生可用於 add_attachments_to_knowledge 的路徑
+        attachment_path = f"ai-generated/{filename}"
 
-            # 驗證格式
-            validation = validate_md2ppt(generated_content)
-            if not validation.valid:
-                logger.debug(f"generate_md2ppt: 驗證失敗 attempt={attempt}: {validation.to_error_message()[:200]}")
-
-            if validation.valid:
-                # 驗證通過，建立分享連結
-                share_data = ShareLinkCreate(
-                    resource_type="content",
-                    content=generated_content,
-                    content_type="text/markdown",
-                    filename="presentation.md2ppt",
-                    expires_in="24h",
-                )
-
-                share_link = await create_share_link(
-                    data=share_data,
-                    created_by="linebot-ai",
-                    tenant_id=tid,
-                )
-
-                # 產生 MD2PPT 連結
-                md2ppt_url = f"https://md-2-ppt-evolution.vercel.app/?shareToken={share_link.token}"
-
-                # 同時保存檔案到 NAS，以便加入知識庫附件
-                from ..config import settings
-                from pathlib import Path
-                import uuid
-
-                file_id = str(uuid.uuid4())[:8]
-                filename = f"presentation-{file_id}.md2ppt"
-
-                # 保存到 ai-generated 目錄（多租戶支援）
-                if tid:
-                    save_dir = Path(settings.ctos_mount_path) / "tenants" / str(tid) / "linebot" / "ai-generated"
-                else:
-                    save_dir = Path(settings.ctos_mount_path) / "linebot" / "files" / "ai-generated"
-
-                save_dir.mkdir(parents=True, exist_ok=True)
-                save_path = save_dir / filename
-                save_path.write_text(generated_content, encoding="utf-8")
-
-                # 產生可用於 add_attachments_to_knowledge 的路徑
-                attachment_path = f"ai-generated/{filename}"
-
-                return f"""✅ 簡報產生成功！
+        return f"""✅ 簡報產生成功！
 
 🔗 開啟連結：{md2ppt_url}
 🔑 存取密碼：{share_link.password}
@@ -6003,17 +6480,9 @@ async def generate_md2ppt(
 ⏰ 連結有效期限：24 小時
 💡 開啟後可直接編輯並匯出為 PPT"""
 
-            else:
-                # 驗證失敗，記錄錯誤訊息供下次嘗試
-                last_error = validation.to_error_message()
-                logger.warning(f"MD2PPT 驗證失敗 (嘗試 {attempt + 1}/{max_retries}): {last_error}")
-
-        except Exception as e:
-            logger.error(f"generate_md2ppt 錯誤: {e}")
-            return f"❌ 產生簡報時發生錯誤：{str(e)}"
-
-    # 所有嘗試都失敗
-    return f"❌ 無法產生符合格式的簡報，請稍後重試或簡化內容。\n\n最後的錯誤：\n{last_error}"
+    except Exception as e:
+        logger.error(f"generate_md2ppt 錯誤: {e}")
+        return f"❌ 產生簡報時發生錯誤：{str(e)}"
 
 
 @mcp.tool()
@@ -6036,7 +6505,6 @@ async def generate_md2doc(
         分享連結和存取密碼
     """
     from .claude_agent import call_claude
-    from .md_validators import validate_md2doc
     from .share import create_share_link
     from ..models.share import ShareLinkCreate
 
@@ -6045,77 +6513,66 @@ async def generate_md2doc(
 
     user_prompt = f"請將以下內容轉換為 MD2DOC 格式的文件：\n\n{content}"
 
-    max_retries = 3
-    last_error = ""
+    try:
+        logger.debug(f"generate_md2doc: prompt_len={len(user_prompt)}")
 
-    for attempt in range(max_retries):
-        try:
-            # 呼叫 Claude 產生內容
-            response = await call_claude(
-                prompt=user_prompt if attempt == 0 else f"{user_prompt}\n\n⚠️ 上次產生的內容有格式錯誤，請修正：\n{last_error}",
-                model="sonnet",
-                system_prompt=MD2DOC_SYSTEM_PROMPT,
-                timeout=180,
-            )
+        # 呼叫 Claude 產生內容
+        response = await call_claude(
+            prompt=user_prompt,
+            model="sonnet",
+            system_prompt=MD2DOC_SYSTEM_PROMPT,
+            timeout=180,
+        )
 
-            if not response.success:
-                return f"❌ AI 產生失敗：{response.error}"
+        if not response.success:
+            logger.warning(f"generate_md2doc: AI 失敗: {response.error}")
+            return f"❌ AI 產生失敗：{response.error}"
 
-            generated_content = response.message.strip()
+        generated_content = response.message.strip()
 
-            # 移除可能的 markdown 標記
-            if generated_content.startswith("```"):
-                lines = generated_content.split("\n")
-                if lines[0].startswith("```"):
-                    lines = lines[1:]
-                if lines and lines[-1].strip() == "```":
-                    lines = lines[:-1]
-                generated_content = "\n".join(lines)
+        # 自動修正格式問題（不驗證、不重試）
+        generated_content = fix_md2doc_format(generated_content)
 
-            # 驗證格式
-            validation = validate_md2doc(generated_content)
+        # 建立分享連結
+        share_data = ShareLinkCreate(
+            resource_type="content",
+            content=generated_content,
+            content_type="text/markdown",
+            filename="document.md2doc",
+            expires_in="24h",
+        )
 
-            if validation.valid:
-                # 驗證通過，建立分享連結
-                share_data = ShareLinkCreate(
-                    resource_type="content",
-                    content=generated_content,
-                    content_type="text/markdown",
-                    filename="document.md2doc",
-                    expires_in="24h",
-                )
+        share_link = await create_share_link(
+            data=share_data,
+            created_by="linebot-ai",
+            tenant_id=tid,
+        )
 
-                share_link = await create_share_link(
-                    data=share_data,
-                    created_by="linebot-ai",
-                    tenant_id=tid,
-                )
+        # 產生 MD2DOC 連結
+        md2doc_url = f"https://md-2-doc-evolution.vercel.app/?shareToken={share_link.token}"
 
-                # 產生 MD2DOC 連結
-                md2doc_url = f"https://md-2-doc-evolution.vercel.app/?shareToken={share_link.token}"
+        # 同時保存檔案到 NAS，以便加入知識庫附件
+        from ..config import settings
+        from pathlib import Path
+        import uuid
 
-                # 同時保存檔案到 NAS，以便加入知識庫附件
-                from ..config import settings
-                from pathlib import Path
-                import uuid
+        file_id = str(uuid.uuid4())[:8]
+        filename = f"document-{file_id}.md2doc"
 
-                file_id = str(uuid.uuid4())[:8]
-                filename = f"document-{file_id}.md2doc"
+        # 保存到 ai-generated 目錄（多租戶支援）
+        if tid:
+            save_dir = Path(settings.ctos_mount_path) / "tenants" / str(tid) / "linebot" / "ai-generated"
+        else:
+            save_dir = Path(settings.ctos_mount_path) / "linebot" / "files" / "ai-generated"
 
-                # 保存到 ai-generated 目錄（多租戶支援）
-                if tid:
-                    save_dir = Path(settings.ctos_mount_path) / "tenants" / str(tid) / "linebot" / "ai-generated"
-                else:
-                    save_dir = Path(settings.ctos_mount_path) / "linebot" / "files" / "ai-generated"
+        save_dir.mkdir(parents=True, exist_ok=True)
+        save_path = save_dir / filename
+        save_path.write_text(generated_content, encoding="utf-8")
 
-                save_dir.mkdir(parents=True, exist_ok=True)
-                save_path = save_dir / filename
-                save_path.write_text(generated_content, encoding="utf-8")
+        # 產生可用於 add_attachments_to_knowledge 的路徑
+        attachment_path = f"ai-generated/{filename}"
 
-                # 產生可用於 add_attachments_to_knowledge 的路徑
-                attachment_path = f"ai-generated/{filename}"
-
-                return f"""✅ 文件產生成功！
+        return f"""✅ 文件產生成功！
 
 🔗 開啟連結：{md2doc_url}
 🔑 存取密碼：{share_link.password}
@@ -6126,17 +6583,9 @@ async def generate_md2doc(
 ⏰ 連結有效期限：24 小時
 💡 開啟後可直接編輯並匯出為 Word"""
 
-            else:
-                # 驗證失敗，記錄錯誤訊息供下次嘗試
-                last_error = validation.to_error_message()
-                logger.warning(f"MD2DOC 驗證失敗 (嘗試 {attempt + 1}/{max_retries}): {last_error}")
-
-        except Exception as e:
-            logger.error(f"generate_md2doc 錯誤: {e}")
-            return f"❌ 產生文件時發生錯誤：{str(e)}"
-
-    # 所有嘗試都失敗
-    return f"❌ 無法產生符合格式的文件，請稍後重試或簡化內容。\n\n最後的錯誤：\n{last_error}"
+    except Exception as e:
+        logger.error(f"generate_md2doc 錯誤: {e}")
+        return f"❌ 產生文件時發生錯誤：{str(e)}"
 
 
 # ============================================================
