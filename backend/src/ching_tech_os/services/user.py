@@ -267,6 +267,11 @@ async def get_all_users(
 ) -> list[dict]:
     """取得所有使用者列表
 
+    角色判斷邏輯：
+    1. platform_admin 從 users.role 判斷（平台管理員不受租戶限制）
+    2. tenant_admin 從 tenant_admins 表判斷
+    3. 其他為 user
+
     Args:
         tenant_id: 租戶 UUID（可選，預設使用預設租戶）
         include_inactive: 是否包含停用的使用者
@@ -282,14 +287,20 @@ async def get_all_users(
 
     async with get_connection() as conn:
         query = """
-            SELECT id, username, display_name, created_at, last_login_at,
-                   preferences, tenant_id, role, is_active
-            FROM users
-            WHERE tenant_id = $1
+            SELECT u.id, u.username, u.display_name, u.created_at, u.last_login_at,
+                   u.preferences, u.tenant_id, u.is_active,
+                   CASE
+                       WHEN u.role = 'platform_admin' THEN 'platform_admin'
+                       WHEN ta.id IS NOT NULL THEN 'tenant_admin'
+                       ELSE 'user'
+                   END AS role
+            FROM users u
+            LEFT JOIN tenant_admins ta ON u.id = ta.user_id AND ta.tenant_id = u.tenant_id
+            WHERE u.tenant_id = $1
         """
         if not include_inactive:
-            query += " AND is_active = true"
-        query += " ORDER BY created_at DESC"
+            query += " AND u.is_active = true"
+        query += " ORDER BY u.created_at DESC"
 
         rows = await conn.fetch(query, tenant_id)
         return [dict(row) for row in rows]
@@ -299,6 +310,11 @@ async def get_all_users_cross_tenant(
     filter_tenant_id: UUID | str | None = None,
 ) -> list[dict]:
     """取得所有租戶的使用者列表（平台管理員專用）
+
+    角色判斷邏輯：
+    1. platform_admin 從 users.role 判斷（平台管理員不受租戶限制）
+    2. tenant_admin 從 tenant_admins 表判斷
+    3. 其他為 user
 
     Args:
         filter_tenant_id: 可選的租戶篩選
@@ -313,9 +329,15 @@ async def get_all_users_cross_tenant(
             rows = await conn.fetch(
                 """
                 SELECT u.id, u.username, u.display_name, u.created_at, u.last_login_at,
-                       u.preferences, u.tenant_id, u.role, u.is_active, t.name as tenant_name
+                       u.preferences, u.tenant_id, u.is_active, t.name as tenant_name,
+                       CASE
+                           WHEN u.role = 'platform_admin' THEN 'platform_admin'
+                           WHEN ta.id IS NOT NULL THEN 'tenant_admin'
+                           ELSE 'user'
+                       END AS role
                 FROM users u
                 LEFT JOIN tenants t ON u.tenant_id = t.id
+                LEFT JOIN tenant_admins ta ON u.id = ta.user_id AND ta.tenant_id = u.tenant_id
                 WHERE u.tenant_id = $1
                 ORDER BY u.created_at DESC
                 """,
@@ -325,9 +347,15 @@ async def get_all_users_cross_tenant(
             rows = await conn.fetch(
                 """
                 SELECT u.id, u.username, u.display_name, u.created_at, u.last_login_at,
-                       u.preferences, u.tenant_id, u.role, u.is_active, t.name as tenant_name
+                       u.preferences, u.tenant_id, u.is_active, t.name as tenant_name,
+                       CASE
+                           WHEN u.role = 'platform_admin' THEN 'platform_admin'
+                           WHEN ta.id IS NOT NULL THEN 'tenant_admin'
+                           ELSE 'user'
+                       END AS role
                 FROM users u
                 LEFT JOIN tenants t ON u.tenant_id = t.id
+                LEFT JOIN tenant_admins ta ON u.id = ta.user_id AND ta.tenant_id = u.tenant_id
                 ORDER BY t.name, u.created_at DESC
                 """,
             )
@@ -490,11 +518,20 @@ async def get_user_preferences(user_id: int) -> dict:
         return {"theme": "dark"}
 
 
-async def get_user_role_and_permissions(user_id: int) -> dict:
+async def get_user_role_and_permissions(
+    user_id: int,
+    tenant_id: UUID | str | None = None,
+) -> dict:
     """取得使用者的角色和權限設定
+
+    角色判斷邏輯：
+    1. 先檢查 users.role 是否為 platform_admin（平台管理員不受租戶限制）
+    2. 如果有 tenant_id，檢查 tenant_admins 表判斷是否為該租戶的管理員
+    3. 否則返回 user
 
     Args:
         user_id: 使用者 ID
+        tenant_id: 租戶 ID（用於判斷是否為該租戶的管理員）
 
     Returns:
         包含 role、permissions 和 user_data 的 dict
@@ -510,7 +547,21 @@ async def get_user_role_and_permissions(user_id: int) -> dict:
         if not row:
             return {"role": "user", "permissions": None, "user_data": None}
 
-        role = row["role"] or "user"
+        # 平台管理員不受租戶限制
+        if row["role"] == "platform_admin":
+            role = "platform_admin"
+        elif tenant_id:
+            # 從 tenant_admins 表判斷是否為該租戶的管理員
+            tid = UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id
+            admin_row = await conn.fetchrow(
+                "SELECT id FROM tenant_admins WHERE user_id = $1 AND tenant_id = $2",
+                user_id, tid,
+            )
+            role = "tenant_admin" if admin_row else "user"
+        else:
+            # 沒有 tenant_id 時，fallback 到 users.role
+            role = row["role"] or "user"
+
         preferences = _parse_preferences(row["preferences"])
         permissions = preferences.get("permissions")
 
@@ -603,6 +654,7 @@ async def get_user_detail(
     """取得使用者詳細資料（用於管理）
 
     會驗證使用者是否屬於該租戶。
+    角色從 tenant_admins 表判斷（platform_admin 除外）。
 
     Args:
         user_id: 使用者 ID
@@ -617,11 +669,17 @@ async def get_user_detail(
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
-            SELECT id, username, display_name, email, role, is_active,
-                   must_change_password, created_at, last_login_at,
-                   password_changed_at, preferences, tenant_id
-            FROM users
-            WHERE id = $1 AND tenant_id = $2
+            SELECT u.id, u.username, u.display_name, u.email, u.is_active,
+                   u.must_change_password, u.created_at, u.last_login_at,
+                   u.password_changed_at, u.preferences, u.tenant_id,
+                   CASE
+                       WHEN u.role = 'platform_admin' THEN 'platform_admin'
+                       WHEN ta.id IS NOT NULL THEN 'tenant_admin'
+                       ELSE 'user'
+                   END AS role
+            FROM users u
+            LEFT JOIN tenant_admins ta ON u.id = ta.user_id AND ta.tenant_id = u.tenant_id
+            WHERE u.id = $1 AND u.tenant_id = $2
             """,
             user_id,
             tenant_id,
@@ -775,14 +833,14 @@ async def get_user_role(
 ) -> str:
     """從資料庫取得使用者的角色
 
-    角色儲存在 users.role 欄位，可能的值：
-    - platform_admin: 平台管理員
-    - tenant_admin: 租戶管理員
-    - user: 一般使用者（預設）
+    角色判斷邏輯：
+    1. 先檢查 users.role 是否為 platform_admin（平台管理員不受租戶限制）
+    2. 如果有 tenant_id，檢查 tenant_admins 表判斷是否為該租戶的管理員
+    3. 否則返回 user
 
     Args:
         user_id: 使用者 ID
-        tenant_id: 租戶 UUID（目前未使用，保留供未來擴充）
+        tenant_id: 租戶 UUID（用於判斷是否為該租戶的管理員）
 
     Returns:
         角色字串：platform_admin / tenant_admin / user
@@ -791,11 +849,22 @@ async def get_user_role(
         return "user"
 
     async with get_connection() as conn:
+        # 先檢查是否為平台管理員
         row = await conn.fetchrow(
             "SELECT role FROM users WHERE id = $1",
             user_id,
         )
-        if row and row["role"]:
-            return row["role"]
+        if row and row["role"] == "platform_admin":
+            return "platform_admin"
+
+        # 從 tenant_admins 表判斷是否為該租戶的管理員
+        if tenant_id:
+            tid = UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id
+            admin_row = await conn.fetchrow(
+                "SELECT id FROM tenant_admins WHERE user_id = $1 AND tenant_id = $2",
+                user_id, tid,
+            )
+            if admin_row:
+                return "tenant_admin"
 
     return "user"

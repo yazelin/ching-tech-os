@@ -10,9 +10,26 @@ from ..database import get_connection
 
 
 def _get_tenant_id(tenant_id: UUID | str | None) -> UUID:
-    """處理 tenant_id 參數"""
+    """處理 tenant_id 參數（使用預設租戶作為 fallback）"""
     if tenant_id is None:
         return UUID(settings.default_tenant_id)
+    if isinstance(tenant_id, str):
+        return UUID(tenant_id)
+    return tenant_id
+
+
+def _resolve_tenant_id(tenant_id: UUID | str | None, fallback: UUID) -> UUID:
+    """解析 tenant_id（使用指定的 fallback）
+
+    Args:
+        tenant_id: 傳入的 tenant_id（可能是 UUID、字串或 None）
+        fallback: 當 tenant_id 為 None 時使用的預設值
+
+    Returns:
+        解析後的 UUID
+    """
+    if tenant_id is None:
+        return fallback
     if isinstance(tenant_id, str):
         return UUID(tenant_id)
     return tenant_id
@@ -334,20 +351,26 @@ async def list_members(project_id: UUID) -> list[ProjectMemberResponse]:
         return [ProjectMemberResponse(**dict(r)) for r in rows]
 
 
-async def create_member(project_id: UUID, data: ProjectMemberCreate) -> ProjectMemberResponse:
+async def create_member(
+    project_id: UUID,
+    data: ProjectMemberCreate,
+    tenant_id: UUID | str | None = None,
+) -> ProjectMemberResponse:
     """新增專案成員"""
     async with get_connection() as conn:
-        # 檢查專案是否存在
-        exists = await conn.fetchval(
-            "SELECT 1 FROM projects WHERE id = $1", project_id
+        # 檢查專案是否存在並取得 tenant_id
+        project_row = await conn.fetchrow(
+            "SELECT id, tenant_id FROM projects WHERE id = $1", project_id
         )
-        if not exists:
+        if not project_row:
             raise ProjectNotFoundError(f"專案 {project_id} 不存在")
+
+        tid = _resolve_tenant_id(tenant_id, project_row["tenant_id"])
 
         row = await conn.fetchrow(
             """
-            INSERT INTO project_members (project_id, name, role, company, email, phone, notes, is_internal, user_id)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            INSERT INTO project_members (project_id, name, role, company, email, phone, notes, is_internal, user_id, tenant_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             RETURNING *
             """,
             project_id,
@@ -359,6 +382,7 @@ async def create_member(project_id: UUID, data: ProjectMemberCreate) -> ProjectM
             data.notes,
             data.is_internal,
             data.user_id,
+            tid,
         )
         # 如果有 user_id，查詢 user 資訊
         result = dict(row)
@@ -469,16 +493,21 @@ async def get_meeting(project_id: UUID, meeting_id: UUID) -> ProjectMeetingRespo
 
 
 async def create_meeting(
-    project_id: UUID, data: ProjectMeetingCreate, created_by: str | None = None
+    project_id: UUID,
+    data: ProjectMeetingCreate,
+    created_by: str | None = None,
+    tenant_id: UUID | str | None = None,
 ) -> ProjectMeetingResponse:
     """新增會議記錄"""
     async with get_connection() as conn:
-        # 檢查專案是否存在
-        exists = await conn.fetchval(
-            "SELECT 1 FROM projects WHERE id = $1", project_id
+        # 檢查專案是否存在並取得 tenant_id
+        project_row = await conn.fetchrow(
+            "SELECT id, tenant_id FROM projects WHERE id = $1", project_id
         )
-        if not exists:
+        if not project_row:
             raise ProjectNotFoundError(f"專案 {project_id} 不存在")
+
+        tid = _resolve_tenant_id(tenant_id, project_row["tenant_id"])
 
         # 處理日期時間時區問題
         meeting_date = data.meeting_date
@@ -490,8 +519,8 @@ async def create_meeting(
 
         row = await conn.fetchrow(
             """
-            INSERT INTO project_meetings (project_id, title, meeting_date, location, attendees, content, created_by)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            INSERT INTO project_meetings (project_id, title, meeting_date, location, attendees, content, created_by, tenant_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING *
             """,
             project_id,
@@ -501,6 +530,7 @@ async def create_meeting(
             data.attendees,
             data.content,
             created_by,
+            tid,
         )
         return ProjectMeetingResponse(**dict(row))
 
@@ -621,15 +651,18 @@ async def upload_attachment(
     data: bytes,
     description: str | None = None,
     uploaded_by: str | None = None,
+    tenant_id: UUID | str | None = None,
 ) -> ProjectAttachmentResponse:
     """上傳附件"""
     async with get_connection() as conn:
-        # 檢查專案是否存在
-        exists = await conn.fetchval(
-            "SELECT 1 FROM projects WHERE id = $1", project_id
+        # 檢查專案是否存在並取得 tenant_id
+        project_row = await conn.fetchrow(
+            "SELECT id, tenant_id FROM projects WHERE id = $1", project_id
         )
-        if not exists:
+        if not project_row:
             raise ProjectNotFoundError(f"專案 {project_id} 不存在")
+
+        tid = _resolve_tenant_id(tenant_id, project_row["tenant_id"])
 
         file_size = len(data)
         file_type = _get_file_type(filename)
@@ -660,8 +693,8 @@ async def upload_attachment(
         # 寫入資料庫
         row = await conn.fetchrow(
             """
-            INSERT INTO project_attachments (project_id, filename, file_type, file_size, storage_path, description, uploaded_by)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            INSERT INTO project_attachments (project_id, filename, file_type, file_size, storage_path, description, uploaded_by, tenant_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING *
             """,
             project_id,
@@ -671,6 +704,7 @@ async def upload_attachment(
             storage_path,
             description,
             uploaded_by,
+            tid,
         )
         return ProjectAttachmentResponse(**dict(row))
 
@@ -779,26 +813,33 @@ async def list_links(project_id: UUID) -> list[ProjectLinkResponse]:
         return [ProjectLinkResponse(**dict(r)) for r in rows]
 
 
-async def create_link(project_id: UUID, data: ProjectLinkCreate) -> ProjectLinkResponse:
+async def create_link(
+    project_id: UUID,
+    data: ProjectLinkCreate,
+    tenant_id: UUID | str | None = None,
+) -> ProjectLinkResponse:
     """新增專案連結"""
     async with get_connection() as conn:
-        # 檢查專案是否存在
-        exists = await conn.fetchval(
-            "SELECT 1 FROM projects WHERE id = $1", project_id
+        # 檢查專案是否存在並取得 tenant_id
+        project_row = await conn.fetchrow(
+            "SELECT id, tenant_id FROM projects WHERE id = $1", project_id
         )
-        if not exists:
+        if not project_row:
             raise ProjectNotFoundError(f"專案 {project_id} 不存在")
+
+        tid = _resolve_tenant_id(tenant_id, project_row["tenant_id"])
 
         row = await conn.fetchrow(
             """
-            INSERT INTO project_links (project_id, title, url, description)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO project_links (project_id, title, url, description, tenant_id)
+            VALUES ($1, $2, $3, $4, $5)
             RETURNING *
             """,
             project_id,
             data.title,
             data.url,
             data.description,
+            tid,
         )
         return ProjectLinkResponse(**dict(row))
 
@@ -867,21 +908,31 @@ async def list_milestones(project_id: UUID) -> list[ProjectMilestoneResponse]:
 
 
 async def create_milestone(
-    project_id: UUID, data: ProjectMilestoneCreate
+    project_id: UUID,
+    data: ProjectMilestoneCreate,
+    tenant_id: UUID | str | None = None,
 ) -> ProjectMilestoneResponse:
-    """新增專案里程碑"""
+    """新增專案里程碑
+
+    Args:
+        project_id: 專案 UUID
+        data: 里程碑資料
+        tenant_id: 租戶 ID（若未提供，從專案取得）
+    """
     async with get_connection() as conn:
-        # 檢查專案是否存在
-        exists = await conn.fetchval(
-            "SELECT 1 FROM projects WHERE id = $1", project_id
+        # 檢查專案是否存在並取得 tenant_id
+        project_row = await conn.fetchrow(
+            "SELECT id, tenant_id FROM projects WHERE id = $1", project_id
         )
-        if not exists:
+        if not project_row:
             raise ProjectNotFoundError(f"專案 {project_id} 不存在")
+
+        tid = _resolve_tenant_id(tenant_id, project_row["tenant_id"])
 
         row = await conn.fetchrow(
             """
-            INSERT INTO project_milestones (project_id, name, milestone_type, planned_date, actual_date, status, notes, sort_order)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            INSERT INTO project_milestones (project_id, name, milestone_type, planned_date, actual_date, status, notes, sort_order, tenant_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             RETURNING *
             """,
             project_id,
@@ -892,6 +943,7 @@ async def create_milestone(
             data.status,
             data.notes,
             data.sort_order,
+            tid,
         )
         return ProjectMilestoneResponse(**dict(row))
 
@@ -972,16 +1024,21 @@ async def list_deliveries(project_id: UUID) -> list[DeliveryScheduleResponse]:
 
 
 async def create_delivery(
-    project_id: UUID, data: DeliveryScheduleCreate, created_by: str | None = None
+    project_id: UUID,
+    data: DeliveryScheduleCreate,
+    created_by: str | None = None,
+    tenant_id: UUID | str | None = None,
 ) -> DeliveryScheduleResponse:
     """新增專案發包記錄"""
     async with get_connection() as conn:
-        # 檢查專案是否存在
-        exists = await conn.fetchval(
-            "SELECT 1 FROM projects WHERE id = $1", project_id
+        # 檢查專案是否存在並取得 tenant_id
+        project_row = await conn.fetchrow(
+            "SELECT id, tenant_id FROM projects WHERE id = $1", project_id
         )
-        if not exists:
+        if not project_row:
             raise ProjectNotFoundError(f"專案 {project_id} 不存在")
+
+        tid = _resolve_tenant_id(tenant_id, project_row["tenant_id"])
 
         # 處理廠商：若提供 vendor_id 則自動查詢廠商名稱
         vendor = data.vendor
@@ -1011,8 +1068,8 @@ async def create_delivery(
 
         row = await conn.fetchrow(
             """
-            INSERT INTO project_delivery_schedules (project_id, vendor, vendor_id, item, item_id, quantity, order_date, expected_delivery_date, status, notes, created_by)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            INSERT INTO project_delivery_schedules (project_id, vendor, vendor_id, item, item_id, quantity, order_date, expected_delivery_date, status, notes, created_by, tenant_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
             RETURNING *
             """,
             project_id,
@@ -1026,6 +1083,7 @@ async def create_delivery(
             data.status,
             data.notes,
             created_by,
+            tid,
         )
         # 取得關聯資料
         result = await conn.fetchrow(

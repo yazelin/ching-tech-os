@@ -111,6 +111,38 @@ async def get_user_tenant_id(line_user_id: str) -> UUID | None:
         return row["tenant_id"] if row else None
 
 
+async def get_line_user_record(
+    line_user_id: str,
+    tenant_id: UUID | str | None = None,
+    columns: str = "*",
+) -> dict | None:
+    """查詢 line_users 表的記錄
+
+    同一個 Line 用戶可能在多個租戶有記錄，此函數會根據 tenant_id 過濾。
+
+    Args:
+        line_user_id: Line 用戶 ID
+        tenant_id: 租戶 ID（若提供，會用於過濾）
+        columns: 要查詢的欄位（預設 "*"）
+
+    Returns:
+        line_users 表的記錄，若找不到則回傳 None
+    """
+    async with get_connection() as conn:
+        if tenant_id:
+            tid = UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id
+            row = await conn.fetchrow(
+                f"SELECT {columns} FROM line_users WHERE line_user_id = $1 AND tenant_id = $2",
+                line_user_id, tid,
+            )
+        else:
+            row = await conn.fetchrow(
+                f"SELECT {columns} FROM line_users WHERE line_user_id = $1",
+                line_user_id,
+            )
+        return dict(row) if row else None
+
+
 async def resolve_tenant_for_message(
     line_group_id: str | None,
     line_user_id: str | None,

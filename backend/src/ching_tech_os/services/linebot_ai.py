@@ -40,6 +40,8 @@ from .linebot import (
     is_readable_file,
     is_legacy_office_file,
     MAX_READABLE_FILE_SIZE,
+    # Line 用戶查詢
+    get_line_user_record,
 )
 from . import ai_manager
 from .linebot_agents import get_linebot_agent, AGENT_LINEBOT_PERSONAL, AGENT_LINEBOT_GROUP
@@ -630,18 +632,15 @@ async def process_message_with_ai(
         user_permissions = None
         app_permissions: dict[str, bool] = {}
         if line_user_id:
-            async with get_connection() as conn:
-                user_row = await conn.fetchrow(
-                    "SELECT user_id FROM line_users WHERE line_user_id = $1",
-                    line_user_id,
-                )
-                if user_row and user_row["user_id"]:
-                    ctos_user_id = user_row["user_id"]
-                    user_info = await get_user_role_and_permissions(ctos_user_id)
-                    user_role = user_info["role"]
-                    user_permissions = user_info["permissions"]
-                    # 計算 App 權限供 prompt 動態生成
-                    app_permissions = get_user_app_permissions_sync(user_role, user_info.get("user_data"))
+            # 同一個 Line 用戶可能在多個租戶有記錄，必須用 tenant_id 過濾
+            user_row = await get_line_user_record(line_user_id, tenant_id, "user_id")
+            if user_row and user_row["user_id"]:
+                ctos_user_id = user_row["user_id"]
+                user_info = await get_user_role_and_permissions(ctos_user_id, tenant_id)
+                user_role = user_info["role"]
+                user_permissions = user_info["permissions"]
+                # 計算 App 權限供 prompt 動態生成
+                app_permissions = get_user_app_permissions_sync(user_role, user_info.get("user_data"))
 
         # 若未關聯 CTOS 帳號，使用預設權限（一般使用者）
         if not app_permissions:
@@ -1343,18 +1342,15 @@ async def build_system_prompt(
 
     # 加入對話識別資訊（供 MCP 工具使用）
     # 查詢用戶的 CTOS user_id（用於權限檢查）
+    # 注意：同一個 Line 用戶可能在多個租戶有記錄，必須用 tenant_id 過濾
     ctos_user_id = None
     line_user_uuid = None
     if line_user_id:
-        async with get_connection() as conn:
-            user_row = await conn.fetchrow(
-                "SELECT id, user_id FROM line_users WHERE line_user_id = $1",
-                line_user_id,
-            )
-            if user_row:
-                line_user_uuid = user_row["id"]
-                if user_row["user_id"]:
-                    ctos_user_id = user_row["user_id"]
+        user_row = await get_line_user_record(line_user_id, tenant_id, "id, user_id")
+        if user_row:
+            line_user_uuid = user_row["id"]
+            if user_row["user_id"]:
+                ctos_user_id = user_row["user_id"]
 
     # 載入並整合自訂記憶
     from .linebot import get_active_group_memories, get_active_user_memories
@@ -1447,15 +1443,11 @@ async def handle_text_message(
             - 有值：使用該租戶的 Line Bot credentials
             - None：使用環境變數的 credentials（共用 Bot）
     """
-    # 取得用戶顯示名稱
+    # 取得用戶顯示名稱（同一個 Line 用戶可能在多個租戶有記錄，用 tenant_id 過濾）
     user_display_name = None
-    async with get_connection() as conn:
-        row = await conn.fetchrow(
-            "SELECT display_name FROM line_users WHERE line_user_id = $1",
-            line_user_id,
-        )
-        if row:
-            user_display_name = row["display_name"]
+    user_row = await get_line_user_record(line_user_id, tenant_id, "display_name")
+    if user_row:
+        user_display_name = user_row["display_name"]
 
     # 處理訊息
     await process_message_with_ai(
