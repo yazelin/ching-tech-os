@@ -365,23 +365,24 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
     user_role = "user"
 
     if user_data:
-        # 使用者已存在，從資料庫取得角色
+        # 使用者已存在
         user_id = user_data["id"]
-        user_role = user_data.get("role") or "user"
         # 更新最後登入時間
         await update_last_login(user_id)
     else:
         # 使用者不存在（SMB 認證但尚未建立用戶記錄）
         try:
             user_id = await upsert_user(request.username, tenant_id=tenant_id)
-            # 新建使用者預設為一般使用者
-            user_role = "user"
         except Exception as e:
             logger.error(f"Failed to upsert user '{request.username}': {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="無法建立使用者記錄，請稍後再試。",
             )
+
+    # 從 tenant_admins 表判斷角色（而非 users.role 欄位）
+    from ..services.user import get_user_role
+    user_role = await get_user_role(user_id, tenant_id)
 
     # 取得使用者的 App 權限（供 session 快取使用）
     from ..services.permissions import get_user_app_permissions_sync

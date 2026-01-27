@@ -631,13 +631,20 @@ async def process_message_with_ai(
         app_permissions: dict[str, bool] = {}
         if line_user_id:
             async with get_connection() as conn:
-                user_row = await conn.fetchrow(
-                    "SELECT user_id FROM line_users WHERE line_user_id = $1",
-                    line_user_id,
-                )
+                # 同一個 Line 用戶可能在多個租戶有記錄，必須用 tenant_id 過濾
+                if tenant_id:
+                    user_row = await conn.fetchrow(
+                        "SELECT user_id FROM line_users WHERE line_user_id = $1 AND tenant_id = $2",
+                        line_user_id, tenant_id,
+                    )
+                else:
+                    user_row = await conn.fetchrow(
+                        "SELECT user_id FROM line_users WHERE line_user_id = $1",
+                        line_user_id,
+                    )
                 if user_row and user_row["user_id"]:
                     ctos_user_id = user_row["user_id"]
-                    user_info = await get_user_role_and_permissions(ctos_user_id)
+                    user_info = await get_user_role_and_permissions(ctos_user_id, tenant_id)
                     user_role = user_info["role"]
                     user_permissions = user_info["permissions"]
                     # 計算 App 權限供 prompt 動態生成
@@ -1343,14 +1350,23 @@ async def build_system_prompt(
 
     # 加入對話識別資訊（供 MCP 工具使用）
     # 查詢用戶的 CTOS user_id（用於權限檢查）
+    # 注意：同一個 Line 用戶可能在多個租戶有記錄，必須用 tenant_id 過濾
     ctos_user_id = None
     line_user_uuid = None
     if line_user_id:
         async with get_connection() as conn:
-            user_row = await conn.fetchrow(
-                "SELECT id, user_id FROM line_users WHERE line_user_id = $1",
-                line_user_id,
-            )
+            if tenant_id:
+                # 有 tenant_id 時，查詢該租戶下的用戶
+                user_row = await conn.fetchrow(
+                    "SELECT id, user_id FROM line_users WHERE line_user_id = $1 AND tenant_id = $2",
+                    line_user_id, tenant_id,
+                )
+            else:
+                # 沒有 tenant_id 時（理論上不應該發生），使用原本的查詢
+                user_row = await conn.fetchrow(
+                    "SELECT id, user_id FROM line_users WHERE line_user_id = $1",
+                    line_user_id,
+                )
             if user_row:
                 line_user_uuid = user_row["id"]
                 if user_row["user_id"]:
@@ -1447,13 +1463,19 @@ async def handle_text_message(
             - 有值：使用該租戶的 Line Bot credentials
             - None：使用環境變數的 credentials（共用 Bot）
     """
-    # 取得用戶顯示名稱
+    # 取得用戶顯示名稱（同一個 Line 用戶可能在多個租戶有記錄，用 tenant_id 過濾）
     user_display_name = None
     async with get_connection() as conn:
-        row = await conn.fetchrow(
-            "SELECT display_name FROM line_users WHERE line_user_id = $1",
-            line_user_id,
-        )
+        if tenant_id:
+            row = await conn.fetchrow(
+                "SELECT display_name FROM line_users WHERE line_user_id = $1 AND tenant_id = $2",
+                line_user_id, tenant_id,
+            )
+        else:
+            row = await conn.fetchrow(
+                "SELECT display_name FROM line_users WHERE line_user_id = $1",
+                line_user_id,
+            )
         if row:
             user_display_name = row["display_name"]
 

@@ -108,10 +108,9 @@ async def get_current_user(
             detail="使用者不存在",
         )
 
-    # 取得權限資訊
+    # 取得權限資訊（使用 session.role，因為登入時已從 tenant_admins 表判斷）
     preferences = _parse_preferences(user.get("preferences"))
-    user_role = user.get("role") or "user"
-    permissions = get_user_permissions_for_role(user_role, preferences)
+    permissions = get_user_permissions_for_role(session.role, preferences)
 
     # 判斷是否已設定密碼
     has_password = bool(user.get("password_hash"))
@@ -152,10 +151,9 @@ async def update_current_user(
             detail="使用者不存在",
         )
 
-    # 取得權限資訊
+    # 取得權限資訊（使用 session.role，因為登入時已從 tenant_admins 表判斷）
     preferences = _parse_preferences(user.get("preferences"))
-    user_role = user.get("role") or "user"
-    permissions = get_user_permissions_for_role(user_role, preferences)
+    permissions = get_user_permissions_for_role(session.role, preferences)
 
     # is_admin 改為基於 role 判斷
     user_is_admin = session.role in ("tenant_admin", "platform_admin")

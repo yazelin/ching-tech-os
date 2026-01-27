@@ -5504,6 +5504,7 @@ async def add_memory(
     title: str | None = None,
     line_group_id: str | None = None,
     line_user_id: str | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     新增記憶
@@ -5513,6 +5514,7 @@ async def add_memory(
         title: 記憶標題（方便識別），若未提供系統會自動產生
         line_group_id: Line 群組的內部 UUID（群組對話時使用，從對話識別取得）
         line_user_id: Line 用戶 ID（個人對話時使用，從對話識別取得）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     await ensure_db_connection()
 
@@ -5542,11 +5544,18 @@ async def add_memory(
 
     elif line_user_id:
         # 個人記憶：需要查詢用戶的內部 UUID
+        # 同一個 Line 用戶可能在多個租戶有記錄，必須用 tenant_id 過濾
         async with get_connection() as conn:
-            user_row = await conn.fetchrow(
-                "SELECT id FROM line_users WHERE line_user_id = $1",
-                line_user_id,
-            )
+            if ctos_tenant_id:
+                user_row = await conn.fetchrow(
+                    "SELECT id FROM line_users WHERE line_user_id = $1 AND tenant_id = $2",
+                    line_user_id, UUID(ctos_tenant_id),
+                )
+            else:
+                user_row = await conn.fetchrow(
+                    "SELECT id FROM line_users WHERE line_user_id = $1",
+                    line_user_id,
+                )
             if not user_row:
                 return "❌ 找不到用戶"
 
@@ -5569,6 +5578,7 @@ async def add_memory(
 async def get_memories(
     line_group_id: str | None = None,
     line_user_id: str | None = None,
+    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     查詢記憶
@@ -5576,6 +5586,7 @@ async def get_memories(
     Args:
         line_group_id: Line 群組的內部 UUID（群組對話時使用，從對話識別取得）
         line_user_id: Line 用戶 ID（個人對話時使用，從對話識別取得）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     await ensure_db_connection()
 
@@ -5612,11 +5623,18 @@ async def get_memories(
 
     elif line_user_id:
         # 個人記憶
+        # 同一個 Line 用戶可能在多個租戶有記錄，必須用 tenant_id 過濾
         async with get_connection() as conn:
-            user_row = await conn.fetchrow(
-                "SELECT id FROM line_users WHERE line_user_id = $1",
-                line_user_id,
-            )
+            if ctos_tenant_id:
+                user_row = await conn.fetchrow(
+                    "SELECT id FROM line_users WHERE line_user_id = $1 AND tenant_id = $2",
+                    line_user_id, UUID(ctos_tenant_id),
+                )
+            else:
+                user_row = await conn.fetchrow(
+                    "SELECT id FROM line_users WHERE line_user_id = $1",
+                    line_user_id,
+                )
             if not user_row:
                 return "❌ 找不到用戶"
 
