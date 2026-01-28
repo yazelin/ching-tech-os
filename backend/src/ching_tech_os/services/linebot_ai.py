@@ -755,7 +755,8 @@ async def process_message_with_ai(
 
         # 呼叫 Claude CLI（只呼叫一次，不重試）
         # 注意：此 timeout 是整體 Claude CLI 的執行時間，包含所有工具呼叫
-        # 當 nanobanana (Gemini Pro) timeout 或回傳錯誤時，會觸發 fallback
+        # 當 nanobanana MCP 完全失敗時（timeout/錯誤），會觸發 FLUX fallback
+        # Gemini 模型間的 fallback（Pro → Flash）由 nanobanana MCP 內部自動處理
         response = await call_claude(
             prompt=user_message,
             model=model,
@@ -788,9 +789,10 @@ async def process_message_with_ai(
         nanobanana_timeout = check_nanobanana_timeout(response.tool_calls)
 
         if nanobanana_error or nanobanana_timeout:
-            # nanobanana (Gemini Pro) 失敗，嘗試三層 fallback
+            # nanobanana MCP 完全失敗（timeout/錯誤），嘗試 FLUX fallback
+            # 注意：Gemini 模型間的 fallback（Pro → Flash）由 nanobanana MCP 內部處理
             error_reason = "timeout（無回應）" if nanobanana_timeout else nanobanana_error
-            logger.warning(f"Nanobanana (Gemini Pro) 錯誤: {error_reason}")
+            logger.warning(f"Nanobanana MCP 錯誤: {error_reason}")
 
             # 提取原始 prompt，嘗試 fallback
             original_prompt = extract_nanobanana_prompt(response.tool_calls)
@@ -820,9 +822,9 @@ async def process_message_with_ai(
             # 如果沒有 fallback 或所有服務都失敗，顯示錯誤訊息
             if not fallback_path:
                 if nanobanana_timeout:
-                    error_detail = "Gemini Pro 無回應（超時）"
+                    error_detail = "圖片生成服務無回應（超時）"
                 else:
-                    error_detail = f"Gemini Pro: {nanobanana_error}"
+                    error_detail = f"圖片生成服務: {nanobanana_error}"
 
                 # 組合錯誤訊息（包含所有失敗的服務）
                 if fallback_error:
