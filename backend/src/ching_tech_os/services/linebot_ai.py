@@ -12,7 +12,10 @@ import time
 from uuid import UUID
 
 from .claude_agent import call_claude, compose_prompt_with_history
-from .huggingface_image import generate_image_fallback
+from .image_fallback import (
+    generate_image_with_fallback,
+    get_fallback_notification,
+)
 from .linebot import (
     reply_text,
     reply_messages,
@@ -751,12 +754,14 @@ async def process_message_with_ai(
         start_time = time.time()
 
         # 呼叫 Claude CLI（只呼叫一次，不重試）
+        # 注意：此 timeout 是整體 Claude CLI 的執行時間，包含所有工具呼叫
+        # 當 nanobanana (Gemini Pro) timeout 或回傳錯誤時，會觸發 fallback
         response = await call_claude(
             prompt=user_message,
             model=model,
             history=history,
             system_prompt=system_prompt,
-            timeout=480,  # 延長至 8 分鐘，支援複雜任務如多次 WebSearch + 分析
+            timeout=480,  # 8 分鐘，支援複雜任務
             tools=all_tools,
         )
 
@@ -783,44 +788,47 @@ async def process_message_with_ai(
         nanobanana_timeout = check_nanobanana_timeout(response.tool_calls)
 
         if nanobanana_error or nanobanana_timeout:
-            # nanobanana 失敗，嘗試 Hugging Face fallback
-            error_reason = "timeout" if nanobanana_timeout else nanobanana_error
-            logger.warning(f"Nanobanana 錯誤: {error_reason}")
+            # nanobanana (Gemini Pro) 失敗，嘗試三層 fallback
+            error_reason = "timeout（無回應）" if nanobanana_timeout else nanobanana_error
+            logger.warning(f"Nanobanana (Gemini Pro) 錯誤: {error_reason}")
 
             # 提取原始 prompt，嘗試 fallback
             original_prompt = extract_nanobanana_prompt(response.tool_calls)
             fallback_path = None
+            service_used = None
             fallback_error = None
 
             if original_prompt:
-                logger.info(f"嘗試 Hugging Face fallback: {original_prompt[:50]}...")
-                fallback_path, used_fallback, fallback_error = await generate_image_fallback(
-                    original_prompt, str(error_reason)
+                logger.info(f"嘗試 fallback: {original_prompt[:50]}...")
+                fallback_path, service_used, fallback_error = await generate_image_with_fallback(
+                    original_prompt, error_reason
                 )
 
                 if fallback_path:
                     # Fallback 成功，準備圖片訊息
-                    logger.info(f"Hugging Face fallback 成功: {fallback_path}")
+                    logger.info(f"Fallback 成功 ({service_used}): {fallback_path}")
                     from .mcp_server import prepare_file_message
                     file_msg = await prepare_file_message(fallback_path, ctos_tenant_id=str(tenant_id) if tenant_id else None)
-                    ai_response = f"圖片已生成（使用備用服務）：\n\n{file_msg}"
-                elif used_fallback:
-                    # Fallback 被觸發但失敗
-                    logger.error(f"Hugging Face fallback 失敗: {fallback_error}")
 
-            # 如果沒有 fallback 或 fallback 也失敗，顯示錯誤訊息
+                    # 加入 fallback 通知
+                    notification = get_fallback_notification(service_used)
+                    if notification:
+                        ai_response = f"圖片已生成{notification}\n\n{file_msg}"
+                    else:
+                        ai_response = f"圖片已生成：\n\n{file_msg}"
+
+            # 如果沒有 fallback 或所有服務都失敗，顯示錯誤訊息
             if not fallback_path:
                 if nanobanana_timeout:
-                    error_detail = "Gemini 伺服器無回應"
+                    error_detail = "Gemini Pro 無回應（超時）"
                 else:
-                    error_detail = "Gemini 伺服器過載（503 錯誤）"
+                    error_detail = f"Gemini Pro: {nanobanana_error}"
 
-                # 組合錯誤訊息（包含 fallback 狀態）
+                # 組合錯誤訊息（包含所有失敗的服務）
                 if fallback_error:
                     ai_response = (
                         "⚠️ 圖片生成服務暫時無法使用\n\n"
-                        f"主服務：{error_detail}\n"
-                        f"備用服務：{fallback_error}\n\n"
+                        f"已嘗試的服務：\n{fallback_error}\n\n"
                         "建議：請稍後再試"
                     )
                 else:
