@@ -110,7 +110,7 @@ API_APP_MAPPING: dict[str, str] = {
     "/api/knowledge": "knowledge-base",
     "/api/nas": "file-manager",
     "/api/inventory": "inventory-management",
-    "/api/vendor": "vendor-management",
+    "/api/vendors": "vendor-management",
     "/api/memory": "memory-manager",
     "/api/share": "share-manager",
 }
@@ -173,8 +173,8 @@ APP_DISPLAY_NAMES: dict[str, str] = {
     "share-manager": "分享管理",
     "tenant-admin": "租戶管理",
     "platform-admin": "平台管理",
-    "md2ppt": "md2ppt",
-    "md2doc": "md2doc",
+    "md2ppt": "簡報生成",
+    "md2doc": "文件生成",
     "settings": "系統設定",
 }
 
