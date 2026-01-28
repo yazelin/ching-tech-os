@@ -109,13 +109,14 @@ async def generate_image_with_gemini_flash(prompt: str) -> tuple[str | None, str
         parts = content.get("parts", [])
 
         # 找到圖片 part
-        image_data = None
-        for part in parts:
-            if "inlineData" in part:
-                inline_data = part["inlineData"]
-                if inline_data.get("mimeType", "").startswith("image/"):
-                    image_data = inline_data.get("data")
-                    break
+        image_data = next(
+            (
+                part["inlineData"].get("data")
+                for part in parts
+                if "inlineData" in part and part["inlineData"].get("mimeType", "").startswith("image/")
+            ),
+            None,
+        )
 
         if not image_data:
             return None, "Gemini Flash 回應中沒有圖片"
@@ -269,7 +270,7 @@ def get_fallback_notification(service_used: str) -> str | None:
         通知訊息，若為主要服務則回傳 None
     """
     if service_used == "Gemini Flash":
-        return "（使用備用服務生成，品質可能略有不同）"
+        return "（使用快速模式）"
     elif service_used == "Hugging Face FLUX":
-        return "（使用備用服務生成，風格可能略有不同）"
+        return "（使用備用服務）"
     return None

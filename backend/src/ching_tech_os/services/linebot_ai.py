@@ -801,7 +801,7 @@ async def process_message_with_ai(
             if original_prompt:
                 logger.info(f"嘗試 fallback: {original_prompt[:50]}...")
                 fallback_path, service_used, fallback_error = await generate_image_with_fallback(
-                    original_prompt, str(error_reason)
+                    original_prompt, error_reason
                 )
 
                 if fallback_path:
