@@ -104,18 +104,6 @@ TOOL_APP_MAPPING: dict[str, str | None] = {
     "share_knowledge_attachment": None,  # 分享知識庫附件（基礎功能）
 }
 
-# API 路徑前綴對應需要的 App 權限
-API_APP_MAPPING: dict[str, str] = {
-    "/api/project": "project-management",
-    "/api/knowledge": "knowledge-base",
-    "/api/nas": "file-manager",
-    "/api/inventory": "inventory-management",
-    "/api/vendors": "vendor-management",
-    "/api/memory": "memory-manager",
-    "/api/share": "share-manager",
-}
-
-
 # ============================================================
 # 預設權限常數
 # ============================================================
@@ -694,18 +682,3 @@ def require_app_permission(app_id: str) -> Callable:
         )
 
     return checker
-
-
-def get_api_required_app(path: str) -> str | None:
-    """根據 API 路徑取得需要的 App 權限
-
-    Args:
-        path: API 路徑（如 "/api/project/123"）
-
-    Returns:
-        需要的 App ID，或 None（不需要特定權限）
-    """
-    for prefix, app_id in API_APP_MAPPING.items():
-        if path.startswith(prefix):
-            return app_id
-    return None
