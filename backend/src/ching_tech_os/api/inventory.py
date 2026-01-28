@@ -65,7 +65,7 @@ async def api_list_inventory_items(
     q: str | None = Query(None, description="關鍵字搜尋（名稱、規格）"),
     category: str | None = Query(None, description="類別過濾"),
     low_stock: bool = Query(False, description="只顯示庫存不足的物料"),
-    session: SessionData = Depends(require_app_permission("inventory")),
+    session: SessionData = Depends(require_app_permission("inventory-management")),
 ) -> InventoryItemListResponse:
     """列出物料"""
     try:
@@ -86,7 +86,7 @@ async def api_list_inventory_items(
 )
 async def api_get_inventory_item(
     item_id: UUID,
-    session: SessionData = Depends(require_app_permission("inventory")),
+    session: SessionData = Depends(require_app_permission("inventory-management")),
 ) -> InventoryItemResponse:
     """取得物料詳情"""
     try:
@@ -105,7 +105,7 @@ async def api_get_inventory_item(
 )
 async def api_create_inventory_item(
     data: InventoryItemCreate,
-    session: SessionData = Depends(require_app_permission("inventory")),
+    session: SessionData = Depends(require_app_permission("inventory-management")),
 ) -> InventoryItemResponse:
     """建立物料"""
     try:
@@ -126,7 +126,7 @@ async def api_create_inventory_item(
 async def api_update_inventory_item(
     item_id: UUID,
     data: InventoryItemUpdate,
-    session: SessionData = Depends(require_app_permission("inventory")),
+    session: SessionData = Depends(require_app_permission("inventory-management")),
 ) -> InventoryItemResponse:
     """更新物料"""
     try:
@@ -144,7 +144,7 @@ async def api_update_inventory_item(
 )
 async def api_delete_inventory_item(
     item_id: UUID,
-    session: SessionData = Depends(require_app_permission("inventory")),
+    session: SessionData = Depends(require_app_permission("inventory-management")),
 ) -> None:
     """刪除物料"""
     try:
@@ -168,7 +168,7 @@ async def api_delete_inventory_item(
 async def api_list_inventory_transactions(
     item_id: UUID,
     limit: int = Query(50, ge=1, le=200, description="最大筆數"),
-    session: SessionData = Depends(require_app_permission("inventory")),
+    session: SessionData = Depends(require_app_permission("inventory-management")),
 ) -> InventoryTransactionListResponse:
     """列出物料的進出貨記錄"""
     try:
@@ -192,7 +192,7 @@ async def api_list_inventory_transactions(
 async def api_create_inventory_transaction(
     item_id: UUID,
     data: InventoryTransactionCreate,
-    session: SessionData = Depends(require_app_permission("inventory")),
+    session: SessionData = Depends(require_app_permission("inventory-management")),
 ) -> InventoryTransactionResponse:
     """建立進出貨記錄"""
     try:
@@ -215,7 +215,7 @@ async def api_create_inventory_transaction(
 )
 async def api_get_inventory_transaction(
     transaction_id: UUID,
-    session: SessionData = Depends(require_app_permission("inventory")),
+    session: SessionData = Depends(require_app_permission("inventory-management")),
 ) -> InventoryTransactionResponse:
     """取得進出貨記錄詳情"""
     try:
@@ -236,7 +236,7 @@ async def api_get_inventory_transaction(
 )
 async def api_delete_inventory_transaction(
     transaction_id: UUID,
-    session: SessionData = Depends(require_app_permission("inventory")),
+    session: SessionData = Depends(require_app_permission("inventory-management")),
 ) -> None:
     """刪除進出貨記錄"""
     try:
@@ -352,7 +352,7 @@ async def api_delete_inventory_order(order_id: UUID) -> None:
     summary="取得所有類別",
 )
 async def api_get_categories(
-    session: SessionData = Depends(require_app_permission("inventory")),
+    session: SessionData = Depends(require_app_permission("inventory-management")),
 ) -> list[str]:
     """取得所有類別"""
     return await get_categories(tenant_id=session.tenant_id)
@@ -364,7 +364,7 @@ async def api_get_categories(
     summary="取得庫存不足數量",
 )
 async def api_get_low_stock_count(
-    session: SessionData = Depends(require_app_permission("inventory")),
+    session: SessionData = Depends(require_app_permission("inventory-management")),
 ) -> int:
     """取得庫存不足的物料數量"""
     return await get_low_stock_count(tenant_id=session.tenant_id)

@@ -37,7 +37,7 @@ async def api_list_vendors(
     q: str | None = Query(None, description="關鍵字搜尋（名稱、簡稱、ERP 編號）"),
     active: bool = Query(True, description="只顯示啟用的廠商"),
     limit: int = Query(100, description="最大回傳數量", ge=1, le=500),
-    session: SessionData = Depends(require_app_permission("inventory")),
+    session: SessionData = Depends(require_app_permission("vendor-management")),
 ) -> VendorListResponse:
     """列出廠商"""
     try:
@@ -58,7 +58,7 @@ async def api_list_vendors(
 )
 async def api_get_vendor(
     vendor_id: UUID,
-    session: SessionData = Depends(require_app_permission("inventory")),
+    session: SessionData = Depends(require_app_permission("vendor-management")),
 ) -> VendorResponse:
     """取得廠商詳情"""
     try:
@@ -77,7 +77,7 @@ async def api_get_vendor(
 )
 async def api_create_vendor(
     data: VendorCreate,
-    session: SessionData = Depends(require_app_permission("inventory")),
+    session: SessionData = Depends(require_app_permission("vendor-management")),
 ) -> VendorResponse:
     """新增廠商"""
     try:
@@ -100,7 +100,7 @@ async def api_create_vendor(
 async def api_update_vendor(
     vendor_id: UUID,
     data: VendorUpdate,
-    session: SessionData = Depends(require_app_permission("inventory")),
+    session: SessionData = Depends(require_app_permission("vendor-management")),
 ) -> VendorResponse:
     """更新廠商"""
     try:
@@ -120,7 +120,7 @@ async def api_update_vendor(
 )
 async def api_deactivate_vendor(
     vendor_id: UUID,
-    session: SessionData = Depends(require_app_permission("inventory")),
+    session: SessionData = Depends(require_app_permission("vendor-management")),
 ) -> VendorResponse:
     """停用廠商（軟刪除）"""
     try:
@@ -138,7 +138,7 @@ async def api_deactivate_vendor(
 )
 async def api_activate_vendor(
     vendor_id: UUID,
-    session: SessionData = Depends(require_app_permission("inventory")),
+    session: SessionData = Depends(require_app_permission("vendor-management")),
 ) -> VendorResponse:
     """啟用廠商"""
     try:

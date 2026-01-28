@@ -71,36 +71,38 @@ TOOL_APP_MAPPING: dict[str, str | None] = {
     "convert_pdf_to_images": "file-manager",
 
     # 庫存管理工具
-    "query_inventory": "inventory",
-    "add_inventory_item": "inventory",
-    "update_inventory_item": "inventory",
-    "record_inventory_in": "inventory",
-    "record_inventory_out": "inventory",
-    "adjust_inventory": "inventory",
-    "add_inventory_order": "inventory",
-    "update_inventory_order": "inventory",
-    "get_inventory_orders": "inventory",
+    "query_inventory": "inventory-management",
+    "add_inventory_item": "inventory-management",
+    "update_inventory_item": "inventory-management",
+    "record_inventory_in": "inventory-management",
+    "record_inventory_out": "inventory-management",
+    "adjust_inventory": "inventory-management",
+    "add_inventory_order": "inventory-management",
+    "update_inventory_order": "inventory-management",
+    "get_inventory_orders": "inventory-management",
 
-    # 廠商管理工具（與庫存一起）
-    "query_vendors": "inventory",
-    "add_vendor": "inventory",
-    "update_vendor": "inventory",
+    # 廠商管理工具
+    "query_vendors": "vendor-management",
+    "add_vendor": "vendor-management",
+    "update_vendor": "vendor-management",
+
+    # 記憶管理工具
+    "get_memories": "memory-manager",
+    "add_memory": "memory-manager",
+    "update_memory": "memory-manager",
+    "delete_memory": "memory-manager",
+
+    # 簡報/文件生成工具
+    "generate_presentation": "md2ppt",
+    "generate_md2ppt": "md2ppt",
+    "generate_md2doc": "md2doc",
 
     # 通用工具（不需要特定權限）
     "get_message_attachments": None,  # 基礎訊息功能
     "summarize_chat": None,           # 群組對話摘要
-    "create_share_link": None,        # 分享連結
+    "create_share_link": None,        # 分享連結（基礎功能）
+    "share_knowledge_attachment": None,  # 分享知識庫附件（基礎功能）
 }
-
-# API 路徑前綴對應需要的 App 權限
-API_APP_MAPPING: dict[str, str] = {
-    "/api/project": "project-management",
-    "/api/knowledge": "knowledge-base",
-    "/api/nas": "file-manager",
-    "/api/inventory": "inventory",
-    "/api/vendor": "inventory",
-}
-
 
 # ============================================================
 # 預設權限常數
@@ -113,12 +115,19 @@ DEFAULT_APP_PERMISSIONS: dict[str, bool] = {
     "terminal": False,          # 高風險，預設關閉
     "code-editor": False,       # 高風險，預設關閉
     "project-management": True,
+    "inventory-management": True,
+    "vendor-management": True,
     "ai-assistant": True,
     "prompt-editor": True,
     "agent-settings": True,
     "ai-log": True,
     "knowledge-base": True,
     "linebot": True,
+    "memory-manager": True,
+    "share-manager": True,
+    "tenant-admin": False,      # 管理功能，預設關閉
+    "md2ppt": True,
+    "md2doc": True,
     "settings": True,
 }
 
@@ -140,15 +149,21 @@ APP_DISPLAY_NAMES: dict[str, str] = {
     "terminal": "終端機",
     "code-editor": "VSCode",
     "project-management": "專案管理",
+    "inventory-management": "物料管理",
+    "vendor-management": "廠商管理",
     "ai-assistant": "AI 助手",
     "prompt-editor": "Prompt 編輯器",
     "agent-settings": "Agent 設定",
     "ai-log": "AI Log",
     "knowledge-base": "知識庫",
     "linebot": "Line Bot",
-    "settings": "系統設定",
-    "inventory": "庫存管理",
+    "memory-manager": "記憶管理",
+    "share-manager": "分享管理",
+    "tenant-admin": "租戶管理",
     "platform-admin": "平台管理",
+    "md2ppt": "簡報生成",
+    "md2doc": "文件生成",
+    "settings": "系統設定",
 }
 
 # 租戶管理員預設權限
@@ -158,15 +173,21 @@ DEFAULT_TENANT_ADMIN_APP_PERMISSIONS: dict[str, bool] = {
     "terminal": False,          # 高風險，預設關閉
     "code-editor": False,       # 高風險，預設關閉
     "project-management": True,
+    "inventory-management": True,
+    "vendor-management": True,
     "ai-assistant": True,
     "prompt-editor": True,
     "agent-settings": True,
     "ai-log": True,
     "knowledge-base": True,
     "linebot": True,
-    "settings": True,
-    "inventory": True,
+    "memory-manager": True,
+    "share-manager": True,
+    "tenant-admin": True,       # 租戶管理員可以管理租戶
     "platform-admin": False,    # 永遠禁止
+    "md2ppt": True,
+    "md2doc": True,
+    "settings": True,
 }
 
 # 完整租戶管理員預設權限結構
@@ -661,18 +682,3 @@ def require_app_permission(app_id: str) -> Callable:
         )
 
     return checker
-
-
-def get_api_required_app(path: str) -> str | None:
-    """根據 API 路徑取得需要的 App 權限
-
-    Args:
-        path: API 路徑（如 "/api/project/123"）
-
-    Returns:
-        需要的 App ID，或 None（不需要特定權限）
-    """
-    for prefix, app_id in API_APP_MAPPING.items():
-        if path.startswith(prefix):
-            return app_id
-    return None
