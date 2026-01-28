@@ -299,7 +299,7 @@ AI_IMAGE_TOOLS_PROMPT = """【AI 圖片生成】
 # App ID 與 Prompt 區塊的對應
 APP_PROMPT_MAPPING: dict[str, str] = {
     "project-management": PROJECT_TOOLS_PROMPT,
-    "inventory": INVENTORY_TOOLS_PROMPT,
+    "inventory-management": INVENTORY_TOOLS_PROMPT,
     "knowledge-base": KNOWLEDGE_TOOLS_PROMPT,
     "file-manager": FILE_TOOLS_PROMPT,
     "ai-assistant": AI_IMAGE_TOOLS_PROMPT + "\n\n" + AI_DOCUMENT_TOOLS_PROMPT,
@@ -366,7 +366,7 @@ def generate_usage_tips_prompt(
         ])
 
     # 庫存相關流程
-    if app_permissions.get("inventory", False):
+    if app_permissions.get("inventory-management", False):
         tips.extend([
             f"{len(tips)+1}. 用戶查詢庫存時，用 query_inventory 搜尋物料",
             f"{len(tips)+1}. 用戶說「進貨 XX 10 個」時，用 record_inventory_in 記錄",
