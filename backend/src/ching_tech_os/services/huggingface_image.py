@@ -119,7 +119,7 @@ async def generate_image_fallback(
     # 檢查是否應該觸發備用
     should_fallback = any(
         keyword in original_error.lower()
-        for keyword in ["overloaded", "quota", "limit", "503", "429"]
+        for keyword in ["overloaded", "quota", "limit", "503", "429", "timeout"]
     )
 
     if not should_fallback:
