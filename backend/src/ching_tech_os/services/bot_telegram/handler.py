@@ -692,7 +692,7 @@ async def _handle_text_with_ai(
                 duration_str = "完成"
 
             # 更新對應 tool 的狀態（找最後一個同名且 running 的）
-            for tool in tool_status_lines:
+            for tool in reversed(tool_status_lines):
                 if tool["name"] == tool_name and tool["status"] == "running":
                     tool["status"] = "done"
                     tool["line"] = tool["line"].replace("⏳ 執行中...", f"✅ 完成 ({duration_str})")

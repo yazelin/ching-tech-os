@@ -273,7 +273,10 @@ async def _process_stream_event(
                 tool_name = content.get("name", "")
                 tool_input = content.get("input", {})
                 active_tools[tool_id] = (tool_name, timestamp)
-                await on_tool_start(tool_name, tool_input)
+                try:
+                    await on_tool_start(tool_name, tool_input)
+                except Exception as e:
+                    logger.warning(f"on_tool_start callback 失敗: {e}")
 
     elif event_type == "user" and on_tool_end:
         message = event.get("message", {})
@@ -287,10 +290,13 @@ async def _process_stream_event(
                 else:
                     tool_name = ""
                     duration_ms = None
-                await on_tool_end(tool_name, {
-                    "duration_ms": duration_ms,
-                    "output": content.get("content", ""),
-                })
+                try:
+                    await on_tool_end(tool_name, {
+                        "duration_ms": duration_ms,
+                        "output": content.get("content", ""),
+                    })
+                except Exception as e:
+                    logger.warning(f"on_tool_end callback 失敗: {e}")
 
 
 def _parse_stream_json_with_timing(
