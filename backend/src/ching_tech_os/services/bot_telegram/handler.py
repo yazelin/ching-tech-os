@@ -36,6 +36,36 @@ logger = logging.getLogger("bot_telegram.handler")
 # 重置對話指令
 RESET_COMMANDS = {"/新對話", "/reset"}
 
+# /start 歡迎訊息
+START_MESSAGE = (
+    "👋 歡迎使用 CTOS Bot！\n\n"
+    "我是 Ching Tech OS 的 AI 助手，可以幫你：\n"
+    "• 回答問題和對話\n"
+    "• 管理專案和筆記\n"
+    "• 生成和編輯圖片\n\n"
+    "📌 首次使用請先綁定帳號：\n"
+    "1. 登入 CTOS 系統\n"
+    "2. 進入 Bot 管理頁面\n"
+    "3. 點擊「綁定帳號」產生驗證碼\n"
+    "4. 將 6 位數驗證碼發送給我\n\n"
+    "輸入 /help 查看更多功能"
+)
+
+# /help 說明訊息
+HELP_MESSAGE = (
+    "📖 CTOS Bot 使用說明\n\n"
+    "💬 基本對話\n"
+    "直接傳送文字即可與 AI 對話\n\n"
+    "🔗 帳號綁定\n"
+    "發送 6 位數驗證碼完成綁定\n\n"
+    "📝 指令列表\n"
+    "/start — 歡迎訊息\n"
+    "/help — 查看此說明\n"
+    "/reset 或 /新對話 — 重置對話記錄\n\n"
+    "👥 群組使用\n"
+    "在群組中 @Bot 或回覆 Bot 訊息即可觸發"
+)
+
 PLATFORM_TYPE = "telegram"
 
 # 群組 chat type
@@ -252,8 +282,17 @@ async def _handle_text(
     except Exception as e:
         logger.error(f"確保用戶/群組失敗: {e}", exc_info=True)
 
-    # 私訊才處理重置指令和綁定驗證碼
+    # 私訊才處理指令和綁定驗證碼
     if not is_group:
+        # /start 和 /help 指令（不需綁定即可使用）
+        cmd = text.strip().split("@")[0]  # 處理 /start@botname 格式
+        if cmd == "/start":
+            await adapter.send_text(chat_id, START_MESSAGE)
+            return
+        if cmd == "/help":
+            await adapter.send_text(chat_id, HELP_MESSAGE)
+            return
+
         # 檢查重置指令
         if text.strip() in RESET_COMMANDS:
             if bot_user_id:
