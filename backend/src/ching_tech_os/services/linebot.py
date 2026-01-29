@@ -80,7 +80,7 @@ async def get_group_tenant_id(line_group_id: str) -> UUID | None:
     """
     async with get_connection() as conn:
         row = await conn.fetchrow(
-            "SELECT tenant_id FROM line_groups WHERE line_group_id = $1",
+            "SELECT tenant_id FROM bot_groups WHERE line_group_id = $1",
             line_group_id,
         )
         return row["tenant_id"] if row else None
@@ -102,7 +102,7 @@ async def get_user_tenant_id(line_user_id: str) -> UUID | None:
         row = await conn.fetchrow(
             """
             SELECT u.tenant_id
-            FROM line_users lu
+            FROM bot_users lu
             JOIN users u ON lu.user_id = u.id
             WHERE lu.line_user_id = $1 AND lu.user_id IS NOT NULL
             """,
@@ -116,7 +116,7 @@ async def get_line_user_record(
     tenant_id: UUID | str | None = None,
     columns: str = "*",
 ) -> dict | None:
-    """查詢 line_users 表的記錄
+    """查詢 bot_users 表的記錄
 
     同一個 Line 用戶可能在多個租戶有記錄，此函數會根據 tenant_id 過濾。
 
@@ -126,18 +126,18 @@ async def get_line_user_record(
         columns: 要查詢的欄位（預設 "*"）
 
     Returns:
-        line_users 表的記錄，若找不到則回傳 None
+        bot_users 表的記錄，若找不到則回傳 None
     """
     async with get_connection() as conn:
         if tenant_id:
             tid = UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id
             row = await conn.fetchrow(
-                f"SELECT {columns} FROM line_users WHERE line_user_id = $1 AND tenant_id = $2",
+                f"SELECT {columns} FROM bot_users WHERE line_user_id = $1 AND tenant_id = $2",
                 line_user_id, tid,
             )
         else:
             row = await conn.fetchrow(
-                f"SELECT {columns} FROM line_users WHERE line_user_id = $1",
+                f"SELECT {columns} FROM bot_users WHERE line_user_id = $1",
                 line_user_id,
             )
         return dict(row) if row else None
@@ -203,7 +203,7 @@ async def _migrate_group_to_tenant(line_group_id: str, tenant_id: UUID) -> None:
     async with get_connection() as conn:
         await conn.execute(
             """
-            UPDATE line_groups
+            UPDATE bot_groups
             SET tenant_id = $2, updated_at = NOW()
             WHERE line_group_id = $1
             """,
@@ -461,7 +461,7 @@ async def get_or_create_user(
         # 查詢指定租戶是否有此用戶
         # 注意：同一個 Line 用戶可以在不同租戶存在（唯一約束是 tenant_id + line_user_id）
         row = await conn.fetchrow(
-            "SELECT id, tenant_id FROM line_users WHERE line_user_id = $1 AND tenant_id = $2",
+            "SELECT id, tenant_id FROM bot_users WHERE line_user_id = $1 AND tenant_id = $2",
             line_user_id,
             tid,
         )
@@ -470,7 +470,7 @@ async def get_or_create_user(
             if profile:
                 await conn.execute(
                     """
-                    UPDATE line_users
+                    UPDATE bot_users
                     SET display_name = COALESCE($2, display_name),
                         picture_url = COALESCE($3, picture_url),
                         status_message = COALESCE($4, status_message),
@@ -487,7 +487,7 @@ async def get_or_create_user(
         # 用戶在此租戶不存在，建立新記錄
         row = await conn.fetchrow(
             """
-            INSERT INTO line_users (line_user_id, display_name, picture_url, status_message, is_friend, tenant_id)
+            INSERT INTO bot_users (line_user_id, display_name, picture_url, status_message, is_friend, tenant_id)
             VALUES ($1, $2, $3, $4, $5, $6)
             RETURNING id
             """,
@@ -520,7 +520,7 @@ async def update_user_friend_status(
     async with get_connection() as conn:
         result = await conn.execute(
             """
-            UPDATE line_users
+            UPDATE bot_users
             SET is_friend = $2, updated_at = NOW()
             WHERE line_user_id = $1 AND tenant_id = $3
             """,
@@ -611,7 +611,7 @@ async def get_or_create_group(
     async with get_connection() as conn:
         # 先查詢全域是否有此群組（line_group_id 有全域唯一約束）
         row = await conn.fetchrow(
-            "SELECT id, tenant_id FROM line_groups WHERE line_group_id = $1",
+            "SELECT id, tenant_id FROM bot_groups WHERE line_group_id = $1",
             line_group_id,
         )
         if row:
@@ -619,7 +619,7 @@ async def get_or_create_group(
             if profile:
                 await conn.execute(
                     """
-                    UPDATE line_groups
+                    UPDATE bot_groups
                     SET name = COALESCE($2, name),
                         picture_url = COALESCE($3, picture_url),
                         member_count = COALESCE($4, member_count),
@@ -636,7 +636,7 @@ async def get_or_create_group(
         # 群組不存在，建立新群組
         row = await conn.fetchrow(
             """
-            INSERT INTO line_groups (line_group_id, name, picture_url, member_count, tenant_id)
+            INSERT INTO bot_groups (line_group_id, name, picture_url, member_count, tenant_id)
             VALUES ($1, $2, $3, $4, $5)
             RETURNING id
             """,
@@ -690,7 +690,7 @@ async def handle_join_event(
     async with get_connection() as conn:
         await conn.execute(
             """
-            UPDATE line_groups
+            UPDATE bot_groups
             SET is_active = true,
                 left_at = NULL,
                 joined_at = COALESCE(
@@ -719,7 +719,7 @@ async def handle_leave_event(
     async with get_connection() as conn:
         await conn.execute(
             """
-            UPDATE line_groups
+            UPDATE bot_groups
             SET is_active = false, left_at = NOW(), updated_at = NOW()
             WHERE line_group_id = $1 AND tenant_id = $2
             """,
@@ -745,7 +745,7 @@ async def get_line_group_external_id(
     tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         row = await conn.fetchrow(
-            "SELECT line_group_id FROM line_groups WHERE id = $1 AND tenant_id = $2",
+            "SELECT line_group_id FROM bot_groups WHERE id = $1 AND tenant_id = $2",
             group_uuid,
             tid,
         )
@@ -804,7 +804,7 @@ async def save_message(
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
-            INSERT INTO line_messages (
+            INSERT INTO bot_messages (
                 message_id, line_user_id, line_group_id,
                 message_type, content, reply_token, is_from_bot, tenant_id
             )
@@ -828,7 +828,7 @@ async def mark_message_ai_processed(message_uuid: UUID) -> None:
     """標記訊息已經過 AI 處理"""
     async with get_connection() as conn:
         await conn.execute(
-            "UPDATE line_messages SET ai_processed = true WHERE id = $1",
+            "UPDATE bot_messages SET ai_processed = true WHERE id = $1",
             message_uuid,
         )
 
@@ -848,14 +848,14 @@ async def get_or_create_bot_user(tenant_id: UUID | str | None = None) -> UUID:
     async with get_connection() as conn:
         # 先查詢全域是否有 Bot 用戶（line_user_id 有全域唯一約束）
         row = await conn.fetchrow(
-            "SELECT id FROM line_users WHERE line_user_id = $1",
+            "SELECT id FROM bot_users WHERE line_user_id = $1",
             bot_line_id,
         )
         if row:
             # 確保 Bot 用戶的 is_friend 為 false 且名稱正確
             await conn.execute(
                 """
-                UPDATE line_users
+                UPDATE bot_users
                 SET is_friend = false, display_name = 'ChingTech AI (Bot)'
                 WHERE id = $1
                 """,
@@ -866,7 +866,7 @@ async def get_or_create_bot_user(tenant_id: UUID | str | None = None) -> UUID:
         # 建立 Bot 用戶（is_friend = false）
         row = await conn.fetchrow(
             """
-            INSERT INTO line_users (line_user_id, display_name, is_friend, tenant_id)
+            INSERT INTO bot_users (line_user_id, display_name, is_friend, tenant_id)
             VALUES ($1, $2, false, $3)
             RETURNING id
             """,
@@ -918,7 +918,7 @@ async def save_bot_response(
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
-            INSERT INTO line_messages (
+            INSERT INTO bot_messages (
                 message_id, line_user_id, line_group_id,
                 message_type, content, is_from_bot, tenant_id
             )
@@ -965,7 +965,7 @@ async def save_file_record(
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
-            INSERT INTO line_files (
+            INSERT INTO bot_files (
                 message_id, file_type, file_name,
                 file_size, mime_type, nas_path, duration, tenant_id
             )
@@ -984,7 +984,7 @@ async def save_file_record(
 
         # 更新訊息的 file_id
         await conn.execute(
-            "UPDATE line_messages SET file_id = $1 WHERE id = $2",
+            "UPDATE bot_messages SET file_id = $1 WHERE id = $2",
             row["id"],
             message_uuid,
         )
@@ -1509,7 +1509,7 @@ async def is_bot_message(line_message_id: str) -> bool:
     """
     async with get_connection() as conn:
         row = await conn.fetchrow(
-            "SELECT is_from_bot FROM line_messages WHERE message_id = $1",
+            "SELECT is_from_bot FROM bot_messages WHERE message_id = $1",
             line_message_id,
         )
         if row:
@@ -1557,13 +1557,13 @@ async def list_groups(
         where_clause = " AND ".join(conditions)
 
         # 查詢總數
-        count_query = f"SELECT COUNT(*) FROM line_groups g WHERE {where_clause}"
+        count_query = f"SELECT COUNT(*) FROM bot_groups g WHERE {where_clause}"
         total = await conn.fetchval(count_query, *params)
 
         # 查詢列表
         query = f"""
             SELECT g.*, p.name as project_name
-            FROM line_groups g
+            FROM bot_groups g
             LEFT JOIN projects p ON g.project_id = p.id
             WHERE {where_clause}
             ORDER BY g.updated_at DESC
@@ -1613,14 +1613,14 @@ async def list_messages(
         where_clause = " AND ".join(conditions)
 
         # 查詢總數
-        count_query = f"SELECT COUNT(*) FROM line_messages m WHERE {where_clause}"
+        count_query = f"SELECT COUNT(*) FROM bot_messages m WHERE {where_clause}"
         total = await conn.fetchval(count_query, *params)
 
         # 查詢列表（包含用戶資訊）
         query = f"""
             SELECT m.*, u.display_name as user_display_name, u.picture_url as user_picture_url
-            FROM line_messages m
-            LEFT JOIN line_users u ON m.line_user_id = u.id
+            FROM bot_messages m
+            LEFT JOIN bot_users u ON m.line_user_id = u.id
             WHERE {where_clause}
             ORDER BY m.created_at DESC
             LIMIT ${param_idx} OFFSET ${param_idx + 1}
@@ -1646,12 +1646,12 @@ async def list_users(
     tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         total = await conn.fetchval(
-            "SELECT COUNT(*) FROM line_users WHERE tenant_id = $1",
+            "SELECT COUNT(*) FROM bot_users WHERE tenant_id = $1",
             tid,
         )
         rows = await conn.fetch(
             """
-            SELECT * FROM line_users
+            SELECT * FROM bot_users
             WHERE tenant_id = $1
             ORDER BY updated_at DESC
             LIMIT $2 OFFSET $3
@@ -1678,7 +1678,7 @@ async def get_group_by_id(
         row = await conn.fetchrow(
             """
             SELECT g.*, p.name as project_name
-            FROM line_groups g
+            FROM bot_groups g
             LEFT JOIN projects p ON g.project_id = p.id
             WHERE g.id = $1 AND g.tenant_id = $2
             """,
@@ -1701,7 +1701,7 @@ async def get_user_by_id(
     tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         row = await conn.fetchrow(
-            "SELECT * FROM line_users WHERE id = $1 AND tenant_id = $2",
+            "SELECT * FROM bot_users WHERE id = $1 AND tenant_id = $2",
             user_id,
             tid,
         )
@@ -1724,7 +1724,7 @@ async def bind_group_to_project(
     async with get_connection() as conn:
         result = await conn.execute(
             """
-            UPDATE line_groups
+            UPDATE bot_groups
             SET project_id = $2, updated_at = NOW()
             WHERE id = $1 AND tenant_id = $3
             """,
@@ -1749,7 +1749,7 @@ async def unbind_group_from_project(
     async with get_connection() as conn:
         result = await conn.execute(
             """
-            UPDATE line_groups
+            UPDATE bot_groups
             SET project_id = NULL, updated_at = NOW()
             WHERE id = $1 AND tenant_id = $2
             """,
@@ -1778,8 +1778,8 @@ async def delete_group(
         row = await conn.fetchrow(
             """
             SELECT g.id, g.name,
-                   (SELECT COUNT(*) FROM line_messages WHERE line_group_id = g.id) as message_count
-            FROM line_groups g
+                   (SELECT COUNT(*) FROM bot_messages WHERE line_group_id = g.id) as message_count
+            FROM bot_groups g
             WHERE g.id = $1 AND g.tenant_id = $2
             """,
             group_id,
@@ -1794,7 +1794,7 @@ async def delete_group(
 
         # 刪除群組（訊息和檔案記錄會級聯刪除）
         await conn.execute(
-            "DELETE FROM line_groups WHERE id = $1 AND tenant_id = $2",
+            "DELETE FROM bot_groups WHERE id = $1 AND tenant_id = $2",
             group_id,
             tid,
         )
@@ -1858,8 +1858,8 @@ async def list_files(
         # 查詢總數
         count_query = f"""
             SELECT COUNT(*)
-            FROM line_files f
-            JOIN line_messages m ON f.message_id = m.id
+            FROM bot_files f
+            JOIN bot_messages m ON f.message_id = m.id
             WHERE {where_clause}
         """
         total = await conn.fetchval(count_query, *params)
@@ -1871,10 +1871,10 @@ async def list_files(
                    m.line_user_id,
                    u.display_name as user_display_name,
                    g.name as group_name
-            FROM line_files f
-            JOIN line_messages m ON f.message_id = m.id
-            LEFT JOIN line_users u ON m.line_user_id = u.id
-            LEFT JOIN line_groups g ON m.line_group_id = g.id
+            FROM bot_files f
+            JOIN bot_messages m ON f.message_id = m.id
+            LEFT JOIN bot_users u ON m.line_user_id = u.id
+            LEFT JOIN bot_groups g ON m.line_group_id = g.id
             WHERE {where_clause}
             ORDER BY f.created_at DESC
             LIMIT ${param_idx} OFFSET ${param_idx + 1}
@@ -1908,10 +1908,10 @@ async def get_file_by_id(
                    u.display_name as user_display_name,
                    g.name as group_name,
                    g.line_group_id as source_group_id
-            FROM line_files f
-            JOIN line_messages m ON f.message_id = m.id
-            LEFT JOIN line_users u ON m.line_user_id = u.id
-            LEFT JOIN line_groups g ON m.line_group_id = g.id
+            FROM bot_files f
+            JOIN bot_messages m ON f.message_id = m.id
+            LEFT JOIN bot_users u ON m.line_user_id = u.id
+            LEFT JOIN bot_groups g ON m.line_group_id = g.id
             WHERE f.id = $1 AND f.tenant_id = $2
             """,
             file_id,
@@ -2000,7 +2000,7 @@ async def delete_file(
 
         # 刪除檔案記錄
         await conn.execute(
-            "DELETE FROM line_files WHERE id = $1 AND tenant_id = $2",
+            "DELETE FROM bot_files WHERE id = $1 AND tenant_id = $2",
             file_id,
             tid,
         )
@@ -2009,7 +2009,7 @@ async def delete_file(
         # 更新訊息的 file_id 為 NULL
         if message_id:
             await conn.execute(
-                "UPDATE line_messages SET file_id = NULL WHERE id = $1",
+                "UPDATE bot_messages SET file_id = NULL WHERE id = $1",
                 message_id,
             )
 
@@ -2044,7 +2044,7 @@ async def generate_binding_code(
         # 清除該用戶之前未使用的驗證碼
         await conn.execute(
             """
-            DELETE FROM line_binding_codes
+            DELETE FROM bot_binding_codes
             WHERE user_id = $1 AND used_at IS NULL AND tenant_id = $2
             """,
             user_id,
@@ -2054,7 +2054,7 @@ async def generate_binding_code(
         # 建立新驗證碼
         await conn.execute(
             """
-            INSERT INTO line_binding_codes (user_id, code, expires_at, tenant_id)
+            INSERT INTO bot_binding_codes (user_id, code, expires_at, tenant_id)
             VALUES ($1, $2, $3, $4)
             """,
             user_id,
@@ -2093,7 +2093,7 @@ async def verify_binding_code(
         code_row = await conn.fetchrow(
             """
             SELECT id, user_id, tenant_id
-            FROM line_binding_codes
+            FROM bot_binding_codes
             WHERE code = $1
               AND used_at IS NULL
               AND expires_at > NOW()
@@ -2110,7 +2110,7 @@ async def verify_binding_code(
 
         # 取得 Line 用戶的 line_user_id
         line_user_row = await conn.fetchrow(
-            "SELECT line_user_id, display_name FROM line_users WHERE id = $1",
+            "SELECT line_user_id, display_name FROM bot_users WHERE id = $1",
             line_user_uuid,
         )
         if not line_user_row:
@@ -2122,7 +2122,7 @@ async def verify_binding_code(
         # 檢查目標租戶是否已有此 Line 用戶的綁定記錄
         target_line_user = await conn.fetchrow(
             """
-            SELECT id, user_id FROM line_users
+            SELECT id, user_id FROM bot_users
             WHERE line_user_id = $1 AND tenant_id = $2
             """,
             line_user_id,
@@ -2139,7 +2139,7 @@ async def verify_binding_code(
             # 允許同一個 Line 用戶在不同租戶各有獨立的綁定
             target_line_user_uuid = await conn.fetchval(
                 """
-                INSERT INTO line_users (line_user_id, display_name, tenant_id)
+                INSERT INTO bot_users (line_user_id, display_name, tenant_id)
                 VALUES ($1, $2, $3)
                 RETURNING id
                 """,
@@ -2152,7 +2152,7 @@ async def verify_binding_code(
         # 檢查該 CTOS 用戶是否已綁定其他 Line 帳號
         existing_line = await conn.fetchrow(
             """
-            SELECT id FROM line_users
+            SELECT id FROM bot_users
             WHERE user_id = $1 AND tenant_id = $2
             """,
             ctos_user_id,
@@ -2164,7 +2164,7 @@ async def verify_binding_code(
         # 執行綁定（在目標租戶）
         await conn.execute(
             """
-            UPDATE line_users
+            UPDATE bot_users
             SET user_id = $2, updated_at = NOW()
             WHERE id = $1 AND tenant_id = $3
             """,
@@ -2176,7 +2176,7 @@ async def verify_binding_code(
         # 標記驗證碼已使用
         await conn.execute(
             """
-            UPDATE line_binding_codes
+            UPDATE bot_binding_codes
             SET used_at = NOW(), used_by_line_user_id = $2
             WHERE id = $1
             """,
@@ -2209,7 +2209,7 @@ async def unbind_line_user(
     async with get_connection() as conn:
         result = await conn.execute(
             """
-            UPDATE line_users
+            UPDATE bot_users
             SET user_id = NULL, updated_at = NOW()
             WHERE user_id = $1 AND tenant_id = $2
             """,
@@ -2241,8 +2241,8 @@ async def get_binding_status(
         row = await conn.fetchrow(
             """
             SELECT lu.display_name, lu.picture_url, bc.used_at as bound_at
-            FROM line_users lu
-            LEFT JOIN line_binding_codes bc ON bc.used_by_line_user_id = lu.id
+            FROM bot_users lu
+            LEFT JOIN bot_binding_codes bc ON bc.used_by_line_user_id = lu.id
             WHERE lu.user_id = $1 AND lu.tenant_id = $2
             ORDER BY bc.used_at DESC NULLS LAST
             LIMIT 1
@@ -2309,7 +2309,7 @@ async def check_line_access(
     async with get_connection() as conn:
         # 檢查用戶綁定
         user_row = await conn.fetchrow(
-            "SELECT user_id FROM line_users WHERE id = $1 AND tenant_id = $2",
+            "SELECT user_id FROM bot_users WHERE id = $1 AND tenant_id = $2",
             line_user_uuid,
             tid,
         )
@@ -2320,7 +2320,7 @@ async def check_line_access(
         # 如果是群組，檢查群組設定
         if line_group_uuid:
             group_row = await conn.fetchrow(
-                "SELECT allow_ai_response FROM line_groups WHERE id = $1 AND tenant_id = $2",
+                "SELECT allow_ai_response FROM bot_groups WHERE id = $1 AND tenant_id = $2",
                 line_group_uuid,
                 tid,
             )
@@ -2350,7 +2350,7 @@ async def update_group_settings(
     async with get_connection() as conn:
         result = await conn.execute(
             """
-            UPDATE line_groups
+            UPDATE bot_groups
             SET allow_ai_response = $2, updated_at = NOW()
             WHERE id = $1 AND tenant_id = $3
             """,
@@ -2384,7 +2384,7 @@ async def update_group_tenant(
     async with get_connection() as conn:
         # 確認群組存在且屬於當前租戶
         existing = await conn.fetchrow(
-            "SELECT id FROM line_groups WHERE id = $1 AND tenant_id = $2",
+            "SELECT id FROM bot_groups WHERE id = $1 AND tenant_id = $2",
             group_id,
             tid,
         )
@@ -2394,7 +2394,7 @@ async def update_group_tenant(
         # 更新群組的租戶
         result = await conn.execute(
             """
-            UPDATE line_groups
+            UPDATE bot_groups
             SET tenant_id = $2, updated_at = NOW()
             WHERE id = $1 AND tenant_id = $3
             """,
@@ -2444,7 +2444,7 @@ async def bind_group_to_tenant_by_code(
 
         # 檢查群組是否已存在
         group_row = await conn.fetchrow(
-            "SELECT id, tenant_id, name FROM line_groups WHERE line_group_id = $1",
+            "SELECT id, tenant_id, name FROM bot_groups WHERE line_group_id = $1",
             line_group_id,
         )
 
@@ -2458,7 +2458,7 @@ async def bind_group_to_tenant_by_code(
             # 更新群組的租戶
             await conn.execute(
                 """
-                UPDATE line_groups
+                UPDATE bot_groups
                 SET tenant_id = $2, updated_at = NOW()
                 WHERE id = $1
                 """,
@@ -2468,14 +2468,14 @@ async def bind_group_to_tenant_by_code(
 
             # 同時更新相關訊息和檔案的租戶
             await conn.execute(
-                "UPDATE line_messages SET tenant_id = $2 WHERE line_group_id = $1",
+                "UPDATE bot_messages SET tenant_id = $2 WHERE line_group_id = $1",
                 group_row["id"],
                 new_tenant_id,
             )
             await conn.execute(
                 """
-                UPDATE line_files SET tenant_id = $2
-                WHERE message_id IN (SELECT id FROM line_messages WHERE line_group_id = $1)
+                UPDATE bot_files SET tenant_id = $2
+                WHERE message_id IN (SELECT id FROM bot_messages WHERE line_group_id = $1)
                 """,
                 group_row["id"],
                 new_tenant_id,
@@ -2535,13 +2535,13 @@ async def list_users_with_binding(
     tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         total = await conn.fetchval(
-            "SELECT COUNT(*) FROM line_users WHERE tenant_id = $1",
+            "SELECT COUNT(*) FROM bot_users WHERE tenant_id = $1",
             tid,
         )
         rows = await conn.fetch(
             """
             SELECT lu.*, u.username as bound_username, u.display_name as bound_display_name
-            FROM line_users lu
+            FROM bot_users lu
             LEFT JOIN users u ON lu.user_id = u.id
             WHERE lu.tenant_id = $1
             ORDER BY lu.updated_at DESC
@@ -2579,7 +2579,7 @@ async def reset_conversation(
     async with get_connection() as conn:
         result = await conn.execute(
             """
-            UPDATE line_users
+            UPDATE bot_users
             SET conversation_reset_at = NOW()
             WHERE line_user_id = $1 AND tenant_id = $2
             """,
@@ -2762,8 +2762,8 @@ async def get_image_info_by_line_message_id(
         row = await conn.fetchrow(
             """
             SELECT f.nas_path, f.file_type, m.id as message_uuid
-            FROM line_files f
-            JOIN line_messages m ON f.message_id = m.id
+            FROM bot_files f
+            JOIN bot_messages m ON f.message_id = m.id
             WHERE m.message_id = $1
               AND f.file_type = 'image'
               AND f.tenant_id = $2
@@ -2969,8 +2969,8 @@ async def get_file_info_by_line_message_id(
             """
             SELECT f.nas_path, f.file_type, f.file_name, f.file_size,
                    m.id as message_uuid
-            FROM line_files f
-            JOIN line_messages m ON f.message_id = m.id
+            FROM bot_files f
+            JOIN bot_messages m ON f.message_id = m.id
             WHERE m.message_id = $1
               AND f.file_type = 'file'
               AND f.tenant_id = $2
@@ -2995,8 +2995,8 @@ async def get_message_content_by_line_message_id(line_message_id: str) -> dict |
             """
             SELECT m.content, m.message_type, m.is_from_bot,
                    u.display_name
-            FROM line_messages m
-            JOIN line_users u ON m.line_user_id = u.id
+            FROM bot_messages m
+            JOIN bot_users u ON m.line_user_id = u.id
             WHERE m.message_id = $1
             """,
             line_message_id,
@@ -3022,8 +3022,8 @@ async def list_group_memories(line_group_id: UUID) -> tuple[list[dict], int]:
         rows = await conn.fetch(
             """
             SELECT m.*, u.display_name as created_by_name
-            FROM line_group_memories m
-            LEFT JOIN line_users u ON m.created_by = u.id
+            FROM bot_group_memories m
+            LEFT JOIN bot_users u ON m.created_by = u.id
             WHERE m.line_group_id = $1
             ORDER BY m.created_at DESC
             """,
@@ -3045,7 +3045,7 @@ async def list_user_memories(line_user_id: UUID) -> tuple[list[dict], int]:
         rows = await conn.fetch(
             """
             SELECT *
-            FROM line_user_memories
+            FROM bot_user_memories
             WHERE line_user_id = $1
             ORDER BY created_at DESC
             """,
@@ -3074,7 +3074,7 @@ async def create_group_memory(
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
-            INSERT INTO line_group_memories (line_group_id, title, content, created_by)
+            INSERT INTO bot_group_memories (line_group_id, title, content, created_by)
             VALUES ($1, $2, $3, $4)
             RETURNING *
             """,
@@ -3088,7 +3088,7 @@ async def create_group_memory(
         # 取得建立者名稱
         if created_by:
             user_row = await conn.fetchrow(
-                "SELECT display_name FROM line_users WHERE id = $1",
+                "SELECT display_name FROM bot_users WHERE id = $1",
                 created_by,
             )
             if user_row:
@@ -3116,7 +3116,7 @@ async def create_user_memory(
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
-            INSERT INTO line_user_memories (line_user_id, title, content)
+            INSERT INTO bot_user_memories (line_user_id, title, content)
             VALUES ($1, $2, $3)
             RETURNING *
             """,
@@ -3136,7 +3136,7 @@ async def update_memory(
 ) -> dict | None:
     """更新記憶（群組或個人）
 
-    會先嘗試在 line_group_memories 找，找不到再找 line_user_memories。
+    會先嘗試在 bot_group_memories 找，找不到再找 bot_user_memories。
 
     Args:
         memory_id: 記憶 UUID
@@ -3171,8 +3171,8 @@ async def update_memory(
             row = await conn.fetchrow(
                 """
                 SELECT m.*, u.display_name as created_by_name
-                FROM line_group_memories m
-                LEFT JOIN line_users u ON m.created_by = u.id
+                FROM bot_group_memories m
+                LEFT JOIN bot_users u ON m.created_by = u.id
                 WHERE m.id = $1
                 """,
                 memory_id,
@@ -3180,7 +3180,7 @@ async def update_memory(
             if row:
                 return dict(row)
             row = await conn.fetchrow(
-                "SELECT * FROM line_user_memories WHERE id = $1",
+                "SELECT * FROM bot_user_memories WHERE id = $1",
                 memory_id,
             )
             return dict(row) if row else None
@@ -3191,7 +3191,7 @@ async def update_memory(
         # 嘗試更新群組記憶
         row = await conn.fetchrow(
             f"""
-            UPDATE line_group_memories
+            UPDATE bot_group_memories
             SET {set_clause}
             WHERE id = $1
             RETURNING *
@@ -3204,7 +3204,7 @@ async def update_memory(
             # 取得建立者名稱
             if result.get("created_by"):
                 user_row = await conn.fetchrow(
-                    "SELECT display_name FROM line_users WHERE id = $1",
+                    "SELECT display_name FROM bot_users WHERE id = $1",
                     result["created_by"],
                 )
                 if user_row:
@@ -3215,7 +3215,7 @@ async def update_memory(
         # 嘗試更新個人記憶
         row = await conn.fetchrow(
             f"""
-            UPDATE line_user_memories
+            UPDATE bot_user_memories
             SET {set_clause}
             WHERE id = $1
             RETURNING *
@@ -3233,7 +3233,7 @@ async def update_memory(
 async def delete_memory(memory_id: UUID) -> bool:
     """刪除記憶（群組或個人）
 
-    會先嘗試在 line_group_memories 刪除，找不到再找 line_user_memories。
+    會先嘗試在 bot_group_memories 刪除，找不到再找 bot_user_memories。
 
     Args:
         memory_id: 記憶 UUID
@@ -3244,7 +3244,7 @@ async def delete_memory(memory_id: UUID) -> bool:
     async with get_connection() as conn:
         # 先嘗試刪除群組記憶
         result = await conn.execute(
-            "DELETE FROM line_group_memories WHERE id = $1",
+            "DELETE FROM bot_group_memories WHERE id = $1",
             memory_id,
         )
         if result == "DELETE 1":
@@ -3253,7 +3253,7 @@ async def delete_memory(memory_id: UUID) -> bool:
 
         # 嘗試刪除個人記憶
         result = await conn.execute(
-            "DELETE FROM line_user_memories WHERE id = $1",
+            "DELETE FROM bot_user_memories WHERE id = $1",
             memory_id,
         )
         if result == "DELETE 1":
@@ -3274,7 +3274,7 @@ async def get_line_user_by_ctos_user(ctos_user_id: int) -> dict | None:
     """
     async with get_connection() as conn:
         row = await conn.fetchrow(
-            "SELECT * FROM line_users WHERE user_id = $1",
+            "SELECT * FROM bot_users WHERE user_id = $1",
             ctos_user_id,
         )
         return dict(row) if row else None
@@ -3293,7 +3293,7 @@ async def get_active_group_memories(line_group_id: UUID) -> list[dict]:
         rows = await conn.fetch(
             """
             SELECT content
-            FROM line_group_memories
+            FROM bot_group_memories
             WHERE line_group_id = $1 AND is_active = true
             ORDER BY created_at ASC
             """,
@@ -3315,7 +3315,7 @@ async def get_active_user_memories(line_user_id: UUID) -> list[dict]:
         rows = await conn.fetch(
             """
             SELECT content
-            FROM line_user_memories
+            FROM bot_user_memories
             WHERE line_user_id = $1 AND is_active = true
             ORDER BY created_at ASC
             """,

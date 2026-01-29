@@ -1795,7 +1795,7 @@ async def _determine_knowledge_scope(
         # 群組聊天：檢查群組是否綁定專案
         async with get_connection() as conn:
             group_row = await conn.fetchrow(
-                "SELECT project_id FROM line_groups WHERE id = $1",
+                "SELECT project_id FROM bot_groups WHERE id = $1",
                 UUID_type(line_group_id),
             )
             if group_row and group_row["project_id"]:
@@ -2032,8 +2032,8 @@ async def summarize_chat(
             """
             SELECT m.content, m.created_at, m.message_type,
                    u.display_name as user_name
-            FROM line_messages m
-            LEFT JOIN line_users u ON m.line_user_id = u.id
+            FROM bot_messages m
+            LEFT JOIN bot_users u ON m.line_user_id = u.id
             WHERE m.line_group_id = $1
               AND m.created_at >= $2
               AND m.message_type = 'text'
@@ -2053,7 +2053,7 @@ async def summarize_chat(
 
         # 取得群組名稱
         group = await conn.fetchrow(
-            "SELECT name FROM line_groups WHERE id = $1 AND tenant_id = $2",
+            "SELECT name FROM bot_groups WHERE id = $1 AND tenant_id = $2",
             UUID(line_group_id),
             tid,
         )
@@ -2128,9 +2128,9 @@ async def get_message_attachments(
             f"""
             SELECT f.id, f.file_type, f.file_name, f.file_size, f.nas_path,
                    f.created_at, u.display_name as user_name
-            FROM line_files f
-            JOIN line_messages m ON f.message_id = m.id
-            LEFT JOIN line_users u ON m.line_user_id = u.id
+            FROM bot_files f
+            JOIN bot_messages m ON f.message_id = m.id
+            LEFT JOIN bot_users u ON m.line_user_id = u.id
             WHERE {where_clause}
               AND f.nas_path IS NOT NULL
             ORDER BY f.created_at DESC
@@ -2798,7 +2798,7 @@ async def send_nas_file(
         # 查詢 Line group ID（加入 tenant_id 過濾以確保安全）
         async with get_connection() as conn:
             row = await conn.fetchrow(
-                "SELECT line_group_id FROM line_groups WHERE id = $1 AND tenant_id = $2",
+                "SELECT line_group_id FROM bot_groups WHERE id = $1 AND tenant_id = $2",
                 UUID(line_group_id),
                 tid,
             )
@@ -3048,7 +3048,7 @@ async def prepare_file_message(
         # 下載連結需要加上 /download（圖片用）
         download_url = result.full_url.replace("/s/", "/api/public/") + "/download"
 
-        # 計算相對於 linebot_local_path 的路徑（用於存 line_files）
+        # 計算相對於 linebot_local_path 的路徑（用於存 bot_files）
         linebot_base = settings.linebot_local_path
         full_path_str = str(full_path)
         if full_path_str.startswith(linebot_base):
@@ -5532,7 +5532,7 @@ async def add_memory(
         async with get_connection() as conn:
             row = await conn.fetchrow(
                 """
-                INSERT INTO line_group_memories (line_group_id, title, content)
+                INSERT INTO bot_group_memories (line_group_id, title, content)
                 VALUES ($1, $2, $3)
                 RETURNING id
                 """,
@@ -5553,7 +5553,7 @@ async def add_memory(
         async with get_connection() as conn:
             row = await conn.fetchrow(
                 """
-                INSERT INTO line_user_memories (line_user_id, title, content)
+                INSERT INTO bot_user_memories (line_user_id, title, content)
                 VALUES ($1, $2, $3)
                 RETURNING id
                 """,
@@ -5593,7 +5593,7 @@ async def get_memories(
             rows = await conn.fetch(
                 """
                 SELECT id, title, content, is_active, created_at
-                FROM line_group_memories
+                FROM bot_group_memories
                 WHERE line_group_id = $1
                 ORDER BY created_at DESC
                 """,
@@ -5625,7 +5625,7 @@ async def get_memories(
             rows = await conn.fetch(
                 """
                 SELECT id, title, content, is_active, created_at
-                FROM line_user_memories
+                FROM bot_user_memories
                 WHERE line_user_id = $1
                 ORDER BY created_at DESC
                 """,
@@ -5698,7 +5698,7 @@ async def update_memory(
     async with get_connection() as conn:
         # 先嘗試更新群組記憶
         result = await conn.execute(
-            f"UPDATE line_group_memories SET {set_clause} WHERE id = $1",
+            f"UPDATE bot_group_memories SET {set_clause} WHERE id = $1",
             *params,
         )
         if result == "UPDATE 1":
@@ -5706,7 +5706,7 @@ async def update_memory(
 
         # 再嘗試更新個人記憶
         result = await conn.execute(
-            f"UPDATE line_user_memories SET {set_clause} WHERE id = $1",
+            f"UPDATE bot_user_memories SET {set_clause} WHERE id = $1",
             *params,
         )
         if result == "UPDATE 1":
@@ -5733,7 +5733,7 @@ async def delete_memory(memory_id: str) -> str:
     async with get_connection() as conn:
         # 先嘗試刪除群組記憶
         result = await conn.execute(
-            "DELETE FROM line_group_memories WHERE id = $1",
+            "DELETE FROM bot_group_memories WHERE id = $1",
             memory_uuid,
         )
         if result == "DELETE 1":
@@ -5741,7 +5741,7 @@ async def delete_memory(memory_id: str) -> str:
 
         # 再嘗試刪除個人記憶
         result = await conn.execute(
-            "DELETE FROM line_user_memories WHERE id = $1",
+            "DELETE FROM bot_user_memories WHERE id = $1",
             memory_uuid,
         )
         if result == "DELETE 1":
