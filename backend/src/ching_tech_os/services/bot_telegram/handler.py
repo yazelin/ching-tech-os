@@ -245,12 +245,24 @@ async def _extract_reply_from_message(reply, bot=None) -> str:
     elif reply.photo:
         parts.append("[回覆圖片]")
 
-    # 檔案
+    # 檔案：下載可讀檔案到暫存目錄
     elif reply.document:
         file_name = reply.document.file_name or "未知檔案"
-        caption = reply.caption or ""
-        if caption:
-            parts.append(f"[回覆檔案: {file_name}，附文: {caption}]")
+        if bot:
+            try:
+                from ..bot.media import is_readable_file, TEMP_FILE_DIR
+                if is_readable_file(file_name):
+                    file = await bot.get_file(reply.document.file_id)
+                    file_path = os.path.join(TEMP_FILE_DIR, f"reply_{reply.document.file_unique_id}_{file_name}")
+                    os.makedirs(TEMP_FILE_DIR, exist_ok=True)
+                    await file.download_to_drive(file_path)
+                    parts.append(f"[回覆檔案: {file_path}]")
+                    logger.debug(f"下載回覆檔案: {file_path}")
+                else:
+                    parts.append(f"[回覆檔案: {file_name}（不支援讀取的格式）]")
+            except Exception as e:
+                logger.warning(f"下載回覆檔案失敗: {e}")
+                parts.append(f"[回覆檔案: {file_name}]")
         else:
             parts.append(f"[回覆檔案: {file_name}]")
 
