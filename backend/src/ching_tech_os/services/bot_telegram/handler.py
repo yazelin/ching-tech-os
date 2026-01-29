@@ -4,6 +4,7 @@ Phase 3：接收文字訊息，透過 AI 回覆，並儲存用戶與訊息記錄
 """
 
 import logging
+import time
 from uuid import UUID
 
 from telegram import Update
@@ -14,7 +15,12 @@ from ..claude_agent import call_claude
 from ...database import get_connection
 from ...config import settings
 from ..linebot_agents import get_linebot_agent
-from ..linebot_ai import auto_prepare_generated_images, build_system_prompt
+from ..linebot_ai import (
+    auto_prepare_generated_images,
+    build_system_prompt,
+    get_conversation_context,
+    log_linebot_ai_call,
+)
 from ..mcp_server import get_mcp_tool_names
 
 logger = logging.getLogger("bot_telegram.handler")
@@ -135,6 +141,15 @@ async def _handle_text(
 
     # 檢查重置指令
     if text.strip() in RESET_COMMANDS:
+        try:
+            async with get_connection() as conn:
+                bot_user_id = await _ensure_bot_user(user, conn)
+                await conn.execute(
+                    "UPDATE bot_users SET conversation_reset_at = NOW() WHERE id = $1",
+                    bot_user_id,
+                )
+        except Exception as e:
+            logger.error(f"重置對話失敗: {e}", exc_info=True)
         await adapter.send_text(chat_id, "對話已重置 ✨")
         return
 
@@ -152,10 +167,12 @@ async def _handle_text_with_ai(
     """透過 AI 處理文字訊息並回覆"""
     # 0. 儲存用戶與用戶訊息
     bot_user_id: UUID | None = None
+    message_uuid: UUID | None = None
+    platform_user_id = str(user.id)
     try:
         async with get_connection() as conn:
             bot_user_id = await _ensure_bot_user(user, conn)
-            await _save_message(
+            message_uuid = await _save_message(
                 conn,
                 message_id=f"tg_{message_id}",
                 bot_user_id=bot_user_id,
@@ -166,6 +183,18 @@ async def _handle_text_with_ai(
             )
     except Exception as e:
         logger.error(f"儲存用戶訊息失敗: {e}", exc_info=True)
+
+    # 0.5 取得對話歷史
+    history: list[dict] = []
+    try:
+        history, _images, _files = await get_conversation_context(
+            line_group_id=None,
+            line_user_id=platform_user_id,
+            limit=20,
+            exclude_message_id=message_uuid,
+        )
+    except Exception as e:
+        logger.error(f"取得對話歷史失敗: {e}", exc_info=True)
 
     # 1. 取得 Agent 設定（使用個人對話 Agent）
     agent = await get_linebot_agent(is_group=False)
@@ -194,15 +223,36 @@ async def _handle_text_with_ai(
     ]
     all_tools = builtin_tools + mcp_tools + nanobanana_tools + ["Read"]
 
-    # 4. 呼叫 AI（單輪對話，無歷史）
+    # 4. 呼叫 AI（含對話歷史）
+    start_time = time.time()
     response = await call_claude(
         prompt=text,
         model=model,
-        history=[],
+        history=history,
         system_prompt=system_prompt,
         timeout=480,
         tools=all_tools,
     )
+    duration_ms = int((time.time() - start_time) * 1000)
+
+    # 4.5 記錄 AI Log
+    if message_uuid:
+        try:
+            await log_linebot_ai_call(
+                message_uuid=message_uuid,
+                line_group_id=None,
+                is_group=False,
+                input_prompt=text,
+                history=history,
+                system_prompt=system_prompt,
+                allowed_tools=all_tools,
+                model=model,
+                response=response,
+                duration_ms=duration_ms,
+                context_type_override="telegram-personal",
+            )
+        except Exception as e:
+            logger.error(f"記錄 AI Log 失敗: {e}", exc_info=True)
 
     if not response.success:
         logger.error(f"AI 呼叫失敗: {response.error}")

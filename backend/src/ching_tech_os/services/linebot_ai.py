@@ -762,6 +762,7 @@ async def log_linebot_ai_call(
     response,
     duration_ms: int,
     tenant_id: UUID | None = None,
+    context_type_override: str | None = None,
 ) -> None:
     """
     記錄 Line Bot AI 調用到 AI Log
@@ -813,7 +814,7 @@ async def log_linebot_ai_call(
         log_data = AiLogCreate(
             agent_id=agent_id,
             prompt_id=prompt_id,
-            context_type="linebot-group" if is_group else "linebot-personal",
+            context_type=context_type_override or ("linebot-group" if is_group else "linebot-personal"),
             context_id=str(message_uuid),
             input_prompt=full_input,
             system_prompt=system_prompt,
