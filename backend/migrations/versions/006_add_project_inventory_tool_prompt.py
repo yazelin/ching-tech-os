@@ -59,8 +59,8 @@ def downgrade() -> None:
         UPDATE ai_prompts
         SET content = REPLACE(
             content,
-            '{PERSONAL_NEW_TOOL}',
-            ''
+            '{PERSONAL_NEW_TOOL}{PERSONAL_INSERT_BEFORE}',
+            '{PERSONAL_INSERT_BEFORE}'
         )
         WHERE name = 'linebot-personal';
     """)
@@ -69,8 +69,8 @@ def downgrade() -> None:
         UPDATE ai_prompts
         SET content = REPLACE(
             content,
-            '{GROUP_NEW_TOOL}',
-            ''
+            '{GROUP_NEW_TOOL}{GROUP_INSERT_BEFORE}',
+            '{GROUP_INSERT_BEFORE}'
         )
         WHERE name = 'linebot-group';
     """)

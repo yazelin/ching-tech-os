@@ -1154,18 +1154,28 @@ async def get_project_inventory_status(
         if not project:
             raise InventoryError(f"專案 {project_id} 不存在")
 
-        # 查詢該專案所有進出貨記錄，按物料分組彙總
+        # 查詢該專案所有相關物料（含訂購但尚未進出貨的），按物料分組彙總
         rows = await conn.fetch(
             """
+            WITH project_items AS (
+                SELECT DISTINCT item_id
+                FROM inventory_transactions
+                WHERE project_id = $1 AND tenant_id = $2
+                UNION
+                SELECT DISTINCT item_id
+                FROM inventory_orders
+                WHERE project_id = $1
+            )
             SELECT
                 i.id AS item_id,
                 i.name AS item_name,
                 i.unit,
                 COALESCE(SUM(CASE WHEN t.type = 'in' THEN t.quantity ELSE 0 END), 0) AS total_in,
                 COALESCE(SUM(CASE WHEN t.type = 'out' THEN t.quantity ELSE 0 END), 0) AS total_out
-            FROM inventory_transactions t
-            JOIN inventory_items i ON t.item_id = i.id
-            WHERE t.project_id = $1 AND t.tenant_id = $2
+            FROM project_items pi
+            JOIN inventory_items i ON pi.item_id = i.id
+            LEFT JOIN inventory_transactions t
+                ON pi.item_id = t.item_id AND t.project_id = $1 AND t.tenant_id = $2
             GROUP BY i.id, i.name, i.unit
             ORDER BY i.name
             """,

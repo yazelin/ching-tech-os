@@ -5069,7 +5069,7 @@ async def query_project_inventory(
             return f"❌ 找不到專案「{project_name or project_id}」"
 
         project = project_result.project
-        pid = UUID(str(project["id"]))
+        pid = project["id"]
 
         # 取得進出貨狀態
         data = await get_project_inventory_status(pid, tenant_id=ctos_tenant_id)
