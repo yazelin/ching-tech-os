@@ -2033,8 +2033,8 @@ async def summarize_chat(
             SELECT m.content, m.created_at, m.message_type,
                    u.display_name as user_name
             FROM bot_messages m
-            LEFT JOIN bot_users u ON m.line_user_id = u.id
-            WHERE m.line_group_id = $1
+            LEFT JOIN bot_users u ON m.bot_user_id = u.id
+            WHERE m.bot_group_id = $1
               AND m.created_at >= $2
               AND m.message_type = 'text'
               AND m.content IS NOT NULL
@@ -2106,15 +2106,15 @@ async def get_message_attachments(
         param_idx = 3
 
         if line_group_id:
-            conditions.append(f"m.line_group_id = ${param_idx}")
+            conditions.append(f"m.bot_group_id = ${param_idx}")
             params.append(UUID(line_group_id))
             param_idx += 1
         elif line_user_id:
             # 個人聊天：查詢該用戶的訊息且不在群組中
-            conditions.append(f"u.line_user_id = ${param_idx}")
+            conditions.append(f"u.platform_user_id = ${param_idx}")
             params.append(line_user_id)
             param_idx += 1
-            conditions.append("m.line_group_id IS NULL")
+            conditions.append("m.bot_group_id IS NULL")
 
         if file_type:
             conditions.append(f"f.file_type = ${param_idx}")
@@ -2130,7 +2130,7 @@ async def get_message_attachments(
                    f.created_at, u.display_name as user_name
             FROM bot_files f
             JOIN bot_messages m ON f.message_id = m.id
-            LEFT JOIN bot_users u ON m.line_user_id = u.id
+            LEFT JOIN bot_users u ON m.bot_user_id = u.id
             WHERE {where_clause}
               AND f.nas_path IS NOT NULL
             ORDER BY f.created_at DESC
@@ -2798,12 +2798,12 @@ async def send_nas_file(
         # 查詢 Line group ID（加入 tenant_id 過濾以確保安全）
         async with get_connection() as conn:
             row = await conn.fetchrow(
-                "SELECT line_group_id FROM bot_groups WHERE id = $1 AND tenant_id = $2",
+                "SELECT platform_group_id FROM bot_groups WHERE id = $1 AND tenant_id = $2",
                 UUID(line_group_id),
                 tid,
             )
             if row:
-                target_id = row["line_group_id"]
+                target_id = row["platform_group_id"]
             else:
                 return f"錯誤：找不到群組 {line_group_id}"
     elif line_user_id:
@@ -5621,7 +5621,7 @@ async def add_memory(
         async with get_connection() as conn:
             row = await conn.fetchrow(
                 """
-                INSERT INTO bot_group_memories (line_group_id, title, content)
+                INSERT INTO bot_group_memories (bot_group_id, title, content)
                 VALUES ($1, $2, $3)
                 RETURNING id
                 """,
@@ -5642,7 +5642,7 @@ async def add_memory(
         async with get_connection() as conn:
             row = await conn.fetchrow(
                 """
-                INSERT INTO bot_user_memories (line_user_id, title, content)
+                INSERT INTO bot_user_memories (bot_user_id, title, content)
                 VALUES ($1, $2, $3)
                 RETURNING id
                 """,
@@ -5683,7 +5683,7 @@ async def get_memories(
                 """
                 SELECT id, title, content, is_active, created_at
                 FROM bot_group_memories
-                WHERE line_group_id = $1
+                WHERE bot_group_id = $1
                 ORDER BY created_at DESC
                 """,
                 group_uuid,
@@ -5715,7 +5715,7 @@ async def get_memories(
                 """
                 SELECT id, title, content, is_active, created_at
                 FROM bot_user_memories
-                WHERE line_user_id = $1
+                WHERE bot_user_id = $1
                 ORDER BY created_at DESC
                 """,
                 user_row["id"],
