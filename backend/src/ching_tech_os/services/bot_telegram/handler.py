@@ -5,6 +5,7 @@ Phase 3：接收文字訊息，透過 AI 回覆，並儲存用戶與訊息記錄
 """
 
 import logging
+import os
 import time
 from uuid import UUID
 
@@ -217,21 +218,32 @@ def _should_respond_in_group(message, bot_username: str | None) -> bool:
     return False
 
 
-def _extract_reply_from_message(reply) -> str:
+REPLY_IMAGE_DIR = "/tmp/ching-tech-os/reply-images"
+os.makedirs(REPLY_IMAGE_DIR, exist_ok=True)
+
+
+async def _extract_reply_from_message(reply, bot=None) -> str:
     """從 Telegram message 物件直接取得回覆內容（不查 DB）
 
     支援文字、圖片（含 caption）和檔案訊息。
-    圖片和檔案無法在此下載，僅標記類型讓 AI 理解上下文。
+    圖片會下載到暫存目錄讓 AI 讀取。
     """
     parts = []
 
-    # 圖片
-    if reply.photo:
-        caption = reply.caption or ""
-        if caption:
-            parts.append(f"[回覆圖片，附文: {caption}]")
-        else:
+    # 圖片：下載到暫存目錄
+    if reply.photo and bot:
+        try:
+            photo = reply.photo[-1]  # 最大尺寸
+            file = await bot.get_file(photo.file_id)
+            file_path = os.path.join(REPLY_IMAGE_DIR, f"{photo.file_unique_id}.jpg")
+            await file.download_to_drive(file_path)
+            parts.append(f"[回覆圖片: {file_path}]")
+            logger.debug(f"下載回覆圖片: {file_path}")
+        except Exception as e:
+            logger.warning(f"下載回覆圖片失敗: {e}")
             parts.append("[回覆圖片]")
+    elif reply.photo:
+        parts.append("[回覆圖片]")
 
     # 檔案
     elif reply.document:
@@ -242,9 +254,16 @@ def _extract_reply_from_message(reply) -> str:
         else:
             parts.append(f"[回覆檔案: {file_name}]")
 
+    # caption（圖片或檔案的附文）
+    if reply.caption and not reply.text:
+        caption = reply.caption
+        if len(caption) > 500:
+            caption = caption[:500] + "..."
+        parts.append(f"[附文: {caption}]")
+
     # 文字
-    text = reply.text
-    if text:
+    if reply.text:
+        text = reply.text
         if len(text) > 500:
             text = text[:500] + "..."
         parts.append(f"[回覆訊息: {text}]")
@@ -252,7 +271,7 @@ def _extract_reply_from_message(reply) -> str:
     return "\n".join(parts) + "\n" if parts else ""
 
 
-async def _get_reply_context(message, tenant_id: UUID) -> str:
+async def _get_reply_context(message, tenant_id: UUID, bot=None) -> str:
     """取得被回覆訊息的上下文
 
     如果用戶回覆了一則舊訊息，查詢該訊息內容並組裝成上下文。
@@ -283,7 +302,7 @@ async def _get_reply_context(message, tenant_id: UUID) -> str:
     if not row:
         # DB 沒有記錄，直接從 Telegram reply message 物件取得內容
         # （Bot 回覆的 message_id 與 DB 儲存的 key 格式不同，常會查不到）
-        return _extract_reply_from_message(reply)
+        return await _extract_reply_from_message(reply, bot)
 
     msg_type = row["message_type"]
     content = row["content"]
@@ -309,7 +328,7 @@ async def _get_reply_context(message, tenant_id: UUID) -> str:
         return f"[回覆訊息: {content}]\n"
 
     # DB 有記錄但沒有可用內容，嘗試從 message 物件取得
-    return _extract_reply_from_message(reply)
+    return await _extract_reply_from_message(reply, bot)
 
 
 def _strip_bot_mention(text: str, bot_username: str | None) -> str:
@@ -450,7 +469,7 @@ async def _handle_text(
             return
 
     # 取得回覆上下文
-    reply_context = await _get_reply_context(message, tenant_id)
+    reply_context = await _get_reply_context(message, tenant_id, bot=adapter.bot)
     if reply_context:
         text = reply_context + text
 
