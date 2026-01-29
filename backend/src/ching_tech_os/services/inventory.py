@@ -90,6 +90,8 @@ async def list_inventory_items(
                 REPLACE(REPLACE(LOWER(name), '-', ''), ' ', '') LIKE ${param_idx}
                 OR REPLACE(REPLACE(LOWER(COALESCE(specification, '')), '-', ''), ' ', '') LIKE ${param_idx}
                 OR REPLACE(REPLACE(LOWER(COALESCE(model, '')), '-', ''), ' ', '') LIKE ${param_idx}
+                OR REPLACE(REPLACE(LOWER(COALESCE(category, '')), '-', ''), ' ', '') LIKE ${param_idx}
+                OR REPLACE(REPLACE(LOWER(COALESCE(default_vendor, '')), '-', ''), ' ', '') LIKE ${param_idx}
             )"""
             params.append(f"%{normalized_query}%")
             param_idx += 1
@@ -1125,6 +1127,67 @@ async def update_inventory_order(
             item_name=item["name"] if item else None,
             project_name=project_name,
         )
+
+
+async def get_project_inventory_status(
+    project_id: UUID,
+    tenant_id: UUID | str | None = None,
+) -> dict:
+    """
+    查詢指定專案的物料進出貨狀態
+
+    Args:
+        project_id: 專案 ID
+        tenant_id: 租戶 ID
+
+    Returns:
+        包含專案名稱和各物料進出貨彙總的字典
+    """
+    tid = _get_tenant_id(tenant_id)
+    async with get_connection() as conn:
+        # 取得專案名稱
+        project = await conn.fetchrow(
+            "SELECT name FROM projects WHERE id = $1 AND tenant_id = $2",
+            project_id,
+            tid,
+        )
+        if not project:
+            raise InventoryError(f"專案 {project_id} 不存在")
+
+        # 查詢該專案所有進出貨記錄，按物料分組彙總
+        rows = await conn.fetch(
+            """
+            SELECT
+                i.id AS item_id,
+                i.name AS item_name,
+                i.unit,
+                COALESCE(SUM(CASE WHEN t.type = 'in' THEN t.quantity ELSE 0 END), 0) AS total_in,
+                COALESCE(SUM(CASE WHEN t.type = 'out' THEN t.quantity ELSE 0 END), 0) AS total_out
+            FROM inventory_transactions t
+            JOIN inventory_items i ON t.item_id = i.id
+            WHERE t.project_id = $1 AND t.tenant_id = $2
+            GROUP BY i.id, i.name, i.unit
+            ORDER BY i.name
+            """,
+            project_id,
+            tid,
+        )
+
+        items = [
+            {
+                "item_id": str(row["item_id"]),
+                "item_name": row["item_name"],
+                "unit": row["unit"],
+                "total_in": row["total_in"],
+                "total_out": row["total_out"],
+            }
+            for row in rows
+        ]
+
+        return {
+            "project_name": project["name"],
+            "items": items,
+        }
 
 
 async def delete_inventory_order(order_id: UUID) -> None:

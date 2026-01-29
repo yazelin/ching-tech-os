@@ -5023,6 +5023,95 @@ async def adjust_inventory(
 
 
 @mcp.tool()
+async def query_project_inventory(
+    project_id: str | None = None,
+    project_name: str | None = None,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
+) -> str:
+    """
+    查詢專案的物料進出貨狀態（哪些已到貨、哪些尚未進貨）
+
+    Args:
+        project_id: 專案 ID（與 project_name 擇一提供）
+        project_name: 專案名稱（與 project_id 擇一提供，會模糊匹配）
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
+    """
+    from ..services.inventory import (
+        find_project_by_id_or_name,
+        get_project_inventory_status,
+    )
+
+    await ensure_db_connection()
+
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("query_project_inventory", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
+    if not project_id and not project_name:
+        return "❌ 請提供專案 ID 或專案名稱"
+
+    try:
+        # 查找專案
+        project_result = await find_project_by_id_or_name(
+            project_id=project_id, project_name=project_name, tenant_id=ctos_tenant_id
+        )
+        if not project_result.found:
+            if project_result.has_multiple:
+                candidates = "\n".join(
+                    [f"• {c['name']}（ID: {c['id']}）" for c in project_result.candidates]
+                )
+                return f"⚠️ {project_result.error}，請指定：\n{candidates}"
+            if project_result.error:
+                return f"❌ {project_result.error}"
+            return f"❌ 找不到專案「{project_name or project_id}」"
+
+        project = project_result.project
+        pid = UUID(str(project["id"]))
+
+        # 取得進出貨狀態
+        data = await get_project_inventory_status(pid, tenant_id=ctos_tenant_id)
+
+        items = data["items"]
+        if not items:
+            return f"📦 {data['project_name']} 專案尚無任何進出貨記錄"
+
+        # 分類：已進貨 vs 尚未進貨
+        received = []
+        not_received = []
+        for item in items:
+            if item["total_in"] > 0:
+                received.append(item)
+            else:
+                not_received.append(item)
+
+        total = len(items)
+        result = f"📦 {data['project_name']} 專案物料進出貨狀態（共 {total} 項）\n"
+
+        if received:
+            result += f"\n✅ 已進貨（{len(received)} 項）：\n"
+            for item in received:
+                unit = item["unit"] or ""
+                out_info = f"，出貨 {item['total_out']}" if item["total_out"] > 0 else ""
+                result += f"• {item['item_name']}：進貨 {item['total_in']} {unit}{out_info}\n"
+
+        if not_received:
+            result += f"\n⏳ 尚未進貨（{len(not_received)} 項）：\n"
+            for item in not_received:
+                unit = item["unit"] or ""
+                out_info = f"（出貨 {item['total_out']} {unit}）" if item["total_out"] > 0 else ""
+                result += f"• {item['item_name']}{out_info}\n"
+
+        return result.rstrip()
+
+    except Exception as e:
+        logger.error(f"查詢專案進出貨狀態失敗: {e}")
+        return f"❌ 查詢失敗：{str(e)}"
+
+
+@mcp.tool()
 async def add_inventory_order(
     order_quantity: float,
     item_id: str | None = None,
