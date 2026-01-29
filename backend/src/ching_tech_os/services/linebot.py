@@ -2188,17 +2188,19 @@ async def verify_binding_code(
             )
             logger.info(f"已在目標租戶 {target_tid} 建立 {user_platform_type} 用戶記錄: {target_line_user_uuid}")
 
-        # 檢查該 CTOS 用戶是否已綁定其他 Line 帳號
+        # 檢查該 CTOS 用戶是否已綁定同平台的其他帳號
         existing_line = await conn.fetchrow(
             """
             SELECT id FROM bot_users
-            WHERE user_id = $1 AND tenant_id = $2
+            WHERE user_id = $1 AND tenant_id = $2 AND platform_type = $3
             """,
             ctos_user_id,
             target_tid,
+            user_platform_type,
         )
         if existing_line:
-            return False, "此 CTOS 帳號已綁定其他 Line 帳號"
+            platform_label = "Telegram" if user_platform_type == "telegram" else "Line"
+            return False, f"此 CTOS 帳號已綁定其他 {platform_label} 帳號"
 
         # 執行綁定（在目標租戶）
         await conn.execute(
@@ -2233,30 +2235,46 @@ async def verify_binding_code(
 async def unbind_line_user(
     user_id: int,
     tenant_id: UUID | str | None = None,
+    platform_type: str | None = None,
 ) -> bool:
     """
-    解除 CTOS 用戶的 Line 綁定
+    解除 CTOS 用戶的平台綁定
 
     Args:
         user_id: CTOS 用戶 ID
         tenant_id: 租戶 ID
+        platform_type: 平台類型（line/telegram），None 表示解除所有平台
 
     Returns:
         是否成功解除綁定
     """
     tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
-        result = await conn.execute(
-            """
-            UPDATE bot_users
-            SET user_id = NULL, updated_at = NOW()
-            WHERE user_id = $1 AND tenant_id = $2
-            """,
-            user_id,
-            tid,
-        )
-        if result == "UPDATE 1":
-            logger.info(f"已解除綁定: ctos_user={user_id}")
+        if platform_type:
+            result = await conn.execute(
+                """
+                UPDATE bot_users
+                SET user_id = NULL, updated_at = NOW()
+                WHERE user_id = $1 AND tenant_id = $2 AND platform_type = $3
+                """,
+                user_id,
+                tid,
+                platform_type,
+            )
+        else:
+            result = await conn.execute(
+                """
+                UPDATE bot_users
+                SET user_id = NULL, updated_at = NOW()
+                WHERE user_id = $1 AND tenant_id = $2
+                """,
+                user_id,
+                tid,
+            )
+        affected = int(result.split()[-1]) if result else 0
+        if affected > 0:
+            platform_label = platform_type or "all"
+            logger.info(f"已解除綁定: ctos_user={user_id}, platform={platform_label}")
             return True
         return False
 

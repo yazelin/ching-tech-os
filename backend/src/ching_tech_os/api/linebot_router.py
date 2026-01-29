@@ -845,12 +845,16 @@ async def api_get_binding_status(session: SessionData = Depends(get_current_sess
 
 
 @router.delete("/binding")
-async def api_unbind_line(session: SessionData = Depends(get_current_session)):
-    """解除當前用戶的 Line 綁定"""
-    success = await unbind_line_user(session.user_id, tenant_id=session.tenant_id)
+async def api_unbind_line(
+    platform_type: str | None = None,
+    session: SessionData = Depends(get_current_session),
+):
+    """解除當前用戶的平台綁定（可指定 platform_type=line|telegram）"""
+    success = await unbind_line_user(session.user_id, tenant_id=session.tenant_id, platform_type=platform_type)
     if not success:
         raise HTTPException(status_code=404, detail="未找到綁定記錄")
-    return {"status": "ok", "message": "已解除 Line 綁定"}
+    platform_label = "Telegram" if platform_type == "telegram" else "Line" if platform_type == "line" else "所有平台"
+    return {"status": "ok", "message": f"已解除 {platform_label} 綁定"}
 
 
 # ============================================================
