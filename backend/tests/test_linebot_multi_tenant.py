@@ -330,7 +330,7 @@ class TestWebhookIntegration:
         from ching_tech_os.api import linebot_router
 
         app = FastAPI()
-        app.include_router(linebot_router.router, prefix="/api/linebot")
+        app.include_router(linebot_router.line_router, prefix="/api/bot/line")
         client = TestClient(app)
 
         body = b'{"events":[]}'
@@ -348,7 +348,7 @@ class TestWebhookIntegration:
             mock_parser.return_value = mock_parser_instance
 
             response = client.post(
-                "/api/linebot/webhook",
+                "/api/bot/line/webhook",
                 content=body,
                 headers={"X-Line-Signature": signature},
             )
@@ -363,10 +363,10 @@ class TestWebhookIntegration:
         """Webhook 應拒絕無效簽章"""
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
-        from ching_tech_os.api.linebot_router import router
+        from ching_tech_os.api.linebot_router import line_router
 
         app = FastAPI()
-        app.include_router(router, prefix="/api/linebot")
+        app.include_router(line_router, prefix="/api/bot/line")
         client = TestClient(app)
 
         body = b'{"events":[]}'
@@ -377,7 +377,7 @@ class TestWebhookIntegration:
             mock_cache.return_value = []
 
             response = client.post(
-                "/api/linebot/webhook",
+                "/api/bot/line/webhook",
                 content=body,
                 headers={"X-Line-Signature": invalid_signature},
             )

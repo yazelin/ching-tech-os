@@ -52,7 +52,7 @@ Line Platform
 
 **設定方式**：
 1. 租戶在 Line Developers Console 建立 Messaging API Channel
-2. 設定 Webhook URL 指向平台：`https://your-domain/api/linebot/webhook`
+2. 設定 Webhook URL 指向平台：`https://your-domain/api/bot/line/webhook`
 3. 在租戶管理介面設定 Channel ID、Channel Secret、Access Token
 4. 平台會自動以該租戶的憑證驗證和回覆訊息
 
@@ -218,7 +218,7 @@ Line Platform
 ### Webhook
 
 ```
-POST /api/linebot/webhook
+POST /api/bot/line/webhook
 ```
 
 Line 平台的 Webhook 端點，需在 Line Developers Console 設定。
@@ -226,11 +226,11 @@ Line 平台的 Webhook 端點，需在 Line Developers Console 設定。
 ### 群組管理
 
 ```
-GET /api/linebot/groups
-GET /api/linebot/groups/{group_id}
-POST /api/linebot/groups/{group_id}/bind-project
-DELETE /api/linebot/groups/{group_id}/bind-project
-DELETE /api/linebot/groups/{group_id}
+GET /api/bot/groups
+GET /api/bot/groups/{group_id}
+POST /api/bot/groups/{group_id}/bind-project
+DELETE /api/bot/groups/{group_id}/bind-project
+DELETE /api/bot/groups/{group_id}
 ```
 
 > **刪除群組**：刪除群組會級聯刪除相關訊息（`line_messages`）和檔案記錄（`line_files`），但 NAS 實體檔案不會被刪除。
@@ -238,14 +238,14 @@ DELETE /api/linebot/groups/{group_id}
 ### 用戶管理
 
 ```
-GET /api/linebot/users
-GET /api/linebot/users/{user_id}
+GET /api/bot/users
+GET /api/bot/users/{user_id}
 ```
 
 ### 訊息查詢
 
 ```
-GET /api/linebot/messages?group_id=xxx&page=1&page_size=50
+GET /api/bot/messages?group_id=xxx&page=1&page_size=50
 ```
 
 ## AI 處理邏輯
@@ -476,7 +476,7 @@ CHING_TECH_LINEBOT_NAS_PATH=linebot/files
 ### Line Developers Console 設定
 
 1. 建立 Messaging API Channel
-2. 設定 Webhook URL: `https://your-domain/api/linebot/webhook`
+2. 設定 Webhook URL: `https://your-domain/api/bot/line/webhook`
 3. 啟用 Webhook
 4. 取得 Channel Secret 和 Channel Access Token
 

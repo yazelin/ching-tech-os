@@ -230,7 +230,7 @@ merge_mode: "replace" | "merge"  // 取代或合併
 
 **設定步驟**：
 1. 租戶在 Line Developers Console 申請 Messaging API Channel
-2. 設定 Webhook URL：`https://your-domain/api/linebot/webhook`
+2. 設定 Webhook URL：`https://your-domain/api/bot/line/webhook`
 3. 平台管理員在租戶管理介面設定憑證：
    - Channel ID
    - Channel Secret（加密儲存）
