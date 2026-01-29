@@ -55,23 +55,6 @@ docker exec ching-tech-os-db psql -U ching_tech -d ching_tech_os -c "SELECT * FR
 - `context_type`: 來源類型（line_group, line_user, web 等）
 - `allowed_tools`: 允許使用的工具列表
 
-### 服務日誌
-後端以 systemd 服務運行，查看日誌使用：
-
-```bash
-# 查看最近 50 行日誌
-journalctl -u ching-tech-os -n 50 --no-pager
-
-# 即時追蹤日誌
-journalctl -u ching-tech-os -f
-
-# 查看特定時間範圍
-journalctl -u ching-tech-os --since "10 minutes ago"
-
-# 過濾特定關鍵字
-journalctl -u ching-tech-os -n 100 --no-pager | grep -i "error"
-```
-
 ## 後端開發
 - 使用 FastAPI + asyncpg
 - Pydantic 資料模型放在 `models/` 目錄

@@ -9,7 +9,7 @@
       "command": "bash",
       "args": [
         "-c",
-        "set -a && source /path/to/your/project/.env && set +a && npx -y @willh/nano-banana-mcp"
+        "set -a && source /path/to/your/project/.env && set +a && uvx nanobanana-py"
       ]
     }
   }
