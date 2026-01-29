@@ -236,9 +236,11 @@ async def send_ai_response(
 
         if file_type == "image" and url:
             # 圖片：使用 ImageMessage（顯示在文字下方）
+            # 優先使用 original_url（HTTPS），Line API 要求必須是 HTTPS URL
+            image_url = file_info.get("original_url") or url
             messages.append(ImageMessage(
-                original_content_url=url,
-                preview_image_url=url,
+                original_content_url=image_url,
+                preview_image_url=image_url,
             ))
         elif file_type == "file" and url:
             # 非圖片檔案：加入連結文字
@@ -681,9 +683,11 @@ async def process_message_with_ai(
                 # 圖片訊息放在後面
                 for file_info in file_messages:
                     if file_info.get("type") == "image" and file_info.get("url"):
+                        # 優先使用 original_url（HTTPS），Line API 要求必須是 HTTPS URL
+                        img_url = file_info.get("original_url") or file_info["url"]
                         push_message_list.append(LBImageMessage(
-                            original_content_url=file_info["url"],
-                            preview_image_url=file_info.get("preview_url") or file_info["url"],
+                            original_content_url=img_url,
+                            preview_image_url=file_info.get("preview_url") or img_url,
                         ))
 
                 # 合併發送所有訊息

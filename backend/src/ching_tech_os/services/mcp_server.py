@@ -3109,6 +3109,7 @@ async def download_web_image(
     file_info = {
         "type": "image",
         "url": local_path,
+        "original_url": url,
         "name": file_name,
     }
     marker = f"[FILE_MESSAGE:{json.dumps(file_info, ensure_ascii=False)}]"
