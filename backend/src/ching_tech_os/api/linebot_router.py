@@ -91,6 +91,7 @@ from ..services.linebot_ai import handle_text_message
 logger = logging.getLogger("linebot_router")
 
 router = APIRouter(tags=["Bot"])
+line_router = APIRouter(tags=["Bot-Line"])
 
 
 # ============================================================
@@ -98,7 +99,7 @@ router = APIRouter(tags=["Bot"])
 # ============================================================
 
 
-@router.post("/webhook")
+@line_router.post("/webhook")
 async def webhook(
     request: Request,
     background_tasks: BackgroundTasks,

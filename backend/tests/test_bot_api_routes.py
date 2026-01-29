@@ -42,8 +42,10 @@ def create_session_override(username: str, user_id: int = 1, role: str = "user")
 
 def create_bot_app():
     """建立包含 /api/bot 路由的測試應用程式"""
+    from ching_tech_os.api.linebot_router import line_router
     app = FastAPI()
     app.include_router(bot_router, prefix="/api/bot")
+    app.include_router(line_router, prefix="/api/bot/line")
     app.include_router(tenant_router)
     return app
 
@@ -91,8 +93,8 @@ class TestBotApiRoutes:
             response = self.client.get("/api/bot/files")
             assert response.status_code == 200
 
-    def test_bot_webhook_route_exists(self):
-        """/api/bot/webhook 路由應存在（POST）"""
+    def test_bot_line_webhook_route_exists(self):
+        """/api/bot/line/webhook 路由應存在（POST）"""
         from ching_tech_os.api import linebot_router
 
         with patch.object(linebot_router, "verify_webhook_signature", new_callable=AsyncMock) as mock_verify, \
@@ -103,11 +105,25 @@ class TestBotApiRoutes:
             mock_parser.return_value = mock_parser_instance
 
             response = self.client.post(
-                "/api/bot/webhook",
+                "/api/bot/line/webhook",
                 content=b'{"events":[]}',
                 headers={"X-Line-Signature": "test"},
             )
             assert response.status_code == 200
+
+    def test_old_linebot_routes_return_404(self):
+        """舊的 /api/linebot/* 路由應回傳 404"""
+        response = self.client.get("/api/linebot/groups")
+        assert response.status_code == 404
+
+    def test_old_bot_webhook_returns_404(self):
+        """舊的 /api/bot/webhook 路由應回傳 404（已移到 /api/bot/line/webhook）"""
+        response = self.client.post(
+            "/api/bot/webhook",
+            content=b'{"events":[]}',
+            headers={"X-Line-Signature": "test"},
+        )
+        assert response.status_code in (404, 405)
 
     def test_nonexistent_route_returns_404(self):
         """/api/bot/nonexistent 應回傳 404"""

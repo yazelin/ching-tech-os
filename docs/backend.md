@@ -126,38 +126,38 @@ uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8089 --reload
 
 | 方法 | 端點 | 說明 |
 |------|------|------|
-| POST | `/api/linebot/webhook` | Line Webhook 接收端點 |
+| POST | `/api/bot/line/webhook` | Line Webhook 接收端點 |
 
 #### 群組管理
 
 | 方法 | 端點 | 說明 |
 |------|------|------|
-| GET | `/api/linebot/groups` | 列表群組 |
-| GET | `/api/linebot/groups/{id}` | 取得群組詳情 |
-| POST | `/api/linebot/groups/{id}/bind-project` | 綁定專案 |
-| DELETE | `/api/linebot/groups/{id}/bind-project` | 解除專案綁定 |
-| GET | `/api/linebot/groups/{id}/files` | 列出群組檔案 |
+| GET | `/api/bot/groups` | 列表群組 |
+| GET | `/api/bot/groups/{id}` | 取得群組詳情 |
+| POST | `/api/bot/groups/{id}/bind-project` | 綁定專案 |
+| DELETE | `/api/bot/groups/{id}/bind-project` | 解除專案綁定 |
+| GET | `/api/bot/groups/{id}/files` | 列出群組檔案 |
 
 #### 用戶管理
 
 | 方法 | 端點 | 說明 |
 |------|------|------|
-| GET | `/api/linebot/users` | 列表用戶 |
-| GET | `/api/linebot/users/{id}` | 取得用戶詳情 |
+| GET | `/api/bot/users` | 列表用戶 |
+| GET | `/api/bot/users/{id}` | 取得用戶詳情 |
 
 #### 訊息管理
 
 | 方法 | 端點 | 說明 |
 |------|------|------|
-| GET | `/api/linebot/messages` | 列表訊息（支援過濾）|
+| GET | `/api/bot/messages` | 列表訊息（支援過濾）|
 
 #### 檔案管理
 
 | 方法 | 端點 | 說明 |
 |------|------|------|
-| GET | `/api/linebot/files` | 列表檔案（支援過濾）|
-| GET | `/api/linebot/files/{id}` | 取得檔案詳情 |
-| GET | `/api/linebot/files/{id}/download` | 下載檔案 |
+| GET | `/api/bot/files` | 列表檔案（支援過濾）|
+| GET | `/api/bot/files/{id}` | 取得檔案詳情 |
+| GET | `/api/bot/files/{id}/download` | 下載檔案 |
 
 ### 物料/庫存管理
 

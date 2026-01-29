@@ -189,7 +189,7 @@ ChingTech OS 支援兩種 Line Bot 模式：
 
 1. 在 Channel 的 **Messaging API** 標籤頁
 2. 找到 **Webhook URL** 欄位
-3. 設定為：`https://your-domain/api/linebot/webhook`
+3. 設定為：`https://your-domain/api/bot/line/webhook`
    - 將 `your-domain` 替換為實際的平台網址
 4. 開啟 **Use webhook** 開關
 5. 關閉 **Auto-reply messages**（讓 AI 處理回覆）
