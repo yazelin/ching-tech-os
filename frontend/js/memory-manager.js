@@ -45,7 +45,7 @@ const MemoryManagerApp = (function() {
    */
   async function apiRequest(endpoint, options = {}) {
     const token = typeof LoginModule !== 'undefined' ? LoginModule.getToken() : null;
-    const response = await fetch(`/api/linebot${endpoint}`, {
+    const response = await fetch(`/api/bot${endpoint}`, {
       ...options,
       headers: {
         'Content-Type': 'application/json',

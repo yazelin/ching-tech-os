@@ -1565,7 +1565,7 @@ const TenantAdminApp = (function () {
 
     try {
       // 使用租戶 API（平台管理員和租戶管理員都可以用）
-      const response = await APIClient.get('/tenant/linebot');
+      const response = await APIClient.get('/tenant/bot');
 
       // 更新狀態顯示
       if (response.configured) {
@@ -1620,7 +1620,7 @@ const TenantAdminApp = (function () {
 
     try {
       // 使用租戶 API
-      const response = await APIClient.post('/tenant/linebot/test');
+      const response = await APIClient.post('/tenant/bot/test');
 
       if (response.success) {
         resultEl.className = 'linebot-test-result success';
@@ -1686,7 +1686,7 @@ const TenantAdminApp = (function () {
       if (accessToken) data.access_token = accessToken;
 
       // 使用租戶 API
-      await APIClient.put('/tenant/linebot', data);
+      await APIClient.put('/tenant/bot', data);
 
       // 清空密碼欄位
       container.querySelector('#lineChannelSecret').value = '';
@@ -1721,7 +1721,7 @@ const TenantAdminApp = (function () {
 
     try {
       // 使用租戶 API
-      await APIClient.delete('/tenant/linebot');
+      await APIClient.delete('/tenant/bot');
 
       // 清空表單
       container.querySelector('#lineChannelId').value = '';

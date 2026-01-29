@@ -47,7 +47,7 @@ const LineBotApp = (function () {
 
     // API 呼叫
     async function api(endpoint, options = {}) {
-        const url = `/api/linebot${endpoint}`;
+        const url = `/api/bot${endpoint}`;
         const token = getToken();
         const response = await fetch(url, {
             ...options,
@@ -1038,7 +1038,7 @@ const LineBotApp = (function () {
     // 刪除檔案
     async function deleteFile(fileId) {
         try {
-            const response = await fetch(`/api/linebot/files/${fileId}`, {
+            const response = await fetch(`/api/bot/files/${fileId}`, {
                 method: 'DELETE',
                 headers: {
                     'Authorization': `Bearer ${getToken()}`,
@@ -1070,7 +1070,7 @@ const LineBotApp = (function () {
     // 刪除群組
     async function deleteGroup(groupId) {
         try {
-            const response = await fetch(`/api/linebot/groups/${groupId}`, {
+            const response = await fetch(`/api/bot/groups/${groupId}`, {
                 method: 'DELETE',
                 headers: {
                     'Authorization': `Bearer ${getToken()}`,
@@ -1155,7 +1155,7 @@ const LineBotApp = (function () {
                     openFile(file);
                     break;
                 case 'download':
-                    FileUtils.downloadWithAuth(`/api/linebot/files/${file.id}/download`, file.file_name);
+                    FileUtils.downloadWithAuth(`/api/bot/files/${file.id}/download`, file.file_name);
                     break;
                 case 'delete':
                     const fileName = card?.querySelector('.linebot-file-name')?.textContent || '此檔案';
@@ -1191,7 +1191,7 @@ const LineBotApp = (function () {
         }
 
         let fileName = file.file_name || `${file.file_type}_${file.id.slice(0, 8)}`;
-        const fileUrl = `/api/linebot/files/${file.id}/download`;
+        const fileUrl = `/api/bot/files/${file.id}/download`;
 
         // 如果檔名沒有副檔名，根據 file_type 加上預設副檔名
         if (!fileName.includes('.')) {
