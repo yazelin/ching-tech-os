@@ -10,8 +10,13 @@ import logging
 import os
 import shutil
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, Optional
+
+# Tool 進度通知 callback 型態
+# on_tool_start(tool_name, tool_input) / on_tool_end(tool_name, result)
+ToolNotifyCallback = Callable[[str, dict], Awaitable[None]]
 
 from ..config import settings
 from . import ai_manager
@@ -230,6 +235,70 @@ def _clean_overgenerated_response(text: str) -> str:
     return result
 
 
+async def _process_stream_event(
+    line: str,
+    timestamp: float,
+    on_tool_start: ToolNotifyCallback | None,
+    on_tool_end: ToolNotifyCallback | None,
+    active_tools: dict[str, tuple[str, float]],
+) -> None:
+    """即時解析單行 stream-json 事件並觸發 callback
+
+    Args:
+        line: 一行 JSON 文字
+        timestamp: 該行的讀取時間戳
+        on_tool_start: tool 開始時的回調
+        on_tool_end: tool 結束時的回調
+        active_tools: 追蹤中的 tool（tool_use_id → (name, started_at)），由呼叫端維護
+    """
+    if not (on_tool_start or on_tool_end):
+        return
+
+    stripped = line.strip()
+    if not stripped:
+        return
+
+    try:
+        event = json.loads(stripped)
+    except json.JSONDecodeError:
+        return
+
+    event_type = event.get("type")
+
+    if event_type == "assistant" and on_tool_start:
+        message = event.get("message", {})
+        for content in message.get("content", []):
+            if content.get("type") == "tool_use":
+                tool_id = content.get("id", "")
+                tool_name = content.get("name", "")
+                tool_input = content.get("input", {})
+                active_tools[tool_id] = (tool_name, timestamp)
+                try:
+                    await on_tool_start(tool_name, tool_input)
+                except Exception as e:
+                    logger.warning(f"on_tool_start callback 失敗: {e}")
+
+    elif event_type == "user" and on_tool_end:
+        message = event.get("message", {})
+        for content in message.get("content", []):
+            if content.get("type") == "tool_result":
+                tool_id = content.get("tool_use_id", "")
+                tool_info = active_tools.pop(tool_id, None)
+                if tool_info:
+                    tool_name, started_at = tool_info
+                    duration_ms = int((timestamp - started_at) * 1000)
+                else:
+                    tool_name = ""
+                    duration_ms = None
+                try:
+                    await on_tool_end(tool_name, {
+                        "duration_ms": duration_ms,
+                        "output": content.get("content", ""),
+                    })
+                except Exception as e:
+                    logger.warning(f"on_tool_end callback 失敗: {e}")
+
+
 def _parse_stream_json_with_timing(
     lines_with_time: list[tuple[float, str]]
 ) -> ParseResult:
@@ -362,6 +431,8 @@ async def call_claude(
     system_prompt: str | None = None,
     timeout: int = DEFAULT_TIMEOUT,
     tools: list[str] | None = None,
+    on_tool_start: ToolNotifyCallback | None = None,
+    on_tool_end: ToolNotifyCallback | None = None,
 ) -> ClaudeResponse:
     """非同步呼叫 Claude CLI（自己管理對話歷史）
 
@@ -437,6 +508,9 @@ async def call_claude(
 
         logger.debug(f"claude_agent 子進程已啟動，pid={proc.pid}")
 
+        # 即時事件追蹤（用於 callback）
+        _active_tools: dict[str, tuple[str, float]] = {}
+
         # Streaming 讀取 stdout（邊讀邊收集，記錄時間戳）
         async def read_stdout():
             line_count = 0
@@ -445,7 +519,13 @@ async def call_claude(
                 if not line:
                     break
                 line_count += 1
-                stdout_lines_with_time.append((time.time(), line.decode("utf-8")))
+                ts = time.time()
+                decoded = line.decode("utf-8")
+                stdout_lines_with_time.append((ts, decoded))
+                # 即時解析並觸發 callback
+                await _process_stream_event(
+                    decoded, ts, on_tool_start, on_tool_end, _active_tools
+                )
                 if line_count <= 3 or line_count % 10 == 0:
                     logger.debug(f"claude_agent stdout: 已讀取 {line_count} 行")
             logger.debug(f"claude_agent stdout: 讀取完成，共 {line_count} 行")

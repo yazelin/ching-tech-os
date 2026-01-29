@@ -5,6 +5,7 @@ Phase 3：接收文字訊息，透過 AI 回覆，並儲存用戶與訊息記錄
 """
 
 import logging
+import os
 import time
 from uuid import UUID
 
@@ -217,7 +218,72 @@ def _should_respond_in_group(message, bot_username: str | None) -> bool:
     return False
 
 
-async def _get_reply_context(message, tenant_id: UUID) -> str:
+REPLY_IMAGE_DIR = "/tmp/bot-images"
+os.makedirs(REPLY_IMAGE_DIR, exist_ok=True)
+
+
+async def _extract_reply_from_message(reply, bot=None) -> str:
+    """從 Telegram message 物件直接取得回覆內容（不查 DB）
+
+    支援文字、圖片（含 caption）和檔案訊息。
+    圖片會下載到暫存目錄讓 AI 讀取。
+    """
+    parts = []
+
+    # 圖片：下載到暫存目錄
+    if reply.photo and bot:
+        try:
+            photo = reply.photo[-1]  # 最大尺寸
+            file = await bot.get_file(photo.file_id)
+            file_path = os.path.join(REPLY_IMAGE_DIR, f"{photo.file_unique_id}.jpg")
+            await file.download_to_drive(file_path)
+            parts.append(f"[回覆圖片: {file_path}]")
+            logger.debug(f"下載回覆圖片: {file_path}")
+        except Exception as e:
+            logger.warning(f"下載回覆圖片失敗: {e}")
+            parts.append("[回覆圖片]")
+    elif reply.photo:
+        parts.append("[回覆圖片]")
+
+    # 檔案：下載可讀檔案到暫存目錄
+    elif reply.document:
+        file_name = reply.document.file_name or "未知檔案"
+        if bot:
+            try:
+                from ..bot.media import is_readable_file, TEMP_FILE_DIR
+                if is_readable_file(file_name):
+                    file = await bot.get_file(reply.document.file_id)
+                    file_path = os.path.join(TEMP_FILE_DIR, f"reply_{reply.document.file_unique_id}_{file_name}")
+                    os.makedirs(TEMP_FILE_DIR, exist_ok=True)
+                    await file.download_to_drive(file_path)
+                    parts.append(f"[回覆檔案: {file_path}]")
+                    logger.debug(f"下載回覆檔案: {file_path}")
+                else:
+                    parts.append(f"[回覆檔案: {file_name}（不支援讀取的格式）]")
+            except Exception as e:
+                logger.warning(f"下載回覆檔案失敗: {e}")
+                parts.append(f"[回覆檔案: {file_name}]")
+        else:
+            parts.append(f"[回覆檔案: {file_name}]")
+
+    # caption（圖片或檔案的附文）
+    if reply.caption and not reply.text:
+        caption = reply.caption
+        if len(caption) > 500:
+            caption = caption[:500] + "..."
+        parts.append(f"[附文: {caption}]")
+
+    # 文字
+    if reply.text:
+        text = reply.text
+        if len(text) > 500:
+            text = text[:500] + "..."
+        parts.append(f"[回覆訊息: {text}]")
+
+    return "\n".join(parts) + "\n" if parts else ""
+
+
+async def _get_reply_context(message, tenant_id: UUID, bot=None) -> str:
     """取得被回覆訊息的上下文
 
     如果用戶回覆了一則舊訊息，查詢該訊息內容並組裝成上下文。
@@ -246,10 +312,9 @@ async def _get_reply_context(message, tenant_id: UUID) -> str:
         return ""
 
     if not row:
-        # DB 沒有記錄，嘗試從 reply message 本身取得
-        if reply.text:
-            return f"[回覆訊息: {reply.text}]\n"
-        return ""
+        # DB 沒有記錄，直接從 Telegram reply message 物件取得內容
+        # （Bot 回覆的 message_id 與 DB 儲存的 key 格式不同，常會查不到）
+        return await _extract_reply_from_message(reply, bot)
 
     msg_type = row["message_type"]
     content = row["content"]
@@ -274,7 +339,8 @@ async def _get_reply_context(message, tenant_id: UUID) -> str:
     if content:
         return f"[回覆訊息: {content}]\n"
 
-    return ""
+    # DB 有記錄但沒有可用內容，嘗試從 message 物件取得
+    return await _extract_reply_from_message(reply, bot)
 
 
 def _strip_bot_mention(text: str, bot_username: str | None) -> str:
@@ -415,7 +481,7 @@ async def _handle_text(
             return
 
     # 取得回覆上下文
-    reply_context = await _get_reply_context(message, tenant_id)
+    reply_context = await _get_reply_context(message, tenant_id, bot=adapter.bot)
     if reply_context:
         text = reply_context + text
 
@@ -641,7 +707,68 @@ async def _handle_text_with_ai(
     ]
     all_tools = builtin_tools + mcp_tools + nanobanana_tools + ["Read"]
 
-    # 4. 呼叫 AI（含對話歷史）
+    # 4. 建立進度通知 callback（含節流避免 Telegram API 限流）
+    progress_message_id: str | None = None
+    tool_status_lines: list[dict] = []
+    last_update_ts: float = 0.0
+    THROTTLE_INTERVAL = 1.0  # 至少間隔 1 秒才更新訊息
+
+    async def _send_or_update_progress() -> None:
+        """送出或更新進度訊息（含節流）"""
+        nonlocal progress_message_id, last_update_ts
+        now = time.time()
+        full_text = "🤖 AI 處理中\n\n" + "\n\n".join(t["line"] for t in tool_status_lines)
+
+        if progress_message_id is None:
+            sent = await adapter.send_progress(chat_id, full_text)
+            progress_message_id = sent.message_id
+            last_update_ts = now
+        elif now - last_update_ts >= THROTTLE_INTERVAL:
+            await adapter.update_progress(chat_id, progress_message_id, full_text)
+            last_update_ts = now
+
+    async def _on_tool_start(tool_name: str, tool_input: dict) -> None:
+        """Tool 開始執行時的回調：送出或更新進度通知"""
+        try:
+            # 格式化輸入參數（簡短顯示）
+            input_str = ""
+            if tool_input:
+                items = list(tool_input.items())[:2]
+                input_str = ", ".join(f"{k}={repr(v)[:30]}" for k, v in items)
+                if len(tool_input) > 2:
+                    input_str += ", ..."
+
+            status_line = f"🔧 {tool_name}"
+            if input_str:
+                status_line += f"\n   └ {input_str}"
+            status_line += "\n   ⏳ 執行中..."
+
+            tool_status_lines.append({"name": tool_name, "status": "running", "line": status_line})
+            await _send_or_update_progress()
+        except Exception as e:
+            logger.debug(f"進度通知（tool_start）失敗: {e}")
+
+    async def _on_tool_end(tool_name: str, result: dict) -> None:
+        """Tool 執行完成時的回調：更新進度通知"""
+        try:
+            duration_ms_val = result.get("duration_ms")
+            if duration_ms_val is not None:
+                duration_str = f"{duration_ms_val}ms" if duration_ms_val < 1000 else f"{duration_ms_val / 1000:.1f}s"
+            else:
+                duration_str = "完成"
+
+            # 更新對應 tool 的狀態（找最後一個同名且 running 的）
+            for tool in reversed(tool_status_lines):
+                if tool["name"] == tool_name and tool["status"] == "running":
+                    tool["status"] = "done"
+                    tool["line"] = tool["line"].replace("⏳ 執行中...", f"✅ 完成 ({duration_str})")
+                    break
+
+            await _send_or_update_progress()
+        except Exception as e:
+            logger.debug(f"進度通知（tool_end）失敗: {e}")
+
+    # 呼叫 AI（含對話歷史和進度通知）
     context_type = "telegram-group" if is_group else "telegram-personal"
     start_time = time.time()
     response = await call_claude(
@@ -651,8 +778,17 @@ async def _handle_text_with_ai(
         system_prompt=system_prompt,
         timeout=480,
         tools=all_tools,
+        on_tool_start=_on_tool_start,
+        on_tool_end=_on_tool_end,
     )
     duration_ms = int((time.time() - start_time) * 1000)
+
+    # 刪除進度通知訊息
+    if progress_message_id:
+        try:
+            await adapter.finish_progress(chat_id, progress_message_id)
+        except Exception as e:
+            logger.debug(f"刪除進度通知失敗: {e}")
 
     # 4.5 記錄 AI Log
     if message_uuid:
