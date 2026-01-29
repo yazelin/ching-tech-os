@@ -217,6 +217,17 @@ def _should_respond_in_group(message, bot_username: str | None) -> bool:
     return False
 
 
+def _extract_reply_from_message(reply) -> str:
+    """從 Telegram message 物件直接取得回覆內容（不查 DB）"""
+    # 文字或圖片 caption
+    text = reply.text or reply.caption
+    if text:
+        if len(text) > 500:
+            text = text[:500] + "..."
+        return f"[回覆訊息: {text}]\n"
+    return ""
+
+
 async def _get_reply_context(message, tenant_id: UUID) -> str:
     """取得被回覆訊息的上下文
 
@@ -246,10 +257,9 @@ async def _get_reply_context(message, tenant_id: UUID) -> str:
         return ""
 
     if not row:
-        # DB 沒有記錄，嘗試從 reply message 本身取得
-        if reply.text:
-            return f"[回覆訊息: {reply.text}]\n"
-        return ""
+        # DB 沒有記錄，直接從 Telegram reply message 物件取得內容
+        # （Bot 回覆的 message_id 與 DB 儲存的 key 格式不同，常會查不到）
+        return _extract_reply_from_message(reply)
 
     msg_type = row["message_type"]
     content = row["content"]
@@ -274,7 +284,8 @@ async def _get_reply_context(message, tenant_id: UUID) -> str:
     if content:
         return f"[回覆訊息: {content}]\n"
 
-    return ""
+    # DB 有記錄但沒有可用內容，嘗試從 message 物件取得
+    return _extract_reply_from_message(reply)
 
 
 def _strip_bot_mention(text: str, bot_username: str | None) -> str:
