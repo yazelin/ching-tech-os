@@ -26,6 +26,7 @@ from ..linebot_ai import (
 from ..linebot import (
     check_line_access,
     is_binding_code_format,
+    resolve_tenant_for_message,
     verify_binding_code,
 )
 from ..mcp_server import get_mcp_tool_names
@@ -79,9 +80,10 @@ def _get_tenant_id() -> UUID:
     return UUID(settings.default_tenant_id)
 
 
-async def _ensure_bot_user(user, conn) -> UUID:
+async def _ensure_bot_user(user, conn, tenant_id: UUID | None = None) -> UUID:
     """確保 Telegram 用戶存在於 bot_users，回傳 UUID"""
-    tenant_id = _get_tenant_id()
+    if tenant_id is None:
+        tenant_id = _get_tenant_id()
     platform_user_id = str(user.id)
     display_name = user.full_name
 
@@ -121,9 +123,10 @@ async def _ensure_bot_user(user, conn) -> UUID:
     return row["id"]
 
 
-async def _ensure_bot_group(chat, conn) -> UUID:
+async def _ensure_bot_group(chat, conn, tenant_id: UUID | None = None) -> UUID:
     """確保 Telegram 群組存在於 bot_groups，回傳 UUID"""
-    tenant_id = _get_tenant_id()
+    if tenant_id is None:
+        tenant_id = _get_tenant_id()
     platform_group_id = str(chat.id)
     group_name = chat.title or "未知群組"
 
@@ -412,16 +415,19 @@ async def _handle_text(
     is_group: bool, adapter: TelegramBotAdapter,
 ) -> None:
     """處理文字訊息"""
-    tenant_id = _get_tenant_id()
+    # 動態解析租戶：已綁定用戶使用其 CTOS 帳號的租戶
+    group_id = str(chat.id) if is_group else None
+    user_id = str(user.id) if user else None
+    tenant_id = await resolve_tenant_for_message(group_id, user_id)
 
     # 確保用戶和群組存在
     bot_user_id: UUID | None = None
     bot_group_id: UUID | None = None
     try:
         async with get_connection() as conn:
-            bot_user_id = await _ensure_bot_user(user, conn)
+            bot_user_id = await _ensure_bot_user(user, conn, tenant_id)
             if is_group:
-                bot_group_id = await _ensure_bot_group(chat, conn)
+                bot_group_id = await _ensure_bot_group(chat, conn, tenant_id)
     except Exception as e:
         logger.error(f"確保用戶/群組失敗: {e}", exc_info=True)
 
@@ -501,7 +507,10 @@ async def _handle_media(
     is_group: bool, adapter: TelegramBotAdapter,
 ) -> None:
     """處理圖片和檔案訊息"""
-    tenant_id = _get_tenant_id()
+    # 動態解析租戶
+    group_id = str(chat.id) if is_group else None
+    user_id_str = str(user.id) if user else None
+    tenant_id = await resolve_tenant_for_message(group_id, user_id_str)
     caption = message.caption or ""
 
     # 確保用戶和群組存在
@@ -509,9 +518,9 @@ async def _handle_media(
     bot_group_id: UUID | None = None
     try:
         async with get_connection() as conn:
-            bot_user_id = await _ensure_bot_user(user, conn)
+            bot_user_id = await _ensure_bot_user(user, conn, tenant_id)
             if is_group:
-                bot_group_id = await _ensure_bot_group(chat, conn)
+                bot_group_id = await _ensure_bot_group(chat, conn, tenant_id)
     except Exception as e:
         logger.error(f"確保用戶/群組失敗: {e}", exc_info=True)
 
