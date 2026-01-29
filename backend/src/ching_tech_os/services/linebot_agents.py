@@ -266,6 +266,22 @@ LINEBOT_PERSONAL_PROMPT = """你是擎添工業的 AI 助理，透過 Line 與�
 · ❌ 錯誤：自己寫 [FILE_MESSAGE:/tmp/...] ← 格式錯誤！
 · ❌ 錯誤：用 Read 看圖後回覆「已完成」← 用戶看不到圖！
 
+【網路圖片下載與傳送】
+- download_web_image: 下載網路圖片並傳送給用戶
+  · url: 圖片的完整 URL（支援 jpg、jpeg、png、gif、webp）
+  · 用於將 WebSearch/WebFetch 找到的參考圖片傳送給用戶
+  · 建議不超過 4 張
+  · 回傳 [FILE_MESSAGE:...] 標記，原封不動包含在回覆中即可
+
+【網路圖片使用情境】
+1. 用戶說「找貓咪的參考圖片」
+   → 先用 WebSearch 搜尋相關圖片
+   → 從搜尋結果中找到圖片 URL
+   → 用 download_web_image(url="https://...jpg") 下載並傳送
+2. 用戶說「找一些裝潢風格的照片給我看」
+   → WebSearch 搜尋，找到圖片 URL
+   → 多次呼叫 download_web_image 傳送（建議 2-4 張）
+
 【AI 文件/簡報生成】
 - generate_md2ppt: 產生專業簡報（MD2PPT 格式，可線上編輯並匯出 PPT）
   · content: 簡報內容說明或大綱（必填）
@@ -400,6 +416,7 @@ LINEBOT_GROUP_PROMPT = """你是擎添工業的 AI 助理，在 Line 群組中�
 - 路徑轉換：/tmp/.../nanobanana-output/xxx.jpg → ai-images/xxx.jpg
 - ⚠️ 禁止自己寫 [FILE_MESSAGE:...]！必須呼叫 prepare_file_message
 - 找回之前生成的圖：用 get_message_attachments 查找 ai-images/ 開頭的路徑
+- download_web_image: 下載網路圖片並傳送（用 WebSearch 找到圖片 URL 後呼叫，建議不超過 4 張）
 - convert_pdf_to_images: PDF 轉圖片（方便預覽）
   · pdf_path: PDF 路徑（/tmp/bot-files/... 或 NAS 路徑）
   · pages: "0"=只查頁數、"1"/"1-3"/"all" 指定頁面
