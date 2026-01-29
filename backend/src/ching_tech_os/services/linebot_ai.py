@@ -1025,6 +1025,7 @@ async def build_system_prompt(
     builtin_tools: list[str] | None = None,
     tenant_id: UUID | None = None,
     app_permissions: dict[str, bool] | None = None,
+    platform_type: str = "line",
 ) -> str:
     """
     建立系統提示
@@ -1153,6 +1154,9 @@ async def build_system_prompt(
 請自然地遵循上述規則，不需要特別提及或確認。"""
         base_prompt += memory_block
 
+    # 平台標籤
+    platform_label = "Telegram" if platform_type == "telegram" else "Line"
+
     if line_group_id:
         async with get_connection() as conn:
             group = await conn.fetchrow(
@@ -1170,7 +1174,8 @@ async def build_system_prompt(
                     base_prompt += f"\n綁定專案：{group['project_name']}"
                     base_prompt += f"\n專案 ID（供工具查詢用）：{group['project_id']}"
         # 加入群組 ID 和用戶身份識別
-        base_prompt += f"\n\n【對話識別】\nline_group_id: {line_group_id}"
+        base_prompt += f"\n\n【對話識別】\n平台：{platform_label}"
+        base_prompt += f"\ngroup_id: {line_group_id}"
         if tenant_id:
             base_prompt += f"\nctos_tenant_id: {tenant_id}"
         if ctos_user_id:
@@ -1179,13 +1184,14 @@ async def build_system_prompt(
             base_prompt += "\nctos_user_id: （未關聯）"
     elif line_user_id:
         # 個人對話：加入用戶 ID 和身份識別
-        base_prompt += f"\n\n【對話識別】\nline_user_id: {line_user_id}"
+        base_prompt += f"\n\n【對話識別】\n平台：{platform_label}"
+        base_prompt += f"\n{platform_label.lower()}_user_id: {line_user_id}"
         if tenant_id:
             base_prompt += f"\nctos_tenant_id: {tenant_id}"
         if ctos_user_id:
             base_prompt += f"\nctos_user_id: {ctos_user_id}"
         else:
-            base_prompt += "\nctos_user_id: （未關聯，無法進行專案更新操作）"
+            base_prompt += f"\nctos_user_id: （未關聯，無法進行專案更新操作）"
 
     return base_prompt
 

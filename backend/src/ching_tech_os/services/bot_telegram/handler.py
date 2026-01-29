@@ -710,10 +710,12 @@ async def _handle_text_with_ai(
     # 2.5 建立系統提示
     system_prompt = await build_system_prompt(
         line_group_id=bot_group_id if is_group else None,
-        line_user_id=None,
+        line_user_id=platform_user_id,
         base_prompt=base_prompt,
         builtin_tools=builtin_tools,
+        tenant_id=tenant_id,
         app_permissions=app_permissions,
+        platform_type="telegram",
     )
 
     # 3. 組裝工具列表（根據用戶權限過濾）
