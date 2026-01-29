@@ -641,13 +641,28 @@ async def _handle_text_with_ai(
     ]
     all_tools = builtin_tools + mcp_tools + nanobanana_tools + ["Read"]
 
-    # 4. 建立進度通知 callback
+    # 4. 建立進度通知 callback（含節流避免 Telegram API 限流）
     progress_message_id: str | None = None
     tool_status_lines: list[dict] = []
+    last_update_ts: float = 0.0
+    THROTTLE_INTERVAL = 1.0  # 至少間隔 1 秒才更新訊息
+
+    async def _send_or_update_progress() -> None:
+        """送出或更新進度訊息（含節流）"""
+        nonlocal progress_message_id, last_update_ts
+        now = time.time()
+        full_text = "🤖 AI 處理中\n\n" + "\n\n".join(t["line"] for t in tool_status_lines)
+
+        if progress_message_id is None:
+            sent = await adapter.send_progress(chat_id, full_text)
+            progress_message_id = sent.message_id
+            last_update_ts = now
+        elif now - last_update_ts >= THROTTLE_INTERVAL:
+            await adapter.update_progress(chat_id, progress_message_id, full_text)
+            last_update_ts = now
 
     async def _on_tool_start(tool_name: str, tool_input: dict) -> None:
         """Tool 開始執行時的回調：送出或更新進度通知"""
-        nonlocal progress_message_id
         try:
             # 格式化輸入參數（簡短顯示）
             input_str = ""
@@ -663,14 +678,7 @@ async def _handle_text_with_ai(
             status_line += "\n   ⏳ 執行中..."
 
             tool_status_lines.append({"name": tool_name, "status": "running", "line": status_line})
-
-            full_text = "🤖 AI 處理中\n\n" + "\n\n".join(t["line"] for t in tool_status_lines)
-
-            if progress_message_id is None:
-                sent = await adapter.send_progress(chat_id, full_text)
-                progress_message_id = sent.message_id
-            else:
-                await adapter.update_progress(chat_id, progress_message_id, full_text)
+            await _send_or_update_progress()
         except Exception as e:
             logger.debug(f"進度通知（tool_start）失敗: {e}")
 
@@ -690,9 +698,7 @@ async def _handle_text_with_ai(
                     tool["line"] = tool["line"].replace("⏳ 執行中...", f"✅ 完成 ({duration_str})")
                     break
 
-            if progress_message_id:
-                full_text = "🤖 AI 處理中\n\n" + "\n\n".join(t["line"] for t in tool_status_lines)
-                await adapter.update_progress(chat_id, progress_message_id, full_text)
+            await _send_or_update_progress()
         except Exception as e:
             logger.debug(f"進度通知（tool_end）失敗: {e}")
 
