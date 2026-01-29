@@ -1843,7 +1843,7 @@ const PlatformAdminApp = (function () {
       if (tenantFilter) params.append('tenant_id', tenantFilter);
 
       const queryString = params.toString();
-      const url = `/admin/tenants/line-groups${queryString ? '?' + queryString : ''}`;
+      const url = `/admin/tenants/bot-groups${queryString ? '?' + queryString : ''}`;
 
       const data = await APIClient.get(url);
       lineGroupsCache = data.items || [];
@@ -1996,7 +1996,7 @@ const PlatformAdminApp = (function () {
       confirmBtn.innerHTML = `<span class="icon">${getIcon('loading', 'mdi-spin')}</span> 變更中...`;
 
       try {
-        await APIClient.request(`/admin/tenants/line-groups/${groupId}/tenant`, {
+        await APIClient.request(`/admin/tenants/bot-groups/${groupId}/tenant`, {
           method: 'PATCH',
           body: JSON.stringify({ new_tenant_id: newTenantId }),
         });
