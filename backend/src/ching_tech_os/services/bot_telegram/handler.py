@@ -848,6 +848,7 @@ async def _handle_text_with_ai(
     if reply_text:
         await adapter.send_text(chat_id, reply_text)
 
+    sent_file_msg_ids: list[tuple[int, dict]] = []  # (telegram_message_id, file_info)
     for file_info in files:
         file_type = file_info.get("type", "")
         url = file_info.get("url", "")
@@ -855,7 +856,8 @@ async def _handle_text_with_ai(
             continue
         try:
             if file_type == "image":
-                await adapter.send_image(chat_id, url)
+                sent_msg = await adapter.send_image(chat_id, url)
+                sent_file_msg_ids.append((int(sent_msg.message_id), file_info))
             else:
                 await adapter.send_file(
                     chat_id, url, file_info.get("name", "file")
@@ -884,17 +886,15 @@ async def _handle_text_with_ai(
                     tenant_id=tenant_id,
                 )
 
-                # 儲存圖片檔案記錄（讓檔案分頁能查到 Telegram 生成的圖片）
-                image_files = [f for f in files if f.get("type") == "image"]
-                for idx, img_info in enumerate(image_files):
+                # 儲存圖片檔案記錄（用 Telegram 回傳的 message_id，讓回覆時能查到）
+                for sent_tg_msg_id, img_info in sent_file_msg_ids:
                     nas_path = img_info.get("nas_path")
                     file_name = img_info.get("name", "image")
                     if nas_path:
                         try:
-                            # 為每張圖片建立獨立的訊息記錄
                             img_msg_uuid = await _save_message(
                                 conn,
-                                message_id=f"tg_img_{message_id}_{idx}_{file_name[:16]}",
+                                message_id=f"tg_{sent_tg_msg_id}",
                                 bot_user_id=bot_user_id,
                                 bot_group_id=bot_group_id,
                                 message_type="image",
@@ -909,7 +909,7 @@ async def _handle_text_with_ai(
                                 nas_path=nas_path,
                                 tenant_id=tenant_id,
                             )
-                            logger.info(f"已儲存 Telegram Bot 圖片記錄: {file_name}")
+                            logger.info(f"已儲存 Telegram Bot 圖片記錄: tg_{sent_tg_msg_id} -> {file_name}")
                         except Exception as e:
                             logger.error(f"儲存圖片記錄失敗: {e}", exc_info=True)
         except Exception as e:
