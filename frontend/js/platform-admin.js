@@ -1310,7 +1310,7 @@ const PlatformAdminApp = (function () {
     content.style.display = 'none';
 
     try {
-      const response = await APIClient.get(`/admin/tenants/${tenantId}/linebot`);
+      const response = await APIClient.get(`/admin/tenants/${tenantId}/bot`);
       renderTenantLineBotSettings(dialog, content, response, tenantId);
       loading.style.display = 'none';
       content.style.display = '';
@@ -1389,7 +1389,7 @@ const PlatformAdminApp = (function () {
       resultEl.style.display = 'none';
 
       try {
-        const response = await APIClient.post(`/admin/tenants/${tenantId}/linebot/test`);
+        const response = await APIClient.post(`/admin/tenants/${tenantId}/bot/test`);
 
         if (response.success) {
           resultEl.className = 'tenant-linebot-test-result success';
@@ -1442,7 +1442,7 @@ const PlatformAdminApp = (function () {
         if (channelSecret) data.channel_secret = channelSecret;
         if (accessToken) data.access_token = accessToken;
 
-        await APIClient.put(`/admin/tenants/${tenantId}/linebot`, data);
+        await APIClient.put(`/admin/tenants/${tenantId}/bot`, data);
 
         // 清空密碼欄位
         container.querySelector('#tenantLineChannelSecret').value = '';
@@ -1470,7 +1470,7 @@ const PlatformAdminApp = (function () {
       btn.innerHTML = `<span class="icon">${getIcon('loading', 'mdi-spin')}</span><span>清除中...</span>`;
 
       try {
-        await APIClient.request(`/admin/tenants/${tenantId}/linebot`, { method: 'DELETE' });
+        await APIClient.request(`/admin/tenants/${tenantId}/bot`, { method: 'DELETE' });
         loadTenantLineBotSettings(dialog, tenantId);
         showToast('Line Bot 設定已清除', 'check');
       } catch (error) {
