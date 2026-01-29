@@ -16,7 +16,7 @@
       // 計算 base path 並設為全域變數供其他腳本使用
       window.PUBLIC_BASE = (function() {
         var path = window.location.pathname;
-        var knownPaths = ['/ctos', '/trial'];
+        var knownPaths = ['/ctos', '/trial', '/dev'];
         for (var i = 0; i < knownPaths.length; i++) {
           if (path.indexOf(knownPaths[i] + '/') === 0 || path === knownPaths[i]) {
             return knownPaths[i];
