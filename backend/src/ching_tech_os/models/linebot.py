@@ -46,6 +46,7 @@ class LineGroupResponse(LineGroupBase):
     """Line 群組回應"""
 
     id: UUID
+    platform_type: str = "line"
     platform_group_id: str
     member_count: int
     project_id: UUID | None
@@ -99,6 +100,7 @@ class LineUserResponse(LineUserBase):
     """Line 用戶回應"""
 
     id: UUID
+    platform_type: str = "line"
     platform_user_id: str
     user_id: int | None
     is_friend: bool

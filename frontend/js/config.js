@@ -11,7 +11,7 @@
   let basePath = '';
 
   // 檢查已知的子路徑部署
-  const knownBasePaths = ['/ctos', '/trial'];
+  const knownBasePaths = ['/ctos', '/trial', '/dev'];
   for (const known of knownBasePaths) {
     if (pathName.startsWith(known + '/') || pathName === known) {
       basePath = known;
