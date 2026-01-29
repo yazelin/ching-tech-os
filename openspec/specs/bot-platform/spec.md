@@ -1,0 +1,119 @@
+# bot-platform Specification
+
+## Purpose
+TBD - created by archiving change refactor-multi-platform-bot. Update Purpose after archive.
+## Requirements
+### Requirement: BotAdapter Protocol 定義
+系統 SHALL 定義平台無關的 BotAdapter Protocol，作為所有訊息平台的統一介面。
+
+#### Scenario: 標準化發送介面
+- **WHEN** 系統需要發送訊息到任何平台
+- **THEN** 透過 BotAdapter Protocol 的統一方法發送
+- **AND** 所有平台 Adapter 必須實作 `send_text`、`send_image`、`send_file` 方法
+- **AND** 每個方法回傳 `SentMessage`（包含 message_id、platform_type）
+
+#### Scenario: 可選的訊息編輯能力
+- **WHEN** 平台支援訊息編輯（如 Telegram）
+- **THEN** 平台 Adapter 額外實作 `EditableMessageAdapter` Protocol
+- **AND** 提供 `edit_message` 和 `delete_message` 方法
+- **AND** 業務邏輯透過 `isinstance()` 檢查是否可用
+
+#### Scenario: 可選的進度通知能力
+- **WHEN** 平台支援即時更新訊息（如 Telegram 的 edit_message）
+- **THEN** 平台 Adapter 額外實作 `ProgressNotifier` Protocol
+- **AND** 提供 `send_progress`、`update_progress`、`finish_progress` 方法
+- **AND** AI 處理期間的 tool 執行狀態可透過此介面即時更新
+
+### Requirement: BotMessage 正規化格式
+系統 SHALL 使用統一的 BotMessage 格式處理所有平台的訊息。
+
+#### Scenario: 入站訊息正規化
+- **WHEN** 收到任何平台的訊息
+- **THEN** 平台 Adapter 將訊息轉換為 `BotMessage` 格式
+- **AND** 包含 `platform_type`、`sender_id`、`target_id`、`text`、`media`、`context_type`（private/group）
+- **AND** 平台特定資料存於 `platform_data` 字典
+
+#### Scenario: 出站回應建構
+- **WHEN** AI 處理完成需要回覆
+- **THEN** 核心邏輯產生 `BotResponse`（text + images + files）
+- **AND** 平台 Adapter 將 `BotResponse` 轉換為平台特定格式發送
+
+### Requirement: BotContext 對話情境
+系統 SHALL 使用統一的 BotContext 管理對話情境。
+
+#### Scenario: 建構對話情境
+- **WHEN** 收到訊息觸發 AI 處理
+- **THEN** 系統建構 `BotContext` 包含 `platform_type`、`tenant_id`、`user_id`、`group_id`、`conversation_type`
+- **AND** 平台 Adapter 負責從平台事件填充 context
+
+#### Scenario: 依情境選擇 Agent
+- **WHEN** 系統需要選擇 AI Agent
+- **THEN** 根據 `BotContext.conversation_type`（private/group）選擇對應 Agent
+- **AND** Agent 選擇邏輯與平台無關
+
+### Requirement: 平台無關的 AI 處理核心
+系統 SHALL 將 AI 處理邏輯抽離為平台無關的共用模組。
+
+#### Scenario: 統一的 AI 處理流程
+- **WHEN** 任何平台觸發 AI 處理
+- **THEN** 共用核心負責：Agent 選擇、system prompt 建構、對話歷史組合、Claude CLI 呼叫、回應解析
+- **AND** 平台特定的發送邏輯由各平台 Adapter 處理
+
+#### Scenario: system prompt 建構
+- **WHEN** 系統建構 AI system prompt
+- **THEN** 核心邏輯組合：Agent 基礎 prompt + 使用者權限 + 對話情境 + 自訂記憶
+- **AND** 平台特定資訊（如群組綁定專案）透過 BotContext 傳入
+
+#### Scenario: 回應解析
+- **WHEN** Claude CLI 回傳 AI 回應
+- **THEN** 核心邏輯負責解析 FILE_MESSAGE 標記、圖片生成自動處理
+- **AND** 產生平台無關的 `BotResponse`
+
+### Requirement: 多平台資料儲存
+系統 SHALL 使用統一的資料表結構儲存多平台資料。
+
+#### Scenario: bot_groups 資料表
+- **WHEN** 系統儲存群組
+- **THEN** 群組資料存於 `bot_groups` 資料表
+- **AND** 包含 `platform_type` 欄位（'line'、'telegram' 等）
+- **AND** 包含 `platform_group_id` 欄位（平台原生群組 ID）
+- **AND** 其餘欄位與原 `line_groups` 相同
+
+#### Scenario: bot_users 資料表
+- **WHEN** 系統儲存使用者
+- **THEN** 使用者資料存於 `bot_users` 資料表
+- **AND** 包含 `platform_type` 欄位
+- **AND** 包含 `platform_user_id` 欄位（平台原生用戶 ID）
+
+#### Scenario: bot_messages 資料表
+- **WHEN** 系統儲存訊息
+- **THEN** 訊息資料存於 `bot_messages` 資料表
+- **AND** 關聯到 `bot_groups` 和 `bot_users`
+
+#### Scenario: bot_files 資料表
+- **WHEN** 系統儲存檔案
+- **THEN** 檔案資料存於 `bot_files` 資料表
+- **AND** 關聯到 `bot_messages`
+
+#### Scenario: bot_binding_codes 資料表
+- **WHEN** 系統產生綁定驗證碼
+- **THEN** 驗證碼資料存於 `bot_binding_codes` 資料表
+
+#### Scenario: bot_group_memories 和 bot_user_memories 資料表
+- **WHEN** 系統儲存自訂記憶
+- **THEN** 記憶資料存於 `bot_group_memories` 和 `bot_user_memories` 資料表
+- **AND** 分別關聯到 `bot_groups` 和 `bot_users`
+
+### Requirement: Agent 管理通用化
+系統 SHALL 將 Agent 管理邏輯從 Line 專屬改為平台通用。
+
+#### Scenario: 通用 Agent 初始化
+- **WHEN** 應用程式啟動
+- **THEN** 系統確保預設的 bot Agent 存在（bot-personal、bot-group）
+- **AND** 保持與舊 Agent name（linebot-personal、linebot-group）的向後相容映射
+
+#### Scenario: 動態工具 prompt 生成
+- **WHEN** 系統建構 Agent prompt
+- **THEN** 動態工具 prompt 生成邏輯與平台無關
+- **AND** 根據使用者的 app 權限決定可用工具
+
