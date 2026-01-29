@@ -21,6 +21,7 @@ const LineBotApp = (function () {
     // 狀態
     let state = {
         currentTab: 'binding',  // 預設顯示綁定分頁
+        platformFilter: null,   // null = 全部, 'line', 'telegram'
         groups: [],
         users: [],
         messages: [],
@@ -39,6 +40,18 @@ const LineBotApp = (function () {
             files: { groupId: null, fileType: null },
         },
     };
+
+    // 取得平台篩選的 query 參數
+    function platformQuery() {
+        return state.platformFilter ? `&platform_type=${state.platformFilter}` : '';
+    }
+
+    // 取得平台圖示 HTML
+    function platformBadge(platformType) {
+        const pt = platformType || 'line';
+        const iconName = pt === 'telegram' ? 'telegram' : 'line';
+        return `<span class="linebot-platform-badge ${pt}"><span class="icon">${typeof getIcon !== 'undefined' ? getIcon(iconName) : pt}</span></span>`;
+    }
 
     // 取得 token
     function getToken() {
@@ -80,10 +93,11 @@ const LineBotApp = (function () {
     }
 
     // 產生綁定驗證碼
-    async function generateBindingCode() {
+    async function generateBindingCode(platformType = 'line') {
         try {
-            const data = await api('/binding/generate-code', { method: 'POST' });
-            showBindingCodeModal(data.code, data.expires_at);
+            const data = await api(`/binding/generate-code?platform_type=${platformType}`, { method: 'POST' });
+            const platformName = platformType === 'telegram' ? 'Telegram' : 'Line';
+            showBindingCodeModal(data.code, data.expires_at, platformName);
         } catch (error) {
             console.error('產生驗證碼失敗:', error);
             alert(`產生驗證碼失敗: ${error.message}`);
@@ -107,19 +121,19 @@ const LineBotApp = (function () {
     }
 
     // 顯示驗證碼彈窗
-    function showBindingCodeModal(code, expiresAt) {
+    function showBindingCodeModal(code, expiresAt, platformName = 'Line') {
         const modal = document.createElement('div');
         modal.className = 'linebot-modal-overlay';
         modal.innerHTML = `
             <div class="linebot-modal">
                 <div class="linebot-modal-header">
-                    <h3>Line 綁定驗證碼</h3>
+                    <h3>${platformName} 綁定驗證碼</h3>
                     <button class="linebot-modal-close">&times;</button>
                 </div>
                 <div class="linebot-modal-body">
                     <div class="linebot-binding-code-display">${code}</div>
                     <p class="linebot-binding-instruction">
-                        請在 Line 私訊 Bot 發送此驗證碼完成綁定
+                        請在 ${platformName} 私訊 Bot 發送此驗證碼完成綁定
                     </p>
                     <p class="linebot-binding-expires">
                         有效期限：${new Date(expiresAt).toLocaleString()}
@@ -184,6 +198,50 @@ const LineBotApp = (function () {
         });
     }
 
+    // 渲染單一平台綁定區塊
+    function renderPlatformBinding(platformName, platformKey, platformStatus) {
+        const iconHtml = platformBadge(platformKey);
+        if (platformStatus && platformStatus.is_bound) {
+            return `
+                <div class="linebot-binding-status bound">
+                    <div class="linebot-binding-icon">${iconHtml}</div>
+                    <div class="linebot-binding-info">
+                        <div class="linebot-binding-label">已綁定 ${platformName} 帳號</div>
+                        <div class="linebot-binding-detail">
+                            ${platformStatus.picture_url
+                                ? `<img class="linebot-binding-avatar" src="${platformStatus.picture_url}" alt="">`
+                                : ''
+                            }
+                            <span>${platformStatus.display_name || `${platformName} 用戶`}</span>
+                        </div>
+                        <div class="linebot-binding-time">
+                            綁定時間：${platformStatus.bound_at ? new Date(platformStatus.bound_at).toLocaleString() : '未知'}
+                        </div>
+                    </div>
+                    <button class="linebot-btn linebot-btn-danger linebot-unbind-btn" data-platform="${platformKey}">解除綁定</button>
+                </div>
+            `;
+        } else {
+            return `
+                <div class="linebot-binding-status unbound">
+                    <div class="linebot-binding-icon">${iconHtml}</div>
+                    <div class="linebot-binding-info">
+                        <div class="linebot-binding-label">尚未綁定 ${platformName} 帳號</div>
+                        <div class="linebot-binding-instruction">
+                            <p>綁定 ${platformName} 帳號後，即可使用 ${platformName} Bot 的 AI 功能。</p>
+                            <ol>
+                                <li>點擊「產生驗證碼」按鈕</li>
+                                <li>在 ${platformName} 私訊 Bot 發送驗證碼</li>
+                                <li>完成綁定！</li>
+                            </ol>
+                        </div>
+                    </div>
+                    <button class="linebot-btn linebot-btn-primary linebot-generate-code-btn" data-platform="${platformKey}">產生驗證碼</button>
+                </div>
+            `;
+        }
+    }
+
     // 渲染綁定狀態
     function renderBindingStatus() {
         const container = document.querySelector('.linebot-binding-content');
@@ -196,49 +254,31 @@ const LineBotApp = (function () {
             return;
         }
 
-        if (status.is_bound) {
-            container.innerHTML = `
-                <div class="linebot-binding-status bound">
-                    <div class="linebot-binding-icon">✅</div>
-                    <div class="linebot-binding-info">
-                        <div class="linebot-binding-label">已綁定 Line 帳號</div>
-                        <div class="linebot-binding-detail">
-                            ${status.line_picture_url
-                                ? `<img class="linebot-binding-avatar" src="${status.line_picture_url}" alt="">`
-                                : ''
-                            }
-                            <span>${status.line_display_name || 'Line 用戶'}</span>
-                        </div>
-                        <div class="linebot-binding-time">
-                            綁定時間：${status.bound_at ? new Date(status.bound_at).toLocaleString() : '未知'}
-                        </div>
-                    </div>
-                    <button class="linebot-btn linebot-btn-danger linebot-unbind-btn">解除綁定</button>
-                </div>
-            `;
+        // 多平台綁定區塊
+        const lineStatus = status.line || {
+            is_bound: status.is_bound,
+            display_name: status.line_display_name,
+            picture_url: status.line_picture_url,
+            bound_at: status.bound_at,
+        };
+        const telegramStatus = status.telegram || { is_bound: false };
 
-            container.querySelector('.linebot-unbind-btn').addEventListener('click', unbindLine);
-        } else {
-            container.innerHTML = `
-                <div class="linebot-binding-status unbound">
-                    <div class="linebot-binding-icon">🔗</div>
-                    <div class="linebot-binding-info">
-                        <div class="linebot-binding-label">尚未綁定 Line 帳號</div>
-                        <div class="linebot-binding-instruction">
-                            <p>綁定 Line 帳號後，即可使用 Line Bot 的 AI 功能。</p>
-                            <ol>
-                                <li>點擊「產生驗證碼」按鈕</li>
-                                <li>在 Line 私訊 Bot 發送驗證碼</li>
-                                <li>完成綁定！</li>
-                            </ol>
-                        </div>
-                    </div>
-                    <button class="linebot-btn linebot-btn-primary linebot-generate-code-btn">產生驗證碼</button>
-                </div>
-            `;
+        container.innerHTML = `
+            <h3 style="margin: 0 0 16px 0; color: var(--text-primary); font-size: 16px;">帳號綁定</h3>
+            ${renderPlatformBinding('Line', 'line', lineStatus)}
+            <div style="height: 16px;"></div>
+            ${renderPlatformBinding('Telegram', 'telegram', telegramStatus)}
+        `;
 
-            container.querySelector('.linebot-generate-code-btn').addEventListener('click', generateBindingCode);
-        }
+        // 綁定事件
+        container.querySelectorAll('.linebot-unbind-btn').forEach(btn => {
+            btn.addEventListener('click', () => unbindLine());
+        });
+        container.querySelectorAll('.linebot-generate-code-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                generateBindingCode(btn.dataset.platform || 'line');
+            });
+        });
     }
 
     // 更新群組 AI 回應設定
@@ -267,7 +307,7 @@ const LineBotApp = (function () {
         renderLoading('groups');
 
         try {
-            const data = await api(`/groups?limit=20&offset=${(page - 1) * 20}`);
+            const data = await api(`/groups?limit=20&offset=${(page - 1) * 20}${platformQuery()}`);
             state.groups = data.items;
             state.pagination.groups = { page, total: data.total };
             renderGroups();
@@ -285,7 +325,7 @@ const LineBotApp = (function () {
         renderLoading('users');
 
         try {
-            const data = await api(`/users-with-binding?limit=20&offset=${(page - 1) * 20}`);
+            const data = await api(`/users-with-binding?limit=20&offset=${(page - 1) * 20}${platformQuery()}`);
             state.users = data.items;
             state.pagination.users = { page, total: data.total };
             renderUsers();
@@ -303,7 +343,7 @@ const LineBotApp = (function () {
         renderLoading('messages');
 
         try {
-            let endpoint = `/messages?page=${page}&page_size=50`;
+            let endpoint = `/messages?page=${page}&page_size=50${platformQuery()}`;
             if (groupId) {
                 endpoint += `&group_id=${groupId}`;
             }
@@ -327,7 +367,7 @@ const LineBotApp = (function () {
 
         try {
             const { groupId, fileType } = state.filters.files;
-            let endpoint = `/files?page=${page}&page_size=30`;
+            let endpoint = `/files?page=${page}&page_size=30${platformQuery()}`;
 
             if (groupId) {
                 endpoint += `&group_id=${groupId}`;
@@ -439,7 +479,7 @@ const LineBotApp = (function () {
                     }
                 </div>
                 <div class="linebot-group-info">
-                    <div class="linebot-group-name">${group.name || '未命名群組'}</div>
+                    <div class="linebot-group-name">${platformBadge(group.platform_type)} ${group.name || '未命名群組'}</div>
                     <div class="linebot-group-meta">
                         <span>${group.member_count} 位成員</span>
                         <span class="linebot-group-status">
@@ -644,7 +684,7 @@ const LineBotApp = (function () {
                     }
                 </div>
                 <div class="linebot-user-info">
-                    <div class="linebot-user-name">${user.display_name || '未知用戶'}</div>
+                    <div class="linebot-user-name">${platformBadge(user.platform_type)} ${user.display_name || '未知用戶'}</div>
                     <div class="linebot-user-status">
                         ${user.is_friend ? '好友' : '非好友'}
                         ${user.status_message ? ` · ${user.status_message}` : ''}
@@ -844,16 +884,16 @@ const LineBotApp = (function () {
             p.classList.toggle('active', p.dataset.panel === tab);
         });
 
-        // 載入資料
-        if (tab === 'binding' && state.bindingStatus === null) {
-            loadBindingStatus();
-        } else if (tab === 'groups' && state.groups.length === 0) {
+        // 載入資料（每次切換 tab 都重新載入，以反映平台篩選）
+        if (tab === 'binding') {
+            if (state.bindingStatus === null) loadBindingStatus();
+        } else if (tab === 'groups') {
             loadGroups();
-        } else if (tab === 'users' && state.users.length === 0) {
+        } else if (tab === 'users') {
             loadUsers();
-        } else if (tab === 'messages' && state.messages.length === 0) {
+        } else if (tab === 'messages') {
             loadMessages();
-        } else if (tab === 'files' && state.files.length === 0) {
+        } else if (tab === 'files') {
             loadFiles();
         }
     }
@@ -865,10 +905,31 @@ const LineBotApp = (function () {
         return div.innerHTML;
     }
 
+    // 重新載入當前分頁資料（平台切換時使用）
+    function reloadCurrentTab() {
+        const tab = state.currentTab;
+        // 清除快取，強制重新載入
+        if (tab === 'groups') {
+            state.groups = [];
+            loadGroups();
+        } else if (tab === 'users') {
+            state.users = [];
+            loadUsers();
+        } else if (tab === 'messages') {
+            state.messages = [];
+            loadMessages();
+        } else if (tab === 'files') {
+            state.files = [];
+            loadFiles();
+        }
+        // binding 不受平台篩選影響（已顯示所有平台）
+    }
+
     // 初始化
     async function init(container) {
         // 重置 state（視窗重新打開時需要）
         state.currentTab = 'binding';
+        state.platformFilter = null;
         state.groups = [];
         state.users = [];
         state.messages = [];
@@ -890,6 +951,16 @@ const LineBotApp = (function () {
                     <button class="linebot-tab" data-tab="users">用戶</button>
                     <button class="linebot-tab" data-tab="messages">訊息</button>
                     <button class="linebot-tab" data-tab="files">檔案</button>
+                </div>
+
+                <div class="linebot-platform-filter">
+                    <button class="linebot-platform-btn active" data-platform="">全部</button>
+                    <button class="linebot-platform-btn" data-platform="line">
+                        <span class="icon">${typeof getIcon !== 'undefined' ? getIcon('line') : 'L'}</span> Line
+                    </button>
+                    <button class="linebot-platform-btn" data-platform="telegram">
+                        <span class="icon">${typeof getIcon !== 'undefined' ? getIcon('telegram') : 'T'}</span> Telegram
+                    </button>
                 </div>
 
                 <div class="linebot-content">
@@ -958,6 +1029,22 @@ const LineBotApp = (function () {
         // 綁定標籤點擊事件
         container.querySelectorAll('.linebot-tab').forEach(tab => {
             tab.addEventListener('click', () => switchTab(tab.dataset.tab));
+        });
+
+        // 綁定平台篩選事件
+        container.querySelectorAll('.linebot-platform-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const platform = btn.dataset.platform || null;
+                state.platformFilter = platform;
+
+                // 更新按鈕樣式
+                container.querySelectorAll('.linebot-platform-btn').forEach(b => {
+                    b.classList.toggle('active', (b.dataset.platform || null) === platform);
+                });
+
+                // 重新載入當前分頁資料
+                reloadCurrentTab();
+            });
         });
 
         // 載入專案列表

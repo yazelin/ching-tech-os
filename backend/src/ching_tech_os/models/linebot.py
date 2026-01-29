@@ -260,13 +260,26 @@ class BindingCodeResponse(BaseModel):
     expires_at: datetime
 
 
-class BindingStatusResponse(BaseModel):
-    """綁定狀態回應"""
+class PlatformBindingStatus(BaseModel):
+    """單一平台綁定狀態"""
 
     is_bound: bool
-    platform_display_name: str | None = None
-    platform_picture_url: str | None = None
+    display_name: str | None = None
+    picture_url: str | None = None
     bound_at: datetime | None = None
+
+
+class BindingStatusResponse(BaseModel):
+    """綁定狀態回應（多平台）"""
+
+    is_bound: bool
+    # 向後相容欄位
+    line_display_name: str | None = None
+    line_picture_url: str | None = None
+    bound_at: datetime | None = None
+    # 多平台狀態
+    line: PlatformBindingStatus | None = None
+    telegram: PlatformBindingStatus | None = None
 
 
 # ============================================================

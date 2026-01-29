@@ -9,7 +9,7 @@ import asyncio
 import logging
 from uuid import UUID
 
-from fastapi import APIRouter, Request, HTTPException, Header, BackgroundTasks, Depends
+from fastapi import APIRouter, Query, Request, HTTPException, Header, BackgroundTasks, Depends
 from fastapi.responses import Response
 from linebot.v3.webhooks import (
     MessageEvent,
@@ -523,14 +523,16 @@ async def process_unfollow_event(event: UnfollowEvent, tenant_id: UUID) -> None:
 async def api_list_groups(
     is_active: bool | None = None,
     project_id: UUID | None = None,
+    platform_type: str | None = Query(None, description="平台類型過濾（line, telegram）"),
     limit: int = 50,
     offset: int = 0,
     session: SessionData = Depends(get_current_session),
 ):
-    """列出 Line 群組"""
+    """列出群組"""
     items, total = await list_groups(
         is_active=is_active,
         project_id=project_id,
+        platform_type=platform_type,
         limit=limit,
         offset=offset,
         tenant_id=session.tenant_id,
@@ -605,12 +607,13 @@ async def api_delete_group(
 
 @router.get("/users", response_model=LineUserListResponse)
 async def api_list_users(
+    platform_type: str | None = Query(None, description="平台類型過濾（line, telegram）"),
     limit: int = 50,
     offset: int = 0,
     session: SessionData = Depends(get_current_session),
 ):
-    """列出 Line 用戶"""
-    items, total = await list_users(limit=limit, offset=offset, tenant_id=session.tenant_id)
+    """列出用戶"""
+    items, total = await list_users(platform_type=platform_type, limit=limit, offset=offset, tenant_id=session.tenant_id)
     return LineUserListResponse(
         items=[LineUserResponse(**item) for item in items],
         total=total,
@@ -638,6 +641,7 @@ async def api_get_user(
 async def api_list_messages(
     group_id: UUID | None = None,
     user_id: UUID | None = None,
+    platform_type: str | None = Query(None, description="平台類型過濾（line, telegram）"),
     page: int = 1,
     page_size: int = 50,
     session: SessionData = Depends(get_current_session),
@@ -647,6 +651,7 @@ async def api_list_messages(
     items, total = await list_messages(
         line_group_id=group_id,
         line_user_id=user_id,
+        platform_type=platform_type,
         limit=page_size,
         offset=offset,
         tenant_id=session.tenant_id,
@@ -699,6 +704,7 @@ async def api_list_files(
     group_id: UUID | None = None,
     user_id: UUID | None = None,
     file_type: str | None = None,
+    platform_type: str | None = Query(None, description="平台類型過濾（line, telegram）"),
     page: int = 1,
     page_size: int = 50,
     session: SessionData = Depends(get_current_session),
@@ -709,6 +715,7 @@ async def api_list_files(
         group_id: 群組 UUID 過濾
         user_id: 用戶 UUID 過濾
         file_type: 檔案類型過濾（image, video, audio, file）
+        platform_type: 平台類型過濾（line, telegram）
         page: 頁碼
         page_size: 每頁數量
     """
@@ -717,6 +724,7 @@ async def api_list_files(
         line_group_id=group_id,
         line_user_id=user_id,
         file_type=file_type,
+        platform_type=platform_type,
         limit=page_size,
         offset=offset,
         tenant_id=session.tenant_id,
@@ -816,13 +824,16 @@ async def api_delete_file(
 
 
 @router.post("/binding/generate-code", response_model=BindingCodeResponse)
-async def api_generate_binding_code(session: SessionData = Depends(get_current_session)):
-    """產生 Line 綁定驗證碼
+async def api_generate_binding_code(
+    platform_type: str = Query("line", description="平台類型（line, telegram）"),
+    session: SessionData = Depends(get_current_session),
+):
+    """產生綁定驗證碼
 
     產生 6 位數字驗證碼，有效期 5 分鐘。
-    用戶需在 Line 私訊 Bot 發送此驗證碼來完成綁定。
+    用戶需在對應平台的 Bot 私訊發送此驗證碼來完成綁定。
     """
-    code, expires_at = await generate_binding_code(session.user_id, tenant_id=session.tenant_id)
+    code, expires_at = await generate_binding_code(session.user_id, platform_type=platform_type, tenant_id=session.tenant_id)
     return BindingCodeResponse(code=code, expires_at=expires_at)
 
 
@@ -882,12 +893,13 @@ async def api_update_group(
 
 @router.get("/users-with-binding", response_model=LineUserListResponse)
 async def api_list_users_with_binding(
+    platform_type: str | None = Query(None, description="平台類型過濾（line, telegram）"),
     limit: int = 50,
     offset: int = 0,
     session: SessionData = Depends(get_current_session),
 ):
-    """列出 Line 用戶（包含 CTOS 帳號綁定狀態）"""
-    items, total = await list_users_with_binding(limit=limit, offset=offset, tenant_id=session.tenant_id)
+    """列出用戶（包含 CTOS 帳號綁定狀態）"""
+    items, total = await list_users_with_binding(platform_type=platform_type, limit=limit, offset=offset, tenant_id=session.tenant_id)
     return LineUserListResponse(
         items=[LineUserResponse(**item) for item in items],
         total=total,

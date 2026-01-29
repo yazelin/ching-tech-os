@@ -38,6 +38,69 @@
     border-bottom: 2px solid var(--color-primary);
 }
 
+/* 平台篩選器 */
+.linebot-platform-filter {
+    display: flex;
+    gap: 4px;
+    padding: 0 0 8px 0;
+}
+
+.linebot-platform-btn {
+    padding: 6px 14px;
+    background: transparent;
+    border: 1px solid var(--border-light);
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: 16px;
+    font-size: 13px;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.linebot-platform-btn:hover {
+    color: var(--text-primary);
+    border-color: var(--text-secondary);
+}
+
+.linebot-platform-btn.active {
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+    background: rgba(74, 158, 255, 0.1);
+}
+
+.linebot-platform-btn .icon {
+    width: 16px;
+    height: 16px;
+}
+
+/* 平台圖示徽章 */
+.linebot-platform-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+
+.linebot-platform-badge .icon {
+    width: 14px;
+    height: 14px;
+}
+
+.linebot-platform-badge.line {
+    background: rgba(6, 199, 85, 0.15);
+    color: #06c755;
+}
+
+.linebot-platform-badge.telegram {
+    background: rgba(38, 166, 222, 0.15);
+    color: #26a6de;
+}
+
 /* 內容區域 */
 .linebot-content {
     flex: 1;

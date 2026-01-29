@@ -178,18 +178,22 @@ const MemoryManagerApp = (function() {
       return;
     }
 
-    listEl.innerHTML = groups.map(group => `
+    listEl.innerHTML = groups.map(group => {
+      const pt = group.platform_type || 'line';
+      const ptIcon = pt === 'telegram' ? 'telegram' : 'line';
+      return `
       <div class="mm-sidebar-item ${selectedGroupId === group.id ? 'active' : ''}"
            data-id="${group.id}">
         <div class="mm-sidebar-item-icon">
-          ${icon('account-group')}
+          <span class="linebot-platform-badge ${pt}">${icon(ptIcon)}</span>
         </div>
         <div class="mm-sidebar-item-info">
           <span class="mm-sidebar-item-name">${escapeHtml(group.name || '未命名群組')}</span>
           <span class="mm-sidebar-item-meta">${group.member_count} 人</span>
         </div>
       </div>
-    `).join('');
+    `;
+    }).join('');
 
     // 綁定點擊事件
     listEl.querySelectorAll('.mm-sidebar-item').forEach(item => {
@@ -214,7 +218,10 @@ const MemoryManagerApp = (function() {
       return;
     }
 
-    listEl.innerHTML = users.map(user => `
+    listEl.innerHTML = users.map(user => {
+      const pt = user.platform_type || 'line';
+      const ptIcon = pt === 'telegram' ? 'telegram' : 'line';
+      return `
       <div class="mm-sidebar-item ${selectedUserId === user.id ? 'active' : ''}"
            data-id="${user.id}">
         <div class="mm-sidebar-item-avatar">
@@ -223,11 +230,15 @@ const MemoryManagerApp = (function() {
             : icon('account')}
         </div>
         <div class="mm-sidebar-item-info">
-          <span class="mm-sidebar-item-name">${escapeHtml(user.display_name || '未知用戶')}</span>
+          <span class="mm-sidebar-item-name">
+            <span class="linebot-platform-badge ${pt}">${icon(ptIcon)}</span>
+            ${escapeHtml(user.display_name || '未知用戶')}
+          </span>
           <span class="mm-sidebar-item-meta">${user.bound_username ? '已綁定' : '未綁定'}</span>
         </div>
       </div>
-    `).join('');
+    `;
+    }).join('');
 
     // 綁定點擊事件
     listEl.querySelectorAll('.mm-sidebar-item').forEach(item => {
