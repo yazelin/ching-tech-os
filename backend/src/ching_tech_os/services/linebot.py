@@ -2089,13 +2089,14 @@ async def generate_binding_code(
         # 建立新驗證碼
         await conn.execute(
             """
-            INSERT INTO bot_binding_codes (user_id, code, expires_at, tenant_id)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO bot_binding_codes (user_id, code, expires_at, tenant_id, platform_type)
+            VALUES ($1, $2, $3, $4, $5)
             """,
             user_id,
             code,
             expires_at,
             tid,
+            platform_type,
         )
 
     logger.info(f"已產生綁定驗證碼: user_id={user_id}")
@@ -2143,9 +2144,9 @@ async def verify_binding_code(
         ctos_user_id = code_row["user_id"]
         target_tid = code_row["tenant_id"]  # 驗證碼所屬的租戶（目標租戶）
 
-        # 取得 Line 用戶的 platform_user_id
+        # 取得 Line 用戶的 platform_user_id 和 platform_type
         line_user_row = await conn.fetchrow(
-            "SELECT platform_user_id, display_name FROM bot_users WHERE id = $1",
+            "SELECT platform_user_id, display_name, platform_type FROM bot_users WHERE id = $1",
             line_user_uuid,
         )
         if not line_user_row:
@@ -2153,15 +2154,17 @@ async def verify_binding_code(
 
         line_user_id = line_user_row["platform_user_id"]
         display_name = line_user_row["display_name"]
+        user_platform_type = line_user_row["platform_type"] or "line"
 
-        # 檢查目標租戶是否已有此 Line 用戶的綁定記錄
+        # 檢查目標租戶是否已有此用戶的綁定記錄
         target_line_user = await conn.fetchrow(
             """
             SELECT id, user_id FROM bot_users
-            WHERE platform_user_id = $1 AND tenant_id = $2
+            WHERE platform_user_id = $1 AND tenant_id = $2 AND platform_type = $3
             """,
             line_user_id,
             target_tid,
+            user_platform_type,
         )
 
         if target_line_user:
@@ -2170,19 +2173,20 @@ async def verify_binding_code(
                 return False, "此 Line 帳號在目標租戶已綁定其他 CTOS 帳號"
             target_line_user_uuid = target_line_user["id"]
         else:
-            # 目標租戶沒有此 Line 用戶記錄，建立新記錄
-            # 允許同一個 Line 用戶在不同租戶各有獨立的綁定
+            # 目標租戶沒有此用戶記錄，建立新記錄
+            # 允許同一個用戶在不同租戶各有獨立的綁定
             target_line_user_uuid = await conn.fetchval(
                 """
-                INSERT INTO bot_users (platform_user_id, display_name, tenant_id)
-                VALUES ($1, $2, $3)
+                INSERT INTO bot_users (platform_user_id, display_name, tenant_id, platform_type)
+                VALUES ($1, $2, $3, $4)
                 RETURNING id
                 """,
                 line_user_id,
                 display_name,
                 target_tid,
+                user_platform_type,
             )
-            logger.info(f"已在目標租戶 {target_tid} 建立 Line 用戶記錄: {target_line_user_uuid}")
+            logger.info(f"已在目標租戶 {target_tid} 建立 {user_platform_type} 用戶記錄: {target_line_user_uuid}")
 
         # 檢查該 CTOS 用戶是否已綁定其他 Line 帳號
         existing_line = await conn.fetchrow(

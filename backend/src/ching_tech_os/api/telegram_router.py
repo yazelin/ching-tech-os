@@ -50,16 +50,18 @@ async def telegram_webhook(
             logger.warning("Telegram Webhook secret 驗證失敗")
             raise HTTPException(status_code=403, detail="Invalid secret token")
 
+    # 取得 adapter（若未設定 token 會拋出 503，不應被下方 try 捕獲）
+    adapter = _get_adapter()
+
     # 解析 Update
     try:
         body = await request.json()
-        update = Update.de_json(body, _get_adapter().bot)
+        update = Update.de_json(body, adapter.bot)
     except Exception as e:
         logger.error(f"解析 Telegram Update 失敗: {e}")
         raise HTTPException(status_code=400, detail="Invalid update body")
 
     # 背景處理
-    adapter = _get_adapter()
     background_tasks.add_task(handle_update, update, adapter)
 
     return {"status": "ok"}

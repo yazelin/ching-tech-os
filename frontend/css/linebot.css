@@ -67,7 +67,7 @@
 .linebot-platform-btn.active {
     color: var(--color-primary);
     border-color: var(--color-primary);
-    background: rgba(74, 158, 255, 0.1);
+    background: var(--accent-bg-subtle);
 }
 
 .linebot-platform-btn .icon {
@@ -92,13 +92,13 @@
 }
 
 .linebot-platform-badge.line {
-    background: rgba(6, 199, 85, 0.15);
-    color: #06c755;
+    background: rgba(var(--color-success-rgb), 0.15);
+    color: var(--color-success);
 }
 
 .linebot-platform-badge.telegram {
-    background: rgba(38, 166, 222, 0.15);
-    color: #26a6de;
+    background: rgba(var(--color-primary-rgb), 0.15);
+    color: var(--color-primary);
 }
 
 /* 內容區域 */

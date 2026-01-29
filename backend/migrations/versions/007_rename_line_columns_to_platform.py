@@ -168,13 +168,13 @@ def downgrade() -> None:
     op.execute('DROP INDEX IF EXISTS "idx_bot_groups_tenant_platform_unique"')
     op.execute(
         'ALTER TABLE bot_groups ADD CONSTRAINT "bot_groups_line_group_id_key" '
-        'UNIQUE (platform_group_id)'  # 注意：downgrade 後欄位名已還原
+        'UNIQUE (platform_group_id)'  # 注意：此處仍使用新欄位名，欄位將在最後一步還原
     )
 
     op.execute('DROP INDEX IF EXISTS "idx_bot_users_tenant_platform_unique"')
     op.execute(
         'CREATE UNIQUE INDEX "idx_line_users_tenant_line_user_unique" '
-        'ON bot_users (tenant_id, platform_user_id)'  # 注意：downgrade 後欄位名已還原
+        'ON bot_users (tenant_id, platform_user_id)'  # 注意：此處仍使用新欄位名，欄位將在最後一步還原
     )
 
     # ---- 3. 還原約束名稱 ----
