@@ -400,7 +400,8 @@ async def handle_update(update: Update, adapter: TelegramBotAdapter) -> None:
         if is_group:
             text = _strip_bot_mention(message.text, adapter.bot_username)
             if not text:
-                return
+                # 只有 @Bot 沒有其他內容時，讓 AI 根據對話歷史回應
+                text = "（用戶呼叫了你，請根據最近的對話歷史回應）"
         else:
             text = message.text
         await _handle_text(message, text, chat_id, chat, user, is_group, adapter)
