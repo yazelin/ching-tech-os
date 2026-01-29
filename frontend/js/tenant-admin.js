@@ -1410,6 +1410,57 @@ const TenantAdminApp = (function () {
           <div class="linebot-test-result" id="linebotTestResult" style="display: none;"></div>
         </div>
       </div>
+
+      <!-- Telegram Bot 設定區塊（僅平台管理員/租戶管理員可見） -->
+      <div class="tenant-settings-form linebot-settings-section" id="telegramBotSettingsSection" style="display: none;">
+        <div class="settings-group">
+          <h3 class="settings-group-title">
+            <span class="icon">${getIcon('send')}</span>
+            Telegram Bot 設定
+          </h3>
+          <p class="settings-description">
+            設定獨立的 Telegram Bot 憑證，讓此租戶擁有專屬的 Telegram Bot。<br>
+            如果不設定，將使用平台預設的共用 Bot。
+          </p>
+
+          <div class="linebot-status" id="telegramBotStatus">
+            <div class="linebot-status-loading">
+              <span class="icon">${getIcon('loading', 'mdi-spin')}</span>
+              <span>載入中...</span>
+            </div>
+          </div>
+
+          <div class="linebot-form" id="telegramBotForm" style="display: none;">
+            <div class="form-group">
+              <label for="telegramBotToken">Bot Token</label>
+              <input type="password" id="telegramBotToken" class="input" placeholder="留空表示不更新" />
+              <span class="form-hint">從 @BotFather 取得</span>
+            </div>
+            <div class="form-group">
+              <label for="telegramAdminChatId">Admin Chat ID</label>
+              <input type="text" id="telegramAdminChatId" class="input" placeholder="管理員 Chat ID" />
+              <span class="form-hint">用於接收系統通知</span>
+            </div>
+
+            <div class="linebot-actions">
+              <button class="btn btn-secondary" id="testTelegramBotBtn">
+                <span class="icon">${getIcon('connection')}</span>
+                <span>測試連線</span>
+              </button>
+              <button class="btn btn-primary" id="saveTelegramBotBtn">
+                <span class="icon">${getIcon('content-save')}</span>
+                <span>儲存設定</span>
+              </button>
+              <button class="btn btn-text-danger" id="clearTelegramBotBtn">
+                <span class="icon">${getIcon('delete')}</span>
+                <span>清除設定</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="linebot-test-result" id="telegramBotTestResult" style="display: none;"></div>
+        </div>
+      </div>
     `;
 
     // 綁定儲存按鈕
@@ -1432,6 +1483,13 @@ const TenantAdminApp = (function () {
       const linebotSection = container.querySelector('#linebotSettingsSection');
       linebotSection.style.display = '';
       loadLinebotSettings(container, isPlatformAdmin, true);  // 首次載入，綁定事件
+    }
+
+    // Telegram Bot 設定：平台管理員和租戶管理員都可以設定
+    if (isPlatformAdmin || isTenantAdmin) {
+      const telegramSection = container.querySelector('#telegramBotSettingsSection');
+      telegramSection.style.display = '';
+      loadTelegramBotSettings(container, true);  // 首次載入，綁定事件
     }
   }
 
@@ -1733,6 +1791,164 @@ const TenantAdminApp = (function () {
 
       if (typeof DesktopModule !== 'undefined') {
         DesktopModule.showToast('Line Bot 設定已清除', 'check');
+      }
+    } catch (error) {
+      alert(`清除失敗：${error.message}`);
+    } finally {
+      clearBtn.disabled = false;
+      clearBtn.innerHTML = `<span class="icon">${getIcon('delete')}</span><span>清除設定</span>`;
+    }
+  }
+
+  // ============================================================
+  // Telegram Bot 設定（租戶管理）
+  // ============================================================
+
+  async function loadTelegramBotSettings(container, bindEvents = false) {
+    const statusEl = container.querySelector('#telegramBotStatus');
+    const formEl = container.querySelector('#telegramBotForm');
+
+    try {
+      const response = await APIClient.get('/tenant/telegram-bot');
+
+      if (response.configured) {
+        statusEl.innerHTML = `
+          <div class="linebot-status-configured">
+            <span class="icon">${getIcon('check-circle')}</span>
+            <span>已設定獨立 Telegram Bot</span>
+            ${response.admin_chat_id ? `<span class="linebot-channel-id">Admin Chat ID: ${response.admin_chat_id}</span>` : ''}
+          </div>
+        `;
+        container.querySelector('#telegramAdminChatId').value = response.admin_chat_id || '';
+      } else {
+        statusEl.innerHTML = `
+          <div class="linebot-status-unconfigured">
+            <span class="icon">${getIcon('information-outline')}</span>
+            <span>使用平台共用 Bot</span>
+          </div>
+        `;
+      }
+
+      formEl.style.display = '';
+
+      if (bindEvents) {
+        container.querySelector('#testTelegramBotBtn').addEventListener('click', () => testTelegramBotConnection(container));
+        container.querySelector('#saveTelegramBotBtn').addEventListener('click', () => saveTelegramBotSettings(container));
+        container.querySelector('#clearTelegramBotBtn').addEventListener('click', () => clearTelegramBotSettings(container));
+      }
+
+    } catch (error) {
+      statusEl.innerHTML = `
+        <div class="linebot-status-error">
+          <span class="icon">${getIcon('alert-circle')}</span>
+          <span>載入失敗：${error.message}</span>
+        </div>
+      `;
+    }
+  }
+
+  async function testTelegramBotConnection(container) {
+    const testBtn = container.querySelector('#testTelegramBotBtn');
+    const resultEl = container.querySelector('#telegramBotTestResult');
+
+    testBtn.disabled = true;
+    testBtn.innerHTML = `<span class="icon">${getIcon('loading', 'mdi-spin')}</span><span>測試中...</span>`;
+    resultEl.style.display = 'none';
+
+    try {
+      const response = await APIClient.post('/tenant/telegram-bot/test');
+
+      if (response.success) {
+        resultEl.className = 'linebot-test-result success';
+        resultEl.innerHTML = `
+          <span class="icon">${getIcon('check-circle')}</span>
+          <div class="linebot-test-info">
+            <strong>連線成功</strong>
+            <span>Bot：@${response.bot_info?.username || 'N/A'}（${response.bot_info?.first_name || ''}）</span>
+          </div>
+        `;
+      } else {
+        resultEl.className = 'linebot-test-result error';
+        resultEl.innerHTML = `
+          <span class="icon">${getIcon('alert-circle')}</span>
+          <div class="linebot-test-info">
+            <strong>連線失敗</strong>
+            <span>${response.error || '未知錯誤'}</span>
+          </div>
+        `;
+      }
+      resultEl.style.display = '';
+
+    } catch (error) {
+      resultEl.className = 'linebot-test-result error';
+      resultEl.innerHTML = `
+        <span class="icon">${getIcon('alert-circle')}</span>
+        <div class="linebot-test-info">
+          <strong>測試失敗</strong>
+          <span>${error.message}</span>
+        </div>
+      `;
+      resultEl.style.display = '';
+    } finally {
+      testBtn.disabled = false;
+      testBtn.innerHTML = `<span class="icon">${getIcon('connection')}</span><span>測試連線</span>`;
+    }
+  }
+
+  async function saveTelegramBotSettings(container) {
+    const saveBtn = container.querySelector('#saveTelegramBotBtn');
+    const botToken = container.querySelector('#telegramBotToken').value;
+    const adminChatId = container.querySelector('#telegramAdminChatId').value.trim();
+
+    if (!botToken && !adminChatId) {
+      alert('請至少填寫 Bot Token');
+      return;
+    }
+
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = `<span class="icon">${getIcon('loading', 'mdi-spin')}</span><span>儲存中...</span>`;
+
+    try {
+      const data = {};
+      if (botToken) data.bot_token = botToken;
+      if (adminChatId) data.admin_chat_id = adminChatId;
+
+      await APIClient.put('/tenant/telegram-bot', data);
+
+      container.querySelector('#telegramBotToken').value = '';
+
+      await loadTelegramBotSettings(container);
+
+      if (typeof DesktopModule !== 'undefined') {
+        DesktopModule.showToast('Telegram Bot 設定已儲存', 'check');
+      }
+    } catch (error) {
+      alert(`儲存失敗：${error.message}`);
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.innerHTML = `<span class="icon">${getIcon('content-save')}</span><span>儲存設定</span>`;
+    }
+  }
+
+  async function clearTelegramBotSettings(container) {
+    if (!confirm('確定要清除 Telegram Bot 設定嗎？\n清除後將使用平台共用 Bot。')) {
+      return;
+    }
+
+    const clearBtn = container.querySelector('#clearTelegramBotBtn');
+    clearBtn.disabled = true;
+    clearBtn.innerHTML = `<span class="icon">${getIcon('loading', 'mdi-spin')}</span><span>清除中...</span>`;
+
+    try {
+      await APIClient.delete('/tenant/telegram-bot');
+
+      container.querySelector('#telegramBotToken').value = '';
+      container.querySelector('#telegramAdminChatId').value = '';
+
+      await loadTelegramBotSettings(container);
+
+      if (typeof DesktopModule !== 'undefined') {
+        DesktopModule.showToast('Telegram Bot 設定已清除', 'check');
       }
     } catch (error) {
       alert(`清除失敗：${error.message}`);

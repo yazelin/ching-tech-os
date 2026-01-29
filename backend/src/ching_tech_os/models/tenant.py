@@ -26,6 +26,10 @@ class TenantSettings(BaseModel):
     line_channel_secret: str | None = None  # 加密儲存
     line_channel_access_token: str | None = None  # 加密儲存
 
+    # Telegram Bot 設定（多租戶支援）
+    telegram_bot_token: str | None = None  # 加密儲存
+    telegram_admin_chat_id: str | None = None  # 管理員 Chat ID
+
     # NAS SMB 登入驗證設定
     enable_nas_auth: bool = False  # 允許使用 NAS 帳號登入（需租戶有 NAS 才啟用）
     nas_auth_host: str | None = None  # NAS 主機（None 使用系統預設）
@@ -198,6 +202,32 @@ class LineBotTestResponse(BaseModel):
 
     success: bool
     bot_info: dict | None = None  # 包含 bot 名稱等資訊
+    error: str | None = None
+
+
+# === Telegram Bot 設定模型 ===
+
+
+class TelegramBotSettingsUpdate(BaseModel):
+    """更新 Telegram Bot 設定請求"""
+
+    bot_token: str | None = Field(None, description="Telegram Bot Token（明文）")
+    admin_chat_id: str | None = Field(None, description="管理員 Chat ID")
+
+
+class TelegramBotSettingsResponse(BaseModel):
+    """Telegram Bot 設定回應（不包含敏感資訊）"""
+
+    configured: bool = Field(..., description="是否已設定 Telegram Bot")
+    admin_chat_id: str | None = Field(None, description="管理員 Chat ID")
+    # 不回傳 bot_token
+
+
+class TelegramBotTestResponse(BaseModel):
+    """Telegram Bot 測試回應"""
+
+    success: bool
+    bot_info: dict | None = None  # 包含 bot 名稱、username 等
     error: str | None = None
 
 

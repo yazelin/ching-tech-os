@@ -1156,3 +1156,187 @@ async def delete_linebot_settings(
     invalidate_tenant_secrets_cache()
 
     return LineBotDeleteResponse(success=True, message="Line Bot 設定已清除")
+
+
+# ============================================================
+# Telegram Bot 設定 API
+# ============================================================
+
+
+class TelegramBotSettingsUpdate(BaseModel):
+    """更新 Telegram Bot 設定請求"""
+    bot_token: str | None = None
+    admin_chat_id: str | None = None
+
+
+class TelegramBotSettingsResponse(BaseModel):
+    """Telegram Bot 設定回應（不包含敏感資訊）"""
+    configured: bool
+    admin_chat_id: str | None = None
+
+
+class TelegramBotTestResponse(BaseModel):
+    """Telegram Bot 測試回應"""
+    success: bool
+    bot_info: dict | None = None
+    error: str | None = None
+
+
+class TelegramBotDeleteResponse(BaseModel):
+    """Telegram Bot 刪除回應"""
+    success: bool
+    message: str
+
+
+@router.get("/telegram-bot", response_model=TelegramBotSettingsResponse)
+async def get_telegram_bot_settings(
+    session: SessionData = Depends(get_current_session),
+) -> TelegramBotSettingsResponse:
+    """取得租戶 Telegram Bot 設定"""
+    from ..services.tenant import get_tenant_telegram_credentials
+
+    await require_tenant_admin(session)
+
+    if session.tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="未關聯租戶",
+        )
+
+    credentials = await get_tenant_telegram_credentials(session.tenant_id)
+
+    if credentials:
+        return TelegramBotSettingsResponse(
+            configured=True,
+            admin_chat_id=credentials.get("admin_chat_id"),
+        )
+    else:
+        return TelegramBotSettingsResponse(configured=False)
+
+
+@router.put("/telegram-bot", response_model=TelegramBotSettingsResponse)
+async def update_telegram_bot_settings(
+    request: TelegramBotSettingsUpdate,
+    session: SessionData = Depends(get_current_session),
+) -> TelegramBotSettingsResponse:
+    """更新租戶 Telegram Bot 設定"""
+    from ..services.tenant import get_tenant_telegram_credentials, update_tenant_telegram_settings
+
+    await require_tenant_admin(session)
+
+    if session.tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="未關聯租戶",
+        )
+
+    success = await update_tenant_telegram_settings(
+        session.tenant_id,
+        bot_token=request.bot_token,
+        admin_chat_id=request.admin_chat_id,
+    )
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="更新失敗",
+        )
+
+    credentials = await get_tenant_telegram_credentials(session.tenant_id)
+
+    return TelegramBotSettingsResponse(
+        configured=bool(credentials),
+        admin_chat_id=credentials.get("admin_chat_id") if credentials else None,
+    )
+
+
+@router.post("/telegram-bot/test", response_model=TelegramBotTestResponse)
+async def test_telegram_bot_connection(
+    session: SessionData = Depends(get_current_session),
+) -> TelegramBotTestResponse:
+    """測試租戶 Telegram Bot 憑證（呼叫 Telegram getMe API）"""
+    import httpx
+    from ..services.tenant import get_tenant_telegram_credentials
+
+    await require_tenant_admin(session)
+
+    if session.tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="未關聯租戶",
+        )
+
+    credentials = await get_tenant_telegram_credentials(session.tenant_id)
+
+    if not credentials:
+        return TelegramBotTestResponse(
+            success=False,
+            error="尚未設定 Telegram Bot 憑證",
+        )
+
+    bot_token = credentials.get("bot_token")
+    if not bot_token:
+        return TelegramBotTestResponse(
+            success=False,
+            error="缺少 Bot Token",
+        )
+
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"https://api.telegram.org/bot{bot_token}/getMe",
+                timeout=10,
+            )
+            data = resp.json()
+
+            if data.get("ok"):
+                result = data["result"]
+                return TelegramBotTestResponse(
+                    success=True,
+                    bot_info={
+                        "id": result.get("id"),
+                        "first_name": result.get("first_name"),
+                        "username": result.get("username"),
+                        "is_bot": result.get("is_bot"),
+                    },
+                )
+            else:
+                return TelegramBotTestResponse(
+                    success=False,
+                    error=data.get("description", "未知錯誤"),
+                )
+    except Exception as e:
+        return TelegramBotTestResponse(
+            success=False,
+            error=str(e),
+        )
+
+
+@router.delete("/telegram-bot", response_model=TelegramBotDeleteResponse)
+async def delete_telegram_bot_settings(
+    session: SessionData = Depends(get_current_session),
+) -> TelegramBotDeleteResponse:
+    """清除租戶 Telegram Bot 設定"""
+    from ..services.tenant import update_tenant_telegram_settings
+
+    await require_tenant_admin(session)
+
+    if session.tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="未關聯租戶",
+        )
+
+    success = await update_tenant_telegram_settings(
+        session.tenant_id,
+        bot_token=None,
+        admin_chat_id=None,
+    )
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="清除失敗",
+        )
+
+    return TelegramBotDeleteResponse(success=True, message="Telegram Bot 設定已清除")

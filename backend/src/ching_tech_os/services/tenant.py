@@ -889,7 +889,7 @@ def _row_to_tenant_brief(row) -> TenantBrief:
 
 
 def _encrypt_settings_credentials(settings_dict: dict) -> dict:
-    """加密 settings 中的 Line Bot 憑證"""
+    """加密 settings 中的 Bot 憑證（Line + Telegram）"""
     result = settings_dict.copy()
 
     if result.get("line_channel_secret"):
@@ -898,11 +898,14 @@ def _encrypt_settings_credentials(settings_dict: dict) -> dict:
     if result.get("line_channel_access_token"):
         result["line_channel_access_token"] = encrypt_credential(result["line_channel_access_token"])
 
+    if result.get("telegram_bot_token"):
+        result["telegram_bot_token"] = encrypt_credential(result["telegram_bot_token"])
+
     return result
 
 
 def _decrypt_settings_credentials(settings_dict: dict) -> dict:
-    """解密 settings 中的 Line Bot 憑證"""
+    """解密 settings 中的 Bot 憑證（Line + Telegram）"""
     result = settings_dict.copy()
 
     if result.get("line_channel_secret"):
@@ -919,11 +922,18 @@ def _decrypt_settings_credentials(settings_dict: dict) -> dict:
             logger.warning(f"解密 line_channel_access_token 失敗: {e}")
             result["line_channel_access_token"] = None
 
+    if result.get("telegram_bot_token"):
+        try:
+            result["telegram_bot_token"] = decrypt_credential(result["telegram_bot_token"])
+        except ValueError as e:
+            logger.warning(f"解密 telegram_bot_token 失敗: {e}")
+            result["telegram_bot_token"] = None
+
     return result
 
 
 def _mask_settings_credentials(settings_dict: dict) -> dict:
-    """遮蔽 settings 中的 Line Bot 憑證（用於 API 回應）
+    """遮蔽 settings 中的 Bot 憑證（用於 API 回應）
 
     憑證欄位會被設為 None，但會新增 has_xxx 欄位表示是否已設定
     """
@@ -933,6 +943,7 @@ def _mask_settings_credentials(settings_dict: dict) -> dict:
     # 注意：這裡只是清除敏感資料，不回傳加密後的值
     result["line_channel_secret"] = None
     result["line_channel_access_token"] = None
+    result["telegram_bot_token"] = None
 
     return result
 
@@ -1075,6 +1086,104 @@ async def update_tenant_line_settings(
             settings_data["line_channel_access_token"] = None
 
         # 儲存
+        await conn.execute(
+            """
+            UPDATE tenants
+            SET settings = $2, updated_at = NOW()
+            WHERE id = $1
+            """,
+            tenant_id,
+            json.dumps(settings_data),
+        )
+
+        return True
+
+
+# === Telegram Bot 憑證專用函數 ===
+
+
+async def get_tenant_telegram_credentials(tenant_id: UUID | str) -> dict | None:
+    """取得租戶的 Telegram Bot 憑證（解密後）
+
+    Args:
+        tenant_id: 租戶 UUID
+
+    Returns:
+        包含 bot_token, admin_chat_id 的字典，或 None
+    """
+    if isinstance(tenant_id, str):
+        tenant_id = UUID(tenant_id)
+
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            "SELECT settings FROM tenants WHERE id = $1",
+            tenant_id,
+        )
+        if row is None:
+            return None
+
+        settings_data = row["settings"]
+        if isinstance(settings_data, str):
+            settings_data = json.loads(settings_data)
+        elif settings_data is None:
+            return None
+
+        bot_token = settings_data.get("telegram_bot_token")
+        admin_chat_id = settings_data.get("telegram_admin_chat_id")
+
+        if not bot_token:
+            return None
+
+        try:
+            return {
+                "bot_token": decrypt_credential(bot_token),
+                "admin_chat_id": admin_chat_id,
+            }
+        except ValueError as e:
+            logger.warning(f"解密租戶 {tenant_id} 的 Telegram Bot 憑證失敗: {e}")
+            return None
+
+
+async def update_tenant_telegram_settings(
+    tenant_id: UUID | str,
+    bot_token: str | None,
+    admin_chat_id: str | None,
+) -> bool:
+    """更新租戶的 Telegram Bot 設定
+
+    Args:
+        tenant_id: 租戶 UUID
+        bot_token: Telegram Bot Token（明文，會被加密儲存）
+        admin_chat_id: 管理員 Chat ID
+
+    Returns:
+        是否成功更新
+    """
+    if isinstance(tenant_id, str):
+        tenant_id = UUID(tenant_id)
+
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            "SELECT settings FROM tenants WHERE id = $1",
+            tenant_id,
+        )
+        if row is None:
+            return False
+
+        settings_data = row["settings"]
+        if isinstance(settings_data, str):
+            settings_data = json.loads(settings_data)
+        elif settings_data is None:
+            settings_data = {}
+
+        # 更新 Telegram Bot 設定
+        if bot_token:
+            settings_data["telegram_bot_token"] = encrypt_credential(bot_token)
+        else:
+            settings_data["telegram_bot_token"] = None
+
+        settings_data["telegram_admin_chat_id"] = admin_chat_id
+
         await conn.execute(
             """
             UPDATE tenants
