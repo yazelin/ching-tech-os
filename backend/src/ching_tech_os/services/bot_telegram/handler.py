@@ -857,17 +857,6 @@ async def _handle_text_with_ai(
     # 6. 解析回應（分離文字和檔案）
     reply_text, files = parse_ai_response(ai_message)
 
-    # 6.5 提取回應中的網路圖片 URL 並下載發送
-    from ..bot.media import extract_image_urls, download_image_from_url
-    if reply_text:
-        image_urls = extract_image_urls(reply_text)
-        if image_urls:
-            logger.info(f"偵測到 {len(image_urls)} 個圖片 URL，開始下載...")
-            for img_url in image_urls[:4]:  # 最多 4 張
-                local_path = await download_image_from_url(img_url)
-                if local_path:
-                    files.append({"type": "image", "url": local_path, "name": os.path.basename(local_path)})
-
     # 7. 發送回覆
     if reply_text:
         await adapter.send_text(chat_id, reply_text)

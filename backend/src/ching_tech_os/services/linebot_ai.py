@@ -640,15 +640,6 @@ async def process_message_with_ai(
         # 解析 AI 回應，提取檔案訊息標記
         text_response, file_messages = parse_ai_response(ai_response)
 
-        # 提取回應中的網路圖片 URL，直接作為圖片訊息發送
-        from .bot.media import extract_image_urls
-        if text_response:
-            image_urls = extract_image_urls(text_response)
-            if image_urls:
-                logger.info(f"偵測到 {len(image_urls)} 個圖片 URL")
-                for img_url in image_urls[:4]:  # 最多 4 張
-                    file_messages.append({"type": "image", "url": img_url, "name": ""})
-
         # 回覆訊息並取得 Line 訊息 ID（用於回覆觸發功能）
         # 群組對話時，mention 發問的用戶
         line_message_ids = []

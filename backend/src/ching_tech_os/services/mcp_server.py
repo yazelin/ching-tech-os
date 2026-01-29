@@ -3073,6 +3073,49 @@ async def prepare_file_message(
 
 
 # ============================================
+# 網路圖片下載
+# ============================================
+
+
+@mcp.tool()
+async def download_web_image(
+    url: str,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
+) -> str:
+    """
+    下載網路圖片並準備為回覆訊息。用於將網路上找到的參考圖片傳送給用戶。
+
+    使用時機：當用戶要求尋找參考圖片、範例圖、示意圖等，透過 WebSearch/WebFetch 找到圖片 URL 後，
+    使用此工具下載圖片並傳送給用戶。可多次呼叫以傳送多張圖片（建議不超過 4 張）。
+
+    Args:
+        url: 圖片的完整 URL（支援 jpg、jpeg、png、gif、webp 格式）
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+        ctos_tenant_id: 租戶 ID（從對話識別取得）
+
+    Returns:
+        包含檔案訊息標記的字串，系統會自動在回覆中顯示圖片
+    """
+    import json
+    from .bot.media import download_image_from_url
+
+    local_path = await download_image_from_url(url)
+    if not local_path:
+        return f"❌ 無法下載圖片：{url}"
+
+    import os
+    file_name = os.path.basename(local_path)
+    file_info = {
+        "type": "image",
+        "url": local_path,
+        "name": file_name,
+    }
+    marker = f"[FILE_MESSAGE:{json.dumps(file_info, ensure_ascii=False)}]"
+    return f"已下載圖片 {file_name}\n{marker}"
+
+
+# ============================================
 # 專案發包/交貨期程管理
 # ============================================
 
