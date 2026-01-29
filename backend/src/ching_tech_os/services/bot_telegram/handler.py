@@ -173,9 +173,11 @@ async def _save_message(
     message_type: str,
     content: str | None,
     is_from_bot: bool,
+    tenant_id: UUID | None = None,
 ) -> UUID:
     """儲存訊息到 bot_messages"""
-    tenant_id = _get_tenant_id()
+    if tenant_id is None:
+        tenant_id = _get_tenant_id()
     row = await conn.fetchrow(
         """
         INSERT INTO bot_messages (
@@ -496,6 +498,7 @@ async def _handle_text(
         await _handle_text_with_ai(
             text, chat_id, user, message.message_id,
             bot_user_id, bot_group_id, is_group, adapter,
+            tenant_id=tenant_id,
         )
     except Exception as e:
         logger.error(f"AI 處理失敗: {e}", exc_info=True)
@@ -550,6 +553,7 @@ async def _handle_media(
                     message_type=msg_type,
                     content=caption,
                     is_from_bot=False,
+                    tenant_id=tenant_id,
                 )
         except Exception as e:
             logger.error(f"儲存媒體訊息失敗: {e}", exc_info=True)
@@ -616,6 +620,7 @@ async def _handle_media(
         ai_prompt, chat_id, user, message.message_id,
         bot_user_id, bot_group_id, is_group, adapter,
         existing_message_uuid=message_uuid,
+        tenant_id=tenant_id,
     )
 
 
@@ -629,12 +634,14 @@ async def _handle_text_with_ai(
     is_group: bool,
     adapter: TelegramBotAdapter,
     existing_message_uuid: UUID | None = None,
+    tenant_id: UUID | None = None,
 ) -> None:
     """透過 AI 處理文字訊息並回覆"""
     # 0. 儲存用戶訊息（媒體訊息已在 _handle_media 儲存，跳過）
     message_uuid: UUID | None = existing_message_uuid
     platform_user_id = str(user.id)
-    tenant_id = _get_tenant_id()
+    if tenant_id is None:
+        tenant_id = _get_tenant_id()
     if bot_user_id and message_uuid is None:
         try:
             async with get_connection() as conn:
@@ -646,6 +653,7 @@ async def _handle_text_with_ai(
                     message_type="text",
                     content=text,
                     is_from_bot=False,
+                    tenant_id=tenant_id,
                 )
         except Exception as e:
             logger.error(f"儲存用戶訊息失敗: {e}", exc_info=True)
@@ -867,6 +875,7 @@ async def _handle_text_with_ai(
                     message_type="text",
                     content=reply_text or "",
                     is_from_bot=True,
+                    tenant_id=tenant_id,
                 )
         except Exception as e:
             logger.error(f"儲存 Bot 回覆失敗: {e}", exc_info=True)
