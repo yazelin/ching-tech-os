@@ -2895,6 +2895,7 @@ def _build_file_message_info(
         file_info = {
             "type": "file",
             "url": fallback_url or download_url,
+            "download_url": download_url,
             "name": file_name,
             "size": size_str,
         }

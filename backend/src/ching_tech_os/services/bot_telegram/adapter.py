@@ -4,9 +4,11 @@
 """
 
 import logging
+from io import BytesIO
 from typing import Any
 
-from telegram import Bot
+import httpx
+from telegram import Bot, InputFile
 
 from ..bot.adapter import SentMessage
 
@@ -89,11 +91,22 @@ class TelegramBotAdapter:
         reply_to: str | None = None,
         file_size: str | None = None,
     ) -> SentMessage:
-        """發送檔案訊息"""
+        """發送檔案訊息
+
+        先下載檔案到記憶體，再以二進位方式上傳給 Telegram，
+        避免 Telegram 伺服器無法存取內網 URL 的問題。
+        """
+        # 先下載檔案到記憶體
+        async with httpx.AsyncClient(follow_redirects=True, timeout=60) as client:
+            resp = await client.get(file_url)
+            resp.raise_for_status()
+
+        buf = BytesIO(resp.content)
+        buf.name = file_name
+
         kwargs: dict[str, Any] = {
             "chat_id": target,
-            "document": file_url,
-            "filename": file_name,
+            "document": InputFile(buf, filename=file_name),
         }
         if reply_to:
             kwargs["reply_to_message_id"] = int(reply_to)

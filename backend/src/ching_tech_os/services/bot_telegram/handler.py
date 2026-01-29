@@ -872,9 +872,21 @@ async def _handle_text_with_ai(
                 sent_msg = await adapter.send_image(chat_id, url)
                 sent_file_msg_ids.append((int(sent_msg.message_id), file_info))
             else:
+                # 優先使用 download_url（直接下載連結），避免拿到分享頁面 HTML
+                file_download_url = file_info.get("download_url") or url
                 await adapter.send_file(
-                    chat_id, url, file_info.get("name", "file")
+                    chat_id, file_download_url, file_info.get("name", "file")
                 )
+                # 附上分享連結（url 是分享頁面，方便用戶在瀏覽器開啟）
+                share_url = file_info.get("url", "")
+                if share_url and share_url != file_download_url:
+                    file_name = file_info.get("name", "檔案")
+                    file_size = file_info.get("size", "")
+                    size_text = f"（{file_size}）" if file_size else ""
+                    await adapter.send_text(
+                        chat_id,
+                        f"📎 {file_name}{size_text}\n🔗 {share_url}\n⏰ 連結 24 小時內有效",
+                    )
         except Exception as e:
             logger.warning(f"發送檔案失敗: {e}")
 
