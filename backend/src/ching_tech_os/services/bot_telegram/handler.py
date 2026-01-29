@@ -21,7 +21,14 @@ from ..linebot_ai import (
     get_conversation_context,
     log_linebot_ai_call,
 )
+from ..linebot import (
+    check_line_access,
+    is_binding_code_format,
+    verify_binding_code,
+)
 from ..mcp_server import get_mcp_tool_names
+from ..permissions import get_mcp_tools_for_user, get_user_app_permissions_sync
+from ..user import get_user_role_and_permissions
 
 logger = logging.getLogger("bot_telegram.handler")
 
@@ -138,51 +145,90 @@ async def _handle_text(
 ) -> None:
     """處理文字訊息"""
     text = message.text
+    tenant_id = _get_tenant_id()
+
+    # 確保用戶存在
+    bot_user_id: UUID | None = None
+    try:
+        async with get_connection() as conn:
+            bot_user_id = await _ensure_bot_user(user, conn)
+    except Exception as e:
+        logger.error(f"確保用戶失敗: {e}", exc_info=True)
 
     # 檢查重置指令
     if text.strip() in RESET_COMMANDS:
-        try:
-            async with get_connection() as conn:
-                bot_user_id = await _ensure_bot_user(user, conn)
-                await conn.execute(
-                    "UPDATE bot_users SET conversation_reset_at = NOW() WHERE id = $1",
-                    bot_user_id,
-                )
-        except Exception as e:
-            logger.error(f"重置對話失敗: {e}", exc_info=True)
+        if bot_user_id:
+            try:
+                async with get_connection() as conn:
+                    await conn.execute(
+                        "UPDATE bot_users SET conversation_reset_at = NOW() WHERE id = $1",
+                        bot_user_id,
+                    )
+            except Exception as e:
+                logger.error(f"重置對話失敗: {e}", exc_info=True)
         await adapter.send_text(chat_id, "對話已重置 ✨")
         return
 
+    # 檢查是否為綁定驗證碼（6 位數字）
+    if bot_user_id and await is_binding_code_format(text.strip()):
+        success, msg = await verify_binding_code(
+            bot_user_id, text.strip(), tenant_id=tenant_id
+        )
+        await adapter.send_text(chat_id, msg)
+        return
+
+    # 存取控制檢查
+    if bot_user_id:
+        has_access, deny_reason = await check_line_access(
+            bot_user_id, line_group_uuid=None, tenant_id=tenant_id
+        )
+        if not has_access and deny_reason == "user_not_bound":
+            await adapter.send_text(
+                chat_id,
+                "請先在 CTOS 系統綁定您的 Telegram 帳號才能使用此服務。\n\n"
+                "步驟：\n"
+                "1. 登入 CTOS 系統\n"
+                "2. 進入 Bot 管理頁面\n"
+                "3. 點擊「綁定帳號」產生驗證碼\n"
+                "4. 將 6 位數驗證碼發送給我完成綁定",
+            )
+            return
+
     # AI 對話
     try:
-        await _handle_text_with_ai(text, chat_id, user, message.message_id, adapter)
+        await _handle_text_with_ai(text, chat_id, user, message.message_id, bot_user_id, adapter)
     except Exception as e:
         logger.error(f"AI 處理失敗: {e}", exc_info=True)
         await adapter.send_text(chat_id, "抱歉，處理訊息時發生錯誤，請稍後再試。")
 
 
 async def _handle_text_with_ai(
-    text: str, chat_id: str, user, message_id: int, adapter: TelegramBotAdapter
+    text: str,
+    chat_id: str,
+    user,
+    message_id: int,
+    bot_user_id: UUID | None,
+    adapter: TelegramBotAdapter,
 ) -> None:
     """透過 AI 處理文字訊息並回覆"""
-    # 0. 儲存用戶與用戶訊息
-    bot_user_id: UUID | None = None
+    # 0. 儲存用戶訊息
     message_uuid: UUID | None = None
     platform_user_id = str(user.id)
-    try:
-        async with get_connection() as conn:
-            bot_user_id = await _ensure_bot_user(user, conn)
-            message_uuid = await _save_message(
-                conn,
-                message_id=f"tg_{message_id}",
-                bot_user_id=bot_user_id,
-                bot_group_id=None,
-                message_type="text",
-                content=text,
-                is_from_bot=False,
-            )
-    except Exception as e:
-        logger.error(f"儲存用戶訊息失敗: {e}", exc_info=True)
+    tenant_id = _get_tenant_id()
+    if bot_user_id:
+        try:
+            async with get_connection() as conn:
+                message_uuid = await _save_message(
+                    conn,
+                    message_id=f"tg_{message_id}",
+                    bot_user_id=bot_user_id,
+                    bot_group_id=None,
+                    message_type="text",
+                    content=text,
+                    is_from_bot=False,
+                )
+        except Exception as e:
+            logger.error(f"儲存用戶訊息失敗: {e}", exc_info=True)
 
     # 0.5 取得對話歷史
     history: list[dict] = []
@@ -207,16 +253,43 @@ async def _handle_text_with_ai(
     base_prompt = agent.get("system_prompt", {}).get("content", "")
     builtin_tools = agent.get("tools") or []
 
-    # 2. 建立系統提示（不帶用戶/群組識別，Phase 2 簡化）
+    # 2. 取得用戶權限（用於工具過濾和 system_prompt）
+    user_role = "user"
+    user_permissions = None
+    app_permissions: dict[str, bool] = {}
+    if bot_user_id:
+        try:
+            async with get_connection() as conn:
+                row = await conn.fetchrow(
+                    "SELECT user_id FROM bot_users WHERE id = $1", bot_user_id
+                )
+                if row and row["user_id"]:
+                    user_info = await get_user_role_and_permissions(
+                        row["user_id"], tenant_id
+                    )
+                    user_role = user_info["role"]
+                    user_permissions = user_info["permissions"]
+                    app_permissions = get_user_app_permissions_sync(
+                        user_role, user_info.get("user_data")
+                    )
+        except Exception as e:
+            logger.error(f"取得用戶權限失敗: {e}", exc_info=True)
+
+    if not app_permissions:
+        app_permissions = get_user_app_permissions_sync("user", None)
+
+    # 2.5 建立系統提示
     system_prompt = await build_system_prompt(
         line_group_id=None,
         line_user_id=None,
         base_prompt=base_prompt,
         builtin_tools=builtin_tools,
+        app_permissions=app_permissions,
     )
 
-    # 3. 組裝工具列表（完整權限，Phase 2 不做權限過濾）
+    # 3. 組裝工具列表（根據用戶權限過濾）
     mcp_tools = await get_mcp_tool_names(exclude_group_only=True)
+    mcp_tools = get_mcp_tools_for_user(user_role, user_permissions, mcp_tools)
     nanobanana_tools = [
         "mcp__nanobanana__generate_image",
         "mcp__nanobanana__edit_image",
