@@ -7,7 +7,7 @@ TBD - created by archiving change add-line-bot. Update Purpose after archive.
 Line Bot SHALL 接收並處理 Line Messaging API 的 Webhook 事件，並加入存取控制檢查。
 
 #### Scenario: 接收 Webhook 請求
-- **WHEN** Line 伺服器發送 POST 請求到 `/api/linebot/webhook`
+- **WHEN** Line 伺服器發送 POST 請求到 `/api/bot/line/webhook`
 - **THEN** 系統驗證 X-Line-Signature 簽章
 - **AND** 解析請求 body 取得事件列表
 - **AND** 回傳 HTTP 200 OK
@@ -61,7 +61,7 @@ Line Bot SHALL 記錄群組內的所有訊息。
 - **AND** 建立 line_files 記錄
 
 #### Scenario: 查詢群組訊息歷史
-- **WHEN** 使用者請求 `GET /api/linebot/groups/{id}/messages`
+- **WHEN** 使用者請求 `GET /api/bot/groups/{id}/messages`
 - **THEN** 系統回傳該群組的訊息列表
 - **AND** 支援分頁與日期範圍過濾
 
@@ -71,17 +71,17 @@ Line Bot SHALL 記錄群組內的所有訊息。
 Line Bot SHALL 支援手動綁定群組到專案。
 
 #### Scenario: 設定群組綁定專案
-- **WHEN** 管理者請求 `PUT /api/linebot/groups/{id}/project`
+- **WHEN** 管理者請求 `PUT /api/bot/groups/{id}/project`
 - **AND** 提供 project_id 參數
 - **THEN** 系統更新群組的 project_id
 - **AND** 後續該群組訊息自動關聯到該專案
 
 #### Scenario: 解除群組綁定
-- **WHEN** 管理者請求 `DELETE /api/linebot/groups/{id}/project`
+- **WHEN** 管理者請求 `DELETE /api/bot/groups/{id}/project`
 - **THEN** 系統將群組的 project_id 設為 null
 
 #### Scenario: 查詢群組綁定狀態
-- **WHEN** 使用者請求 `GET /api/linebot/groups/{id}`
+- **WHEN** 使用者請求 `GET /api/bot/groups/{id}`
 - **THEN** 系統回傳群組資訊，包含綁定的專案 ID 與名稱
 
 ---
@@ -100,12 +100,12 @@ Line Bot SHALL 將圖片與檔案統一儲存到 NAS。
 - **AND** 記錄儲存路徑、檔名、大小到 line_files 表
 
 #### Scenario: 查詢群組檔案列表
-- **WHEN** 使用者請求 `GET /api/linebot/groups/{id}/files`
+- **WHEN** 使用者請求 `GET /api/bot/groups/{id}/files`
 - **THEN** 系統回傳該群組的檔案列表
 - **AND** 每個檔案包含檔名、類型、大小、縮圖路徑（如有）、建立時間
 
 #### Scenario: 下載檔案
-- **WHEN** 使用者請求 `GET /api/linebot/files/{id}/download`
+- **WHEN** 使用者請求 `GET /api/bot/files/{id}/download`
 - **THEN** 系統從 NAS 讀取檔案
 - **AND** 回傳檔案內容供下載
 
@@ -146,7 +146,7 @@ Line Bot SHALL 在個人對話中提供助理功能。
 Line Bot SHALL 提供群組管理 RESTful API，包含刪除功能。
 
 #### Scenario: 刪除群組
-- **WHEN** 使用者請求 `DELETE /api/linebot/groups/{id}`
+- **WHEN** 使用者請求 `DELETE /api/bot/groups/{id}`
 - **THEN** 系統刪除群組記錄
 - **AND** 級聯刪除該群組的所有訊息記錄
 - **AND** 級聯刪除該群組的所有檔案記錄
@@ -182,13 +182,13 @@ Line Bot SHALL 記錄並管理 Line 使用者資訊，包含綁定狀態與好�
 - **THEN** `is_friend` 設為 `false`
 
 #### Scenario: 取得使用者列表
-- **WHEN** 使用者請求 `GET /api/linebot/users`
+- **WHEN** 使用者請求 `GET /api/bot/users`
 - **THEN** 系統回傳所有 Line 使用者列表
 - **AND** 包含每個用戶的綁定狀態（user_id, 綁定的 CTOS 用戶名稱）
 - **AND** 包含每個用戶的好友狀態（is_friend）
 
 #### Scenario: 取得使用者對話歷史
-- **WHEN** 使用者請求 `GET /api/linebot/users/{id}/messages`
+- **WHEN** 使用者請求 `GET /api/bot/users/{id}/messages`
 - **THEN** 系統回傳該使用者的個人對話歷史
 - **AND** 支援分頁與日期範圍過濾
 
@@ -243,7 +243,7 @@ Line Bot SHALL 使用 PostgreSQL 資料庫儲存資料。
 Line Bot SHALL 實作用戶綁定機制，限制只有 CTOS 用戶才能使用 Bot。
 
 #### Scenario: 產生綁定驗證碼
-- **WHEN** CTOS 用戶請求 `POST /api/linebot/binding/generate-code`
+- **WHEN** CTOS 用戶請求 `POST /api/bot/binding/generate-code`
 - **THEN** 系統產生 6 位數字驗證碼
 - **AND** 驗證碼有效期為 5 分鐘
 - **AND** 清除該用戶之前未使用的驗證碼
@@ -260,12 +260,12 @@ Line Bot SHALL 實作用戶綁定機制，限制只有 CTOS 用戶才能使用 B
 - **THEN** 系統回覆驗證碼無效或已過期
 
 #### Scenario: 解除綁定
-- **WHEN** CTOS 用戶請求 `DELETE /api/linebot/binding`
+- **WHEN** CTOS 用戶請求 `DELETE /api/bot/binding`
 - **THEN** 系統解除該用戶的 Line 綁定
 - **AND** 該 Line 帳號無法再使用 Bot
 
 #### Scenario: 查詢綁定狀態
-- **WHEN** CTOS 用戶請求 `GET /api/linebot/binding/status`
+- **WHEN** CTOS 用戶請求 `GET /api/bot/binding/status`
 - **THEN** 系統回傳用戶的 Line 綁定狀態
 - **AND** 如已綁定，回傳 Line 顯示名稱與頭像
 
@@ -280,7 +280,7 @@ Line Bot SHALL 實作用戶綁定機制，限制只有 CTOS 用戶才能使用 B
 - **THEN** Bot 靜默不回應
 
 #### Scenario: 群組 AI 回應開關
-- **WHEN** 管理者請求 `PATCH /api/linebot/groups/{id}` 更新 allow_ai_response
+- **WHEN** 管理者請求 `PATCH /api/bot/groups/{id}` 更新 allow_ai_response
 - **THEN** 系統更新群組的 AI 回應設定
 - **AND** 只有開啟 AI 回應的群組才會觸發 AI 處理
 
@@ -294,7 +294,7 @@ Line Bot SHALL 實作用戶綁定機制，限制只有 CTOS 用戶才能使用 B
 Line Bot SHALL 提供 Line 用戶與 CTOS 帳號的綁定機制。
 
 #### Scenario: 產生綁定驗證碼
-- **WHEN** 已登入的 CTOS 用戶請求 `POST /api/linebot/binding/generate-code`
+- **WHEN** 已登入的 CTOS 用戶請求 `POST /api/bot/binding/generate-code`
 - **THEN** 系統產生 6 位數字驗證碼
 - **AND** 驗證碼有效期為 5 分鐘
 - **AND** 同一用戶的舊驗證碼自動失效
@@ -317,12 +317,12 @@ Line Bot SHALL 提供 Line 用戶與 CTOS 帳號的綁定機制。
 - **THEN** 系統回覆「此 Line 帳號已綁定其他帳號，請先解除綁定」
 
 #### Scenario: 查詢綁定狀態
-- **WHEN** 已登入的 CTOS 用戶請求 `GET /api/linebot/binding/status`
+- **WHEN** 已登入的 CTOS 用戶請求 `GET /api/bot/binding/status`
 - **THEN** 系統回傳綁定狀態
 - **AND** 若已綁定，包含 Line 顯示名稱與綁定時間
 
 #### Scenario: 解除綁定
-- **WHEN** 已登入的 CTOS 用戶請求 `DELETE /api/linebot/binding`
+- **WHEN** 已登入的 CTOS 用戶請求 `DELETE /api/bot/binding`
 - **AND** 該用戶已綁定 Line 帳號
 - **THEN** 系統將 `line_users.user_id` 設為 NULL
 - **AND** 該 Line 帳號將無法再使用 Bot
@@ -360,12 +360,12 @@ Line Bot SHALL 支援群組層級的 AI 回應開關。
 - **AND** Bot 不會回應該群組的訊息
 
 #### Scenario: 開啟群組 AI 回應
-- **WHEN** 管理者請求 `PATCH /api/linebot/groups/{id}`
+- **WHEN** 管理者請求 `PATCH /api/bot/groups/{id}`
 - **AND** 設定 `allow_ai_response = true`
 - **THEN** Bot 開始回應該群組中已綁定用戶的訊息
 
 #### Scenario: 關閉群組 AI 回應
-- **WHEN** 管理者請求 `PATCH /api/linebot/groups/{id}`
+- **WHEN** 管理者請求 `PATCH /api/bot/groups/{id}`
 - **AND** 設定 `allow_ai_response = false`
 - **THEN** Bot 停止回應該群組的訊息
 - **AND** 訊息仍繼續記錄
@@ -832,33 +832,33 @@ Line Bot SHALL 支援儲存群組和個人的自訂記憶 prompt。
 Line Bot SHALL 提供記憶管理的 RESTful API。
 
 #### Scenario: 取得群組記憶列表
-- **WHEN** 使用者請求 `GET /api/linebot/groups/{id}/memories`
+- **WHEN** 使用者請求 `GET /api/bot/groups/{id}/memories`
 - **THEN** 系統回傳該群組的所有記憶列表
 - **AND** 每筆記憶包含 id、title、content、is_active、created_at
 
 #### Scenario: 新增群組記憶
-- **WHEN** 使用者請求 `POST /api/linebot/groups/{id}/memories`
+- **WHEN** 使用者請求 `POST /api/bot/groups/{id}/memories`
 - **AND** 提供 title、content 參數
 - **THEN** 系統建立新的群組記憶
 - **AND** 回傳建立的記憶資料
 
 #### Scenario: 取得個人記憶列表
-- **WHEN** 使用者請求 `GET /api/linebot/users/{id}/memories`
+- **WHEN** 使用者請求 `GET /api/bot/users/{id}/memories`
 - **THEN** 系統回傳該用戶的所有個人記憶列表
 
 #### Scenario: 新增個人記憶
-- **WHEN** 使用者請求 `POST /api/linebot/users/{id}/memories`
+- **WHEN** 使用者請求 `POST /api/bot/users/{id}/memories`
 - **AND** 提供 title、content 參數
 - **THEN** 系統建立新的個人記憶
 
 #### Scenario: 更新記憶
-- **WHEN** 使用者請求 `PUT /api/linebot/memories/{id}`
+- **WHEN** 使用者請求 `PUT /api/bot/memories/{id}`
 - **AND** 提供更新欄位（title、content、is_active）
 - **THEN** 系統更新該記憶
 - **AND** 更新 updated_at 時間戳
 
 #### Scenario: 刪除記憶
-- **WHEN** 使用者請求 `DELETE /api/linebot/memories/{id}`
+- **WHEN** 使用者請求 `DELETE /api/bot/memories/{id}`
 - **THEN** 系統刪除該記憶
 
 ---

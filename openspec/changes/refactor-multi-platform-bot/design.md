@@ -83,7 +83,6 @@ services/
 8. 移除舊檔案，清理 import
 
 ## Open Questions
-- API 路徑是否要從 `/api/linebot/` 改為 `/api/bot/`？或保持不變？
-  - 建議：前端同步修改為 `/api/bot/`，因為是內部系統
+- ~~API 路徑是否要從 `/api/linebot/` 改為 `/api/bot/`？~~ **已完成**：前端和後端已遷移至 `/api/bot/`，webhook 在 `/api/bot/line/webhook`（PR #26, #28）
 - 前端 linebot.js 是否也要改名？
   - 建議：改為 `bot-manager.js`，但可在後續階段處理

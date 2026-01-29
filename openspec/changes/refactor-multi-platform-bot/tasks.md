@@ -51,8 +51,8 @@
 ## 7. API Router 重構
 - [ ] 7.1 建立 `api/bot_router.py`（從 `linebot_router.py` 遷移）
 - [ ] 7.2 更新 `main.py` 路由註冊
-- [ ] 7.3 保留 `/api/linebot/` 向後相容 redirect（或直接修改前端）
-- [ ] 7.4 更新前端 `linebot.js` 的 API 路徑
+- [x] 7.3 ~~保留 `/api/linebot/` 向後相容 redirect~~ 已移除 deprecated 路由（PR #28）
+- [x] 7.4 前端 API 路徑已遷移至 `/api/bot/`（PR #26）
 - [ ] 7.5 確認所有測試通過
 
 ## 8. 清理與驗證

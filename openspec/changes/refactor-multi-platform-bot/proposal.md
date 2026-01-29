@@ -8,7 +8,7 @@
 - 抽離 AI 處理核心（`linebot_ai.py` → `bot_ai.py` + `linebot/ai_handler.py`）
 - 抽離 Agent 管理（`linebot_agents.py` → `bot_agents.py`）
 - **BREAKING**：資料表重新命名 `line_*` → `bot_*`，新增 `platform_type` 欄位
-- **BREAKING**：API 路徑從 `/api/linebot/` 重新對應（保留向後相容 redirect）
+- **DONE**：API 路徑已從 `/api/linebot/` 遷移至 `/api/bot/`，webhook 移至 `/api/bot/line/webhook`（PR #26, #28）
 - 新增測試保護：在重構前為現有 LineBot 核心功能建立整合測試
 
 ## Impact
