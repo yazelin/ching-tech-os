@@ -14,7 +14,7 @@ from .services.session import session_manager
 from .services.terminal import terminal_service
 from .services.scheduler import start_scheduler, stop_scheduler
 from .services.linebot_agents import ensure_default_linebot_agents
-from .api import auth, knowledge, login_records, messages, nas, user, ai_router, ai_management, project, linebot_router, share, files, inventory, vendor, presentation, tenant, config_public
+from .api import auth, knowledge, login_records, messages, nas, user, ai_router, ai_management, project, linebot_router, telegram_router, share, files, inventory, vendor, presentation, tenant, config_public
 from .api.admin import tenants as admin_tenants
 
 # 建立 Socket.IO 伺服器
@@ -54,6 +54,9 @@ async def lifespan(app: FastAPI):
     await session_manager.start_cleanup_task()
     await terminal_service.start_cleanup_task()
     start_scheduler()
+    # 設定 Telegram Webhook
+    from .api.telegram_router import setup_telegram_webhook
+    await setup_telegram_webhook()
     yield
     # 關閉時
     stop_scheduler()
@@ -95,6 +98,7 @@ app.include_router(ai_management.router)
 app.include_router(project.router)
 app.include_router(linebot_router.router, prefix="/api/bot")
 app.include_router(linebot_router.line_router, prefix="/api/bot/line")
+app.include_router(telegram_router.router, prefix="/api/bot/telegram")
 app.include_router(share.router)
 app.include_router(share.public_router)
 app.include_router(files.router)

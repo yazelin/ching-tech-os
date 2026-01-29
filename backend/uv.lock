@@ -1,6 +1,10 @@
 version = 1
 revision = 3
 requires-python = ">=3.11"
+resolution-markers = [
+    "python_full_version >= '3.14'",
+    "python_full_version < '3.14'",
+]
 
 [[package]]
 name = "aenum"
@@ -528,6 +532,7 @@ dependencies = [
     { name = "python-multipart" },
     { name = "python-pptx" },
     { name = "python-socketio" },
+    { name = "python-telegram-bot" },
     { name = "smbprotocol" },
     { name = "sqlalchemy" },
     { name = "user-agents" },
@@ -575,6 +580,7 @@ requires-dist = [
     { name = "python-multipart", specifier = ">=0.0.20" },
     { name = "python-pptx", specifier = ">=0.6.0" },
     { name = "python-socketio", specifier = ">=5.10.0" },
+    { name = "python-telegram-bot", specifier = ">=21.0" },
     { name = "smbprotocol", specifier = ">=1.12.0" },
     { name = "sqlalchemy", specifier = ">=2.0.0" },
     { name = "user-agents", specifier = ">=2.2.0" },
@@ -2304,6 +2310,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/72/a8/5f7c805dd6d0d6cba91d3ea215b4b88889d1b99b71a53c932629daba53f1/python_socketio-5.15.0.tar.gz", hash = "sha256:d0403ababb59aa12fd5adcfc933a821113f27bd77761bc1c54aad2e3191a9b69", size = 126439, upload-time = "2025-11-22T18:50:21.062Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/cd/fa/1ef2f8537272a2f383d72b9301c3ef66a49710b3bb7dcb2bd138cf2920d1/python_socketio-5.15.0-py3-none-any.whl", hash = "sha256:e93363102f4da6d8e7a8872bf4908b866c40f070e716aa27132891e643e2687c", size = 79451, upload-time = "2025-11-22T18:50:19.416Z" },
+]
+
+[[package]]
+name = "python-telegram-bot"
+version = "22.6"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpcore", marker = "python_full_version >= '3.14'" },
+    { name = "httpx" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/cd/9b/8df90c85404166a6631e857027866263adb27440d8af1dbeffbdc4f0166c/python_telegram_bot-22.6.tar.gz", hash = "sha256:50ae8cc10f8dff01445628687951020721f37956966b92a91df4c1bf2d113742", size = 1503761, upload-time = "2026-01-24T13:57:00.269Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/13/97/7298f0e1afe3a1ae52ff4c5af5087ed4de319ea73eb3b5c8c4dd4e76e708/python_telegram_bot-22.6-py3-none-any.whl", hash = "sha256:e598fe171c3dde2dfd0f001619ee9110eece66761a677b34719fb18934935ce0", size = 737267, upload-time = "2026-01-24T13:56:58.06Z" },
 ]
 
 [[package]]
