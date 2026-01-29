@@ -882,7 +882,7 @@ async def _handle_text_with_ai(
 
                 # 儲存圖片檔案記錄（讓檔案分頁能查到 Telegram 生成的圖片）
                 image_files = [f for f in files if f.get("type") == "image"]
-                for img_info in image_files:
+                for idx, img_info in enumerate(image_files):
                     nas_path = img_info.get("nas_path")
                     file_name = img_info.get("name", "image")
                     if nas_path:
@@ -890,7 +890,7 @@ async def _handle_text_with_ai(
                             # 為每張圖片建立獨立的訊息記錄
                             img_msg_uuid = await _save_message(
                                 conn,
-                                message_id=f"tg_img_{message_id}_{file_name[:16]}",
+                                message_id=f"tg_img_{message_id}_{idx}_{file_name[:16]}",
                                 bot_user_id=bot_user_id,
                                 bot_group_id=bot_group_id,
                                 message_type="image",

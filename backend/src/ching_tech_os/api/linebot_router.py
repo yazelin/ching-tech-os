@@ -7,6 +7,7 @@
 
 import asyncio
 import logging
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Query, Request, HTTPException, Header, BackgroundTasks, Depends
@@ -846,7 +847,7 @@ async def api_get_binding_status(session: SessionData = Depends(get_current_sess
 
 @router.delete("/binding")
 async def api_unbind_line(
-    platform_type: str | None = None,
+    platform_type: Literal["line", "telegram"] | None = None,
     session: SessionData = Depends(get_current_session),
 ):
     """解除當前用戶的平台綁定（可指定 platform_type=line|telegram）"""

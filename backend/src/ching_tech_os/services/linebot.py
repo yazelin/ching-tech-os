@@ -13,6 +13,7 @@ import hmac
 import base64
 import logging
 import mimetypes
+import re
 import random
 import time
 from datetime import datetime, timedelta, timezone
@@ -2271,7 +2272,9 @@ async def unbind_line_user(
                 user_id,
                 tid,
             )
-        affected = int(result.split()[-1]) if result else 0
+        # asyncpg execute 回傳格式如 "UPDATE 1"，取最後的數字
+        match = re.search(r"(\d+)$", result or "")
+        affected = int(match.group(1)) if match else 0
         if affected > 0:
             platform_label = platform_type or "all"
             logger.info(f"已解除綁定: ctos_user={user_id}, platform={platform_label}")
