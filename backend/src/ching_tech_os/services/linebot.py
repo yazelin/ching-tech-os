@@ -1524,6 +1524,7 @@ async def is_bot_message(line_message_id: str) -> bool:
 async def list_groups(
     is_active: bool | None = None,
     project_id: UUID | None = None,
+    platform_type: str | None = None,
     limit: int = 50,
     offset: int = 0,
     tenant_id: UUID | str | None = None,
@@ -1533,6 +1534,7 @@ async def list_groups(
     Args:
         is_active: 是否活躍過濾
         project_id: 專案 ID 過濾
+        platform_type: 平台類型過濾（line, telegram）
         limit: 最大數量
         offset: 偏移量
         tenant_id: 租戶 ID
@@ -1552,6 +1554,11 @@ async def list_groups(
         if project_id is not None:
             conditions.append(f"g.project_id = ${param_idx}")
             params.append(project_id)
+            param_idx += 1
+
+        if platform_type is not None:
+            conditions.append(f"g.platform_type = ${param_idx}")
+            params.append(platform_type)
             param_idx += 1
 
         where_clause = " AND ".join(conditions)
@@ -1578,6 +1585,7 @@ async def list_groups(
 async def list_messages(
     line_group_id: UUID | None = None,
     line_user_id: UUID | None = None,
+    platform_type: str | None = None,
     limit: int = 50,
     offset: int = 0,
     tenant_id: UUID | str | None = None,
@@ -1587,6 +1595,7 @@ async def list_messages(
     Args:
         line_group_id: 群組 UUID 過濾
         line_user_id: 用戶 UUID 過濾
+        platform_type: 平台類型過濾（line, telegram）
         limit: 最大數量
         offset: 偏移量
         tenant_id: 租戶 ID
@@ -1608,6 +1617,11 @@ async def list_messages(
         if line_user_id is not None:
             conditions.append(f"m.bot_user_id = ${param_idx}")
             params.append(line_user_id)
+            param_idx += 1
+
+        if platform_type is not None:
+            conditions.append(f"m.platform_type = ${param_idx}")
+            params.append(platform_type)
             param_idx += 1
 
         where_clause = " AND ".join(conditions)
@@ -1632,6 +1646,7 @@ async def list_messages(
 
 
 async def list_users(
+    platform_type: str | None = None,
     limit: int = 50,
     offset: int = 0,
     tenant_id: UUID | str | None = None,
@@ -1639,26 +1654,37 @@ async def list_users(
     """列出用戶
 
     Args:
+        platform_type: 平台類型過濾（line, telegram）
         limit: 最大數量
         offset: 偏移量
         tenant_id: 租戶 ID
     """
     tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
+        conditions = ["tenant_id = $1"]
+        params: list = [tid]
+        param_idx = 2
+
+        if platform_type is not None:
+            conditions.append(f"platform_type = ${param_idx}")
+            params.append(platform_type)
+            param_idx += 1
+
+        where_clause = " AND ".join(conditions)
+
         total = await conn.fetchval(
-            "SELECT COUNT(*) FROM bot_users WHERE tenant_id = $1",
-            tid,
+            f"SELECT COUNT(*) FROM bot_users WHERE {where_clause}",
+            *params,
         )
+        params.extend([limit, offset])
         rows = await conn.fetch(
-            """
+            f"""
             SELECT * FROM bot_users
-            WHERE tenant_id = $1
+            WHERE {where_clause}
             ORDER BY updated_at DESC
-            LIMIT $2 OFFSET $3
+            LIMIT ${param_idx} OFFSET ${param_idx + 1}
             """,
-            tid,
-            limit,
-            offset,
+            *params,
         )
         return [dict(row) for row in rows], total
 
@@ -1815,6 +1841,7 @@ async def list_files(
     line_group_id: UUID | None = None,
     line_user_id: UUID | None = None,
     file_type: str | None = None,
+    platform_type: str | None = None,
     limit: int = 50,
     offset: int = 0,
     tenant_id: UUID | str | None = None,
@@ -1825,6 +1852,7 @@ async def list_files(
         line_group_id: 群組 UUID 過濾
         line_user_id: 用戶 UUID 過濾
         file_type: 檔案類型過濾（image, video, audio, file）
+        platform_type: 平台類型過濾（line, telegram）
         limit: 最大數量
         offset: 偏移量
         tenant_id: 租戶 ID
@@ -1851,6 +1879,11 @@ async def list_files(
         if file_type is not None:
             conditions.append(f"f.file_type = ${param_idx}")
             params.append(file_type)
+            param_idx += 1
+
+        if platform_type is not None:
+            conditions.append(f"m.platform_type = ${param_idx}")
+            params.append(platform_type)
             param_idx += 1
 
         where_clause = " AND ".join(conditions)
@@ -2023,6 +2056,7 @@ async def delete_file(
 
 async def generate_binding_code(
     user_id: int,
+    platform_type: str = "line",
     tenant_id: UUID | str | None = None,
 ) -> tuple[str, datetime]:
     """
@@ -2030,6 +2064,7 @@ async def generate_binding_code(
 
     Args:
         user_id: CTOS 用戶 ID
+        platform_type: 平台類型（line, telegram）
         tenant_id: 租戶 ID
 
     Returns:
@@ -2054,13 +2089,14 @@ async def generate_binding_code(
         # 建立新驗證碼
         await conn.execute(
             """
-            INSERT INTO bot_binding_codes (user_id, code, expires_at, tenant_id)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO bot_binding_codes (user_id, code, expires_at, tenant_id, platform_type)
+            VALUES ($1, $2, $3, $4, $5)
             """,
             user_id,
             code,
             expires_at,
             tid,
+            platform_type,
         )
 
     logger.info(f"已產生綁定驗證碼: user_id={user_id}")
@@ -2108,9 +2144,9 @@ async def verify_binding_code(
         ctos_user_id = code_row["user_id"]
         target_tid = code_row["tenant_id"]  # 驗證碼所屬的租戶（目標租戶）
 
-        # 取得 Line 用戶的 platform_user_id
+        # 取得 Line 用戶的 platform_user_id 和 platform_type
         line_user_row = await conn.fetchrow(
-            "SELECT platform_user_id, display_name FROM bot_users WHERE id = $1",
+            "SELECT platform_user_id, display_name, platform_type FROM bot_users WHERE id = $1",
             line_user_uuid,
         )
         if not line_user_row:
@@ -2118,15 +2154,17 @@ async def verify_binding_code(
 
         line_user_id = line_user_row["platform_user_id"]
         display_name = line_user_row["display_name"]
+        user_platform_type = line_user_row["platform_type"] or "line"
 
-        # 檢查目標租戶是否已有此 Line 用戶的綁定記錄
+        # 檢查目標租戶是否已有此用戶的綁定記錄
         target_line_user = await conn.fetchrow(
             """
             SELECT id, user_id FROM bot_users
-            WHERE platform_user_id = $1 AND tenant_id = $2
+            WHERE platform_user_id = $1 AND tenant_id = $2 AND platform_type = $3
             """,
             line_user_id,
             target_tid,
+            user_platform_type,
         )
 
         if target_line_user:
@@ -2135,19 +2173,20 @@ async def verify_binding_code(
                 return False, "此 Line 帳號在目標租戶已綁定其他 CTOS 帳號"
             target_line_user_uuid = target_line_user["id"]
         else:
-            # 目標租戶沒有此 Line 用戶記錄，建立新記錄
-            # 允許同一個 Line 用戶在不同租戶各有獨立的綁定
+            # 目標租戶沒有此用戶記錄，建立新記錄
+            # 允許同一個用戶在不同租戶各有獨立的綁定
             target_line_user_uuid = await conn.fetchval(
                 """
-                INSERT INTO bot_users (platform_user_id, display_name, tenant_id)
-                VALUES ($1, $2, $3)
+                INSERT INTO bot_users (platform_user_id, display_name, tenant_id, platform_type)
+                VALUES ($1, $2, $3, $4)
                 RETURNING id
                 """,
                 line_user_id,
                 display_name,
                 target_tid,
+                user_platform_type,
             )
-            logger.info(f"已在目標租戶 {target_tid} 建立 Line 用戶記錄: {target_line_user_uuid}")
+            logger.info(f"已在目標租戶 {target_tid} 建立 {user_platform_type} 用戶記錄: {target_line_user_uuid}")
 
         # 檢查該 CTOS 用戶是否已綁定其他 Line 帳號
         existing_line = await conn.fetchrow(
@@ -2227,44 +2266,65 @@ async def get_binding_status(
     tenant_id: UUID | str | None = None,
 ) -> dict:
     """
-    取得 CTOS 用戶的 Line 綁定狀態
+    取得 CTOS 用戶的多平台綁定狀態
 
     Args:
         user_id: CTOS 用戶 ID
         tenant_id: 租戶 ID
 
     Returns:
-        綁定狀態資訊
+        多平台綁定狀態資訊（包含 line 和 telegram）
     """
     tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
-        row = await conn.fetchrow(
+        rows = await conn.fetch(
             """
-            SELECT lu.display_name, lu.picture_url, bc.used_at as bound_at
+            SELECT lu.platform_type, lu.display_name, lu.picture_url,
+                   bc.used_at as bound_at
             FROM bot_users lu
             LEFT JOIN bot_binding_codes bc ON bc.used_by_bot_user_id = lu.id
             WHERE lu.user_id = $1 AND lu.tenant_id = $2
-            ORDER BY bc.used_at DESC NULLS LAST
-            LIMIT 1
+            ORDER BY lu.platform_type, bc.used_at DESC NULLS LAST
             """,
             user_id,
             tid,
         )
 
-        if row:
-            return {
-                "is_bound": True,
-                "line_display_name": row["display_name"],
-                "line_picture_url": row["picture_url"],
-                "bound_at": row["bound_at"],
-            }
-        else:
+        # 建立各平台的綁定狀態
+        platforms = {}
+        for row in rows:
+            pt = row["platform_type"] or "line"
+            if pt not in platforms:
+                platforms[pt] = {
+                    "is_bound": True,
+                    "display_name": row["display_name"],
+                    "picture_url": row["picture_url"],
+                    "bound_at": row["bound_at"],
+                }
+
+        def _platform_status(pt: str) -> dict:
+            if pt in platforms:
+                return platforms[pt]
             return {
                 "is_bound": False,
-                "line_display_name": None,
-                "line_picture_url": None,
+                "display_name": None,
+                "picture_url": None,
                 "bound_at": None,
             }
+
+        line_status = _platform_status("line")
+        telegram_status = _platform_status("telegram")
+
+        # 保持向後相容：is_bound 為任一平台已綁定
+        return {
+            "is_bound": line_status["is_bound"] or telegram_status["is_bound"],
+            "line_display_name": line_status["display_name"],
+            "line_picture_url": line_status["picture_url"],
+            "bound_at": line_status["bound_at"],
+            # 多平台擴充
+            "line": line_status,
+            "telegram": telegram_status,
+        }
 
 
 async def is_binding_code_format(content: str) -> bool:
@@ -2521,6 +2581,7 @@ def is_bind_tenant_command(text: str) -> tuple[bool, str | None]:
 
 
 async def list_users_with_binding(
+    platform_type: str | None = None,
     limit: int = 50,
     offset: int = 0,
     tenant_id: UUID | str | None = None,
@@ -2528,28 +2589,39 @@ async def list_users_with_binding(
     """列出用戶（包含 CTOS 綁定資訊）
 
     Args:
+        platform_type: 平台類型過濾（line, telegram）
         limit: 最大數量
         offset: 偏移量
         tenant_id: 租戶 ID
     """
     tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
+        conditions = ["lu.tenant_id = $1"]
+        params: list = [tid]
+        param_idx = 2
+
+        if platform_type is not None:
+            conditions.append(f"lu.platform_type = ${param_idx}")
+            params.append(platform_type)
+            param_idx += 1
+
+        where_clause = " AND ".join(conditions)
+
         total = await conn.fetchval(
-            "SELECT COUNT(*) FROM bot_users WHERE tenant_id = $1",
-            tid,
+            f"SELECT COUNT(*) FROM bot_users lu WHERE {where_clause}",
+            *params,
         )
+        params.extend([limit, offset])
         rows = await conn.fetch(
-            """
+            f"""
             SELECT lu.*, u.username as bound_username, u.display_name as bound_display_name
             FROM bot_users lu
             LEFT JOIN users u ON lu.user_id = u.id
-            WHERE lu.tenant_id = $1
+            WHERE {where_clause}
             ORDER BY lu.updated_at DESC
-            LIMIT $2 OFFSET $3
+            LIMIT ${param_idx} OFFSET ${param_idx + 1}
             """,
-            tid,
-            limit,
-            offset,
+            *params,
         )
         return [dict(row) for row in rows], total
 

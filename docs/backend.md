@@ -224,6 +224,14 @@ uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8089 --reload
 | POST | `/api/admin/tenants/{id}/admins` | 新增租戶管理員 |
 | DELETE | `/api/admin/tenants/{id}/admins/{user_id}` | 移除租戶管理員 |
 
+### Telegram Bot
+
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| POST | `/api/bot/telegram/webhook` | Telegram Webhook 接收端點 |
+
+> Telegram 群組、用戶、訊息管理共用 Line Bot 的 `/api/bot/*` API，透過 `platform_type=telegram` 參數篩選。
+
 ### 終端機 (WebSocket)
 
 | 端點 | 說明 |
@@ -265,6 +273,7 @@ backend/
 │   │   ├── ai_router.py    # AI 對話 API
 │   │   ├── ai_management.py # AI 管理 API (Prompts/Agents/Logs)
 │   │   ├── linebot_router.py # Line Bot API
+│   │   ├── telegram_router.py # Telegram Bot API
 │   │   ├── inventory.py    # 物料/庫存 API
 │   │   ├── vendor.py       # 廠商主檔 API
 │   │   ├── tenant.py       # 租戶自助 API
@@ -280,6 +289,7 @@ backend/
 │   │   ├── ai_manager.py   # AI 管理服務 (Prompts/Agents/Logs)
 │   │   ├── linebot.py      # Line Bot 服務
 │   │   ├── linebot_ai.py   # Line Bot AI 處理
+│   │   ├── bot_telegram/   # Telegram Bot 服務
 │   │   ├── mcp_server.py   # MCP Server（FastMCP）
 │   │   ├── inventory.py    # 物料/庫存服務
 │   │   ├── vendor.py       # 廠商主檔服務

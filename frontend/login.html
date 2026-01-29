@@ -136,7 +136,7 @@
             document.getElementById('tenantCodeGroup').style.display = '';
             // 從 URL 參數或 localStorage 讀取上次使用的租戶代碼，預設為 chingtech
             const urlParams = new URLSearchParams(window.location.search);
-            const tenantCode = urlParams.get('tenant') || localStorage.getItem('chingtech_last_tenant') || 'chingtech';
+            const tenantCode = urlParams.get('tenant') || localStorage.getItem('chingtech_last_tenant') || 'default';
             document.getElementById('tenantCode').value = tenantCode;
           }
         }
