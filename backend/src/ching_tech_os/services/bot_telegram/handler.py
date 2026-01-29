@@ -27,6 +27,7 @@ from ..linebot import (
     check_line_access,
     is_binding_code_format,
     resolve_tenant_for_message,
+    save_file_record,
     verify_binding_code,
 )
 from ..mcp_server import get_mcp_tool_names
@@ -867,7 +868,8 @@ async def _handle_text_with_ai(
     if bot_user_id:
         try:
             async with get_connection() as conn:
-                await _save_message(
+                # 儲存文字回覆
+                reply_msg_uuid = await _save_message(
                     conn,
                     message_id=f"tg_reply_{message_id}",
                     bot_user_id=bot_user_id,
@@ -877,5 +879,34 @@ async def _handle_text_with_ai(
                     is_from_bot=True,
                     tenant_id=tenant_id,
                 )
+
+                # 儲存圖片檔案記錄（讓檔案分頁能查到 Telegram 生成的圖片）
+                image_files = [f for f in files if f.get("type") == "image"]
+                for img_info in image_files:
+                    nas_path = img_info.get("nas_path")
+                    file_name = img_info.get("name", "image")
+                    if nas_path:
+                        try:
+                            # 為每張圖片建立獨立的訊息記錄
+                            img_msg_uuid = await _save_message(
+                                conn,
+                                message_id=f"tg_img_{message_id}_{file_name[:16]}",
+                                bot_user_id=bot_user_id,
+                                bot_group_id=bot_group_id,
+                                message_type="image",
+                                content=f"[Bot 發送的圖片: {file_name}]",
+                                is_from_bot=True,
+                                tenant_id=tenant_id,
+                            )
+                            await save_file_record(
+                                message_uuid=img_msg_uuid,
+                                file_type="image",
+                                file_name=file_name,
+                                nas_path=nas_path,
+                                tenant_id=tenant_id,
+                            )
+                            logger.info(f"已儲存 Telegram Bot 圖片記錄: {file_name}")
+                        except Exception as e:
+                            logger.error(f"儲存圖片記錄失敗: {e}", exc_info=True)
         except Exception as e:
             logger.error(f"儲存 Bot 回覆失敗: {e}", exc_info=True)
