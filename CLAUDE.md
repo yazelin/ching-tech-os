@@ -275,3 +275,19 @@ docs/
 - 新增重大功能後更新 `README.md` 功能總覽
 - 技術設計變更後更新對應的 `docs/*.md`
 - API 變更後更新 `docs/backend.md`
+
+## GitHub CLI 注意事項
+
+### Projects (classic) 已棄用
+`gh pr view` 等指令可能因 GitHub Projects (classic) 棄用而報錯：
+```
+GraphQL: Projects (classic) is being deprecated in favor of the new Projects experience
+```
+**解法**：加上 `--json` 參數指定需要的欄位，避免查詢已棄用的 projectCards：
+```bash
+# ❌ 會報錯
+gh pr view 24
+
+# ✅ 正確：指定欄位
+gh pr view 24 --json title,body,state,url,reviews,comments
+```
