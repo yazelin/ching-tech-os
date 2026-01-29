@@ -105,15 +105,16 @@ const LineBotApp = (function () {
     }
 
     // 解除綁定
-    async function unbindLine() {
-        if (!confirm('確定要解除 Line 綁定嗎？\n解除後需要重新綁定才能使用 Line Bot。')) {
+    async function unbindLine(platformKey = 'line') {
+        const platformName = platformKey === 'telegram' ? 'Telegram' : 'Line';
+        if (!confirm(`確定要解除 ${platformName} 綁定嗎？\n解除後需要重新綁定才能使用 ${platformName} Bot。`)) {
             return;
         }
 
         try {
-            await api('/binding', { method: 'DELETE' });
+            await api(`/binding?platform_type=${platformKey}`, { method: 'DELETE' });
             await loadBindingStatus();
-            alert('已解除 Line 綁定');
+            alert(`已解除 ${platformName} 綁定`);
         } catch (error) {
             console.error('解除綁定失敗:', error);
             alert('解除綁定失敗');
@@ -273,7 +274,7 @@ const LineBotApp = (function () {
 
         // 綁定事件
         container.querySelectorAll('.linebot-unbind-btn').forEach(btn => {
-            btn.addEventListener('click', () => unbindLine());
+            btn.addEventListener('click', () => unbindLine(btn.dataset.platform || 'line'));
         });
         container.querySelectorAll('.linebot-generate-code-btn').forEach(btn => {
             btn.addEventListener('click', () => {

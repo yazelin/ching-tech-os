@@ -26,6 +26,8 @@ from ..linebot_ai import (
 from ..linebot import (
     check_line_access,
     is_binding_code_format,
+    resolve_tenant_for_message,
+    save_file_record,
     verify_binding_code,
 )
 from ..mcp_server import get_mcp_tool_names
@@ -79,9 +81,10 @@ def _get_tenant_id() -> UUID:
     return UUID(settings.default_tenant_id)
 
 
-async def _ensure_bot_user(user, conn) -> UUID:
+async def _ensure_bot_user(user, conn, tenant_id: UUID | None = None) -> UUID:
     """確保 Telegram 用戶存在於 bot_users，回傳 UUID"""
-    tenant_id = _get_tenant_id()
+    if tenant_id is None:
+        tenant_id = _get_tenant_id()
     platform_user_id = str(user.id)
     display_name = user.full_name
 
@@ -121,9 +124,10 @@ async def _ensure_bot_user(user, conn) -> UUID:
     return row["id"]
 
 
-async def _ensure_bot_group(chat, conn) -> UUID:
+async def _ensure_bot_group(chat, conn, tenant_id: UUID | None = None) -> UUID:
     """確保 Telegram 群組存在於 bot_groups，回傳 UUID"""
-    tenant_id = _get_tenant_id()
+    if tenant_id is None:
+        tenant_id = _get_tenant_id()
     platform_group_id = str(chat.id)
     group_name = chat.title or "未知群組"
 
@@ -170,9 +174,11 @@ async def _save_message(
     message_type: str,
     content: str | None,
     is_from_bot: bool,
+    tenant_id: UUID | None = None,
 ) -> UUID:
     """儲存訊息到 bot_messages"""
-    tenant_id = _get_tenant_id()
+    if tenant_id is None:
+        tenant_id = _get_tenant_id()
     row = await conn.fetchrow(
         """
         INSERT INTO bot_messages (
@@ -412,16 +418,19 @@ async def _handle_text(
     is_group: bool, adapter: TelegramBotAdapter,
 ) -> None:
     """處理文字訊息"""
-    tenant_id = _get_tenant_id()
+    # 動態解析租戶：已綁定用戶使用其 CTOS 帳號的租戶
+    group_id = str(chat.id) if is_group else None
+    user_id = str(user.id) if user else None
+    tenant_id = await resolve_tenant_for_message(group_id, user_id)
 
     # 確保用戶和群組存在
     bot_user_id: UUID | None = None
     bot_group_id: UUID | None = None
     try:
         async with get_connection() as conn:
-            bot_user_id = await _ensure_bot_user(user, conn)
+            bot_user_id = await _ensure_bot_user(user, conn, tenant_id)
             if is_group:
-                bot_group_id = await _ensure_bot_group(chat, conn)
+                bot_group_id = await _ensure_bot_group(chat, conn, tenant_id)
     except Exception as e:
         logger.error(f"確保用戶/群組失敗: {e}", exc_info=True)
 
@@ -490,6 +499,7 @@ async def _handle_text(
         await _handle_text_with_ai(
             text, chat_id, user, message.message_id,
             bot_user_id, bot_group_id, is_group, adapter,
+            tenant_id=tenant_id,
         )
     except Exception as e:
         logger.error(f"AI 處理失敗: {e}", exc_info=True)
@@ -501,7 +511,10 @@ async def _handle_media(
     is_group: bool, adapter: TelegramBotAdapter,
 ) -> None:
     """處理圖片和檔案訊息"""
-    tenant_id = _get_tenant_id()
+    # 動態解析租戶
+    group_id = str(chat.id) if is_group else None
+    user_id_str = str(user.id) if user else None
+    tenant_id = await resolve_tenant_for_message(group_id, user_id_str)
     caption = message.caption or ""
 
     # 確保用戶和群組存在
@@ -509,9 +522,9 @@ async def _handle_media(
     bot_group_id: UUID | None = None
     try:
         async with get_connection() as conn:
-            bot_user_id = await _ensure_bot_user(user, conn)
+            bot_user_id = await _ensure_bot_user(user, conn, tenant_id)
             if is_group:
-                bot_group_id = await _ensure_bot_group(chat, conn)
+                bot_group_id = await _ensure_bot_group(chat, conn, tenant_id)
     except Exception as e:
         logger.error(f"確保用戶/群組失敗: {e}", exc_info=True)
 
@@ -541,6 +554,7 @@ async def _handle_media(
                     message_type=msg_type,
                     content=caption,
                     is_from_bot=False,
+                    tenant_id=tenant_id,
                 )
         except Exception as e:
             logger.error(f"儲存媒體訊息失敗: {e}", exc_info=True)
@@ -607,6 +621,7 @@ async def _handle_media(
         ai_prompt, chat_id, user, message.message_id,
         bot_user_id, bot_group_id, is_group, adapter,
         existing_message_uuid=message_uuid,
+        tenant_id=tenant_id,
     )
 
 
@@ -620,12 +635,14 @@ async def _handle_text_with_ai(
     is_group: bool,
     adapter: TelegramBotAdapter,
     existing_message_uuid: UUID | None = None,
+    tenant_id: UUID | None = None,
 ) -> None:
     """透過 AI 處理文字訊息並回覆"""
     # 0. 儲存用戶訊息（媒體訊息已在 _handle_media 儲存，跳過）
     message_uuid: UUID | None = existing_message_uuid
     platform_user_id = str(user.id)
-    tenant_id = _get_tenant_id()
+    if tenant_id is None:
+        tenant_id = _get_tenant_id()
     if bot_user_id and message_uuid is None:
         try:
             async with get_connection() as conn:
@@ -637,6 +654,7 @@ async def _handle_text_with_ai(
                     message_type="text",
                     content=text,
                     is_from_bot=False,
+                    tenant_id=tenant_id,
                 )
         except Exception as e:
             logger.error(f"儲存用戶訊息失敗: {e}", exc_info=True)
@@ -850,7 +868,8 @@ async def _handle_text_with_ai(
     if bot_user_id:
         try:
             async with get_connection() as conn:
-                await _save_message(
+                # 儲存文字回覆
+                reply_msg_uuid = await _save_message(
                     conn,
                     message_id=f"tg_reply_{message_id}",
                     bot_user_id=bot_user_id,
@@ -858,6 +877,36 @@ async def _handle_text_with_ai(
                     message_type="text",
                     content=reply_text or "",
                     is_from_bot=True,
+                    tenant_id=tenant_id,
                 )
+
+                # 儲存圖片檔案記錄（讓檔案分頁能查到 Telegram 生成的圖片）
+                image_files = [f for f in files if f.get("type") == "image"]
+                for idx, img_info in enumerate(image_files):
+                    nas_path = img_info.get("nas_path")
+                    file_name = img_info.get("name", "image")
+                    if nas_path:
+                        try:
+                            # 為每張圖片建立獨立的訊息記錄
+                            img_msg_uuid = await _save_message(
+                                conn,
+                                message_id=f"tg_img_{message_id}_{idx}_{file_name[:16]}",
+                                bot_user_id=bot_user_id,
+                                bot_group_id=bot_group_id,
+                                message_type="image",
+                                content=f"[Bot 發送的圖片: {file_name}]",
+                                is_from_bot=True,
+                                tenant_id=tenant_id,
+                            )
+                            await save_file_record(
+                                message_uuid=img_msg_uuid,
+                                file_type="image",
+                                file_name=file_name,
+                                nas_path=nas_path,
+                                tenant_id=tenant_id,
+                            )
+                            logger.info(f"已儲存 Telegram Bot 圖片記錄: {file_name}")
+                        except Exception as e:
+                            logger.error(f"儲存圖片記錄失敗: {e}", exc_info=True)
         except Exception as e:
             logger.error(f"儲存 Bot 回覆失敗: {e}", exc_info=True)
