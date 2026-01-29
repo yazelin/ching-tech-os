@@ -762,6 +762,7 @@ async def log_linebot_ai_call(
     response,
     duration_ms: int,
     tenant_id: UUID | None = None,
+    context_type_override: str | None = None,
 ) -> None:
     """
     記錄 Line Bot AI 調用到 AI Log
@@ -813,7 +814,7 @@ async def log_linebot_ai_call(
         log_data = AiLogCreate(
             agent_id=agent_id,
             prompt_id=prompt_id,
-            context_type="linebot-group" if is_group else "linebot-personal",
+            context_type=context_type_override or ("linebot-group" if is_group else "linebot-personal"),
             context_id=str(message_uuid),
             input_prompt=full_input,
             system_prompt=system_prompt,
@@ -871,9 +872,9 @@ async def get_conversation_context(
                        m.message_type, m.message_id as line_message_id,
                        f.nas_path, f.file_name, f.file_size, f.file_type as actual_file_type
                 FROM bot_messages m
-                LEFT JOIN bot_users u ON m.line_user_id = u.id
+                LEFT JOIN bot_users u ON m.bot_user_id = u.id
                 LEFT JOIN bot_files f ON f.message_id = m.id
-                WHERE m.line_group_id = $1
+                WHERE m.bot_group_id = $1
                   AND ($3::uuid IS NULL OR m.id != $3)
                   AND m.message_type IN ('text', 'image', 'file')
                   AND (m.content IS NOT NULL OR m.message_type IN ('image', 'file'))
@@ -892,11 +893,11 @@ async def get_conversation_context(
                        m.message_type, m.message_id as line_message_id,
                        f.nas_path, f.file_name, f.file_size, f.file_type as actual_file_type
                 FROM bot_messages m
-                LEFT JOIN bot_users u ON m.line_user_id = u.id
+                LEFT JOIN bot_users u ON m.bot_user_id = u.id
                 LEFT JOIN bot_files f ON f.message_id = m.id
-                WHERE u.line_user_id = $1
+                WHERE u.platform_user_id = $1
                   AND ($3::uuid IS NULL OR m.id != $3)
-                  AND m.line_group_id IS NULL
+                  AND m.bot_group_id IS NULL
                   AND m.message_type IN ('text', 'image', 'file')
                   AND (m.content IS NOT NULL OR m.message_type IN ('image', 'file'))
                   AND (

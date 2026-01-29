@@ -29,7 +29,7 @@ class LineGroupBase(BaseModel):
 class LineGroupCreate(LineGroupBase):
     """建立 Line 群組"""
 
-    line_group_id: str = Field(..., max_length=64)
+    platform_group_id: str = Field(..., max_length=64)
 
 
 class LineGroupUpdate(BaseModel):
@@ -46,7 +46,7 @@ class LineGroupResponse(LineGroupBase):
     """Line 群組回應"""
 
     id: UUID
-    line_group_id: str
+    platform_group_id: str
     member_count: int
     project_id: UUID | None
     project_name: str | None = None
@@ -82,7 +82,7 @@ class LineUserBase(BaseModel):
 class LineUserCreate(LineUserBase):
     """建立 Line 用戶"""
 
-    line_user_id: str = Field(..., max_length=64)
+    platform_user_id: str = Field(..., max_length=64)
 
 
 class LineUserUpdate(BaseModel):
@@ -99,7 +99,7 @@ class LineUserResponse(LineUserBase):
     """Line 用戶回應"""
 
     id: UUID
-    line_user_id: str
+    platform_user_id: str
     user_id: int | None
     is_friend: bool
     created_at: datetime
@@ -125,8 +125,8 @@ class LineMessageCreate(BaseModel):
     """建立 Line 訊息（內部使用）"""
 
     message_id: str = Field(..., max_length=64)
-    line_user_id: UUID
-    line_group_id: UUID | None = None
+    bot_user_id: UUID
+    bot_group_id: UUID | None = None
     message_type: str = Field(..., max_length=32)
     content: str | None = None
     reply_token: str | None = None
@@ -138,10 +138,10 @@ class LineMessageResponse(BaseModel):
 
     id: UUID
     message_id: str
-    line_user_id: UUID
+    bot_user_id: UUID
     user_display_name: str | None = None
     user_picture_url: str | None = None
-    line_group_id: UUID | None
+    bot_group_id: UUID | None
     message_type: str
     content: str | None
     file_id: UUID | None
@@ -163,8 +163,8 @@ class LineMessageListResponse(BaseModel):
 class LineMessageFilter(BaseModel):
     """Line 訊息過濾條件"""
 
-    line_group_id: UUID | None = None
-    line_user_id: UUID | None = None
+    bot_group_id: UUID | None = None
+    bot_user_id: UUID | None = None
     message_type: str | None = None
     start_date: datetime | None = None
     end_date: datetime | None = None
@@ -202,8 +202,8 @@ class LineFileResponse(BaseModel):
     duration: int | None
     created_at: datetime
     # 關聯資訊（來自 JOIN）
-    line_group_id: UUID | None = None
-    line_user_id: UUID | None = None
+    bot_group_id: UUID | None = None
+    bot_user_id: UUID | None = None
     user_display_name: str | None = None
     group_name: str | None = None
 
@@ -264,8 +264,8 @@ class BindingStatusResponse(BaseModel):
     """綁定狀態回應"""
 
     is_bound: bool
-    line_display_name: str | None = None
-    line_picture_url: str | None = None
+    platform_display_name: str | None = None
+    platform_picture_url: str | None = None
     bound_at: datetime | None = None
 
 

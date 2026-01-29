@@ -232,8 +232,8 @@ class TenantImportService:
             "vendor_id": "vendors",
         },
         "bot_messages": {
-            "line_group_id": "bot_groups",
-            "line_user_id": "bot_users",
+            "bot_group_id": "bot_groups",
+            "bot_user_id": "bot_users",
         },
         "ai_chats": {
             "user_id": "users",
