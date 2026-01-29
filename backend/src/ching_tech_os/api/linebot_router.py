@@ -90,7 +90,7 @@ from ..services.linebot_ai import handle_text_message
 
 logger = logging.getLogger("linebot_router")
 
-router = APIRouter(prefix="/api/linebot", tags=["Line Bot"])
+router = APIRouter(tags=["Bot"])
 
 
 # ============================================================

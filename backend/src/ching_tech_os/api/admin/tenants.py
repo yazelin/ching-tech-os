@@ -601,7 +601,8 @@ async def remove_tenant_admin_by_platform(
 # ============================================================
 
 
-@router.get("/{tenant_id}/linebot", response_model=LineBotSettingsResponse)
+@router.get("/{tenant_id}/bot", response_model=LineBotSettingsResponse)
+@router.get("/{tenant_id}/linebot", response_model=LineBotSettingsResponse, deprecated=True)
 async def get_tenant_linebot_settings(
     tenant_id: str,
     session: SessionData = Depends(get_current_session),
@@ -636,7 +637,8 @@ async def get_tenant_linebot_settings(
         )
 
 
-@router.put("/{tenant_id}/linebot", response_model=LineBotSettingsResponse)
+@router.put("/{tenant_id}/bot", response_model=LineBotSettingsResponse)
+@router.put("/{tenant_id}/linebot", response_model=LineBotSettingsResponse, deprecated=True)
 async def update_tenant_linebot_settings(
     tenant_id: str,
     request: LineBotSettingsUpdate,
@@ -683,7 +685,8 @@ async def update_tenant_linebot_settings(
     )
 
 
-@router.post("/{tenant_id}/linebot/test", response_model=LineBotTestResponse)
+@router.post("/{tenant_id}/bot/test", response_model=LineBotTestResponse)
+@router.post("/{tenant_id}/linebot/test", response_model=LineBotTestResponse, deprecated=True)
 async def test_tenant_linebot(
     tenant_id: str,
     session: SessionData = Depends(get_current_session),
@@ -745,7 +748,8 @@ async def test_tenant_linebot(
         )
 
 
-@router.delete("/{tenant_id}/linebot", response_model=SuspendResponse)
+@router.delete("/{tenant_id}/bot", response_model=SuspendResponse)
+@router.delete("/{tenant_id}/linebot", response_model=SuspendResponse, deprecated=True)
 async def delete_tenant_linebot_settings(
     tenant_id: str,
     session: SessionData = Depends(get_current_session),

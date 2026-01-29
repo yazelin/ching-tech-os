@@ -157,7 +157,7 @@ class PathManager:
         if path.startswith(self._system_prefixes):
             # /tmp/... → temp://
             if path.startswith("/tmp/"):
-                relative = path[5:]  # 移除 /tmp/
+                relative = path.removeprefix("/tmp/")
                 # 特殊處理 nanobanana 輸出
                 if "nanobanana-output/" in relative:
                     filename = relative.split("nanobanana-output/")[-1]
@@ -170,7 +170,7 @@ class PathManager:
                 if relative.startswith("bot-files/"):
                     return ParsedPath(
                         zone=StorageZone.TEMP,
-                        path=f"bot/{relative[10:]}",
+                        path=f"bot/{relative.removeprefix('bot-files/')}",
                         raw=path
                     )
                 return ParsedPath(
@@ -247,7 +247,7 @@ class PathManager:
 
         # 特殊處理 bot 暫存檔案：temp://bot/xxx → /tmp/bot-files/xxx
         if parsed.zone == StorageZone.TEMP and parsed.path.startswith("bot/"):
-            return f"/tmp/bot-files/{parsed.path[4:]}"
+            return f"/tmp/bot-files/{parsed.path.removeprefix('bot/')}"
 
         # LOCAL zone 知識庫路徑的多租戶支援
         # 多租戶模式下，local://knowledge/... 實際存在租戶的 NAS 目錄

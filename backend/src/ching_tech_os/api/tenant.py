@@ -978,7 +978,8 @@ async def test_nas_auth_connection(
         )
 
 
-@router.get("/linebot", response_model=LineBotSettingsResponse)
+@router.get("/bot", response_model=LineBotSettingsResponse)
+@router.get("/linebot", response_model=LineBotSettingsResponse, deprecated=True)
 async def get_linebot_settings(
     session: SessionData = Depends(get_current_session),
 ) -> LineBotSettingsResponse:
@@ -1012,7 +1013,8 @@ async def get_linebot_settings(
         )
 
 
-@router.put("/linebot", response_model=LineBotSettingsResponse)
+@router.put("/bot", response_model=LineBotSettingsResponse)
+@router.put("/linebot", response_model=LineBotSettingsResponse, deprecated=True)
 async def update_linebot_settings(
     request: LineBotSettingsUpdate,
     session: SessionData = Depends(get_current_session),
@@ -1059,7 +1061,8 @@ async def update_linebot_settings(
     )
 
 
-@router.post("/linebot/test", response_model=LineBotTestResponse)
+@router.post("/bot/test", response_model=LineBotTestResponse)
+@router.post("/linebot/test", response_model=LineBotTestResponse, deprecated=True)
 async def test_linebot_connection(
     session: SessionData = Depends(get_current_session),
 ) -> LineBotTestResponse:
@@ -1118,7 +1121,8 @@ async def test_linebot_connection(
         )
 
 
-@router.delete("/linebot", response_model=LineBotDeleteResponse)
+@router.delete("/bot", response_model=LineBotDeleteResponse)
+@router.delete("/linebot", response_model=LineBotDeleteResponse, deprecated=True)
 async def delete_linebot_settings(
     session: SessionData = Depends(get_current_session),
 ) -> LineBotDeleteResponse:

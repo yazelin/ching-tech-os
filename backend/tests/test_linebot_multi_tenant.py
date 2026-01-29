@@ -330,7 +330,7 @@ class TestWebhookIntegration:
         from ching_tech_os.api import linebot_router
 
         app = FastAPI()
-        app.include_router(linebot_router.router)
+        app.include_router(linebot_router.router, prefix="/api/linebot")
         client = TestClient(app)
 
         body = b'{"events":[]}'
@@ -366,7 +366,7 @@ class TestWebhookIntegration:
         from ching_tech_os.api.linebot_router import router
 
         app = FastAPI()
-        app.include_router(router)
+        app.include_router(router, prefix="/api/linebot")
         client = TestClient(app)
 
         body = b'{"events":[]}'
