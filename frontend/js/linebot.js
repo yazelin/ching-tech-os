@@ -97,7 +97,7 @@ const LineBotApp = (function () {
         try {
             const data = await api(`/binding/generate-code?platform_type=${platformType}`, { method: 'POST' });
             const platformName = platformType === 'telegram' ? 'Telegram' : 'Line';
-            showBindingCodeModal(data.code, data.expires_at, platformName);
+            showBindingCodeModal(data.code, data.expires_at, platformName, platformType);
         } catch (error) {
             console.error('產生驗證碼失敗:', error);
             alert(`產生驗證碼失敗: ${error.message}`);
@@ -121,7 +121,7 @@ const LineBotApp = (function () {
     }
 
     // 顯示驗證碼彈窗
-    function showBindingCodeModal(code, expiresAt, platformName = 'Line') {
+    function showBindingCodeModal(code, expiresAt, platformName = 'Line', platformKey = 'line') {
         const modal = document.createElement('div');
         modal.className = 'linebot-modal-overlay';
         modal.innerHTML = `
@@ -155,7 +155,8 @@ const LineBotApp = (function () {
             pollInterval = setInterval(async () => {
                 try {
                     const status = await api('/binding/status');
-                    if (status.is_bound) {
+                    const platformStatus = status[platformKey];
+                    if (platformStatus && platformStatus.is_bound) {
                         // 綁定成功！
                         clearInterval(pollInterval);
                         state.bindingStatus = status;
