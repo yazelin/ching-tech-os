@@ -94,7 +94,7 @@ async def my_tool(param: str) -> str:
 ```
 
 **Prompt 更新**：新增 MCP 工具後，需要同步更新：
-1. `linebot_agents.py` - 程式碼中的 prompt 定義
+1. `bot/agents.py`（或 `linebot_agents.py`）- 程式碼中的 prompt 定義
 2. 建立新的 migration 檔案更新資料庫中的 prompt
 3. 執行 `uv run alembic upgrade head` 套用變更
 

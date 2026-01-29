@@ -88,7 +88,7 @@ class TestBotContext:
             platform_user_id="U123",
         )
         assert ctx.group_uuid is None
-        assert ctx.reply_token is None
+        assert ctx.platform_data == {}
 
     def test_group_context(self):
         from uuid import uuid4
@@ -97,10 +97,10 @@ class TestBotContext:
             platform_type=PlatformType.LINE,
             conversation_type=ConversationType.GROUP,
             group_uuid=gid,
-            reply_token="reply_abc",
+            platform_data={"reply_token": "reply_abc"},
         )
         assert ctx.group_uuid == gid
-        assert ctx.reply_token == "reply_abc"
+        assert ctx.platform_data["reply_token"] == "reply_abc"
 
 
 # ============================================================

@@ -182,7 +182,7 @@ FILE_TOOLS_PROMPT = """【NAS 專案檔案】
 
 【PDF 轉圖片】
 - convert_pdf_to_images: 將 PDF 轉換為圖片（方便在 Line 中預覽）
-  · pdf_path: PDF 檔案路徑（用戶上傳的 /tmp/linebot-files/... 或 NAS 路徑）
+  · pdf_path: PDF 檔案路徑（用戶上傳的 /tmp/bot-files/... 或 NAS 路徑）
   · pages: 要轉換的頁面
     - "0"：只查詢頁數，不轉換
     - "1"：只轉換第 1 頁

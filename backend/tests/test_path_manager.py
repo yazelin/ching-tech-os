@@ -148,11 +148,11 @@ class TestParseSystemPath:
         assert result.zone == StorageZone.TEMP
         assert result.path == "ai-generated/abc.jpg"
 
-    def test_tmp_linebot_files(self, path_manager):
-        """/tmp/linebot-files/ 特殊路徑"""
-        result = path_manager.parse("/tmp/linebot-files/msg123.pdf")
+    def test_tmp_bot_files(self, path_manager):
+        """/tmp/bot-files/ 特殊路徑"""
+        result = path_manager.parse("/tmp/bot-files/msg123.pdf")
         assert result.zone == StorageZone.TEMP
-        assert result.path == "linebot/msg123.pdf"
+        assert result.path == "bot/msg123.pdf"
 
     def test_slash_relative_path(self, path_manager):
         """以 / 開頭的非系統路徑（檔案管理器 NAS 共享）"""
@@ -224,15 +224,15 @@ class TestToFilesystem:
         with pytest.raises(ValueError, match="NAS zone 路徑無法轉換"):
             path_manager.to_filesystem("/home/photos/image.jpg")
 
-    def test_linebot_temp_to_filesystem(self, path_manager):
-        """linebot 暫存路徑應正確還原為 /tmp/linebot-files/"""
-        # /tmp/linebot-files/xxx.pdf → temp://linebot/xxx.pdf → /tmp/linebot-files/xxx.pdf
-        result = path_manager.to_filesystem("/tmp/linebot-files/msg123.pdf")
-        assert result == "/tmp/linebot-files/msg123.pdf"
+    def test_bot_temp_to_filesystem(self, path_manager):
+        """bot 暫存路徑應正確還原為 /tmp/bot-files/"""
+        # /tmp/bot-files/xxx.pdf → temp://bot/xxx.pdf → /tmp/bot-files/xxx.pdf
+        result = path_manager.to_filesystem("/tmp/bot-files/msg123.pdf")
+        assert result == "/tmp/bot-files/msg123.pdf"
 
-        # 直接使用 temp://linebot/... 格式也應正確
-        result2 = path_manager.to_filesystem("temp://linebot/msg456.pdf")
-        assert result2 == "/tmp/linebot-files/msg456.pdf"
+        # 直接使用 temp://bot/... 格式也應正確
+        result2 = path_manager.to_filesystem("temp://bot/msg456.pdf")
+        assert result2 == "/tmp/bot-files/msg456.pdf"
 
 
 # ============================================================

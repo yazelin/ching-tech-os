@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, patch, MagicMock
 from uuid import UUID
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.testclient import TestClient
 
 from ching_tech_os.api.auth import router, get_current_session
@@ -44,6 +44,37 @@ MOCK_DEFAULT_TENANT = {
     "plan": "enterprise",
 }
 
+# 模擬使用者資料（密碼認證）
+MOCK_USER_DATA = {
+    "id": 1,
+    "username": "testuser",
+    "display_name": "Test User",
+    "password_hash": "$2b$12$fakehash",
+    "is_active": True,
+    "must_change_password": False,
+    "role": "user",
+    "tenant_id": UUID(DEFAULT_TENANT_UUID),
+}
+
+
+def _login_patches():
+    """共用的 login 函數 mock 組合"""
+    return {
+        "resolve_tenant_id": patch("ching_tech_os.api.auth.resolve_tenant_id", new_callable=AsyncMock),
+        "get_user_for_auth": patch("ching_tech_os.api.auth.get_user_for_auth", new_callable=AsyncMock),
+        "verify_password": patch("ching_tech_os.api.auth.verify_password"),
+        "update_last_login": patch("ching_tech_os.api.auth.update_last_login", new_callable=AsyncMock),
+        "get_user_role": patch("ching_tech_os.api.auth.get_user_role", new_callable=AsyncMock),
+        "get_tenant_by_id": patch("ching_tech_os.api.auth.get_tenant_by_id", new_callable=AsyncMock),
+        "record_login": patch("ching_tech_os.api.auth.record_login", new_callable=AsyncMock),
+        "log_message": patch("ching_tech_os.api.auth.log_message", new_callable=AsyncMock),
+        "emit_new_message": patch("ching_tech_os.api.auth.emit_new_message", new_callable=AsyncMock),
+        "emit_unread_count": patch("ching_tech_os.api.auth.emit_unread_count", new_callable=AsyncMock),
+        "resolve_ip_location": patch("ching_tech_os.api.auth.resolve_ip_location"),
+        "parse_device_info": patch("ching_tech_os.api.auth.parse_device_info"),
+        "get_user_app_permissions_sync": patch("ching_tech_os.services.permissions.get_user_app_permissions_sync"),
+    }
+
 
 # ============================================================
 # 登入流程測試
@@ -59,25 +90,28 @@ class TestLoginWithTenant:
 
     def test_login_single_tenant_mode(self):
         """單租戶模式登入成功"""
-        with patch("ching_tech_os.api.auth.resolve_tenant_id", new_callable=AsyncMock) as mock_resolve, \
-             patch("ching_tech_os.api.auth.create_smb_service") as mock_smb, \
-             patch("ching_tech_os.api.auth.upsert_user", new_callable=AsyncMock) as mock_upsert, \
-             patch("ching_tech_os.api.auth.get_tenant_admin_role", new_callable=AsyncMock) as mock_admin_role, \
-             patch("ching_tech_os.api.auth.get_tenant_by_id", new_callable=AsyncMock) as mock_get_tenant, \
-             patch("ching_tech_os.api.auth.record_login", new_callable=AsyncMock), \
-             patch("ching_tech_os.api.auth.log_message", new_callable=AsyncMock), \
-             patch("ching_tech_os.api.auth.emit_unread_count", new_callable=AsyncMock), \
-             patch("ching_tech_os.api.auth.resolve_ip_location") as mock_geo:
+        patches = _login_patches()
+        mocks = {}
+        with patches["resolve_tenant_id"] as m_resolve, \
+             patches["get_user_for_auth"] as m_get_user, \
+             patches["verify_password"] as m_verify, \
+             patches["update_last_login"] as m_update, \
+             patches["get_user_role"] as m_role, \
+             patches["get_tenant_by_id"] as m_tenant, \
+             patches["record_login"], patches["log_message"], \
+             patches["emit_new_message"], patches["emit_unread_count"], \
+             patches["resolve_ip_location"] as m_geo, \
+             patches["parse_device_info"] as m_device, \
+             patches["get_user_app_permissions_sync"] as m_perms:
 
-            # 設定 mock
-            mock_resolve.return_value = UUID(DEFAULT_TENANT_UUID)
-            mock_smb_instance = MagicMock()
-            mock_smb_instance.test_auth.return_value = True
-            mock_smb.return_value = mock_smb_instance
-            mock_upsert.return_value = 1
-            mock_admin_role.return_value = None
-            mock_get_tenant.return_value = MOCK_DEFAULT_TENANT
-            mock_geo.return_value = None
+            m_resolve.return_value = UUID(DEFAULT_TENANT_UUID)
+            m_get_user.return_value = MOCK_USER_DATA
+            m_verify.return_value = True
+            m_role.return_value = "user"
+            m_tenant.return_value = MOCK_DEFAULT_TENANT
+            m_geo.return_value = None
+            m_device.return_value = None
+            m_perms.return_value = {}
 
             response = self.client.post(
                 "/api/auth/login",
@@ -92,24 +126,27 @@ class TestLoginWithTenant:
 
     def test_login_multi_tenant_mode_with_code(self):
         """多租戶模式登入（提供 tenant_code）"""
-        with patch("ching_tech_os.api.auth.resolve_tenant_id", new_callable=AsyncMock) as mock_resolve, \
-             patch("ching_tech_os.api.auth.create_smb_service") as mock_smb, \
-             patch("ching_tech_os.api.auth.upsert_user", new_callable=AsyncMock) as mock_upsert, \
-             patch("ching_tech_os.api.auth.get_tenant_admin_role", new_callable=AsyncMock) as mock_admin_role, \
-             patch("ching_tech_os.api.auth.get_tenant_by_id", new_callable=AsyncMock) as mock_get_tenant, \
-             patch("ching_tech_os.api.auth.record_login", new_callable=AsyncMock), \
-             patch("ching_tech_os.api.auth.log_message", new_callable=AsyncMock), \
-             patch("ching_tech_os.api.auth.emit_unread_count", new_callable=AsyncMock), \
-             patch("ching_tech_os.api.auth.resolve_ip_location") as mock_geo:
+        patches = _login_patches()
+        with patches["resolve_tenant_id"] as m_resolve, \
+             patches["get_user_for_auth"] as m_get_user, \
+             patches["verify_password"] as m_verify, \
+             patches["update_last_login"], \
+             patches["get_user_role"] as m_role, \
+             patches["get_tenant_by_id"] as m_tenant, \
+             patches["record_login"], patches["log_message"], \
+             patches["emit_new_message"], patches["emit_unread_count"], \
+             patches["resolve_ip_location"] as m_geo, \
+             patches["parse_device_info"] as m_device, \
+             patches["get_user_app_permissions_sync"] as m_perms:
 
-            mock_resolve.return_value = MOCK_TENANT["id"]
-            mock_smb_instance = MagicMock()
-            mock_smb_instance.test_auth.return_value = True
-            mock_smb.return_value = mock_smb_instance
-            mock_upsert.return_value = 1
-            mock_admin_role.return_value = None
-            mock_get_tenant.return_value = MOCK_TENANT
-            mock_geo.return_value = None
+            m_resolve.return_value = MOCK_TENANT["id"]
+            m_get_user.return_value = MOCK_USER_DATA
+            m_verify.return_value = True
+            m_role.return_value = "user"
+            m_tenant.return_value = MOCK_TENANT
+            m_geo.return_value = None
+            m_device.return_value = None
+            m_perms.return_value = {}
 
             response = self.client.post(
                 "/api/auth/login",
@@ -130,8 +167,12 @@ class TestLoginWithTenant:
         """無效的租戶代碼應登入失敗"""
         from ching_tech_os.services.tenant import TenantNotFoundError
 
-        with patch("ching_tech_os.api.auth.resolve_tenant_id", new_callable=AsyncMock) as mock_resolve:
+        with patch("ching_tech_os.api.auth.resolve_tenant_id", new_callable=AsyncMock) as mock_resolve, \
+             patch("ching_tech_os.api.auth.resolve_ip_location") as m_geo, \
+             patch("ching_tech_os.api.auth.parse_device_info") as m_device:
             mock_resolve.side_effect = TenantNotFoundError("租戶不存在")
+            m_geo.return_value = None
+            m_device.return_value = None
 
             response = self.client.post(
                 "/api/auth/login",
@@ -151,8 +192,12 @@ class TestLoginWithTenant:
         """停用的租戶應無法登入"""
         from ching_tech_os.services.tenant import TenantSuspendedError
 
-        with patch("ching_tech_os.api.auth.resolve_tenant_id", new_callable=AsyncMock) as mock_resolve:
+        with patch("ching_tech_os.api.auth.resolve_tenant_id", new_callable=AsyncMock) as mock_resolve, \
+             patch("ching_tech_os.api.auth.resolve_ip_location") as m_geo, \
+             patch("ching_tech_os.api.auth.parse_device_info") as m_device:
             mock_resolve.side_effect = TenantSuspendedError("租戶已停用")
+            m_geo.return_value = None
+            m_device.return_value = None
 
             response = self.client.post(
                 "/api/auth/login",
@@ -183,25 +228,28 @@ class TestTenantAdminRole:
 
     def test_tenant_admin_role_in_session(self):
         """租戶管理員應在 session 中標記 role"""
-        with patch("ching_tech_os.api.auth.resolve_tenant_id", new_callable=AsyncMock) as mock_resolve, \
-             patch("ching_tech_os.api.auth.create_smb_service") as mock_smb, \
-             patch("ching_tech_os.api.auth.upsert_user", new_callable=AsyncMock) as mock_upsert, \
-             patch("ching_tech_os.api.auth.get_tenant_admin_role", new_callable=AsyncMock) as mock_admin_role, \
-             patch("ching_tech_os.api.auth.get_tenant_by_id", new_callable=AsyncMock) as mock_get_tenant, \
-             patch("ching_tech_os.api.auth.record_login", new_callable=AsyncMock), \
-             patch("ching_tech_os.api.auth.log_message", new_callable=AsyncMock), \
-             patch("ching_tech_os.api.auth.emit_unread_count", new_callable=AsyncMock), \
-             patch("ching_tech_os.api.auth.resolve_ip_location") as mock_geo, \
+        patches = _login_patches()
+        with patches["resolve_tenant_id"] as m_resolve, \
+             patches["get_user_for_auth"] as m_get_user, \
+             patches["verify_password"] as m_verify, \
+             patches["update_last_login"], \
+             patches["get_user_role"] as m_role, \
+             patches["get_tenant_by_id"] as m_tenant, \
+             patches["record_login"], patches["log_message"], \
+             patches["emit_new_message"], patches["emit_unread_count"], \
+             patches["resolve_ip_location"] as m_geo, \
+             patches["parse_device_info"] as m_device, \
+             patches["get_user_app_permissions_sync"] as m_perms, \
              patch("ching_tech_os.api.auth.session_manager") as mock_session_mgr:
 
-            mock_resolve.return_value = MOCK_TENANT["id"]
-            mock_smb_instance = MagicMock()
-            mock_smb_instance.test_auth.return_value = True
-            mock_smb.return_value = mock_smb_instance
-            mock_upsert.return_value = 1
-            mock_admin_role.return_value = "admin"  # 是租戶管理員
-            mock_get_tenant.return_value = MOCK_TENANT
-            mock_geo.return_value = None
+            m_resolve.return_value = MOCK_TENANT["id"]
+            m_get_user.return_value = MOCK_USER_DATA
+            m_verify.return_value = True
+            m_role.return_value = "tenant_admin"
+            m_tenant.return_value = MOCK_TENANT
+            m_geo.return_value = None
+            m_device.return_value = None
+            m_perms.return_value = {}
             mock_session_mgr.create_session.return_value = "test_token"
 
             response = self.client.post(
@@ -216,25 +264,28 @@ class TestTenantAdminRole:
 
     def test_normal_user_role(self):
         """一般使用者應標記 role=user"""
-        with patch("ching_tech_os.api.auth.resolve_tenant_id", new_callable=AsyncMock) as mock_resolve, \
-             patch("ching_tech_os.api.auth.create_smb_service") as mock_smb, \
-             patch("ching_tech_os.api.auth.upsert_user", new_callable=AsyncMock) as mock_upsert, \
-             patch("ching_tech_os.api.auth.get_tenant_admin_role", new_callable=AsyncMock) as mock_admin_role, \
-             patch("ching_tech_os.api.auth.get_tenant_by_id", new_callable=AsyncMock) as mock_get_tenant, \
-             patch("ching_tech_os.api.auth.record_login", new_callable=AsyncMock), \
-             patch("ching_tech_os.api.auth.log_message", new_callable=AsyncMock), \
-             patch("ching_tech_os.api.auth.emit_unread_count", new_callable=AsyncMock), \
-             patch("ching_tech_os.api.auth.resolve_ip_location") as mock_geo, \
+        patches = _login_patches()
+        with patches["resolve_tenant_id"] as m_resolve, \
+             patches["get_user_for_auth"] as m_get_user, \
+             patches["verify_password"] as m_verify, \
+             patches["update_last_login"], \
+             patches["get_user_role"] as m_role, \
+             patches["get_tenant_by_id"] as m_tenant, \
+             patches["record_login"], patches["log_message"], \
+             patches["emit_new_message"], patches["emit_unread_count"], \
+             patches["resolve_ip_location"] as m_geo, \
+             patches["parse_device_info"] as m_device, \
+             patches["get_user_app_permissions_sync"] as m_perms, \
              patch("ching_tech_os.api.auth.session_manager") as mock_session_mgr:
 
-            mock_resolve.return_value = MOCK_TENANT["id"]
-            mock_smb_instance = MagicMock()
-            mock_smb_instance.test_auth.return_value = True
-            mock_smb.return_value = mock_smb_instance
-            mock_upsert.return_value = 1
-            mock_admin_role.return_value = None  # 不是租戶管理員
-            mock_get_tenant.return_value = MOCK_TENANT
-            mock_geo.return_value = None
+            m_resolve.return_value = MOCK_TENANT["id"]
+            m_get_user.return_value = MOCK_USER_DATA
+            m_verify.return_value = True
+            m_role.return_value = "user"
+            m_tenant.return_value = MOCK_TENANT
+            m_geo.return_value = None
+            m_device.return_value = None
+            m_perms.return_value = {}
             mock_session_mgr.create_session.return_value = "test_token"
 
             response = self.client.post(
@@ -261,6 +312,8 @@ class TestSessionTenantValidation:
 
         with patch("ching_tech_os.services.session.settings") as mock_settings:
             mock_settings.session_ttl_hours = 8
+            mock_settings.nas_host = "test-nas"
+            mock_settings.multi_tenant_mode = True
 
             token = session_manager.create_session(
                 username="testuser",
@@ -284,6 +337,8 @@ class TestSessionTenantValidation:
 
         with patch("ching_tech_os.services.session.settings") as mock_settings:
             mock_settings.session_ttl_hours = 8
+            mock_settings.nas_host = "test-nas"
+            mock_settings.multi_tenant_mode = True
 
             token = session_manager.create_session(
                 username="admin",
@@ -346,7 +401,6 @@ class TestGetCurrentSession:
             "testuser", 1, tenant_id, "user"
         )
 
-        from fastapi import Depends
         client = TestClient(self.app)
         response = client.get("/test/session")
 
@@ -370,7 +424,6 @@ class TestGetCurrentSession:
             "admin", 1, tenant_id, "tenant_admin"
         )
 
-        from fastapi import Depends
         client = TestClient(self.app)
         response = client.get("/test/admin-session")
 

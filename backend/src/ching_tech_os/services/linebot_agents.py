@@ -170,7 +170,7 @@ LINEBOT_PERSONAL_PROMPT = """你是擎添工業的 AI 助理，透過 Line 與�
 
 【PDF 轉圖片】
 - convert_pdf_to_images: 將 PDF 轉換為圖片（方便在 Line 中預覽）
-  · pdf_path: PDF 檔案路徑（用戶上傳的 /tmp/linebot-files/... 或 NAS 路徑）
+  · pdf_path: PDF 檔案路徑（用戶上傳的 /tmp/bot-files/... 或 NAS 路徑）
   · pages: 要轉換的頁面
     - "0"：只查詢頁數，不轉換
     - "1"：只轉換第 1 頁
@@ -397,7 +397,7 @@ LINEBOT_GROUP_PROMPT = """你是擎添工業的 AI 助理，在 Line 群組中�
 - ⚠️ 禁止自己寫 [FILE_MESSAGE:...]！必須呼叫 prepare_file_message
 - 找回之前生成的圖：用 get_message_attachments 查找 ai-images/ 開頭的路徑
 - convert_pdf_to_images: PDF 轉圖片（方便預覽）
-  · pdf_path: PDF 路徑（/tmp/linebot-files/... 或 NAS 路徑）
+  · pdf_path: PDF 路徑（/tmp/bot-files/... 或 NAS 路徑）
   · pages: "0"=只查頁數、"1"/"1-3"/"all" 指定頁面
   · 1 頁直接轉；多頁先詢問用戶要轉哪幾頁
   · 轉換後用 prepare_file_message 發送圖片

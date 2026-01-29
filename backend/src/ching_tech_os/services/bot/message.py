@@ -64,8 +64,8 @@ class BotContext:
     ctos_user_id: int | None = None
     # 訊息資訊
     message_uuid: UUID | None = None
-    reply_token: str | None = None  # Line 專用，但放在通用 context 避免過度抽象
-    quoted_message_id: str | None = None
+    # 平台特定資料（如 Line 的 reply_token、quoted_message_id）
+    platform_data: dict = field(default_factory=dict)
 
 
 @dataclass

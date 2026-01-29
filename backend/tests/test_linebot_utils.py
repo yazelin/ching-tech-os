@@ -152,7 +152,7 @@ class TestGetTempImagePath:
 
     def test_normal_path(self):
         path = get_temp_image_path("msg123")
-        assert path == "/tmp/linebot-images/msg123.jpg"
+        assert path == "/tmp/bot-images/msg123.jpg"
 
 
 # ============================================================

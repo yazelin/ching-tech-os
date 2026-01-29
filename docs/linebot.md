@@ -1,5 +1,8 @@
 # Line Bot 整合
 
+> **注意**：資料庫表格已從 `line_*` 改名為 `bot_*`（如 `bot_messages`、`bot_groups`、`bot_users`）。
+> 服務層新增 `services/bot/` 核心模組，包含平台無關的 adapter、message、media、ai、agents 等抽象。
+
 Line Bot 整合功能，實現 Line 訊息儲存、AI 助理回應、知識庫管理與公開分享。
 
 ## 多租戶架構

@@ -11,8 +11,8 @@ from pathlib import Path
 logger = logging.getLogger("bot.media")
 
 # 暫存目錄（各平台共用）
-TEMP_IMAGE_DIR = "/tmp/linebot-images"
-TEMP_FILE_DIR = "/tmp/linebot-files"
+TEMP_IMAGE_DIR = "/tmp/bot-images"
+TEMP_FILE_DIR = "/tmp/bot-files"
 
 # 可讀取的檔案副檔名（AI 可透過 Read 工具讀取）
 READABLE_FILE_EXTENSIONS = {

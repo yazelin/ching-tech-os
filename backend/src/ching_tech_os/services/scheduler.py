@@ -136,8 +136,8 @@ async def cleanup_linebot_temp_files():
     刪除修改時間超過 1 小時的暫存檔
     """
     temp_dirs = [
-        "/tmp/linebot-images",
-        "/tmp/linebot-files",
+        "/tmp/bot-images",
+        "/tmp/bot-files",
     ]
 
     one_hour_ago = time.time() - 3600  # 1 小時前
