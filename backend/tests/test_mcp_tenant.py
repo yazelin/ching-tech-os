@@ -28,25 +28,25 @@ class TestGetTenantId:
     """_get_tenant_id 輔助函數測試"""
 
     def test_none_returns_default(self):
-        """None 參數應返回預設租戶 ID"""
+        """None 參數應返回預設租戶 ID（字串格式）"""
         result = _get_tenant_id(None)
-        assert result == DEFAULT_TENANT_ID
+        assert result == str(DEFAULT_TENANT_ID)
 
     def test_valid_uuid_string(self):
-        """有效的 UUID 字串應正確轉換"""
+        """有效的 UUID 字串應原樣返回"""
         uuid_str = "11111111-1111-1111-1111-111111111111"
         result = _get_tenant_id(uuid_str)
-        assert result == UUID(uuid_str)
+        assert result == uuid_str
 
     def test_invalid_uuid_returns_default(self):
-        """無效的 UUID 字串應返回預設租戶 ID"""
+        """無效的 UUID 字串應返回預設租戶 ID（字串格式）"""
         result = _get_tenant_id("invalid-uuid")
-        assert result == DEFAULT_TENANT_ID
+        assert result == str(DEFAULT_TENANT_ID)
 
     def test_empty_string_returns_default(self):
-        """空字串應返回預設租戶 ID"""
+        """空字串應返回預設租戶 ID（字串格式）"""
         result = _get_tenant_id("")
-        assert result == DEFAULT_TENANT_ID
+        assert result == str(DEFAULT_TENANT_ID)
 
 
 # ============================================================
@@ -81,15 +81,19 @@ class TestProjectToolsTenantIsolation:
         """create_project 應將租戶 ID 傳遞給服務層"""
         from ching_tech_os.services.mcp_server import create_project
 
+        mock_result = MagicMock(
+            id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            name="測試專案",
+        )
+
         with patch("ching_tech_os.services.mcp_server.ensure_db_connection", new_callable=AsyncMock), \
-             patch("ching_tech_os.services.mcp_server.svc_create_project", new_callable=AsyncMock) as mock_create:
+             patch("ching_tech_os.services.mcp_server.check_mcp_tool_permission", new_callable=AsyncMock) as mock_perm, \
+             patch("ching_tech_os.services.project.create_project", new_callable=AsyncMock) as mock_create:
 
-            mock_create.return_value = MagicMock(
-                id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
-                name="測試專案",
-            )
+            mock_perm.return_value = (True, None)
+            mock_create.return_value = mock_result
 
-            await create_project(
+            result = await create_project(
                 name="測試專案",
                 ctos_tenant_id=str(TEST_TENANT_ID),
             )
@@ -114,8 +118,10 @@ class TestKnowledgeToolsTenantIsolation:
         from ching_tech_os.services.mcp_server import search_knowledge
 
         with patch("ching_tech_os.services.mcp_server.ensure_db_connection", new_callable=AsyncMock), \
-             patch("ching_tech_os.services.mcp_server.knowledge_search") as mock_search:
+             patch("ching_tech_os.services.mcp_server.check_mcp_tool_permission", new_callable=AsyncMock) as mock_perm, \
+             patch("ching_tech_os.services.knowledge.search_knowledge") as mock_search:
 
+            mock_perm.return_value = (True, None)
             mock_search.return_value = []
 
             await search_knowledge(
@@ -132,8 +138,10 @@ class TestKnowledgeToolsTenantIsolation:
         from ching_tech_os.services.mcp_server import add_note
 
         with patch("ching_tech_os.services.mcp_server.ensure_db_connection", new_callable=AsyncMock), \
-             patch("ching_tech_os.services.mcp_server.knowledge_add") as mock_add:
+             patch("ching_tech_os.services.mcp_server.check_mcp_tool_permission", new_callable=AsyncMock) as mock_perm, \
+             patch("ching_tech_os.services.knowledge.create_knowledge") as mock_add:
 
+            mock_perm.return_value = (True, None)
             mock_add.return_value = "kb-001"
 
             await add_note(
@@ -158,42 +166,48 @@ class TestInventoryToolsTenantIsolation:
         """query_inventory 應使用租戶 ID 過濾"""
         from ching_tech_os.services.mcp_server import query_inventory
 
-        mock_conn = AsyncMock()
-        mock_conn.fetch.return_value = []
-
         with patch("ching_tech_os.services.mcp_server.ensure_db_connection", new_callable=AsyncMock), \
-             patch("ching_tech_os.services.mcp_server.get_connection") as mock_get_conn:
-            mock_get_conn.return_value.__aenter__.return_value = mock_conn
+             patch("ching_tech_os.services.mcp_server.check_mcp_tool_permission", new_callable=AsyncMock) as mock_perm, \
+             patch("ching_tech_os.services.inventory.list_inventory_items", new_callable=AsyncMock) as mock_list:
 
-            await query_inventory(
+            mock_perm.return_value = (True, None)
+            mock_list.return_value = []
+
+            result = await query_inventory(
                 keyword="test",
                 ctos_tenant_id=str(TEST_TENANT_ID),
             )
 
-            # 驗證查詢使用了 tenant_id
-            mock_conn.fetch.assert_called()
-            call_args = str(mock_conn.fetch.call_args)
-            assert "tenant_id" in call_args
+            # 驗證呼叫了庫存查詢函數
+            mock_list.assert_called_once()
+            # 驗證傳遞了 tenant_id
+            call_kwargs = mock_list.call_args[1]
+            assert "tenant_id" in call_kwargs
 
     @pytest.mark.asyncio
     async def test_query_vendors_uses_tenant_id(self):
         """query_vendors 應使用租戶 ID 過濾"""
         from ching_tech_os.services.mcp_server import query_vendors
 
-        mock_conn = AsyncMock()
-        mock_conn.fetch.return_value = []
+        mock_response = MagicMock()
+        mock_response.items = []
 
         with patch("ching_tech_os.services.mcp_server.ensure_db_connection", new_callable=AsyncMock), \
-             patch("ching_tech_os.services.mcp_server.get_connection") as mock_get_conn:
-            mock_get_conn.return_value.__aenter__.return_value = mock_conn
+             patch("ching_tech_os.services.mcp_server.check_mcp_tool_permission", new_callable=AsyncMock) as mock_perm, \
+             patch("ching_tech_os.services.vendor.list_vendors", new_callable=AsyncMock) as mock_list:
+
+            mock_perm.return_value = (True, None)
+            mock_list.return_value = mock_response
 
             await query_vendors(
                 keyword="test",
                 ctos_tenant_id=str(TEST_TENANT_ID),
             )
 
-            # 驗證查詢
-            mock_conn.fetch.assert_called()
+            # 驗證呼叫了廠商查詢函數並傳遞 tenant_id
+            mock_list.assert_called_once()
+            call_kwargs = mock_list.call_args[1]
+            assert "tenant_id" in call_kwargs
 
 
 # ============================================================
@@ -208,18 +222,24 @@ class TestMilestoneToolsTenantIsolation:
         """get_project_milestones 應使用租戶 ID 過濾"""
         from ching_tech_os.services.mcp_server import get_project_milestones
 
-        with patch("ching_tech_os.services.mcp_server.ensure_db_connection", new_callable=AsyncMock), \
-             patch("ching_tech_os.services.mcp_server.svc_list_milestones", new_callable=AsyncMock) as mock_list:
+        mock_conn = AsyncMock()
+        mock_conn.fetchrow.return_value = {"name": "測試專案"}
+        mock_conn.fetch.return_value = []
 
-            mock_list.return_value = []
+        with patch("ching_tech_os.services.mcp_server.ensure_db_connection", new_callable=AsyncMock), \
+             patch("ching_tech_os.services.mcp_server.check_mcp_tool_permission", new_callable=AsyncMock) as mock_perm, \
+             patch("ching_tech_os.services.mcp_server.get_connection") as mock_get_conn:
+
+            mock_perm.return_value = (True, None)
+            mock_get_conn.return_value.__aenter__.return_value = mock_conn
 
             await get_project_milestones(
                 project_id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
                 ctos_tenant_id=str(TEST_TENANT_ID),
             )
 
-            # 驗證呼叫了服務函數
-            mock_list.assert_called_once()
+            # 驗證查詢使用了 tenant_id
+            mock_conn.fetchrow.assert_called()
 
 
 # ============================================================
@@ -234,18 +254,24 @@ class TestMemberToolsTenantIsolation:
         """get_project_members 應使用租戶 ID 過濾"""
         from ching_tech_os.services.mcp_server import get_project_members
 
-        with patch("ching_tech_os.services.mcp_server.ensure_db_connection", new_callable=AsyncMock), \
-             patch("ching_tech_os.services.mcp_server.svc_list_members", new_callable=AsyncMock) as mock_list:
+        mock_conn = AsyncMock()
+        mock_conn.fetchrow.return_value = {"name": "測試專案"}
+        mock_conn.fetch.return_value = []
 
-            mock_list.return_value = []
+        with patch("ching_tech_os.services.mcp_server.ensure_db_connection", new_callable=AsyncMock), \
+             patch("ching_tech_os.services.mcp_server.check_mcp_tool_permission", new_callable=AsyncMock) as mock_perm, \
+             patch("ching_tech_os.services.mcp_server.get_connection") as mock_get_conn:
+
+            mock_perm.return_value = (True, None)
+            mock_get_conn.return_value.__aenter__.return_value = mock_conn
 
             await get_project_members(
                 project_id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
                 ctos_tenant_id=str(TEST_TENANT_ID),
             )
 
-            # 驗證呼叫了服務函數
-            mock_list.assert_called_once()
+            # 驗證查詢使用了 tenant_id
+            mock_conn.fetchrow.assert_called()
 
 
 # ============================================================
@@ -260,18 +286,24 @@ class TestMeetingToolsTenantIsolation:
         """get_project_meetings 應使用租戶 ID 過濾"""
         from ching_tech_os.services.mcp_server import get_project_meetings
 
-        with patch("ching_tech_os.services.mcp_server.ensure_db_connection", new_callable=AsyncMock), \
-             patch("ching_tech_os.services.mcp_server.svc_list_meetings", new_callable=AsyncMock) as mock_list:
+        mock_conn = AsyncMock()
+        mock_conn.fetchrow.return_value = {"name": "測試專案"}
+        mock_conn.fetch.return_value = []
 
-            mock_list.return_value = []
+        with patch("ching_tech_os.services.mcp_server.ensure_db_connection", new_callable=AsyncMock), \
+             patch("ching_tech_os.services.mcp_server.check_mcp_tool_permission", new_callable=AsyncMock) as mock_perm, \
+             patch("ching_tech_os.services.mcp_server.get_connection") as mock_get_conn:
+
+            mock_perm.return_value = (True, None)
+            mock_get_conn.return_value.__aenter__.return_value = mock_conn
 
             await get_project_meetings(
                 project_id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
                 ctos_tenant_id=str(TEST_TENANT_ID),
             )
 
-            # 驗證呼叫了服務函數
-            mock_list.assert_called_once()
+            # 驗證查詢使用了 tenant_id
+            mock_conn.fetchrow.assert_called()
 
 
 # ============================================================

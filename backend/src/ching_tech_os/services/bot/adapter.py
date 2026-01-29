@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 from dataclasses import dataclass
 
 
@@ -89,7 +89,7 @@ class BotAdapter(Protocol):
     async def send_messages(
         self,
         target: str,
-        messages: list,
+        messages: list[Any],
         *,
         reply_to: str | None = None,
     ) -> list[SentMessage]:

@@ -166,11 +166,11 @@ class PathManager:
                         path=f"ai-generated/{filename}",
                         raw=path
                     )
-                # 特殊處理 linebot-files
-                if relative.startswith("linebot-files/"):
+                # 特殊處理 bot-files
+                if relative.startswith("bot-files/"):
                     return ParsedPath(
                         zone=StorageZone.TEMP,
-                        path=f"linebot/{relative[14:]}",
+                        path=f"bot/{relative[10:]}",
                         raw=path
                     )
                 return ParsedPath(
@@ -245,9 +245,9 @@ class PathManager:
         if mount_path is None:
             raise ValueError(f"NAS zone 路徑無法轉換為本地檔案系統路徑: {path}")
 
-        # 特殊處理 linebot 暫存檔案：temp://linebot/xxx → /tmp/linebot-files/xxx
-        if parsed.zone == StorageZone.TEMP and parsed.path.startswith("linebot/"):
-            return f"/tmp/linebot-files/{parsed.path[8:]}"
+        # 特殊處理 bot 暫存檔案：temp://bot/xxx → /tmp/bot-files/xxx
+        if parsed.zone == StorageZone.TEMP and parsed.path.startswith("bot/"):
+            return f"/tmp/bot-files/{parsed.path[4:]}"
 
         # LOCAL zone 知識庫路徑的多租戶支援
         # 多租戶模式下，local://knowledge/... 實際存在租戶的 NAS 目錄

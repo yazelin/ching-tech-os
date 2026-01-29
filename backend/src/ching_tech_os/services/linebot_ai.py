@@ -68,18 +68,6 @@ from .bot.media import parse_pdf_temp_path
 logger = logging.getLogger("linebot_ai")
 
 
-# ============================================================
-# 以下純函式已遷移至 services/bot/ai.py 和 services/bot/media.py
-# 透過頂部的 import 保持向後相容：
-# - parse_pdf_temp_path (from .bot.media)
-# - parse_ai_response (from .bot.ai)
-# - extract_nanobanana_error (from .bot.ai)
-# - extract_nanobanana_prompt (from .bot.ai)
-# - check_nanobanana_timeout (from .bot.ai)
-# - get_user_friendly_nanobanana_error (from .bot.ai)
-# - extract_generated_images_from_tool_calls (from .bot.ai)
-# ============================================================
-
 
 async def auto_prepare_generated_images(
     ai_response: str,

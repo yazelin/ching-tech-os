@@ -2617,74 +2617,18 @@ def is_reset_command(content: str) -> bool:
 # 檔案暫存服務
 # ============================================================
 
-# 暫存目錄
-TEMP_IMAGE_DIR = "/tmp/linebot-images"
-TEMP_FILE_DIR = "/tmp/linebot-files"
-
-# 可讀取的檔案副檔名（AI 可透過 Read 工具讀取）
-READABLE_FILE_EXTENSIONS = {
-    # 純文字格式
-    ".txt", ".md", ".json", ".csv", ".log",
-    ".xml", ".yaml", ".yml",
-    # Office 文件（透過 document_reader 解析）
-    ".docx", ".xlsx", ".pptx",
-    # PDF 文件（透過 document_reader 解析）
-    ".pdf",
-}
-
-# 舊版 Office 格式（提示轉檔）
-LEGACY_OFFICE_EXTENSIONS = {".doc", ".xls", ".ppt"}
-
-# 需要文件解析的格式（透過 document_reader 處理）
-DOCUMENT_EXTENSIONS = {".docx", ".xlsx", ".pptx", ".pdf"}
-
-# 最大可讀取檔案大小（5MB）
-MAX_READABLE_FILE_SIZE = 5 * 1024 * 1024
-
-
-def is_readable_file(filename: str) -> bool:
-    """判斷檔案是否為可讀取類型
-
-    Args:
-        filename: 檔案名稱
-
-    Returns:
-        是否可讀取
-    """
-    if not filename:
-        return False
-    ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-    return ext in READABLE_FILE_EXTENSIONS
-
-
-def is_legacy_office_file(filename: str) -> bool:
-    """判斷檔案是否為舊版 Office 格式
-
-    Args:
-        filename: 檔案名稱
-
-    Returns:
-        是否為舊版格式（.doc, .xls, .ppt）
-    """
-    if not filename:
-        return False
-    ext = Path(filename).suffix.lower()
-    return ext in LEGACY_OFFICE_EXTENSIONS
-
-
-def is_document_file(filename: str) -> bool:
-    """判斷檔案是否需要文件解析
-
-    Args:
-        filename: 檔案名稱
-
-    Returns:
-        是否為需要解析的文件格式（.docx, .xlsx, .pptx, .pdf）
-    """
-    if not filename:
-        return False
-    ext = Path(filename).suffix.lower()
-    return ext in DOCUMENT_EXTENSIONS
+# 暫存目錄與檔案判斷函式（從 bot.media 匯入，保持向後相容）
+from .bot.media import (
+    TEMP_IMAGE_DIR,
+    TEMP_FILE_DIR,
+    READABLE_FILE_EXTENSIONS,
+    LEGACY_OFFICE_EXTENSIONS,
+    DOCUMENT_EXTENSIONS,
+    MAX_READABLE_FILE_SIZE,
+    is_readable_file,
+    is_legacy_office_file,
+    is_document_file,
+)
 
 
 def get_temp_image_path(line_message_id: str) -> str:

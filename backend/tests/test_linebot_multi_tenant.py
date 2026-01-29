@@ -199,20 +199,21 @@ class TestVerifyWebhookSignature:
 
     @pytest.mark.asyncio
     async def test_valid_tenant_signature_returns_true_with_tenant_id(self, mock_tenant_secrets):
-        """有效租戶簽章應回傳 (True, tenant_id)"""
+        """有效租戶簽章應回傳 (True, tenant_id, secret)"""
         body = b'{"events":[]}'
         signature = generate_signature(body, TENANT_A_SECRET)
 
         with patch.object(linebot_service, "get_cached_tenant_secrets", new_callable=AsyncMock) as mock_cache:
             mock_cache.return_value = mock_tenant_secrets
 
-            is_valid, tenant_id = await linebot_service.verify_webhook_signature(body, signature)
+            is_valid, tenant_id, secret = await linebot_service.verify_webhook_signature(body, signature)
             assert is_valid is True
             assert tenant_id == TENANT_A_ID
+            assert secret == TENANT_A_SECRET
 
     @pytest.mark.asyncio
     async def test_valid_default_signature_returns_true_with_none(self, mock_tenant_secrets):
-        """有效預設 Bot 簽章應回傳 (True, None)"""
+        """有效預設 Bot 簽章應回傳 (True, None, None)"""
         body = b'{"events":[]}'
         signature = generate_signature(body, DEFAULT_SECRET)
 
@@ -220,13 +221,14 @@ class TestVerifyWebhookSignature:
              patch.object(linebot_service.settings, "line_channel_secret", DEFAULT_SECRET):
             mock_cache.return_value = mock_tenant_secrets
 
-            is_valid, tenant_id = await linebot_service.verify_webhook_signature(body, signature)
+            is_valid, tenant_id, secret = await linebot_service.verify_webhook_signature(body, signature)
             assert is_valid is True
             assert tenant_id is None
+            assert secret is None
 
     @pytest.mark.asyncio
     async def test_invalid_signature_returns_false(self, mock_tenant_secrets):
-        """無效簽章應回傳 (False, None)"""
+        """無效簽章應回傳 (False, None, None)"""
         body = b'{"events":[]}'
         invalid_signature = "invalid"
 
@@ -234,9 +236,10 @@ class TestVerifyWebhookSignature:
              patch.object(linebot_service.settings, "line_channel_secret", DEFAULT_SECRET):
             mock_cache.return_value = mock_tenant_secrets
 
-            is_valid, tenant_id = await linebot_service.verify_webhook_signature(body, invalid_signature)
+            is_valid, tenant_id, secret = await linebot_service.verify_webhook_signature(body, invalid_signature)
             assert is_valid is False
             assert tenant_id is None
+            assert secret is None
 
 
 # ============================================================
@@ -337,7 +340,7 @@ class TestWebhookIntegration:
         with patch.object(linebot_router, "verify_webhook_signature", new_callable=AsyncMock) as mock_verify, \
              patch.object(linebot_router, "get_webhook_parser") as mock_parser:
             # 模擬簽章驗證成功，識別為租戶 A
-            mock_verify.return_value = (True, TENANT_A_ID)
+            mock_verify.return_value = (True, TENANT_A_ID, TENANT_A_SECRET)
 
             # Mock parser 回傳空事件列表
             mock_parser_instance = MagicMock()

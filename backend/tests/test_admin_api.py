@@ -9,6 +9,7 @@
 import pytest
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, patch
+from uuid import UUID
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -25,7 +26,10 @@ def create_test_app():
     return app
 
 
-def create_session_override(username: str, user_id: int = 1):
+MOCK_TENANT_ID = UUID("11111111-1111-1111-1111-111111111111")
+
+
+def create_session_override(username: str, user_id: int = 1, role: str = "user"):
     """建立 session 覆寫函數（共用）"""
     async def override():
         now = datetime.now()
@@ -36,6 +40,8 @@ def create_session_override(username: str, user_id: int = 1):
             user_id=user_id,
             created_at=now,
             expires_at=now + timedelta(hours=1),
+            tenant_id=MOCK_TENANT_ID,
+            role=role,
         )
     return override
 
@@ -48,6 +54,8 @@ MOCK_ADMIN_USER = {
     "created_at": "2024-01-01T00:00:00",
     "last_login_at": "2024-01-01T00:00:00",
     "preferences": None,
+    "role": "tenant_admin",
+    "tenant_id": MOCK_TENANT_ID,
 }
 
 MOCK_NORMAL_USER = {
@@ -57,6 +65,8 @@ MOCK_NORMAL_USER = {
     "created_at": "2024-01-01T00:00:00",
     "last_login_at": "2024-01-01T00:00:00",
     "preferences": None,
+    "role": "user",
+    "tenant_id": MOCK_TENANT_ID,
 }
 
 MOCK_USER_WITH_PERMS = {
@@ -71,6 +81,8 @@ MOCK_USER_WITH_PERMS = {
             "knowledge": {"global_write": True},
         }
     },
+    "role": "user",
+    "tenant_id": MOCK_TENANT_ID,
 }
 
 
@@ -87,11 +99,10 @@ class TestAdminAccessControl:
 
     def test_admin_can_access_users_list(self):
         """管理員可以存取使用者列表"""
-        with patch("ching_tech_os.api.user.is_admin", return_value=True), \
-             patch("ching_tech_os.api.user.get_all_users", new_callable=AsyncMock) as mock_get_all:
+        with patch("ching_tech_os.api.user.get_all_users", new_callable=AsyncMock) as mock_get_all:
             mock_get_all.return_value = [MOCK_ADMIN_USER, MOCK_NORMAL_USER]
 
-            self.app.dependency_overrides[get_current_session] = create_session_override("admin")
+            self.app.dependency_overrides[get_current_session] = create_session_override("admin", role="tenant_admin")
             client = TestClient(self.app)
 
             response = client.get("/api/admin/users")
@@ -102,35 +113,32 @@ class TestAdminAccessControl:
 
     def test_non_admin_cannot_access_users_list(self):
         """非管理員無法存取使用者列表"""
-        with patch("ching_tech_os.api.user.is_admin", return_value=False):
-            self.app.dependency_overrides[get_current_session] = create_session_override("user1", 2)
-            client = TestClient(self.app)
+        self.app.dependency_overrides[get_current_session] = create_session_override("user1", 2, role="user")
+        client = TestClient(self.app)
 
-            response = client.get("/api/admin/users")
-            assert response.status_code == 403
-            assert "需要管理員權限" in response.json()["detail"]
+        response = client.get("/api/admin/users")
+        assert response.status_code == 403
+        assert "需要管理員權限" in response.json()["detail"]
 
     def test_admin_can_access_default_permissions(self):
         """管理員可以存取預設權限設定"""
-        with patch("ching_tech_os.api.user.is_admin", return_value=True):
-            self.app.dependency_overrides[get_current_session] = create_session_override("admin")
-            client = TestClient(self.app)
+        self.app.dependency_overrides[get_current_session] = create_session_override("admin", role="tenant_admin")
+        client = TestClient(self.app)
 
-            response = client.get("/api/admin/default-permissions")
-            assert response.status_code == 200
-            data = response.json()
-            assert "apps" in data
-            assert "knowledge" in data
-            assert "app_names" in data
+        response = client.get("/api/admin/default-permissions")
+        assert response.status_code == 200
+        data = response.json()
+        assert "apps" in data
+        assert "knowledge" in data
+        assert "app_names" in data
 
     def test_non_admin_cannot_access_default_permissions(self):
         """非管理員無法存取預設權限設定"""
-        with patch("ching_tech_os.api.user.is_admin", return_value=False):
-            self.app.dependency_overrides[get_current_session] = create_session_override("user1", 2)
-            client = TestClient(self.app)
+        self.app.dependency_overrides[get_current_session] = create_session_override("user1", 2, role="user")
+        client = TestClient(self.app)
 
-            response = client.get("/api/admin/default-permissions")
-            assert response.status_code == 403
+        response = client.get("/api/admin/default-permissions")
+        assert response.status_code == 403
 
 
 # ============================================================
@@ -146,16 +154,13 @@ class TestPermissionsUpdate:
 
     def test_admin_can_update_user_permissions(self):
         """管理員可以更新使用者權限"""
-        with patch("ching_tech_os.api.user.is_admin") as mock_is_admin, \
-             patch("ching_tech_os.api.user.get_user_by_id", new_callable=AsyncMock) as mock_get_user, \
+        with patch("ching_tech_os.api.user.get_user_by_id", new_callable=AsyncMock) as mock_get_user, \
              patch("ching_tech_os.api.user.update_user_permissions", new_callable=AsyncMock) as mock_update:
 
-            # admin 檢查時返回 True，目標使用者檢查時返回 False
-            mock_is_admin.side_effect = lambda username: username == "admin"
             mock_get_user.return_value = MOCK_NORMAL_USER
             mock_update.return_value = {"permissions": {"apps": {"terminal": True}}}
 
-            self.app.dependency_overrides[get_current_session] = create_session_override("admin")
+            self.app.dependency_overrides[get_current_session] = create_session_override("admin", role="tenant_admin")
             client = TestClient(self.app)
 
             response = client.patch(
@@ -168,43 +173,33 @@ class TestPermissionsUpdate:
 
     def test_non_admin_cannot_update_permissions(self):
         """非管理員無法更新權限"""
-        with patch("ching_tech_os.api.user.is_admin", return_value=False):
-            self.app.dependency_overrides[get_current_session] = create_session_override("user1", 2)
-            client = TestClient(self.app)
+        self.app.dependency_overrides[get_current_session] = create_session_override("user1", 2, role="user")
+        client = TestClient(self.app)
 
-            response = client.patch(
-                "/api/admin/users/3/permissions",
-                json={"apps": {"terminal": True}}
-            )
-            assert response.status_code == 403
+        response = client.patch(
+            "/api/admin/users/3/permissions",
+            json={"apps": {"terminal": True}}
+        )
+        assert response.status_code == 403
 
-    def test_cannot_update_admin_permissions(self):
-        """無法修改管理員的權限"""
-        with patch("ching_tech_os.api.user.is_admin") as mock_is_admin, \
-             patch("ching_tech_os.api.user.get_user_by_id", new_callable=AsyncMock) as mock_get_user:
+    def test_cannot_update_own_permissions(self):
+        """無法修改自己的權限"""
+        self.app.dependency_overrides[get_current_session] = create_session_override("admin", 1, role="tenant_admin")
+        client = TestClient(self.app)
 
-            # 當前使用者是 admin，目標使用者也是 admin
-            mock_is_admin.return_value = True
-            mock_get_user.return_value = MOCK_ADMIN_USER
-
-            self.app.dependency_overrides[get_current_session] = create_session_override("admin")
-            client = TestClient(self.app)
-
-            response = client.patch(
-                "/api/admin/users/1/permissions",
-                json={"apps": {"terminal": True}}
-            )
-            assert response.status_code == 400
-            assert "無法修改管理員的權限" in response.json()["detail"]
+        response = client.patch(
+            "/api/admin/users/1/permissions",
+            json={"apps": {"terminal": True}}
+        )
+        assert response.status_code == 403
+        assert "無法修改自己的權限" in response.json()["detail"]
 
     def test_update_nonexistent_user(self):
         """更新不存在的使用者應返回 404"""
-        with patch("ching_tech_os.api.user.is_admin", return_value=True), \
-             patch("ching_tech_os.api.user.get_user_by_id", new_callable=AsyncMock) as mock_get_user:
-
+        with patch("ching_tech_os.api.user.get_user_by_id", new_callable=AsyncMock) as mock_get_user:
             mock_get_user.return_value = None
 
-            self.app.dependency_overrides[get_current_session] = create_session_override("admin")
+            self.app.dependency_overrides[get_current_session] = create_session_override("admin", role="tenant_admin")
             client = TestClient(self.app)
 
             response = client.patch(
@@ -216,13 +211,10 @@ class TestPermissionsUpdate:
 
     def test_update_empty_permissions(self):
         """更新空的權限應返回 400"""
-        with patch("ching_tech_os.api.user.is_admin") as mock_is_admin, \
-             patch("ching_tech_os.api.user.get_user_by_id", new_callable=AsyncMock) as mock_get_user:
-
-            mock_is_admin.side_effect = lambda username: username == "admin"
+        with patch("ching_tech_os.api.user.get_user_by_id", new_callable=AsyncMock) as mock_get_user:
             mock_get_user.return_value = MOCK_NORMAL_USER
 
-            self.app.dependency_overrides[get_current_session] = create_session_override("admin")
+            self.app.dependency_overrides[get_current_session] = create_session_override("admin", role="tenant_admin")
             client = TestClient(self.app)
 
             response = client.patch(
@@ -246,12 +238,10 @@ class TestUserApi:
 
     def test_get_current_user_returns_permissions(self):
         """取得目前使用者應包含權限資訊"""
-        with patch("ching_tech_os.api.user.get_user_by_username", new_callable=AsyncMock) as mock_get, \
-             patch("ching_tech_os.api.user.is_admin", return_value=False):
-
+        with patch("ching_tech_os.api.user.get_user_by_username", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = MOCK_NORMAL_USER
 
-            self.app.dependency_overrides[get_current_session] = create_session_override("user1", 2)
+            self.app.dependency_overrides[get_current_session] = create_session_override("user1", 2, role="user")
             client = TestClient(self.app)
 
             response = client.get("/api/user/me")
@@ -262,20 +252,18 @@ class TestUserApi:
             assert data["is_admin"] is False
 
     def test_admin_user_has_full_permissions(self):
-        """管理員應有完整權限"""
-        with patch("ching_tech_os.api.user.get_user_by_username", new_callable=AsyncMock) as mock_get, \
-             patch("ching_tech_os.api.user.is_admin", return_value=True), \
-             patch("ching_tech_os.services.permissions.is_admin", return_value=True):
+        """平台管理員應有完整權限"""
+        mock_platform_admin = {**MOCK_ADMIN_USER, "role": "platform_admin"}
+        with patch("ching_tech_os.api.user.get_user_by_username", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_platform_admin
 
-            mock_get.return_value = MOCK_ADMIN_USER
-
-            self.app.dependency_overrides[get_current_session] = create_session_override("admin")
+            self.app.dependency_overrides[get_current_session] = create_session_override("admin", role="platform_admin")
             client = TestClient(self.app)
 
             response = client.get("/api/user/me")
             assert response.status_code == 200
             data = response.json()
             assert data["is_admin"] is True
-            # 管理員應有所有應用程式權限
+            # 平台管理員應有所有應用程式權限
             assert data["permissions"]["apps"]["terminal"] is True
             assert data["permissions"]["apps"]["code-editor"] is True

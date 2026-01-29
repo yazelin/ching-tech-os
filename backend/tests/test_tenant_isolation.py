@@ -385,9 +385,12 @@ class TestTenantAdmin:
             data = TenantAdminCreate(user_id=1, role="admin")
             result = await add_tenant_admin(MOCK_TENANT_1["id"], data)
 
-            assert result.user_id == 1
-            assert result.role == "admin"
-            assert result.id == mock_admin_id
+            # result 是 TenantAdminCreateResponse
+            assert result.success is True
+            assert result.admin is not None
+            assert result.admin.user_id == 1
+            assert result.admin.role == "admin"
+            assert result.admin.id == mock_admin_id
 
     @pytest.mark.asyncio
     async def test_add_admin_user_not_found(self):
@@ -488,8 +491,10 @@ class TestGetTenantUsage:
         }
         mock_conn.fetchval.side_effect = [5, 10, 50, 200]  # users, projects, ai_today, ai_month
 
-        with patch("ching_tech_os.services.tenant.get_connection") as mock_get_conn:
+        with patch("ching_tech_os.services.tenant.get_connection") as mock_get_conn, \
+             patch("ching_tech_os.services.tenant.calculate_tenant_storage", new_callable=AsyncMock) as mock_storage:
             mock_get_conn.return_value.__aenter__.return_value = mock_conn
+            mock_storage.return_value = 100
 
             result = await get_tenant_usage(MOCK_TENANT_1["id"])
 
@@ -507,7 +512,8 @@ class TestGetTenantUsage:
         mock_conn = AsyncMock()
         mock_conn.fetchrow.return_value = None
 
-        with patch("ching_tech_os.services.tenant.get_connection") as mock_get_conn:
+        with patch("ching_tech_os.services.tenant.get_connection") as mock_get_conn, \
+             patch("ching_tech_os.services.tenant.calculate_tenant_storage", new_callable=AsyncMock):
             mock_get_conn.return_value.__aenter__.return_value = mock_conn
 
             with pytest.raises(TenantNotFoundError):

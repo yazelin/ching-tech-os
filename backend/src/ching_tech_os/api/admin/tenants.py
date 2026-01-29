@@ -79,7 +79,8 @@ class LineGroupTenantResponse(BaseModel):
     new_tenant_id: str | None = None
 
 
-@router.get("/line-groups")
+@router.get("/bot-groups")
+@router.get("/line-groups", deprecated=True)
 async def list_all_bot_groups(
     limit: int = 50,
     offset: int = 0,
@@ -170,7 +171,8 @@ async def list_all_bot_groups(
         }
 
 
-@router.patch("/line-groups/{group_id}/tenant")
+@router.patch("/bot-groups/{group_id}/tenant")
+@router.patch("/line-groups/{group_id}/tenant", deprecated=True)
 async def update_line_group_tenant(
     group_id: str,
     request: LineGroupTenantUpdateRequest,
