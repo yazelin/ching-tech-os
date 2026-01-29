@@ -75,6 +75,7 @@ async def setup_telegram_webhook() -> None:
         return
 
     adapter = _get_adapter()
+    await adapter.ensure_bot_info()
     webhook_url = f"{settings.public_url}/api/bot/telegram/webhook"
 
     try:

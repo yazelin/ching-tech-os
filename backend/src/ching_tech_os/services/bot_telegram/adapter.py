@@ -27,6 +27,18 @@ class TelegramBotAdapter:
 
     def __init__(self, token: str):
         self.bot = Bot(token=token)
+        self._bot_username: str | None = None
+
+    @property
+    def bot_username(self) -> str | None:
+        """Bot 的 username（需先呼叫 ensure_bot_info 初始化）"""
+        return self._bot_username
+
+    async def ensure_bot_info(self) -> None:
+        """取得並快取 Bot 資訊（username 等）"""
+        if self._bot_username is None:
+            me = await self.bot.get_me()
+            self._bot_username = me.username
 
     # === BotAdapter ===
 
