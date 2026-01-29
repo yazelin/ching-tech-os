@@ -3,8 +3,12 @@
 供平台管理員（platform_admin）管理所有租戶。
 """
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 from ...models.auth import SessionData
 from ...models.tenant import (
@@ -891,7 +895,8 @@ async def test_tenant_telegram_bot(
             else:
                 return TelegramBotTestResponse(success=False, error=data.get("description", "未知錯誤"))
     except Exception as e:
-        return TelegramBotTestResponse(success=False, error=str(e))
+        logger.warning(f"Telegram Bot 測試連線失敗: {e}")
+        return TelegramBotTestResponse(success=False, error="連線失敗，請確認 Bot Token 是否正確")
 
 
 @router.delete("/{tenant_id}/telegram-bot", response_model=SuspendResponse)

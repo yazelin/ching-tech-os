@@ -1900,8 +1900,13 @@ const TenantAdminApp = (function () {
     const botToken = container.querySelector('#telegramBotToken').value;
     const adminChatId = container.querySelector('#telegramAdminChatId').value.trim();
 
+    const isConfigured = !!container.querySelector('.tenant-linebot-status.configured');
+    if (!isConfigured && !botToken) {
+      alert('首次設定請務必填寫 Bot Token');
+      return;
+    }
     if (!botToken && !adminChatId) {
-      alert('請至少填寫 Bot Token');
+      alert('請至少填寫一個欄位');
       return;
     }
 

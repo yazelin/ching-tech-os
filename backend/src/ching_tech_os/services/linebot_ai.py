@@ -1191,7 +1191,7 @@ async def build_system_prompt(
         if ctos_user_id:
             base_prompt += f"\nctos_user_id: {ctos_user_id}"
         else:
-            base_prompt += f"\nctos_user_id: （未關聯，無法進行專案更新操作）"
+            base_prompt += "\nctos_user_id: （未關聯，無法進行專案更新操作）"
 
     return base_prompt
 

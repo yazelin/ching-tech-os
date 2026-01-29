@@ -3,8 +3,11 @@
 供租戶管理員管理自己的租戶設定。
 """
 
+import logging
 import os
 import tempfile
+
+logger = logging.getLogger(__name__)
 from datetime import datetime, timedelta
 from pathlib import Path
 from uuid import UUID
@@ -1163,29 +1166,11 @@ async def delete_linebot_settings(
 # ============================================================
 
 
-class TelegramBotSettingsUpdate(BaseModel):
-    """更新 Telegram Bot 設定請求"""
-    bot_token: str | None = None
-    admin_chat_id: str | None = None
-
-
-class TelegramBotSettingsResponse(BaseModel):
-    """Telegram Bot 設定回應（不包含敏感資訊）"""
-    configured: bool
-    admin_chat_id: str | None = None
-
-
-class TelegramBotTestResponse(BaseModel):
-    """Telegram Bot 測試回應"""
-    success: bool
-    bot_info: dict | None = None
-    error: str | None = None
-
-
-class TelegramBotDeleteResponse(BaseModel):
-    """Telegram Bot 刪除回應"""
-    success: bool
-    message: str
+from ..models.tenant import (
+    TelegramBotSettingsUpdate,
+    TelegramBotSettingsResponse,
+    TelegramBotTestResponse,
+)
 
 
 @router.get("/telegram-bot", response_model=TelegramBotSettingsResponse)
@@ -1306,16 +1291,17 @@ async def test_telegram_bot_connection(
                     error=data.get("description", "未知錯誤"),
                 )
     except Exception as e:
+        logger.warning(f"Telegram Bot 測試連線失敗: {e}")
         return TelegramBotTestResponse(
             success=False,
-            error=str(e),
+            error="連線失敗，請確認 Bot Token 是否正確",
         )
 
 
-@router.delete("/telegram-bot", response_model=TelegramBotDeleteResponse)
+@router.delete("/telegram-bot", response_model=LineBotDeleteResponse)
 async def delete_telegram_bot_settings(
     session: SessionData = Depends(get_current_session),
-) -> TelegramBotDeleteResponse:
+) -> LineBotDeleteResponse:
     """清除租戶 Telegram Bot 設定"""
     from ..services.tenant import update_tenant_telegram_settings
 
@@ -1339,4 +1325,4 @@ async def delete_telegram_bot_settings(
             detail="清除失敗",
         )
 
-    return TelegramBotDeleteResponse(success=True, message="Telegram Bot 設定已清除")
+    return LineBotDeleteResponse(success=True, message="Telegram Bot 設定已清除")
