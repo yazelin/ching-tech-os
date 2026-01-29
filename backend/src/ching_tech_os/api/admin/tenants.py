@@ -80,7 +80,7 @@ class LineGroupTenantResponse(BaseModel):
 
 
 @router.get("/line-groups")
-async def list_all_line_groups(
+async def list_all_bot_groups(
     limit: int = 50,
     offset: int = 0,
     tenant_id: str | None = None,
@@ -116,13 +116,13 @@ async def list_all_line_groups(
         if tenant_uuid:
             # 過濾特定租戶
             total = await conn.fetchval(
-                "SELECT COUNT(*) FROM line_groups WHERE tenant_id = $1",
+                "SELECT COUNT(*) FROM bot_groups WHERE tenant_id = $1",
                 tenant_uuid,
             )
             rows = await conn.fetch(
                 """
                 SELECT g.*, t.name as tenant_name
-                FROM line_groups g
+                FROM bot_groups g
                 LEFT JOIN tenants t ON g.tenant_id = t.id
                 WHERE g.tenant_id = $1
                 ORDER BY g.updated_at DESC
@@ -134,11 +134,11 @@ async def list_all_line_groups(
             )
         else:
             # 列出所有租戶的群組
-            total = await conn.fetchval("SELECT COUNT(*) FROM line_groups")
+            total = await conn.fetchval("SELECT COUNT(*) FROM bot_groups")
             rows = await conn.fetch(
                 """
                 SELECT g.*, t.name as tenant_name
-                FROM line_groups g
+                FROM bot_groups g
                 LEFT JOIN tenants t ON g.tenant_id = t.id
                 ORDER BY g.updated_at DESC
                 LIMIT $1 OFFSET $2
@@ -217,7 +217,7 @@ async def update_line_group_tenant(
 
     async with get_connection() as conn:
         group = await conn.fetchrow(
-            "SELECT id, tenant_id FROM line_groups WHERE id = $1",
+            "SELECT id, tenant_id FROM bot_groups WHERE id = $1",
             group_uuid,
         )
 

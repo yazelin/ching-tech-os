@@ -882,9 +882,9 @@ async def get_conversation_context(
                 SELECT m.content, m.is_from_bot, u.display_name,
                        m.message_type, m.message_id as line_message_id,
                        f.nas_path, f.file_name, f.file_size, f.file_type as actual_file_type
-                FROM line_messages m
-                LEFT JOIN line_users u ON m.line_user_id = u.id
-                LEFT JOIN line_files f ON f.message_id = m.id
+                FROM bot_messages m
+                LEFT JOIN bot_users u ON m.line_user_id = u.id
+                LEFT JOIN bot_files f ON f.message_id = m.id
                 WHERE m.line_group_id = $1
                   AND ($3::uuid IS NULL OR m.id != $3)
                   AND m.message_type IN ('text', 'image', 'file')
@@ -903,9 +903,9 @@ async def get_conversation_context(
                 SELECT m.content, m.is_from_bot, u.display_name,
                        m.message_type, m.message_id as line_message_id,
                        f.nas_path, f.file_name, f.file_size, f.file_type as actual_file_type
-                FROM line_messages m
-                LEFT JOIN line_users u ON m.line_user_id = u.id
-                LEFT JOIN line_files f ON f.message_id = m.id
+                FROM bot_messages m
+                LEFT JOIN bot_users u ON m.line_user_id = u.id
+                LEFT JOIN bot_files f ON f.message_id = m.id
                 WHERE u.line_user_id = $1
                   AND ($3::uuid IS NULL OR m.id != $3)
                   AND m.line_group_id IS NULL
@@ -1169,7 +1169,7 @@ async def build_system_prompt(
             group = await conn.fetchrow(
                 """
                 SELECT g.name, g.project_id, p.name as project_name
-                FROM line_groups g
+                FROM bot_groups g
                 LEFT JOIN projects p ON g.project_id = p.id
                 WHERE g.id = $1
                 """,

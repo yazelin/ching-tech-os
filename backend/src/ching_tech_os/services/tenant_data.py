@@ -33,8 +33,8 @@ class TenantExportService:
         "inventory_items",
         "ai_agents",
         "ai_prompts",
-        "line_groups",
-        "line_users",
+        "bot_groups",
+        "bot_users",
         # 有外鍵依賴的資料
         "projects",
         "project_members",
@@ -44,7 +44,7 @@ class TenantExportService:
         "project_links",
         "project_delivery_schedules",
         "inventory_transactions",
-        "line_messages",
+        "bot_messages",
         "ai_chats",
         "public_share_links",
         "tenant_admins",
@@ -180,8 +180,8 @@ class TenantImportService:
         "inventory_items",
         "ai_agents",
         "ai_prompts",
-        "line_groups",
-        "line_users",
+        "bot_groups",
+        "bot_users",
         # 2. 有外鍵依賴的資料
         "projects",
         "project_members",
@@ -191,7 +191,7 @@ class TenantImportService:
         "project_links",
         "project_delivery_schedules",
         "inventory_transactions",
-        "line_messages",
+        "bot_messages",
         "ai_chats",
         "public_share_links",
         "tenant_admins",
@@ -231,9 +231,9 @@ class TenantImportService:
             "project_id": "projects",
             "vendor_id": "vendors",
         },
-        "line_messages": {
-            "line_group_id": "line_groups",
-            "line_user_id": "line_users",
+        "bot_messages": {
+            "line_group_id": "bot_groups",
+            "line_user_id": "bot_users",
         },
         "ai_chats": {
             "user_id": "users",
