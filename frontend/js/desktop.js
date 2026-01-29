@@ -19,7 +19,7 @@ const DesktopModule = (function() {
     { id: 'agent-settings', name: 'Agent 設定', icon: 'mdi-tune-variant' },
     { id: 'ai-log', name: 'AI Log', icon: 'mdi-history' },
     { id: 'knowledge-base', name: '知識庫', icon: 'mdi-book-open-page-variant' },
-    { id: 'linebot', name: 'Line Bot', icon: 'mdi-message-text' },
+    { id: 'linebot', name: 'Bot 管理', icon: 'mdi-message-text' },
     { id: 'memory-manager', name: '記憶管理', icon: 'mdi-brain' },
     { id: 'share-manager', name: '分享管理', icon: 'mdi-share-variant' },
     { id: 'tenant-admin', name: '租戶管理', icon: 'office-building' },
@@ -193,7 +193,7 @@ const DesktopModule = (function() {
   }
 
   /**
-   * Open Line Bot management window
+   * Open Bot 管理 window
    */
   function openLineBotWindow() {
     const existingWindow = WindowModule.getWindowByAppId('linebot');
@@ -203,7 +203,7 @@ const DesktopModule = (function() {
     }
 
     WindowModule.createWindow({
-      title: 'Line Bot',
+      title: 'Bot 管理',
       icon: 'mdi-message-text',
       width: 900,
       height: 600,

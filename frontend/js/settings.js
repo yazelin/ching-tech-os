@@ -20,7 +20,7 @@ const SettingsApp = (function () {
     'agent-settings': 'Agent 設定',
     'ai-log': 'AI Log',
     'knowledge-base': '知識庫',
-    'linebot': 'Line Bot',
+    'linebot': 'Bot 管理',
     'settings': '系統設定',
   };
 

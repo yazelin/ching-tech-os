@@ -34,6 +34,7 @@ ChingTech OS 是擎添工業內部使用的整合式工作平台，以 Web 技�
 | 物料/庫存管理 | 完成 | 物料主檔（型號、存放庫位）、進出貨記錄、庫存查詢、盤點調整、低庫存警示、訂購記錄 |
 | 記憶管理 | 完成 | Line Bot 群組/個人自訂記憶、記憶啟用/停用 |
 | Line Bot | 完成 | 群組管理、訊息記錄、用戶綁定、AI 對話整合、MCP 工具、NAS 檔案搜尋與發送、AI 圖片生成（含 Hugging Face FLUX 備用）、文件讀取、群組 @ 提及回覆、回覆引用、自訂記憶、物料/庫存管理、簡報生成、MD2PPT/MD2DOC 文件轉換 |
+| Telegram Bot | 完成 | Telegram 私訊/群組 AI 對話、帳號綁定、圖片/檔案接收、回覆引用、與 Line Bot 共用 MCP 工具和 AI Agent |
 | 訊息中心 | 完成 | 系統訊息、登入記錄追蹤、未讀狀態管理 |
 | 使用者管理 | 完成 | 使用者列表、功能權限設定（管理員） |
 | 系統設定 | 完成 | 亮色/暗色主題切換 |
@@ -130,6 +131,7 @@ python3 -m http.server 8080
 - SMB/CIFS (NAS 檔案存取)
 - Alembic (資料庫 migration)
 - Line Bot SDK v3 (Line Messaging API)
+- python-telegram-bot 22.x (Telegram Bot API)
 - Claude CLI (AI 對話處理)
 - MCP Server (AI 工具整合)
 
@@ -188,6 +190,7 @@ ching-tech-os/
 | [docs/smb-nas-architecture.md](docs/smb-nas-architecture.md) | SMB/NAS 檔案系統架構 |
 | [docs/file-manager.md](docs/file-manager.md) | 檔案管理器設計 |
 | [docs/linebot.md](docs/linebot.md) | Line Bot 整合設計 |
+| [docs/telegram-bot.md](docs/telegram-bot.md) | Telegram Bot 整合設計 |
 | [docs/mcp-server.md](docs/mcp-server.md) | MCP Server（AI 工具） |
 
 ### 部署與安全
