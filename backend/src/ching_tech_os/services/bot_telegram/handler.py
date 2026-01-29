@@ -218,14 +218,38 @@ def _should_respond_in_group(message, bot_username: str | None) -> bool:
 
 
 def _extract_reply_from_message(reply) -> str:
-    """從 Telegram message 物件直接取得回覆內容（不查 DB）"""
-    # 文字或圖片 caption
-    text = reply.text or reply.caption
+    """從 Telegram message 物件直接取得回覆內容（不查 DB）
+
+    支援文字、圖片（含 caption）和檔案訊息。
+    圖片和檔案無法在此下載，僅標記類型讓 AI 理解上下文。
+    """
+    parts = []
+
+    # 圖片
+    if reply.photo:
+        caption = reply.caption or ""
+        if caption:
+            parts.append(f"[回覆圖片，附文: {caption}]")
+        else:
+            parts.append("[回覆圖片]")
+
+    # 檔案
+    elif reply.document:
+        file_name = reply.document.file_name or "未知檔案"
+        caption = reply.caption or ""
+        if caption:
+            parts.append(f"[回覆檔案: {file_name}，附文: {caption}]")
+        else:
+            parts.append(f"[回覆檔案: {file_name}]")
+
+    # 文字
+    text = reply.text
     if text:
         if len(text) > 500:
             text = text[:500] + "..."
-        return f"[回覆訊息: {text}]\n"
-    return ""
+        parts.append(f"[回覆訊息: {text}]")
+
+    return "\n".join(parts) + "\n" if parts else ""
 
 
 async def _get_reply_context(message, tenant_id: UUID) -> str:
