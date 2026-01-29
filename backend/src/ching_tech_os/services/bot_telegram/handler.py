@@ -218,7 +218,7 @@ def _should_respond_in_group(message, bot_username: str | None) -> bool:
     return False
 
 
-REPLY_IMAGE_DIR = "/tmp/ching-tech-os/reply-images"
+REPLY_IMAGE_DIR = "/tmp/bot-images"
 os.makedirs(REPLY_IMAGE_DIR, exist_ok=True)
 
 
