@@ -1178,11 +1178,17 @@ async def update_tenant_telegram_settings(
 
         # 更新 Telegram Bot 設定
         if bot_token:
+            # 設定新的 Bot Token
             settings_data["telegram_bot_token"] = encrypt_credential(bot_token)
+            settings_data["telegram_admin_chat_id"] = admin_chat_id
+        elif settings_data.get("telegram_bot_token"):
+            # 已有自訂 Bot Token，僅更新 admin_chat_id
+            if admin_chat_id is not None:
+                settings_data["telegram_admin_chat_id"] = admin_chat_id
         else:
+            # 沒有自訂 Bot Token，清除所有 Telegram 設定
             settings_data["telegram_bot_token"] = None
-
-        settings_data["telegram_admin_chat_id"] = admin_chat_id
+            settings_data["telegram_admin_chat_id"] = None
 
         await conn.execute(
             """

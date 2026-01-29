@@ -1831,7 +1831,32 @@ const TenantAdminApp = (function () {
 
       formEl.style.display = '';
 
+      // 未設定自訂 Bot Token 時，禁用 Admin Chat ID
+      const adminInput = container.querySelector('#telegramAdminChatId');
+      const adminHint = adminInput?.parentElement?.querySelector('.form-hint');
+      if (!response.configured) {
+        adminInput.disabled = true;
+        adminInput.placeholder = '需先設定 Bot Token';
+        if (adminHint) adminHint.textContent = '僅自訂 Bot 可設定 Admin Chat ID';
+      }
+
       if (bindEvents) {
+        // 動態啟用：輸入 Bot Token 時啟用 Admin Chat ID
+        container.querySelector('#telegramBotToken')?.addEventListener('input', (e) => {
+          if (!response.configured) {
+            if (e.target.value) {
+              adminInput.disabled = false;
+              adminInput.placeholder = '管理員 Chat ID';
+              if (adminHint) adminHint.textContent = '用於接收系統通知';
+            } else {
+              adminInput.disabled = true;
+              adminInput.placeholder = '需先設定 Bot Token';
+              adminInput.value = '';
+              if (adminHint) adminHint.textContent = '僅自訂 Bot 可設定 Admin Chat ID';
+            }
+          }
+        });
+
         container.querySelector('#testTelegramBotBtn').addEventListener('click', () => testTelegramBotConnection(container));
         container.querySelector('#saveTelegramBotBtn').addEventListener('click', () => saveTelegramBotSettings(container));
         container.querySelector('#clearTelegramBotBtn').addEventListener('click', () => clearTelegramBotSettings(container));
@@ -1900,8 +1925,13 @@ const TenantAdminApp = (function () {
     const botToken = container.querySelector('#telegramBotToken').value;
     const adminChatId = container.querySelector('#telegramAdminChatId').value.trim();
 
+    const isConfigured = !!container.querySelector('.linebot-status-configured');
     if (!botToken && !adminChatId) {
       alert('請至少填寫一個欄位');
+      return;
+    }
+    if (!isConfigured && !botToken && adminChatId) {
+      alert('需先設定 Bot Token 才能設定 Admin Chat ID');
       return;
     }
 

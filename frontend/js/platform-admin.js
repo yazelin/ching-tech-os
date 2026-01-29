@@ -1540,8 +1540,8 @@ const PlatformAdminApp = (function () {
         </div>
         <div class="form-group">
           <label for="tenantTelegramAdminChatId">Admin Chat ID</label>
-          <input type="text" id="tenantTelegramAdminChatId" class="input" placeholder="管理員 Chat ID" value="${settings.admin_chat_id || ''}" />
-          <span class="form-hint">用於接收系統通知</span>
+          <input type="text" id="tenantTelegramAdminChatId" class="input" placeholder="${isConfigured ? '管理員 Chat ID' : '需先設定 Bot Token'}" value="${settings.admin_chat_id || ''}" ${isConfigured ? '' : 'disabled'} />
+          <span class="form-hint">${isConfigured ? '用於接收系統通知' : '僅自訂 Bot 可設定 Admin Chat ID'}</span>
         </div>
 
         <div class="tenant-linebot-actions">
@@ -1564,6 +1564,21 @@ const PlatformAdminApp = (function () {
 
       <div class="tenant-linebot-test-result" id="tenantTelegramTestResult" style="display: none;"></div>
     `;
+
+    // 動態啟用 Admin Chat ID：輸入 Bot Token 時啟用
+    if (!isConfigured) {
+      container.querySelector('#tenantTelegramBotToken')?.addEventListener('input', (e) => {
+        const adminInput = container.querySelector('#tenantTelegramAdminChatId');
+        if (e.target.value) {
+          adminInput.disabled = false;
+          adminInput.placeholder = '管理員 Chat ID';
+        } else {
+          adminInput.disabled = true;
+          adminInput.placeholder = '需先設定 Bot Token';
+          adminInput.value = '';
+        }
+      });
+    }
 
     // 測試連線
     container.querySelector('#testTenantTelegramBtn')?.addEventListener('click', async () => {
@@ -1613,8 +1628,13 @@ const PlatformAdminApp = (function () {
       const botToken = container.querySelector('#tenantTelegramBotToken').value;
       const adminChatId = container.querySelector('#tenantTelegramAdminChatId').value.trim();
 
+      const isConfigured = !!container.querySelector('.tenant-linebot-status.configured');
       if (!botToken && !adminChatId) {
         alert('請至少填寫一個欄位');
+        return;
+      }
+      if (!isConfigured && !botToken && adminChatId) {
+        alert('需先設定 Bot Token 才能設定 Admin Chat ID');
         return;
       }
 
