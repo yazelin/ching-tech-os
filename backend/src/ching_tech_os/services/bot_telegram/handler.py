@@ -483,7 +483,9 @@ async def _handle_text(
                         "1. 登入 CTOS 系統\n"
                         "2. 進入 Bot 管理頁面\n"
                         "3. 點擊「綁定帳號」產生驗證碼\n"
-                        "4. 將 6 位數驗證碼發送給我完成綁定",
+                        "4. 將 6 位數驗證碼發送給我完成綁定\n\n"
+                        f"📋 您的 Telegram ID：{chat_id}\n"
+                        "（設定 Admin Chat ID 時可使用此 ID）",
                     )
                 # 群組：未綁定用戶靜默忽略
             # group_not_allowed：靜默忽略
