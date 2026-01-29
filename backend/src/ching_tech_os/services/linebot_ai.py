@@ -374,7 +374,7 @@ async def process_message_with_ai(
             return error_msg
 
         # 從 Agent 取得 model 和基礎 prompt
-        model = agent["model"].replace("claude-", "")  # claude-sonnet -> sonnet
+        model = agent.get("model", "opus").replace("claude-", "")  # claude-sonnet -> sonnet
         # 安全取得 system_prompt（處理 None 和非 dict 情況）
         system_prompt_data = agent.get("system_prompt")
         logger.debug(f"system_prompt type: {type(system_prompt_data)}, value preview: {repr(system_prompt_data)[:100] if system_prompt_data else 'None'}")

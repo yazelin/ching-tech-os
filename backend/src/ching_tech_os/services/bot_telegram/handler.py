@@ -674,15 +674,27 @@ async def _handle_text_with_ai(
         logger.error(f"取得對話歷史失敗: {e}", exc_info=True)
 
     # 1. 取得 Agent 設定
-    agent = await get_linebot_agent(is_group=is_group)
+    agent = await get_linebot_agent(is_group=is_group, tenant_id=tenant_id)
     if not agent:
         logger.error("找不到 Agent 設定")
         await adapter.send_text(chat_id, "系統尚未設定 AI Agent，請聯繫管理員。")
         return
 
-    model = agent.get("model", "sonnet")
-    base_prompt = agent.get("system_prompt", {}).get("content", "")
+    # 從 Agent 取得 model 和基礎 prompt（與 Line Bot 對齊）
+    model = agent.get("model", "opus").replace("claude-", "")
+    system_prompt_data = agent.get("system_prompt")
+    if isinstance(system_prompt_data, dict):
+        base_prompt = system_prompt_data.get("content", "")
+    else:
+        base_prompt = ""
+        if system_prompt_data is not None:
+            logger.warning(f"system_prompt 不是 dict: {type(system_prompt_data)}")
     builtin_tools = agent.get("tools") or []
+
+    if not base_prompt:
+        logger.error("Agent 沒有設定 system_prompt")
+        await adapter.send_text(chat_id, "⚠️ AI 設定錯誤：Agent 沒有設定 system_prompt")
+        return
 
     # 2. 取得用戶權限（用於工具過濾和 system_prompt）
     user_role = "user"
