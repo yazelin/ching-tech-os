@@ -217,6 +217,66 @@ def _should_respond_in_group(message, bot_username: str | None) -> bool:
     return False
 
 
+async def _get_reply_context(message, tenant_id: UUID) -> str:
+    """取得被回覆訊息的上下文
+
+    如果用戶回覆了一則舊訊息，查詢該訊息內容並組裝成上下文。
+    支援文字、圖片和檔案訊息。
+    """
+    reply = message.reply_to_message
+    if not reply:
+        return ""
+
+    reply_msg_id = f"tg_{reply.message_id}"
+
+    # 查 DB 取得被回覆訊息
+    try:
+        async with get_connection() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT m.content, m.message_type, f.nas_path, f.file_name
+                FROM bot_messages m
+                LEFT JOIN bot_files f ON f.message_id = m.id
+                WHERE m.message_id = $1
+                """,
+                reply_msg_id,
+            )
+    except Exception as e:
+        logger.error(f"查詢被回覆訊息失敗: {e}", exc_info=True)
+        return ""
+
+    if not row:
+        # DB 沒有記錄，嘗試從 reply message 本身取得
+        if reply.text:
+            return f"[回覆訊息: {reply.text}]\n"
+        return ""
+
+    msg_type = row["message_type"]
+    content = row["content"]
+    nas_path = row["nas_path"]
+
+    if msg_type == "image" and nas_path:
+        from ..linebot import ensure_temp_image
+        temp_path = await ensure_temp_image(reply_msg_id, nas_path, tenant_id=tenant_id)
+        if temp_path:
+            return f"[回覆圖片: {temp_path}]\n"
+
+    if msg_type == "file" and nas_path and row["file_name"]:
+        from ..linebot import ensure_temp_file
+        from ..bot.media import is_readable_file
+        if is_readable_file(row["file_name"]):
+            temp_path = await ensure_temp_file(
+                reply_msg_id, nas_path, row["file_name"], tenant_id=tenant_id,
+            )
+            if temp_path:
+                return f"[回覆檔案: {temp_path}]\n"
+
+    if content:
+        return f"[回覆訊息: {content}]\n"
+
+    return ""
+
+
 def _strip_bot_mention(text: str, bot_username: str | None) -> str:
     """移除訊息中的 @Bot mention，保留實際內容"""
     if bot_username:
@@ -353,6 +413,11 @@ async def _handle_text(
                 # 群組：未綁定用戶靜默忽略
             # group_not_allowed：靜默忽略
             return
+
+    # 取得回覆上下文
+    reply_context = await _get_reply_context(message, tenant_id)
+    if reply_context:
+        text = reply_context + text
 
     # AI 對話
     try:
