@@ -641,7 +641,62 @@ async def _handle_text_with_ai(
     ]
     all_tools = builtin_tools + mcp_tools + nanobanana_tools + ["Read"]
 
-    # 4. 呼叫 AI（含對話歷史）
+    # 4. 建立進度通知 callback
+    progress_message_id: str | None = None
+    tool_status_lines: list[dict] = []
+
+    async def _on_tool_start(tool_name: str, tool_input: dict) -> None:
+        """Tool 開始執行時的回調：送出或更新進度通知"""
+        nonlocal progress_message_id
+        try:
+            # 格式化輸入參數（簡短顯示）
+            input_str = ""
+            if tool_input:
+                items = list(tool_input.items())[:2]
+                input_str = ", ".join(f"{k}={repr(v)[:30]}" for k, v in items)
+                if len(tool_input) > 2:
+                    input_str += ", ..."
+
+            status_line = f"🔧 {tool_name}"
+            if input_str:
+                status_line += f"\n   └ {input_str}"
+            status_line += "\n   ⏳ 執行中..."
+
+            tool_status_lines.append({"name": tool_name, "status": "running", "line": status_line})
+
+            full_text = "🤖 AI 處理中\n\n" + "\n\n".join(t["line"] for t in tool_status_lines)
+
+            if progress_message_id is None:
+                sent = await adapter.send_progress(chat_id, full_text)
+                progress_message_id = sent.message_id
+            else:
+                await adapter.update_progress(chat_id, progress_message_id, full_text)
+        except Exception as e:
+            logger.debug(f"進度通知（tool_start）失敗: {e}")
+
+    async def _on_tool_end(tool_name: str, result: dict) -> None:
+        """Tool 執行完成時的回調：更新進度通知"""
+        try:
+            duration_ms_val = result.get("duration_ms")
+            if duration_ms_val is not None:
+                duration_str = f"{duration_ms_val}ms" if duration_ms_val < 1000 else f"{duration_ms_val / 1000:.1f}s"
+            else:
+                duration_str = "完成"
+
+            # 更新對應 tool 的狀態（找最後一個同名且 running 的）
+            for tool in tool_status_lines:
+                if tool["name"] == tool_name and tool["status"] == "running":
+                    tool["status"] = "done"
+                    tool["line"] = tool["line"].replace("⏳ 執行中...", f"✅ 完成 ({duration_str})")
+                    break
+
+            if progress_message_id:
+                full_text = "🤖 AI 處理中\n\n" + "\n\n".join(t["line"] for t in tool_status_lines)
+                await adapter.update_progress(chat_id, progress_message_id, full_text)
+        except Exception as e:
+            logger.debug(f"進度通知（tool_end）失敗: {e}")
+
+    # 呼叫 AI（含對話歷史和進度通知）
     context_type = "telegram-group" if is_group else "telegram-personal"
     start_time = time.time()
     response = await call_claude(
@@ -651,8 +706,17 @@ async def _handle_text_with_ai(
         system_prompt=system_prompt,
         timeout=480,
         tools=all_tools,
+        on_tool_start=_on_tool_start,
+        on_tool_end=_on_tool_end,
     )
     duration_ms = int((time.time() - start_time) * 1000)
+
+    # 刪除進度通知訊息
+    if progress_message_id:
+        try:
+            await adapter.finish_progress(chat_id, progress_message_id)
+        except Exception as e:
+            logger.debug(f"刪除進度通知失敗: {e}")
 
     # 4.5 記錄 AI Log
     if message_uuid:
