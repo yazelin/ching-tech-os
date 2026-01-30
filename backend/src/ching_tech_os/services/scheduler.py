@@ -12,6 +12,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
+from ..config import settings
 from ..database import get_connection
 
 logger = logging.getLogger(__name__)
@@ -205,6 +206,45 @@ async def cleanup_ai_images():
         logger.error(f"清理 AI 圖片失敗: {e}")
 
 
+async def check_telegram_webhook_health():
+    """
+    檢查 Telegram Webhook 健康狀態
+    若偵測到錯誤或有 pending updates，重新設定 webhook
+    """
+    if not settings.telegram_bot_token:
+        return
+
+    try:
+        from telegram import Bot
+
+        bot = Bot(token=settings.telegram_bot_token)
+        info = await bot.get_webhook_info()
+
+        if info.last_error_date or info.pending_update_count > 0:
+            logger.warning(
+                f"Telegram Webhook 異常: "
+                f"error={info.last_error_message}, "
+                f"pending={info.pending_update_count}"
+            )
+
+            # 刪除並重設 webhook 以重置退避計時器
+            await bot.delete_webhook()
+
+            kwargs = {
+                "url": f"{settings.public_url}/api/bot/telegram/webhook"
+            }
+            if settings.telegram_webhook_secret:
+                kwargs["secret_token"] = settings.telegram_webhook_secret
+
+            await bot.set_webhook(**kwargs)
+            logger.info("Telegram Webhook 已重新設定")
+        else:
+            logger.debug("Telegram Webhook 狀態正常")
+
+    except Exception as e:
+        logger.error(f"檢查 Telegram Webhook 失敗: {e}")
+
+
 def start_scheduler():
     """
     啟動排程器
@@ -251,6 +291,15 @@ def start_scheduler():
         CronTrigger(hour=4, minute=30),
         id='cleanup_ai_images',
         name='清理 AI 生成圖片',
+        replace_existing=True
+    )
+
+    # 每 5 分鐘檢查 Telegram Webhook 健康狀態
+    scheduler.add_job(
+        check_telegram_webhook_health,
+        IntervalTrigger(minutes=5),
+        id='check_telegram_webhook_health',
+        name='檢查 Telegram Webhook',
         replace_existing=True
     )
 
