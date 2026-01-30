@@ -2207,17 +2207,25 @@ async def search_nas_files(
     if not allowed:
         return f"❌ {error_msg}"
 
-    # 此工具搜尋的是公司共用專案區（projects_mount_path），不是租戶隔離區
-    # 公司專案檔案是跨租戶共用的，因此不需要 tenant_id 過濾
+    # 此工具搜尋的是公司共用區，不是租戶隔離區
+    # 公司共用檔案是跨租戶共用的，因此不需要 tenant_id 過濾
     _tid = _get_tenant_id(ctos_tenant_id)  # noqa: F841 保留以備日後需要
     from pathlib import Path
     from ..config import settings
 
-    # 取得專案掛載點路徑
-    projects_path = Path(settings.projects_mount_path)
+    # 搜尋來源定義（shared zone 的子來源）
+    # TODO: 未來可依使用者權限過濾可搜尋的來源
+    search_sources = {
+        "projects": Path(settings.projects_mount_path),
+        "circuits": Path(settings.circuits_mount_path),
+    }
 
-    if not projects_path.exists():
-        return f"錯誤：掛載點 {settings.projects_mount_path} 不存在或未掛載"
+    # 過濾出實際存在的掛載點
+    available_sources = {
+        name: path for name, path in search_sources.items() if path.exists()
+    }
+    if not available_sources:
+        return "錯誤：沒有可用的搜尋來源掛載點"
 
     # 解析關鍵字（大小寫不敏感）
     keyword_list = [k.strip().lower() for k in keywords.split(",") if k.strip()]
@@ -2229,46 +2237,132 @@ async def search_nas_files(
     if file_types:
         type_list = [t.strip().lower().lstrip(".") for t in file_types.split(",") if t.strip()]
 
-    # 搜尋檔案
-    matched_files = []
-    try:
-        for file_path in projects_path.rglob("*"):
-            if not file_path.is_file():
+    # 清理關鍵字中的 find glob 特殊字元（避免非預期匹配）
+    import re
+    def _sanitize_for_find(s: str) -> str:
+        return re.sub(r'[\[\]?*\\]', '', s)
+    keyword_list = [_sanitize_for_find(kw) for kw in keyword_list]
+    keyword_list = [kw for kw in keyword_list if kw]  # 移除清理後變空的關鍵字
+    if not keyword_list:
+        return "錯誤：請提供有效的關鍵字"
+
+    # 兩階段搜尋：先淺層找目錄，再深入匹配的目錄搜尋檔案
+    # 使用 asyncio subprocess 避免阻塞 event loop
+    source_paths = [str(p) for p in available_sources.values()]
+    source_name_map = {str(p): name for name, p in available_sources.items()}
+
+    async def _run_find(args: list[str], timeout: int = 30) -> str:
+        """非同步執行 find 指令"""
+        proc = None
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *args,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+            return stdout.decode("utf-8", errors="replace").strip()
+        except (asyncio.TimeoutError, OSError):
+            if proc:
+                try:
+                    proc.kill()
+                except ProcessLookupError:
+                    pass
+            return ""
+
+    async def _find_matching_dirs(max_depth: int) -> list[str]:
+        """用 find 在淺層找出名稱匹配任一關鍵字的目錄"""
+        # 對每個 source × keyword 平行執行 find
+        tasks = []
+        for source in source_paths:
+            for kw in keyword_list:
+                args = ["find", source, "-maxdepth", str(max_depth), "-type", "d", "-iname", f"*{kw}*"]
+                tasks.append(_run_find(args, timeout=30))
+
+        results = await asyncio.gather(*tasks)
+        dirs = set()
+        for output in results:
+            for line in output.split("\n"):
+                if line:
+                    dirs.add(line)
+        return sorted(dirs)
+
+    async def _search_in_dirs(dirs: list[str]) -> list[dict]:
+        """在指定目錄中用 find 搜尋符合條件的檔案"""
+        if not dirs:
+            return []
+
+        args = ["find"] + dirs + ["-type", "f"]
+        # 關鍵字過濾（所有關鍵字都要匹配路徑）
+        for kw in keyword_list:
+            args.extend(["-ipath", f"*{kw}*"])
+        # 檔案類型過濾
+        if type_list:
+            args.append("(")
+            for i, t in enumerate(type_list):
+                if i > 0:
+                    args.append("-o")
+                args.extend(["-iname", f"*.{t}"])
+            args.append(")")
+
+        output = await _run_find(args, timeout=120)
+        if not output:
+            return []
+
+        files = []
+        seen = set()
+        for line in output.split("\n"):
+            if not line or line in seen:
+                continue
+            seen.add(line)
+
+            fp = Path(line)
+            # 判斷屬於哪個來源
+            source_name = None
+            source_path = None
+            for sp, sn in source_name_map.items():
+                if line.startswith(sp):
+                    source_name = sn
+                    source_path = sp
+                    break
+            if not source_name:
                 continue
 
-            # 取得相對路徑（用於匹配和顯示）
-            rel_path = file_path.relative_to(projects_path)
-            rel_path_str = str(rel_path)
-            rel_path_lower = rel_path_str.lower()
+            rel_path_str = line[len(source_path):].lstrip("/")
 
-            # 關鍵字匹配（所有關鍵字都要匹配路徑）
-            if not all(kw in rel_path_lower for kw in keyword_list):
-                continue
-
-            # 檔案類型匹配
-            if type_list:
-                suffix = file_path.suffix.lower().lstrip(".")
-                if suffix not in type_list:
-                    continue
-
-            # 取得檔案資訊
             try:
-                stat = file_path.stat()
+                stat = fp.stat()
                 size = stat.st_size
                 modified = datetime.fromtimestamp(stat.st_mtime)
             except OSError:
                 size = 0
                 modified = None
 
-            matched_files.append({
-                "path": f"shared://{rel_path_str}",
-                "name": file_path.name,
+            files.append({
+                "path": f"shared://{source_name}/{rel_path_str}",
+                "name": fp.name,
                 "size": size,
                 "modified": modified,
             })
-
-            if len(matched_files) >= limit:
+            if len(files) >= limit:
                 break
+
+        return files
+
+    matched_files = []
+    try:
+        # 階段 1：淺層 2 層目錄匹配
+        matched_dirs = await _find_matching_dirs(max_depth=2)
+        matched_files = await _search_in_dirs(matched_dirs)
+
+        # 階段 2：沒找到結果，擴展到 3 層
+        if not matched_files:
+            matched_dirs = await _find_matching_dirs(max_depth=3)
+            matched_files = await _search_in_dirs(matched_dirs)
+
+        # 階段 3：仍沒結果，全掃檔名（關鍵字可能只出現在檔名中，不在目錄名）
+        if not matched_files:
+            matched_files = await _search_in_dirs(source_paths)
 
     except PermissionError:
         return "錯誤：沒有權限存取檔案系統"
@@ -2319,42 +2413,23 @@ async def get_nas_file_info(
     if not allowed:
         return f"❌ {error_msg}"
 
-    # 預留租戶 ID 參數，未來透過 config 的 get_tenant_nas_path() 處理路徑隔離
-    tid = _get_tenant_id(ctos_tenant_id)  # noqa: F841
+    tid = _get_tenant_id(ctos_tenant_id)  # noqa: F841 保留以備日後需要
     from pathlib import Path
-    from ..config import settings
+    from .share import validate_nas_file_path, NasFileNotFoundError, NasFileAccessDenied
 
-    projects_path = Path(settings.projects_mount_path)
-
-    # 正規化路徑
-    if file_path.startswith(settings.projects_mount_path):
-        # 完整路徑
-        full_path = Path(file_path)
-    else:
-        # 相對路徑（移除開頭的 /）
-        rel_path = file_path.lstrip("/")
-        full_path = projects_path / rel_path
-
-    # 安全檢查：確保路徑在允許範圍內
+    # 統一使用 validate_nas_file_path 進行路徑驗證（支援 shared://projects/...、shared://circuits/... 等）
     try:
-        full_path = full_path.resolve()
-        if not str(full_path).startswith(str(projects_path.resolve())):
-            return "錯誤：不允許存取此路徑"
-    except Exception:
-        return "錯誤：無效的路徑"
-
-    if not full_path.exists():
-        return f"錯誤：檔案不存在 - {file_path}"
-
-    if not full_path.is_file():
-        return f"錯誤：路徑不是檔案 - {file_path}"
+        full_path = validate_nas_file_path(file_path, tenant_id=tid)
+    except NasFileNotFoundError as e:
+        return f"錯誤：{e}"
+    except NasFileAccessDenied as e:
+        return f"錯誤：{e}"
 
     # 取得檔案資訊
     try:
         stat = full_path.stat()
         size = stat.st_size
         modified = datetime.fromtimestamp(stat.st_mtime)
-        rel_path = full_path.relative_to(projects_path)
     except OSError as e:
         return f"錯誤：無法讀取檔案資訊 - {e}"
 

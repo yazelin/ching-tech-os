@@ -18,6 +18,8 @@ MOUNT_CTOS_UNIT="mnt-nas-ctos.mount"
 MOUNT_CTOS_PATH="${NAS_MOUNT_BASE}/ctos"
 MOUNT_PROJECTS_UNIT="mnt-nas-projects.mount"
 MOUNT_PROJECTS_PATH="${NAS_MOUNT_BASE}/projects"
+MOUNT_CIRCUITS_UNIT="mnt-nas-circuits.mount"
+MOUNT_CIRCUITS_PATH="${NAS_MOUNT_BASE}/circuits"
 
 # 檢查是否以 root 執行
 if [ "$EUID" -ne 0 ]; then
@@ -61,6 +63,7 @@ chmod 600 ${NAS_CREDENTIALS_FILE}
 # 建立掛載點目錄
 mkdir -p ${MOUNT_CTOS_PATH}
 mkdir -p ${MOUNT_PROJECTS_PATH}
+mkdir -p ${MOUNT_CIRCUITS_PATH}
 
 # 停止現有掛載（如果存在）
 if systemctl is-active --quiet ${MOUNT_CTOS_UNIT}; then
@@ -70,6 +73,10 @@ fi
 if systemctl is-active --quiet ${MOUNT_PROJECTS_UNIT}; then
     echo "停止現有 projects 掛載..."
     systemctl stop ${MOUNT_PROJECTS_UNIT}
+fi
+if systemctl is-active --quiet ${MOUNT_CIRCUITS_UNIT}; then
+    echo "停止現有 circuits 掛載..."
+    systemctl stop ${MOUNT_CIRCUITS_UNIT}
 fi
 
 # 移除舊的單一掛載（如果存在）
@@ -116,13 +123,33 @@ Options=credentials=${NAS_CREDENTIALS_FILE},uid=1000,gid=1000,iocharset=utf8,_ne
 WantedBy=multi-user.target
 EOF
 
+# 建立 circuits mount unit（唯讀）- 線路圖
+echo "建立 circuits mount unit..."
+cat > /etc/systemd/system/${MOUNT_CIRCUITS_UNIT} << EOF
+[Unit]
+Description=NAS CIFS Mount - Circuit Diagrams (擎添線路圖/圖檔)
+After=network-online.target
+Wants=network-online.target
+
+[Mount]
+What=//${NAS_HOST}/擎添線路圖/圖檔
+Where=${MOUNT_CIRCUITS_PATH}
+Type=cifs
+Options=credentials=${NAS_CREDENTIALS_FILE},uid=1000,gid=1000,iocharset=utf8,_netdev,ro
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
 # 啟用並啟動 NAS 掛載
 echo "啟用 NAS 掛載..."
 systemctl daemon-reload
 systemctl enable ${MOUNT_CTOS_UNIT}
 systemctl enable ${MOUNT_PROJECTS_UNIT}
+systemctl enable ${MOUNT_CIRCUITS_UNIT}
 systemctl start ${MOUNT_CTOS_UNIT}
 systemctl start ${MOUNT_PROJECTS_UNIT}
+systemctl start ${MOUNT_CIRCUITS_UNIT}
 
 # 確認掛載成功
 MOUNT_SUCCESS=true
@@ -140,6 +167,13 @@ else
     MOUNT_SUCCESS=false
 fi
 
+if mountpoint -q ${MOUNT_CIRCUITS_PATH}; then
+    echo "circuits 掛載成功: ${MOUNT_CIRCUITS_PATH}"
+else
+    echo "警告：circuits 掛載可能未成功，請檢查 systemctl status ${MOUNT_CIRCUITS_UNIT}"
+    MOUNT_SUCCESS=false
+fi
+
 # ===================
 # 應用程式服務設定
 # ===================
@@ -151,7 +185,7 @@ cat > ${SERVICE_FILE} << EOF
 Description=Ching Tech OS Web Desktop Service
 After=network.target docker.service ${MOUNT_CTOS_UNIT}
 Requires=docker.service ${MOUNT_CTOS_UNIT}
-Wants=${MOUNT_PROJECTS_UNIT}
+Wants=${MOUNT_PROJECTS_UNIT} ${MOUNT_CIRCUITS_UNIT}
 
 [Service]
 Type=simple
@@ -212,7 +246,9 @@ echo "  sudo systemctl stop ${SERVICE_NAME}     # 停止服務"
 echo "  sudo journalctl -u ${SERVICE_NAME} -f   # 查看日誌"
 echo "  sudo systemctl status ${MOUNT_CTOS_UNIT}     # 查看 ctos 掛載狀態"
 echo "  sudo systemctl status ${MOUNT_PROJECTS_UNIT} # 查看 projects 掛載狀態"
+echo "  sudo systemctl status ${MOUNT_CIRCUITS_UNIT} # 查看 circuits 掛載狀態"
 echo ""
 echo "NAS 掛載點:"
 echo "  ${MOUNT_CTOS_PATH} (讀寫) - 系統檔案"
 echo "  ${MOUNT_PROJECTS_PATH} (唯讀) - 專案資料分享"
+echo "  ${MOUNT_CIRCUITS_PATH} (唯讀) - 線路圖"

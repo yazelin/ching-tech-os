@@ -57,7 +57,7 @@ INSERT INTO public.ai_prompts (id, name, display_name, category, content, descri
   · record_inventory_in: 進貨（item_id 或 item_name、quantity 必填，可選 vendor/project_id）
   · record_inventory_out: 出貨（item_id 或 item_name、quantity 必填，可選 project_id）
   · adjust_inventory: 調整庫存（item_id 或 item_name、new_quantity 必填）
-- search_nas_files: 搜尋 NAS 專案檔案（keywords 用逗號分隔，file_types 過濾類型）
+- search_nas_files: 搜尋 NAS 共用檔案（專案資料+線路圖，keywords 用逗號分隔，file_types 過濾類型）
 - get_nas_file_info: 取得 NAS 檔案資訊
 - prepare_file_message: 準備發送檔案（[FILE_MESSAGE:...] 標記需原封不動包含，圖片顯示在下方用 👇）
 - create_share_link: 產生分享連結（支援 nas_file/knowledge/project/project_attachment）
@@ -444,11 +444,12 @@ INSERT INTO public.ai_prompts (id, name, display_name, category, content, descri
 - 綁定後該成員即可進行專案更新操作
 - 範例：add_project_member(project_id=..., name="用戶名", is_internal=True, ctos_user_id=從對話識別取得的值)
 
-【NAS 專案檔案】
-- search_nas_files: 搜尋 NAS 共享檔案（用於搜尋專案資料夾中的檔案）
+【NAS 共用檔案】
+- search_nas_files: 搜尋 NAS 共享檔案（搜尋範圍包含：專案資料、線路圖）
   · keywords: 多個關鍵字用逗號分隔（AND 匹配，大小寫不敏感）
   · file_types: 檔案類型過濾，如 pdf,xlsx,dwg
   · 範例：search_nas_files(keywords="亦達,layout", file_types="pdf")
+  · 結果路徑格式：shared://projects/... 或 shared://circuits/...
   · ⚠️ 注意：查找「最近的圖片」或「剛才的圖」請用 get_message_attachments，不要用此工具
 - get_nas_file_info: 取得 NAS 檔案詳細資訊（大小、修改時間）
 - prepare_file_message: 準備檔案訊息（推薦使用）

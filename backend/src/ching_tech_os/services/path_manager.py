@@ -4,7 +4,7 @@
 
 路徑協議：
 - ctos://    → CTOS 系統檔案 (/mnt/nas/ctos/)
-- shared://  → 公司專案共用區 (/mnt/nas/projects/)
+- shared://  → 公司共用區（多來源：projects, circuits）
 - temp://    → 暫存檔案 (/tmp/ctos/)
 - local://   → 本機小檔案 (應用程式 data 目錄)
 - nas://     → NAS 共享（透過 SMB 存取，用於檔案管理器）
@@ -17,7 +17,9 @@
 範例：
 - ctos://knowledge/kb-001/file.pdf
 - ctos://linebot/groups/C123/images/2026-01-05/abc.jpg
-- shared://亦達光學/layout.pdf
+- shared://projects/亦達光學/layout.pdf
+- shared://circuits/線路圖A/xxx.dwg
+- shared://亦達光學/layout.pdf（舊格式，fallback 到 projects）
 - temp://linebot/msg123.pdf
 - local://knowledge/images/kb-001-demo.png
 - nas://home/photos/image.jpg （檔案管理器瀏覽的 NAS 共享）
@@ -80,10 +82,17 @@ class PathManager:
         # 掛載點對應
         self._zone_mounts = {
             StorageZone.CTOS: settings.ctos_mount_path,      # /mnt/nas/ctos
-            StorageZone.SHARED: settings.projects_mount_path, # /mnt/nas/projects
+            StorageZone.SHARED: settings.projects_mount_path, # /mnt/nas/projects（預設 fallback）
             StorageZone.TEMP: "/tmp/ctos",
             StorageZone.LOCAL: str(Path(settings.frontend_dir).parent / "data"),
             StorageZone.NAS: None,  # NAS zone 使用 SMB，無本地掛載點
+        }
+
+        # shared zone 子來源對應（多掛載點）
+        # TODO: 未來可依使用者權限過濾可用的子來源
+        self._shared_mounts = {
+            "projects": settings.projects_mount_path,   # /mnt/nas/projects
+            "circuits": settings.circuits_mount_path,    # /mnt/nas/circuits
         }
 
         # 舊格式前綴對應（用於向後相容）
@@ -188,14 +197,15 @@ class PathManager:
                     raw=path
                 )
 
-            # /mnt/nas/projects/... → shared://
-            if path.startswith(self._settings.projects_mount_path):
-                relative = path[len(self._settings.projects_mount_path):].lstrip("/")
-                return ParsedPath(
-                    zone=StorageZone.SHARED,
-                    path=relative,
-                    raw=path
-                )
+            # /mnt/nas/projects/... 或 /mnt/nas/circuits/... → shared://
+            for source_name, mount_path in self._shared_mounts.items():
+                if path.startswith(mount_path):
+                    relative = path[len(mount_path):].lstrip("/")
+                    return ParsedPath(
+                        zone=StorageZone.SHARED,
+                        path=f"{source_name}/{relative}" if relative else source_name,
+                        raw=path
+                    )
 
             # 其他 /mnt/nas/... 路徑，嘗試解析
             if path.startswith(self._settings.nas_mount_path):
@@ -270,7 +280,28 @@ class PathManager:
             # ctos://knowledge/... → /mnt/nas/ctos/tenants/{tenant_id}/knowledge/...
             return f"{self._settings.ctos_mount_path}/tenants/{tenant_id}/{parsed.path}"
 
+        # SHARED zone 子來源解析
+        if parsed.zone == StorageZone.SHARED:
+            return self._resolve_shared_path(parsed.path)
+
         return f"{mount_path}/{parsed.path}"
+
+    def _resolve_shared_path(self, relative_path: str) -> str:
+        """解析 shared zone 子來源路徑到實際檔案系統路徑
+
+        支援格式：
+        - projects/亦達光學/layout.pdf → /mnt/nas/projects/亦達光學/layout.pdf
+        - circuits/線路圖A/xxx.dwg → /mnt/nas/circuits/線路圖A/xxx.dwg
+        - 亦達光學/layout.pdf → /mnt/nas/projects/亦達光學/layout.pdf（向後相容）
+        """
+        # 檢查第一段是否為已知子來源
+        first_segment = relative_path.split("/", 1)[0]
+        if first_segment in self._shared_mounts:
+            mount_path = self._shared_mounts[first_segment]
+            rest = relative_path[len(first_segment):].lstrip("/")
+            return f"{mount_path}/{rest}" if rest else mount_path
+        # 向後相容：fallback 到 projects
+        return f"{self._shared_mounts['projects']}/{relative_path}"
 
     def to_api(self, path: str) -> str:
         """轉換為前端 API 路徑
