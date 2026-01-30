@@ -41,11 +41,10 @@ async def run_telegram_polling() -> None:
     # 建立專用 Bot 實例，read_timeout 必須大於 POLL_TIMEOUT
     # （adapter.bot 的預設 timeout 太短，不適合 long polling）
     from telegram import Bot
-    polling_bot = Bot(
+    bot = Bot(
         token=settings.telegram_bot_token,
         request=HTTPXRequest(read_timeout=POLL_TIMEOUT + 10),
     )
-    bot = polling_bot
 
     # 刪除現有 webhook，確保 getUpdates 可用
     try:

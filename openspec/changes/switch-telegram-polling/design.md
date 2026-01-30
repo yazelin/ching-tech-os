@@ -16,9 +16,9 @@ Telegram Bot API 提供兩種接收更新的方式：
 
 ## Decisions
 
-### Polling 實作方式：使用 python-telegram-bot 內建 `Application.run_polling()`
-- **理由**：專案已使用 `python-telegram-bot` 套件，它內建完整的 polling 機制（含 offset 管理、錯誤重試、graceful shutdown）
-- **替代方案**：手動呼叫 `getUpdates` API — 需自行管理 offset、重試、超時，增加複雜度
+### Polling 實作方式：使用 `Bot.get_updates()` 手動管理 long polling 迴圈
+- **理由**：專案已使用 `python-telegram-bot` 套件，直接呼叫 `Bot.get_updates()` 配合自行管理的 offset 和指數退避重試，可精確控制行為且與現有 `handle_update()` 無縫銜接
+- **替代方案**：使用 `Application.run_polling()` — 內建完整 polling 機制，但需重構 handler 註冊方式，與現有架構不相容
 
 ### 架構選擇：獨立 asyncio task 在 FastAPI lifespan 中運行
 - **理由**：polling 是一個持續運行的迴圈，適合作為背景任務。放在 lifespan 中可以確保 FastAPI 關閉時一併停止
