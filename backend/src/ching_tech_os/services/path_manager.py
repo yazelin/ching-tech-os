@@ -295,7 +295,7 @@ class PathManager:
         - 亦達光學/layout.pdf → /mnt/nas/projects/亦達光學/layout.pdf（向後相容）
         """
         # 檢查第一段是否為已知子來源
-        first_segment = relative_path.split("/", 1)[0] if "/" in relative_path else relative_path
+        first_segment = relative_path.split("/", 1)[0]
         if first_segment in self._shared_mounts:
             mount_path = self._shared_mounts[first_segment]
             rest = relative_path[len(first_segment):].lstrip("/")

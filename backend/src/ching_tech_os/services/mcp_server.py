@@ -2266,7 +2266,7 @@ async def search_nas_files(
             if proc:
                 try:
                     proc.kill()
-                except Exception:
+                except ProcessLookupError:
                     pass
             return ""
 
