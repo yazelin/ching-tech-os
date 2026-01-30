@@ -42,9 +42,22 @@ const AILogApp = (function() {
     { id: 'web-chat', name: 'Web 對話' },
     { id: 'linebot-group', name: 'Line 群組' },
     { id: 'linebot-personal', name: 'Line 個人' },
+    { id: 'telegram-group', name: 'Telegram 群組' },
+    { id: 'telegram-personal', name: 'Telegram 個人' },
     { id: 'system', name: '系統' },
     { id: 'test', name: '測試' }
   ];
+
+  /**
+   * 取得本地時區偏移字串（如 +08:00）
+   */
+  function getTimezoneSuffix() {
+    const tzOffset = new Date().getTimezoneOffset();
+    const tzSign = tzOffset <= 0 ? '+' : '-';
+    const tzHours = String(Math.floor(Math.abs(tzOffset) / 60)).padStart(2, '0');
+    const tzMins = String(Math.abs(tzOffset) % 60).padStart(2, '0');
+    return `${tzSign}${tzHours}:${tzMins}`;
+  }
 
   /**
    * 載入 Agents（用於過濾器）
@@ -851,7 +864,8 @@ const AILogApp = (function() {
     windowId = wId;
 
     // 設定今天為預設開始日期
-    filters.start_date = getTodayString() + 'T00:00:00';
+    // 加上時區偏移，確保篩選範圍對應本地時間
+    filters.start_date = getTodayString() + 'T00:00:00' + getTimezoneSuffix();
 
     await loadAgents();
 
@@ -890,7 +904,7 @@ const AILogApp = (function() {
         if (filter === 'success') {
           value = value === '' ? null : value === 'true';
         } else if (filter === 'start_date' || filter === 'end_date') {
-          value = value ? value + (filter === 'start_date' ? 'T00:00:00' : 'T23:59:59') : null;
+          value = value ? value + (filter === 'start_date' ? 'T00:00:00' : 'T23:59:59') + getTimezoneSuffix() : null;
         } else {
           value = value || null;
         }

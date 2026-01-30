@@ -349,6 +349,14 @@ async def _get_reply_context(message, tenant_id: UUID, bot=None) -> str:
     return await _extract_reply_from_message(reply, bot)
 
 
+def _prefix_user(text: str, user) -> str:
+    """為文字加上 user[使用者名稱]: 前綴"""
+    if user:
+        display_name = user.full_name or "未知用戶"
+        return f"user[{display_name}]: {text}"
+    return text
+
+
 def _strip_bot_mention(text: str, bot_username: str | None) -> str:
     """移除訊息中的 @Bot mention，保留實際內容"""
     if bot_username:
@@ -369,6 +377,9 @@ async def handle_update(update: Update, adapter: TelegramBotAdapter) -> None:
     chat_id = str(chat.id)
     chat_type = chat.type  # "private", "group", "supergroup"
     is_group = chat_type in GROUP_CHAT_TYPES
+
+    # 確保 bot_username 已初始化（用於群組 @Bot 判斷）
+    await adapter.ensure_bot_info()
 
     # 記錄訊息資訊
     user = message.from_user
@@ -491,6 +502,9 @@ async def _handle_text(
                 # 群組：未綁定用戶靜默忽略
             # group_not_allowed：靜默忽略
             return
+
+    # 加上使用者名稱前綴（與 Line Bot 格式對齊）
+    text = _prefix_user(text, user)
 
     # 取得回覆上下文
     reply_context = await _get_reply_context(message, tenant_id, bot=adapter.bot)
@@ -618,6 +632,9 @@ async def _handle_media(
                 chat_id, f"已儲存檔案 {file_name}，但此格式無法由 AI 讀取。"
             )
             return
+
+    # 加上使用者名稱前綴（與 Line Bot 格式對齊）
+    ai_prompt = _prefix_user(ai_prompt, user)
 
     # 呼叫 AI 處理（傳入已儲存的 message_uuid，避免重複儲存）
     await _handle_text_with_ai(
@@ -839,6 +856,7 @@ async def _handle_text_with_ai(
                 model=model,
                 response=response,
                 duration_ms=duration_ms,
+                tenant_id=tenant_id,
                 context_type_override=context_type,
             )
         except Exception as e:

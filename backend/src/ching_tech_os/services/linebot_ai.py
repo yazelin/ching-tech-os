@@ -1012,9 +1012,9 @@ async def get_conversation_context(
             else:
                 content = row["content"]
 
-            # 群組對話才記錄發送者名稱，個人對話不需要
+            # 記錄發送者名稱（群組和個人對話都顯示）
             sender = None
-            if line_group_id and not row["is_from_bot"] and row["display_name"]:
+            if not row["is_from_bot"] and row["display_name"]:
                 sender = row["display_name"]
 
             context.append({"role": role, "content": content, "sender": sender})
