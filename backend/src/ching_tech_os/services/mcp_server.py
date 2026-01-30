@@ -2351,6 +2351,10 @@ async def search_nas_files(
             matched_dirs = await _find_matching_dirs(max_depth=3)
             matched_files = await _search_in_dirs(matched_dirs)
 
+        # 階段 3：仍沒結果，全掃檔名（關鍵字可能只出現在檔名中，不在目錄名）
+        if not matched_files:
+            matched_files = await _search_in_dirs(source_paths)
+
     except PermissionError:
         return "錯誤：沒有權限存取檔案系統"
     except Exception as e:
