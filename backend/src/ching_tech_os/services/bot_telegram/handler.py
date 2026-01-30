@@ -839,6 +839,7 @@ async def _handle_text_with_ai(
                 model=model,
                 response=response,
                 duration_ms=duration_ms,
+                tenant_id=tenant_id,
                 context_type_override=context_type,
             )
         except Exception as e:
