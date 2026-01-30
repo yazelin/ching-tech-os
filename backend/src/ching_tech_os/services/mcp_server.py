@@ -2237,15 +2237,23 @@ async def search_nas_files(
     if file_types:
         type_list = [t.strip().lower().lstrip(".") for t in file_types.split(",") if t.strip()]
 
+    # 清理關鍵字中的 find glob 特殊字元（避免非預期匹配）
+    import re
+    def _sanitize_for_find(s: str) -> str:
+        return re.sub(r'[\[\]?*\\]', '', s)
+    keyword_list = [_sanitize_for_find(kw) for kw in keyword_list]
+    keyword_list = [kw for kw in keyword_list if kw]  # 移除清理後變空的關鍵字
+    if not keyword_list:
+        return "錯誤：請提供有效的關鍵字"
+
     # 兩階段搜尋：先淺層找目錄，再深入匹配的目錄搜尋檔案
     # 使用 asyncio subprocess 避免阻塞 event loop
-    import asyncio
-
     source_paths = [str(p) for p in available_sources.values()]
     source_name_map = {str(p): name for name, p in available_sources.items()}
 
     async def _run_find(args: list[str], timeout: int = 30) -> str:
         """非同步執行 find 指令"""
+        proc = None
         try:
             proc = await asyncio.create_subprocess_exec(
                 *args,
@@ -2255,10 +2263,11 @@ async def search_nas_files(
             stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
             return stdout.decode("utf-8", errors="replace").strip()
         except (asyncio.TimeoutError, OSError):
-            try:
-                proc.kill()
-            except Exception:
-                pass
+            if proc:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
             return ""
 
     async def _find_matching_dirs(max_depth: int) -> list[str]:
@@ -2404,7 +2413,7 @@ async def get_nas_file_info(
     if not allowed:
         return f"❌ {error_msg}"
 
-    tid = _get_tenant_id(ctos_tenant_id)
+    tid = _get_tenant_id(ctos_tenant_id)  # noqa: F841 保留以備日後需要
     from pathlib import Path
     from .share import validate_nas_file_path, NasFileNotFoundError, NasFileAccessDenied
 
