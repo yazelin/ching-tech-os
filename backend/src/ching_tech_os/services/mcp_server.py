@@ -2237,49 +2237,103 @@ async def search_nas_files(
     if file_types:
         type_list = [t.strip().lower().lstrip(".") for t in file_types.split(",") if t.strip()]
 
-    # 搜尋所有來源
+    # 兩階段搜尋：先淺層找目錄，再深入匹配的目錄搜尋檔案
+    # 避免在 CIFS 掛載上全遍歷（5 萬檔案需 60+ 秒）
+    import subprocess
+
+    source_paths = [str(p) for p in available_sources.values()]
+    source_name_map = {str(p): name for name, p in available_sources.items()}
+
+    def _find_matching_dirs(max_depth: int) -> list[str]:
+        """用 find 在淺層找出名稱匹配任一關鍵字的目錄"""
+        dirs = set()
+        for source in source_paths:
+            for kw in keyword_list:
+                try:
+                    result = subprocess.run(
+                        ["find", source, "-maxdepth", str(max_depth), "-type", "d", "-iname", f"*{kw}*"],
+                        capture_output=True, text=True, timeout=30,
+                    )
+                    for line in result.stdout.strip().split("\n"):
+                        if line:
+                            dirs.add(line)
+                except (subprocess.TimeoutExpired, OSError):
+                    pass
+        return sorted(dirs)
+
+    def _search_in_dirs(dirs: list[str]) -> list[dict]:
+        """在指定目錄中用 find 搜尋符合條件的檔案"""
+        if not dirs:
+            return []
+
+        args = ["find"] + dirs + ["-type", "f"]
+        # 關鍵字過濾（所有關鍵字都要匹配路徑）
+        for kw in keyword_list:
+            args.extend(["-ipath", f"*{kw}*"])
+        # 檔案類型過濾
+        if type_list:
+            args.append("(")
+            for i, t in enumerate(type_list):
+                if i > 0:
+                    args.append("-o")
+                args.extend(["-iname", f"*.{t}"])
+            args.append(")")
+
+        try:
+            result = subprocess.run(args, capture_output=True, text=True, timeout=120)
+        except (subprocess.TimeoutExpired, OSError):
+            return []
+
+        files = []
+        seen = set()
+        for line in result.stdout.strip().split("\n"):
+            if not line or line in seen:
+                continue
+            seen.add(line)
+
+            fp = Path(line)
+            # 判斷屬於哪個來源
+            source_name = None
+            source_path = None
+            for sp, sn in source_name_map.items():
+                if line.startswith(sp):
+                    source_name = sn
+                    source_path = sp
+                    break
+            if not source_name:
+                continue
+
+            rel_path_str = line[len(source_path):].lstrip("/")
+
+            try:
+                stat = fp.stat()
+                size = stat.st_size
+                modified = datetime.fromtimestamp(stat.st_mtime)
+            except OSError:
+                size = 0
+                modified = None
+
+            files.append({
+                "path": f"shared://{source_name}/{rel_path_str}",
+                "name": fp.name,
+                "size": size,
+                "modified": modified,
+            })
+            if len(files) >= limit:
+                break
+
+        return files
+
     matched_files = []
     try:
-        for source_name, source_path in available_sources.items():
-            if len(matched_files) >= limit:
-                break
-            for file_path in source_path.rglob("*"):
-                if not file_path.is_file():
-                    continue
+        # 階段 1：淺層 2 層目錄匹配
+        matched_dirs = _find_matching_dirs(max_depth=2)
+        matched_files = _search_in_dirs(matched_dirs)
 
-                # 取得相對路徑（用於匹配和顯示）
-                rel_path = file_path.relative_to(source_path)
-                rel_path_str = str(rel_path)
-                rel_path_lower = rel_path_str.lower()
-
-                # 關鍵字匹配（所有關鍵字都要匹配路徑）
-                if not all(kw in rel_path_lower for kw in keyword_list):
-                    continue
-
-                # 檔案類型匹配
-                if type_list:
-                    suffix = file_path.suffix.lower().lstrip(".")
-                    if suffix not in type_list:
-                        continue
-
-                # 取得檔案資訊
-                try:
-                    stat = file_path.stat()
-                    size = stat.st_size
-                    modified = datetime.fromtimestamp(stat.st_mtime)
-                except OSError:
-                    size = 0
-                    modified = None
-
-                matched_files.append({
-                    "path": f"shared://{source_name}/{rel_path_str}",
-                    "name": file_path.name,
-                    "size": size,
-                    "modified": modified,
-                })
-
-                if len(matched_files) >= limit:
-                    break
+        # 階段 2：沒找到結果，擴展到 3 層
+        if not matched_files:
+            matched_dirs = _find_matching_dirs(max_depth=3)
+            matched_files = _search_in_dirs(matched_dirs)
 
     except PermissionError:
         return "錯誤：沒有權限存取檔案系統"
