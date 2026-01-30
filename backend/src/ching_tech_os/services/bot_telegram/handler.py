@@ -495,6 +495,11 @@ async def _handle_text(
             # group_not_allowed：靜默忽略
             return
 
+    # 群組訊息加上使用者名稱前綴（與 Line Bot 格式對齊）
+    if is_group and user:
+        display_name = user.full_name or "未知用戶"
+        text = f"user[{display_name}]: {text}"
+
     # 取得回覆上下文
     reply_context = await _get_reply_context(message, tenant_id, bot=adapter.bot)
     if reply_context:
@@ -621,6 +626,11 @@ async def _handle_media(
                 chat_id, f"已儲存檔案 {file_name}，但此格式無法由 AI 讀取。"
             )
             return
+
+    # 群組訊息加上使用者名稱前綴（與 Line Bot 格式對齊）
+    if is_group and user:
+        display_name = user.full_name or "未知用戶"
+        ai_prompt = f"user[{display_name}]: {ai_prompt}"
 
     # 呼叫 AI 處理（傳入已儲存的 message_uuid，避免重複儲存）
     await _handle_text_with_ai(
