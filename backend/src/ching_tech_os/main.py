@@ -54,11 +54,17 @@ async def lifespan(app: FastAPI):
     await session_manager.start_cleanup_task()
     await terminal_service.start_cleanup_task()
     start_scheduler()
-    # 設定 Telegram Webhook
-    from .api.telegram_router import setup_telegram_webhook
-    await setup_telegram_webhook()
+    # 啟動 Telegram Polling（取代 webhook 模式）
+    import asyncio
+    from .services.bot_telegram.polling import run_telegram_polling
+    telegram_polling_task = asyncio.create_task(run_telegram_polling())
     yield
     # 關閉時
+    telegram_polling_task.cancel()
+    try:
+        await telegram_polling_task
+    except asyncio.CancelledError:
+        pass
     stop_scheduler()
     await terminal_service.stop_cleanup_task()
     terminal_service.close_all()

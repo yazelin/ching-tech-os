@@ -10,13 +10,13 @@ Telegram Bot 整合功能，實現 Telegram 訊息儲存、AI 助理回應、帳
 ```
 Telegram Platform
      │
-     ▼ Webhook (X-Telegram-Bot-Api-Secret-Token)
+     ▼ Polling（getUpdates long polling）
 ┌─────────────────────────────────────────────────────────────────┐
 │  FastAPI                                                         │
 │  ┌─────────────────┐    ┌─────────────────────────────────────┐ │
-│  │ telegram_        │    │ linebot_ai.py（共用 AI 處理）       │ │
-│  │ router.py        │───▶│ - build_system_prompt               │ │
-│  │ - webhook        │    │ - get_conversation_context          │ │
+│  │ bot_telegram/    │    │ linebot_ai.py（共用 AI 處理）       │ │
+│  │ polling.py       │───▶│ - build_system_prompt               │ │
+│  │ - getUpdates     │    │ - get_conversation_context          │ │
 │  └─────────────────┘    │ - log_linebot_ai_call               │ │
 │         │                └──────────────┬──────────────────────┘ │
 │         ▼                              ▼                         │
@@ -56,7 +56,7 @@ Telegram Platform
 
 | 項目 | Line Bot | Telegram Bot |
 |------|----------|-------------|
-| Webhook 驗證 | X-Line-Signature（HMAC） | X-Telegram-Bot-Api-Secret-Token |
+| 訊息接收 | Webhook | Polling（getUpdates） |
 | 多租戶 | 支援獨立 Bot / 共用 Bot | 目前使用預設租戶 |
 | 群組觸發 | @Bot mention / 回覆 Bot | @Bot mention / 回覆 Bot |
 | 群組 Mention 回覆 | 支援（TextMessageV2） | 不支援（Telegram 無此機制） |
@@ -66,15 +66,13 @@ Telegram Platform
 
 ## API 端點
 
-### Webhook
+### 訊息接收模式：Polling
 
-```
-POST /api/bot/telegram/webhook
-```
+目前使用 **polling（getUpdates）** 模式主動從 Telegram API 拉取訊息，不受伺服器 IP 變動影響。
+Polling 在 FastAPI lifespan 啟動時以背景 `asyncio.Task` 執行，關閉時自動停止。
 
-Telegram Bot API 的 Webhook 端點。啟動時自動向 Telegram 註冊。
-
-**驗證方式**：透過 `X-Telegram-Bot-Api-Secret-Token` header 比對 `TELEGRAM_WEBHOOK_SECRET` 環境變數。
+> **備註**：舊的 webhook endpoint（`POST /api/bot/telegram/webhook`）程式碼仍保留，
+> 如需切回可在 `main.py` lifespan 改回呼叫 `setup_telegram_webhook()` 並啟用排程健康檢查。
 
 ### 管理 API
 
@@ -154,15 +152,10 @@ TELEGRAM_ADMIN_CHAT_ID=your_admin_chat_id          # 管理員 Telegram ID（啟
 5. 發送 `/setprivacy` 將 privacy mode 設為 `Disable`（允許 Bot 接收群組訊息）
 6. 將 Bot 加入群組
 
-### Webhook 設定
+### Polling 模式
 
-Webhook URL 會在應用程式啟動時自動向 Telegram 註冊：
-
-```
-https://{public_url}/api/bot/telegram/webhook
-```
-
-需確保 Nginx 有正確代理此路徑。
+應用程式啟動時自動以 long polling 模式拉取 Telegram 訊息，不需要 public URL 或 Nginx 代理。
+啟動時會自動刪除既有 webhook 設定（polling 與 webhook 不能同時使用）。
 
 ## 程式碼結構
 
@@ -175,7 +168,8 @@ backend/src/ching_tech_os/
 │       ├── __init__.py
 │       ├── adapter.py              # TelegramBotAdapter（發送訊息、編輯訊息）
 │       ├── handler.py              # 事件處理（文字、圖片、檔案、指令）
-│       └── media.py                # 媒體下載與 NAS 儲存
+│       ├── media.py                # 媒體下載與 NAS 儲存
+│       └── polling.py              # Polling 迴圈（getUpdates long polling）
 ```
 
 ## MCP 工具

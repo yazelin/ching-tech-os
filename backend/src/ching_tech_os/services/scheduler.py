@@ -294,14 +294,14 @@ def start_scheduler():
         replace_existing=True
     )
 
-    # 每 5 分鐘檢查 Telegram Webhook 健康狀態
-    scheduler.add_job(
-        check_telegram_webhook_health,
-        IntervalTrigger(minutes=5),
-        id='check_telegram_webhook_health',
-        name='檢查 Telegram Webhook',
-        replace_existing=True
-    )
+    # Telegram Webhook 健康檢查已停用（改用 polling 模式）
+    # scheduler.add_job(
+    #     check_telegram_webhook_health,
+    #     IntervalTrigger(minutes=5),
+    #     id='check_telegram_webhook_health',
+    #     name='檢查 Telegram Webhook',
+    #     replace_existing=True
+    # )
 
     scheduler.start()
     logger.info("排程服務已啟動")
