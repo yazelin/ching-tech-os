@@ -25,7 +25,8 @@ NEW_GROUP_TOOL = "- search_nas_files: 搜尋 NAS 共用檔案（專案資料+線
 
 def _replace_prompt(name: str, old_text: str, new_text: str) -> None:
     """使用參數化查詢安全地替換 prompt 內容"""
-    op.execute(
+    conn = op.get_bind()
+    conn.execute(
         sa.text(
             "UPDATE ai_prompts SET content = REPLACE(content, :old, :new) WHERE name = :name"
         ),
