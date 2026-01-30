@@ -495,8 +495,8 @@ async def _handle_text(
             # group_not_allowed：靜默忽略
             return
 
-    # 群組訊息加上使用者名稱前綴（與 Line Bot 格式對齊）
-    if is_group and user:
+    # 加上使用者名稱前綴（與 Line Bot 格式對齊）
+    if user:
         display_name = user.full_name or "未知用戶"
         text = f"user[{display_name}]: {text}"
 
@@ -627,8 +627,8 @@ async def _handle_media(
             )
             return
 
-    # 群組訊息加上使用者名稱前綴（與 Line Bot 格式對齊）
-    if is_group and user:
+    # 加上使用者名稱前綴（與 Line Bot 格式對齊）
+    if user:
         display_name = user.full_name or "未知用戶"
         ai_prompt = f"user[{display_name}]: {ai_prompt}"
 
