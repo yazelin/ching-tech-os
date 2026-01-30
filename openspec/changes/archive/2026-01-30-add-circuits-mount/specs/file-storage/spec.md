@@ -1,6 +1,6 @@
 # file-storage spec delta
 
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: shared zone 多掛載點路徑解析
 path_manager SHALL 支援 `shared://` 協議下的多個子來源對應到不同掛載點。

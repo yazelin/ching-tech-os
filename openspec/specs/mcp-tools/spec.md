@@ -45,40 +45,30 @@ MCP Server SHALL 提供 `add_project_milestone` 工具讓 AI 助手新增專案�
 ---
 
 ### Requirement: 搜尋 NAS 共享檔案 MCP 工具
-MCP Server SHALL 提供 `search_nas_files` 工具讓 AI 助手搜尋 NAS 共享掛載點中的檔案。
+MCP Server SHALL 提供 `search_nas_files` 工具搜尋多個 NAS 共享掛載點中的檔案。
 
-#### Scenario: 基本關鍵字搜尋
-- **GIVEN** AI 助手收到用戶查詢「找一下亦達 layout pdf」
-- **WHEN** 呼叫 `search_nas_files(keywords="亦達,layout", file_types="pdf")`
-- **THEN** 系統列出路徑包含「亦達」且包含「layout」的 PDF 檔案（大小寫不敏感）
-- **AND** 回傳檔案路徑列表（最多 100 筆）
-
-#### Scenario: 搜尋多種檔案類型
-- **GIVEN** AI 助手需要搜尋多種檔案
-- **WHEN** 呼叫 `search_nas_files(keywords="亦達", file_types="pdf,xlsx,dwg")`
-- **THEN** 系統列出符合任一檔案類型的檔案
-
-#### Scenario: 僅指定關鍵字
-- **GIVEN** AI 助手收到用戶查詢「給我亦達時程規劃」
-- **WHEN** 呼叫 `search_nas_files(keywords="亦達")`
-- **THEN** 系統列出路徑包含「亦達」的所有檔案
-- **AND** AI 從列表中語意匹配「時程規劃」找到「時間估算.xlsx」
-
-#### Scenario: 大小寫不敏感匹配
-- **GIVEN** 用戶輸入小寫「layout」但實際資料夾是「Layout」
+#### Scenario: 搜尋範圍包含多來源
+- **GIVEN** 系統掛載了 projects 和 circuits 兩個共享區
 - **WHEN** 呼叫 `search_nas_files(keywords="layout")`
-- **THEN** 系統能匹配到「Layout」資料夾下的檔案
+- **THEN** 系統同時搜尋 `/mnt/nas/projects` 和 `/mnt/nas/circuits`
+- **AND** 結果路徑帶來源前綴（如 `shared://projects/...`、`shared://circuits/...`）
 
-#### Scenario: 無符合結果
-- **WHEN** 呼叫 `search_nas_files(keywords="不存在的關鍵字")`
-- **THEN** 回傳空列表和提示訊息
+#### Scenario: 結果路徑格式
+- **GIVEN** 在 circuits 掛載點找到檔案 `線路圖A/xxx.dwg`
+- **WHEN** 搜尋結果回傳
+- **THEN** 路徑為 `shared://circuits/線路圖A/xxx.dwg`
 
-#### Scenario: 安全限制
-- **GIVEN** 搜尋範圍限定於 `/mnt/nas/projects`（唯讀掛載）
-- **WHEN** AI 嘗試搜尋其他路徑
-- **THEN** 系統拒絕並回傳錯誤
+#### Scenario: 單一來源不可用
+- **GIVEN** circuits 掛載點不存在或未掛載
+- **WHEN** 呼叫 `search_nas_files`
+- **THEN** 系統跳過該來源，僅搜尋可用的掛載點
+- **AND** 不回傳錯誤
 
----
+#### Scenario: 權限擴充預留
+- **GIVEN** 搜尋來源定義為字典結構
+- **WHEN** 未來實作權限控制
+- **THEN** 可依使用者權限過濾搜尋來源字典
+- **AND** 不需修改搜尋邏輯本身
 
 ### Requirement: 取得 NAS 檔案資訊 MCP 工具
 MCP Server SHALL 提供 `get_nas_file_info` 工具讓 AI 助手取得特定檔案的詳細資訊。

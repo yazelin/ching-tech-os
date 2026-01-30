@@ -4,34 +4,26 @@
 TBD - created by archiving change mount-nas-storage. Update Purpose after archive.
 ## Requirements
 ### Requirement: NAS 系統掛載
-系統 SHALL 使用 systemd mount unit 掛載 NAS 共享資料夾。
+系統 SHALL 使用 systemd mount unit 掛載 NAS 共享資料夾，包含多個唯讀共用區掛載點。
 
-#### Scenario: 服務啟動前自動掛載
-- **GIVEN** 系統設定了 NAS 掛載
-- **WHEN** `ching-tech-os.service` 啟動
-- **THEN** `mnt-nas.mount` 先啟動並掛載 NAS
-- **AND** 掛載點為 `/mnt/nas`（可透過環境變數配置）
+#### Scenario: circuits 掛載點建立
+- **GIVEN** 安裝腳本執行
+- **WHEN** 建立 systemd mount units
+- **THEN** 建立 `mnt-nas-circuits.mount` 掛載 `//NAS_HOST/擎添線路圖/圖檔` 到 `/mnt/nas/circuits`
+- **AND** 使用唯讀模式（ro）
+- **AND** 使用與其他掛載相同的憑證檔案
 
-#### Scenario: 掛載使用憑證檔案
-- **GIVEN** 系統需要掛載 NAS
-- **WHEN** mount unit 執行掛載
-- **THEN** 使用 `/etc/nas-credentials` 檔案中的帳密
-- **AND** 憑證檔案權限為 600
+#### Scenario: 服務依賴 circuits 掛載
+- **GIVEN** `ching-tech-os.service` 設定
+- **WHEN** 服務啟動
+- **THEN** service unit 包含 `Wants=mnt-nas-circuits.mount`
+- **AND** circuits 掛載失敗不阻止服務啟動（Wants 而非 Requires）
 
-#### Scenario: 服務依賴掛載
-- **GIVEN** `ching-tech-os.service` 設定了 `Requires=mnt-nas.mount`
-- **WHEN** 掛載失敗
-- **THEN** 服務不會啟動
-- **AND** systemd 日誌顯示掛載失敗原因
-
-#### Scenario: 卸載服務時清理掛載
-- **GIVEN** 執行 `uninstall-service.sh`
-- **WHEN** 腳本完成
-- **THEN** mount unit 被停用並移除
-- **AND** 憑證檔案被刪除
-- **AND** 掛載點目錄被移除
-
----
+#### Scenario: circuits 掛載環境變數
+- **GIVEN** 系統設定
+- **WHEN** 讀取環境變數
+- **THEN** `CIRCUITS_MOUNT_PATH` 預設為 `/mnt/nas/circuits`
+- **AND** 可透過 `.env` 覆蓋
 
 ### Requirement: 本機檔案服務
 系統功能 SHALL 透過本機路徑存取 NAS 檔案，取代直接 SMB 連線。
