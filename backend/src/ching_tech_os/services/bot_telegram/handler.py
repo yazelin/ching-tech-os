@@ -658,6 +658,12 @@ async def _handle_text_with_ai(
     tenant_id: UUID | None = None,
 ) -> None:
     """透過 AI 處理文字訊息並回覆"""
+    # 發送「正在輸入」提示
+    try:
+        await adapter.bot.send_chat_action(chat_id=chat_id, action="typing")
+    except Exception as e:
+        logger.debug(f"發送 typing 提示失敗: {e}")
+
     # 0. 儲存用戶訊息（媒體訊息已在 _handle_media 儲存，跳過）
     message_uuid: UUID | None = existing_message_uuid
     platform_user_id = str(user.id)
