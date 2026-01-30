@@ -349,6 +349,14 @@ async def _get_reply_context(message, tenant_id: UUID, bot=None) -> str:
     return await _extract_reply_from_message(reply, bot)
 
 
+def _prefix_user(text: str, user) -> str:
+    """為文字加上 user[使用者名稱]: 前綴"""
+    if user:
+        display_name = user.full_name or "未知用戶"
+        return f"user[{display_name}]: {text}"
+    return text
+
+
 def _strip_bot_mention(text: str, bot_username: str | None) -> str:
     """移除訊息中的 @Bot mention，保留實際內容"""
     if bot_username:
@@ -496,9 +504,7 @@ async def _handle_text(
             return
 
     # 加上使用者名稱前綴（與 Line Bot 格式對齊）
-    if user:
-        display_name = user.full_name or "未知用戶"
-        text = f"user[{display_name}]: {text}"
+    text = _prefix_user(text, user)
 
     # 取得回覆上下文
     reply_context = await _get_reply_context(message, tenant_id, bot=adapter.bot)
@@ -628,9 +634,7 @@ async def _handle_media(
             return
 
     # 加上使用者名稱前綴（與 Line Bot 格式對齊）
-    if user:
-        display_name = user.full_name or "未知用戶"
-        ai_prompt = f"user[{display_name}]: {ai_prompt}"
+    ai_prompt = _prefix_user(ai_prompt, user)
 
     # 呼叫 AI 處理（傳入已儲存的 message_uuid，避免重複儲存）
     await _handle_text_with_ai(

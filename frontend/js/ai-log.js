@@ -49,6 +49,17 @@ const AILogApp = (function() {
   ];
 
   /**
+   * 取得本地時區偏移字串（如 +08:00）
+   */
+  function getTimezoneSuffix() {
+    const tzOffset = new Date().getTimezoneOffset();
+    const tzSign = tzOffset <= 0 ? '+' : '-';
+    const tzHours = String(Math.floor(Math.abs(tzOffset) / 60)).padStart(2, '0');
+    const tzMins = String(Math.abs(tzOffset) % 60).padStart(2, '0');
+    return `${tzSign}${tzHours}:${tzMins}`;
+  }
+
+  /**
    * 載入 Agents（用於過濾器）
    */
   async function loadAgents() {
@@ -854,12 +865,7 @@ const AILogApp = (function() {
 
     // 設定今天為預設開始日期
     // 加上時區偏移，確保篩選範圍對應本地時間
-    const tzOffset = new Date().getTimezoneOffset();
-    const tzSign = tzOffset <= 0 ? '+' : '-';
-    const tzHours = String(Math.floor(Math.abs(tzOffset) / 60)).padStart(2, '0');
-    const tzMins = String(Math.abs(tzOffset) % 60).padStart(2, '0');
-    const tzSuffix = `${tzSign}${tzHours}:${tzMins}`;
-    filters.start_date = getTodayString() + 'T00:00:00' + tzSuffix;
+    filters.start_date = getTodayString() + 'T00:00:00' + getTimezoneSuffix();
 
     await loadAgents();
 
@@ -898,16 +904,7 @@ const AILogApp = (function() {
         if (filter === 'success') {
           value = value === '' ? null : value === 'true';
         } else if (filter === 'start_date' || filter === 'end_date') {
-          if (value) {
-            const tzOffset = new Date().getTimezoneOffset();
-            const tzSign = tzOffset <= 0 ? '+' : '-';
-            const tzHours = String(Math.floor(Math.abs(tzOffset) / 60)).padStart(2, '0');
-            const tzMins = String(Math.abs(tzOffset) % 60).padStart(2, '0');
-            const tzSuffix = `${tzSign}${tzHours}:${tzMins}`;
-            value = value + (filter === 'start_date' ? 'T00:00:00' : 'T23:59:59') + tzSuffix;
-          } else {
-            value = null;
-          }
+          value = value ? value + (filter === 'start_date' ? 'T00:00:00' : 'T23:59:59') + getTimezoneSuffix() : null;
         } else {
           value = value || null;
         }
