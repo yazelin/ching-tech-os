@@ -2207,17 +2207,25 @@ async def search_nas_files(
     if not allowed:
         return f"❌ {error_msg}"
 
-    # 此工具搜尋的是公司共用專案區（projects_mount_path），不是租戶隔離區
-    # 公司專案檔案是跨租戶共用的，因此不需要 tenant_id 過濾
+    # 此工具搜尋的是公司共用區，不是租戶隔離區
+    # 公司共用檔案是跨租戶共用的，因此不需要 tenant_id 過濾
     _tid = _get_tenant_id(ctos_tenant_id)  # noqa: F841 保留以備日後需要
     from pathlib import Path
     from ..config import settings
 
-    # 取得專案掛載點路徑
-    projects_path = Path(settings.projects_mount_path)
+    # 搜尋來源定義（shared zone 的子來源）
+    # TODO: 未來可依使用者權限過濾可搜尋的來源
+    search_sources = {
+        "projects": Path(settings.projects_mount_path),
+        "circuits": Path(settings.circuits_mount_path),
+    }
 
-    if not projects_path.exists():
-        return f"錯誤：掛載點 {settings.projects_mount_path} 不存在或未掛載"
+    # 過濾出實際存在的掛載點
+    available_sources = {
+        name: path for name, path in search_sources.items() if path.exists()
+    }
+    if not available_sources:
+        return "錯誤：沒有可用的搜尋來源掛載點"
 
     # 解析關鍵字（大小寫不敏感）
     keyword_list = [k.strip().lower() for k in keywords.split(",") if k.strip()]
@@ -2229,46 +2237,49 @@ async def search_nas_files(
     if file_types:
         type_list = [t.strip().lower().lstrip(".") for t in file_types.split(",") if t.strip()]
 
-    # 搜尋檔案
+    # 搜尋所有來源
     matched_files = []
     try:
-        for file_path in projects_path.rglob("*"):
-            if not file_path.is_file():
-                continue
-
-            # 取得相對路徑（用於匹配和顯示）
-            rel_path = file_path.relative_to(projects_path)
-            rel_path_str = str(rel_path)
-            rel_path_lower = rel_path_str.lower()
-
-            # 關鍵字匹配（所有關鍵字都要匹配路徑）
-            if not all(kw in rel_path_lower for kw in keyword_list):
-                continue
-
-            # 檔案類型匹配
-            if type_list:
-                suffix = file_path.suffix.lower().lstrip(".")
-                if suffix not in type_list:
-                    continue
-
-            # 取得檔案資訊
-            try:
-                stat = file_path.stat()
-                size = stat.st_size
-                modified = datetime.fromtimestamp(stat.st_mtime)
-            except OSError:
-                size = 0
-                modified = None
-
-            matched_files.append({
-                "path": f"shared://{rel_path_str}",
-                "name": file_path.name,
-                "size": size,
-                "modified": modified,
-            })
-
+        for source_name, source_path in available_sources.items():
             if len(matched_files) >= limit:
                 break
+            for file_path in source_path.rglob("*"):
+                if not file_path.is_file():
+                    continue
+
+                # 取得相對路徑（用於匹配和顯示）
+                rel_path = file_path.relative_to(source_path)
+                rel_path_str = str(rel_path)
+                rel_path_lower = rel_path_str.lower()
+
+                # 關鍵字匹配（所有關鍵字都要匹配路徑）
+                if not all(kw in rel_path_lower for kw in keyword_list):
+                    continue
+
+                # 檔案類型匹配
+                if type_list:
+                    suffix = file_path.suffix.lower().lstrip(".")
+                    if suffix not in type_list:
+                        continue
+
+                # 取得檔案資訊
+                try:
+                    stat = file_path.stat()
+                    size = stat.st_size
+                    modified = datetime.fromtimestamp(stat.st_mtime)
+                except OSError:
+                    size = 0
+                    modified = None
+
+                matched_files.append({
+                    "path": f"shared://{source_name}/{rel_path_str}",
+                    "name": file_path.name,
+                    "size": size,
+                    "modified": modified,
+                })
+
+                if len(matched_files) >= limit:
+                    break
 
     except PermissionError:
         return "錯誤：沒有權限存取檔案系統"
@@ -2319,42 +2330,23 @@ async def get_nas_file_info(
     if not allowed:
         return f"❌ {error_msg}"
 
-    # 預留租戶 ID 參數，未來透過 config 的 get_tenant_nas_path() 處理路徑隔離
-    tid = _get_tenant_id(ctos_tenant_id)  # noqa: F841
+    tid = _get_tenant_id(ctos_tenant_id)
     from pathlib import Path
-    from ..config import settings
+    from .share import validate_nas_file_path, NasFileNotFoundError, NasFileAccessDenied
 
-    projects_path = Path(settings.projects_mount_path)
-
-    # 正規化路徑
-    if file_path.startswith(settings.projects_mount_path):
-        # 完整路徑
-        full_path = Path(file_path)
-    else:
-        # 相對路徑（移除開頭的 /）
-        rel_path = file_path.lstrip("/")
-        full_path = projects_path / rel_path
-
-    # 安全檢查：確保路徑在允許範圍內
+    # 統一使用 validate_nas_file_path 進行路徑驗證（支援 shared://projects/...、shared://circuits/... 等）
     try:
-        full_path = full_path.resolve()
-        if not str(full_path).startswith(str(projects_path.resolve())):
-            return "錯誤：不允許存取此路徑"
-    except Exception:
-        return "錯誤：無效的路徑"
-
-    if not full_path.exists():
-        return f"錯誤：檔案不存在 - {file_path}"
-
-    if not full_path.is_file():
-        return f"錯誤：路徑不是檔案 - {file_path}"
+        full_path = validate_nas_file_path(file_path, tenant_id=tid)
+    except NasFileNotFoundError as e:
+        return f"錯誤：{e}"
+    except NasFileAccessDenied as e:
+        return f"錯誤：{e}"
 
     # 取得檔案資訊
     try:
         stat = full_path.stat()
         size = stat.st_size
         modified = datetime.fromtimestamp(stat.st_mtime)
-        rel_path = full_path.relative_to(projects_path)
     except OSError as e:
         return f"錯誤：無法讀取檔案資訊 - {e}"
 

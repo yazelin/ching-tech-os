@@ -166,11 +166,12 @@ KNOWLEDGE_TOOLS_PROMPT = """【知識庫】
 - update_knowledge_attachment: 更新附件說明（輸入 kb_id、attachment_index、description）"""
 
 # 檔案管理工具說明（對應 app: file-manager）
-FILE_TOOLS_PROMPT = """【NAS 專案檔案】
-- search_nas_files: 搜尋 NAS 共享檔案（用於搜尋專案資料夾中的檔案）
+FILE_TOOLS_PROMPT = """【NAS 共用檔案】
+- search_nas_files: 搜尋 NAS 共享檔案（搜尋範圍包含：專案資料、線路圖）
   · keywords: 多個關鍵字用逗號分隔（AND 匹配，大小寫不敏感）
   · file_types: 檔案類型過濾，如 pdf,xlsx,dwg
   · 範例：search_nas_files(keywords="亦達,layout", file_types="pdf")
+  · 結果路徑格式：shared://projects/... 或 shared://circuits/...
   · ⚠️ 注意：查找「最近的圖片」或「剛才的圖」請用 get_message_attachments，不要用此工具
 - get_nas_file_info: 取得 NAS 檔案詳細資訊（大小、修改時間）
 - prepare_file_message: 準備檔案訊息（推薦使用）

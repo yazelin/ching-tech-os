@@ -152,11 +152,12 @@ LINEBOT_PERSONAL_PROMPT = """你是擎添工業的 AI 助理，透過 Line 與�
 - 綁定後該成員即可進行專案更新操作
 - 範例：add_project_member(project_id=..., name="用戶名", is_internal=True, ctos_user_id=從對話識別取得的值)
 
-【NAS 專案檔案】
-- search_nas_files: 搜尋 NAS 共享檔案（用於搜尋專案資料夾中的檔案）
+【NAS 共用檔案】
+- search_nas_files: 搜尋 NAS 共享檔案（搜尋範圍包含：專案資料、線路圖）
   · keywords: 多個關鍵字用逗號分隔（AND 匹配，大小寫不敏感）
   · file_types: 檔案類型過濾，如 pdf,xlsx,dwg
   · 範例：search_nas_files(keywords="亦達,layout", file_types="pdf")
+  · 結果路徑格式：shared://projects/... 或 shared://circuits/...
   · ⚠️ 注意：查找「最近的圖片」或「剛才的圖」請用 get_message_attachments，不要用此工具
 - get_nas_file_info: 取得 NAS 檔案詳細資訊（大小、修改時間）
 - prepare_file_message: 準備檔案訊息（推薦使用）
