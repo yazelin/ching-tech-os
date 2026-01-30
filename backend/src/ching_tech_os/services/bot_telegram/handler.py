@@ -370,6 +370,9 @@ async def handle_update(update: Update, adapter: TelegramBotAdapter) -> None:
     chat_type = chat.type  # "private", "group", "supergroup"
     is_group = chat_type in GROUP_CHAT_TYPES
 
+    # 確保 bot_username 已初始化（用於群組 @Bot 判斷）
+    await adapter.ensure_bot_info()
+
     # 記錄訊息資訊
     user = message.from_user
     user_name = user.full_name if user else "未知"
