@@ -2238,30 +2238,47 @@ async def search_nas_files(
         type_list = [t.strip().lower().lstrip(".") for t in file_types.split(",") if t.strip()]
 
     # 兩階段搜尋：先淺層找目錄，再深入匹配的目錄搜尋檔案
-    # 避免在 CIFS 掛載上全遍歷（5 萬檔案需 60+ 秒）
-    import subprocess
+    # 使用 asyncio subprocess 避免阻塞 event loop
+    import asyncio
 
     source_paths = [str(p) for p in available_sources.values()]
     source_name_map = {str(p): name for name, p in available_sources.items()}
 
-    def _find_matching_dirs(max_depth: int) -> list[str]:
+    async def _run_find(args: list[str], timeout: int = 30) -> str:
+        """非同步執行 find 指令"""
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *args,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+            return stdout.decode("utf-8", errors="replace").strip()
+        except (asyncio.TimeoutError, OSError):
+            try:
+                proc.kill()
+            except Exception:
+                pass
+            return ""
+
+    async def _find_matching_dirs(max_depth: int) -> list[str]:
         """用 find 在淺層找出名稱匹配任一關鍵字的目錄"""
-        dirs = set()
+        # 對每個 source × keyword 平行執行 find
+        tasks = []
         for source in source_paths:
             for kw in keyword_list:
-                try:
-                    result = subprocess.run(
-                        ["find", source, "-maxdepth", str(max_depth), "-type", "d", "-iname", f"*{kw}*"],
-                        capture_output=True, text=True, timeout=30,
-                    )
-                    for line in result.stdout.strip().split("\n"):
-                        if line:
-                            dirs.add(line)
-                except (subprocess.TimeoutExpired, OSError):
-                    pass
+                args = ["find", source, "-maxdepth", str(max_depth), "-type", "d", "-iname", f"*{kw}*"]
+                tasks.append(_run_find(args, timeout=30))
+
+        results = await asyncio.gather(*tasks)
+        dirs = set()
+        for output in results:
+            for line in output.split("\n"):
+                if line:
+                    dirs.add(line)
         return sorted(dirs)
 
-    def _search_in_dirs(dirs: list[str]) -> list[dict]:
+    async def _search_in_dirs(dirs: list[str]) -> list[dict]:
         """在指定目錄中用 find 搜尋符合條件的檔案"""
         if not dirs:
             return []
@@ -2279,14 +2296,13 @@ async def search_nas_files(
                 args.extend(["-iname", f"*.{t}"])
             args.append(")")
 
-        try:
-            result = subprocess.run(args, capture_output=True, text=True, timeout=120)
-        except (subprocess.TimeoutExpired, OSError):
+        output = await _run_find(args, timeout=120)
+        if not output:
             return []
 
         files = []
         seen = set()
-        for line in result.stdout.strip().split("\n"):
+        for line in output.split("\n"):
             if not line or line in seen:
                 continue
             seen.add(line)
@@ -2327,13 +2343,13 @@ async def search_nas_files(
     matched_files = []
     try:
         # 階段 1：淺層 2 層目錄匹配
-        matched_dirs = _find_matching_dirs(max_depth=2)
-        matched_files = _search_in_dirs(matched_dirs)
+        matched_dirs = await _find_matching_dirs(max_depth=2)
+        matched_files = await _search_in_dirs(matched_dirs)
 
         # 階段 2：沒找到結果，擴展到 3 層
         if not matched_files:
-            matched_dirs = _find_matching_dirs(max_depth=3)
-            matched_files = _search_in_dirs(matched_dirs)
+            matched_dirs = await _find_matching_dirs(max_depth=3)
+            matched_files = await _search_in_dirs(matched_dirs)
 
     except PermissionError:
         return "錯誤：沒有權限存取檔案系統"
