@@ -6845,9 +6845,9 @@ async def prepare_print_file(
     """
     await ensure_db_connection()
     if ctos_user_id:
-        perm_error = await check_mcp_tool_permission("prepare_print_file", ctos_user_id)
-        if perm_error:
-            return perm_error
+        allowed, error_msg = await check_mcp_tool_permission("prepare_print_file", ctos_user_id)
+        if not allowed:
+            return f"❌ {error_msg}"
 
     import asyncio as _asyncio
     from pathlib import Path
