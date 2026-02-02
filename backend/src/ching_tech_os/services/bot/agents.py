@@ -311,6 +311,7 @@ PRINTER_TOOLS_PROMPT = """【列印功能】
   · copies: 份數（可選，預設 1）
   · page_size: 紙張大小（可選，A3/A4/A5/B4/B5/Letter/Legal）
   · orientation: 方向（可選，portrait/landscape）
+  · color_mode: 色彩模式（可選，gray/color，預設 gray。除非用戶要求彩色列印，否則一律用 gray）
 - mcp__printer__list_printers: 查詢可用印表機
 - mcp__printer__printer_status: 查詢印表機狀態
 - mcp__printer__cancel_job: 取消列印工作
