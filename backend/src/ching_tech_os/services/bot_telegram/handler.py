@@ -763,7 +763,15 @@ async def _handle_text_with_ai(
         "mcp__nanobanana__generate_image",
         "mcp__nanobanana__edit_image",
     ]
-    all_tools = builtin_tools + mcp_tools + nanobanana_tools + ["Read"]
+    # 加入 printer-mcp 列印工具（搭配 prepare_print_file 使用）
+    printer_tools = [
+        "mcp__printer__print_file",
+        "mcp__printer__list_printers",
+        "mcp__printer__printer_status",
+        "mcp__printer__cancel_job",
+        "mcp__printer__print_test_page",
+    ]
+    all_tools = builtin_tools + mcp_tools + nanobanana_tools + printer_tools + ["Read"]
 
     # 4. 建立進度通知 callback（含節流避免 Telegram API 限流）
     progress_message_id: str | None = None
