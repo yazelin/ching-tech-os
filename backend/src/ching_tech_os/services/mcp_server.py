@@ -2792,6 +2792,7 @@ async def send_nas_file(
     file_path: str,
     line_user_id: str | None = None,
     line_group_id: str | None = None,
+    telegram_chat_id: str | None = None,
     ctos_user_id: int | None = None,
     ctos_tenant_id: str | None = None,
 ) -> str:
@@ -2802,13 +2803,14 @@ async def send_nas_file(
         file_path: NAS 檔案的完整路徑（從 search_nas_files 取得）
         line_user_id: Line 用戶 ID（個人對話時使用，從【對話識別】取得）
         line_group_id: Line 群組的內部 UUID（群組對話時使用，從【對話識別】取得）
+        telegram_chat_id: Telegram chat ID（從【對話識別】取得）
         ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
         ctos_tenant_id: 租戶 ID（從對話識別取得）
 
     注意：
     - 圖片（jpg/jpeg/png/gif/webp）< 10MB 會直接顯示
     - 其他檔案會發送下載連結
-    - 必須提供 line_user_id 或 line_group_id 其中之一
+    - 必須提供 line_user_id、line_group_id 或 telegram_chat_id 其中之一
     """
     await ensure_db_connection()
 
@@ -2829,11 +2831,10 @@ async def send_nas_file(
         NasFileAccessDenied,
     )
     from ..models.share import ShareLinkCreate
-    from .linebot import push_image, push_text
 
     # 驗證必要參數
-    if not line_user_id and not line_group_id:
-        return "錯誤：請從【對話識別】區塊取得 line_user_id 或 line_group_id"
+    if not line_user_id and not line_group_id and not telegram_chat_id:
+        return "錯誤：請從【對話識別】區塊取得 line_user_id、line_group_id 或 telegram_chat_id"
 
     # 驗證檔案路徑（傳入 tenant_id 以正確解析 CTOS 路徑）
     try:
@@ -2852,7 +2853,7 @@ async def send_nas_file(
     image_extensions = {"jpg", "jpeg", "png", "gif", "webp"}
     is_image = file_ext in image_extensions
 
-    # Line ImageMessage 限制 10MB
+    # 圖片大小限制 10MB
     max_image_size = 10 * 1024 * 1024
 
     # 產生分享連結
@@ -2865,6 +2866,37 @@ async def send_nas_file(
         result = await _create_share_link(data, "linebot", tenant_id=tid)
     except Exception as e:
         return f"建立分享連結失敗：{e}"
+
+    download_url = result.full_url.replace("/s/", "/api/public/") + "/download"
+    size_str = f"{file_size / 1024 / 1024:.1f}MB" if file_size >= 1024 * 1024 else f"{file_size / 1024:.1f}KB"
+
+    # === Telegram 發送 ===
+    if telegram_chat_id:
+        from .bot_telegram.adapter import TelegramBotAdapter
+        from ..config import settings as _settings
+        if not _settings.telegram_bot_token:
+            return "❌ Telegram Bot 未設定"
+        try:
+            adapter = TelegramBotAdapter(token=_settings.telegram_bot_token)
+            if is_image and file_size <= max_image_size:
+                await adapter.send_image(telegram_chat_id, download_url)
+                return f"已發送圖片：{file_name}"
+            else:
+                await adapter.send_file(telegram_chat_id, download_url, file_name)
+                return f"已發送檔案：{file_name}（{size_str}）"
+        except Exception as e:
+            # fallback 到連結
+            try:
+                await adapter.send_text(
+                    telegram_chat_id,
+                    f"📎 {file_name}（{size_str}）\n{result.full_url}\n⏰ 連結 24 小時內有效",
+                )
+                return f"檔案直接發送失敗（{e}），已改發連結：{file_name}"
+            except Exception as e2:
+                return f"無法直接發送（{e2}），以下是下載連結：\n{result.full_url}\n（24 小時內有效）"
+
+    # === Line 發送 ===
+    from .linebot import push_image, push_text
 
     # 決定發送目標（優先使用群組 ID）
     # line_group_id 是內部 UUID，需要轉換為 Line group ID
@@ -2891,8 +2923,6 @@ async def send_nas_file(
     try:
         if is_image and file_size <= max_image_size:
             # 小圖片：直接發送 ImageMessage
-            # 下載連結需要加上 /download
-            download_url = result.full_url.replace("/s/", "/api/public/") + "/download"
             message_id, error = await push_image(target_id, download_url)
             if message_id:
                 return f"已發送圖片：{file_name}"
@@ -2903,17 +2933,14 @@ async def send_nas_file(
                 if fallback_id:
                     return f"圖片發送失敗（{error}），已改發連結：{file_name}"
                 else:
-                    # 連結也發不出去，回傳連結讓 AI 在回覆中告訴用戶
                     return f"無法直接發送（{fallback_error}），以下是下載連結：\n{result.full_url}\n（24 小時內有效）"
         else:
             # 其他檔案或大圖片：發送連結
-            size_str = f"{file_size / 1024 / 1024:.1f}MB" if file_size >= 1024 * 1024 else f"{file_size / 1024:.1f}KB"
             message = f"📎 {file_name}（{size_str}）\n{result.full_url}\n⏰ 連結 24 小時內有效"
             message_id, error = await push_text(target_id, message)
             if message_id:
                 return f"已發送檔案連結：{file_name}"
             else:
-                # 發送失敗，回傳連結讓 AI 在回覆中告訴用戶
                 return f"無法直接發送（{error}），以下是下載連結：\n{result.full_url}\n（24 小時內有效）"
     except Exception as e:
         return f"發送訊息失敗：{e}，連結：{result.full_url}"
