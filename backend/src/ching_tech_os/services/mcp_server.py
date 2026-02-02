@@ -6801,6 +6801,145 @@ async def generate_md2doc(
 
 
 # ============================================================
+# 列印前置處理工具
+# ============================================================
+
+# 需透過 LibreOffice 轉 PDF 的格式
+OFFICE_EXTENSIONS = {
+    ".docx", ".xlsx", ".pptx", ".doc", ".xls", ".ppt",
+    ".odt", ".ods", ".odp",
+}
+
+# printer-mcp 可直接列印的格式
+PRINTABLE_EXTENSIONS = {
+    ".pdf", ".txt", ".log", ".csv",
+    ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff", ".webp",
+}
+
+# 允許存取的路徑前綴
+ALLOWED_PRINT_PATHS = ("/mnt/nas/", "/tmp/ctos/")
+
+
+@mcp.tool()
+async def prepare_print_file(
+    file_path: str,
+    ctos_user_id: int | None = None,
+    ctos_tenant_id: str | None = None,
+) -> str:
+    """將虛擬路徑轉換為可列印的絕對路徑，Office 文件會自動轉為 PDF
+
+    【重要】此工具只負責路徑轉換和格式轉換，不會執行列印。
+    取得回傳的絕對路徑後，請接著呼叫 printer-mcp 的 print_file 工具進行實際列印。
+
+    列印完整流程：
+    1. 呼叫 prepare_print_file 取得絕對路徑
+    2. 呼叫 printer-mcp 的 print_file(file_path=回傳的路徑) 進行列印
+
+    file_path 可以是：
+    - 虛擬路徑：ctos://knowledge/attachments/report.pdf、shared://projects/...
+    - 絕對路徑：/mnt/nas/ctos/...
+
+    支援的檔案格式：
+    - 直接可印：PDF、純文字（.txt, .log, .csv）、圖片（PNG, JPG, JPEG, GIF, BMP, TIFF, WebP）
+    - 自動轉 PDF：Office 文件（.docx, .xlsx, .pptx, .doc, .xls, .ppt, .odt, .ods, .odp）
+    """
+    await ensure_db_connection()
+    if ctos_user_id:
+        perm_error = await check_mcp_tool_permission("prepare_print_file", ctos_user_id)
+        if perm_error:
+            return perm_error
+
+    import asyncio as _asyncio
+    from pathlib import Path
+
+    tid = ctos_tenant_id
+
+    # 路徑轉換：虛擬路徑 → 絕對路徑
+    try:
+        from .path_manager import path_manager
+
+        if "://" in file_path:
+            actual_path = Path(path_manager.to_filesystem(file_path, tenant_id=tid))
+        else:
+            actual_path = Path(file_path)
+    except Exception as e:
+        return f"❌ 路徑解析失敗：{str(e)}"
+
+    # 取得實際絕對路徑（解析 symlink）
+    try:
+        actual_path = actual_path.resolve()
+    except Exception:
+        pass
+
+    # 安全檢查
+    actual_str = str(actual_path)
+    if ".." in file_path:
+        return "❌ 不允許的路徑（禁止路徑穿越）"
+
+    if not any(actual_str.startswith(prefix) for prefix in ALLOWED_PRINT_PATHS):
+        return "❌ 不允許存取此路徑的檔案。僅允許 NAS 和暫存目錄中的檔案。"
+
+    # 檢查檔案存在
+    if not actual_path.exists():
+        return f"❌ 檔案不存在：{file_path}"
+
+    if not actual_path.is_file():
+        return f"❌ 路徑不是檔案：{file_path}"
+
+    # 檢查檔案格式
+    ext = actual_path.suffix.lower()
+
+    if ext in PRINTABLE_EXTENSIONS:
+        return f"""✅ 檔案已準備好，請使用 printer-mcp 的 print_file 工具列印：
+
+📄 檔案：{actual_path.name}
+📂 絕對路徑：{actual_str}
+
+下一步：呼叫 print_file(file_path="{actual_str}")"""
+
+    if ext in OFFICE_EXTENSIONS:
+        # Office 文件轉 PDF
+        try:
+            tmp_dir = Path("/tmp/ctos/print")
+            tmp_dir.mkdir(parents=True, exist_ok=True)
+
+            proc_convert = await _asyncio.create_subprocess_exec(
+                "libreoffice", "--headless", "--convert-to", "pdf",
+                "--outdir", str(tmp_dir), str(actual_path),
+                stdout=_asyncio.subprocess.PIPE,
+                stderr=_asyncio.subprocess.PIPE,
+            )
+            _, stderr_convert = await proc_convert.communicate()
+
+            if proc_convert.returncode != 0:
+                error_msg = stderr_convert.decode().strip() if stderr_convert else "未知錯誤"
+                return f"❌ 檔案轉換 PDF 失敗：{error_msg}"
+
+            pdf_name = actual_path.stem + ".pdf"
+            tmp_pdf = tmp_dir / pdf_name
+
+            if not tmp_pdf.exists():
+                return "❌ 檔案轉換 PDF 後找不到輸出檔案"
+
+            pdf_str = str(tmp_pdf)
+            return f"""✅ Office 文件已轉換為 PDF，請使用 printer-mcp 的 print_file 工具列印：
+
+📄 原始檔案：{actual_path.name}
+📄 轉換後 PDF：{pdf_name}
+📂 絕對路徑：{pdf_str}
+
+下一步：呼叫 print_file(file_path="{pdf_str}")"""
+
+        except FileNotFoundError:
+            return "❌ 找不到 libreoffice 指令，無法轉換 Office 文件。"
+        except Exception as e:
+            return f"❌ 轉換 PDF 時發生錯誤：{str(e)}"
+
+    supported = ", ".join(sorted(PRINTABLE_EXTENSIONS | OFFICE_EXTENSIONS))
+    return f"❌ 不支援的檔案格式：{ext}\n支援的格式：{supported}"
+
+
+# ============================================================
 # 工具存取介面（供 Line Bot 和其他服務使用）
 # ============================================================
 

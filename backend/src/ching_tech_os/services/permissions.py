@@ -97,6 +97,9 @@ TOOL_APP_MAPPING: dict[str, str | None] = {
     "generate_md2ppt": "md2ppt",
     "generate_md2doc": "md2doc",
 
+    # 列印前置處理工具
+    "prepare_print_file": "printer",
+
     # 通用工具（不需要特定權限）
     "get_message_attachments": None,  # 基礎訊息功能
     "summarize_chat": None,           # 群組對話摘要
@@ -128,6 +131,7 @@ DEFAULT_APP_PERMISSIONS: dict[str, bool] = {
     "tenant-admin": False,      # 管理功能，預設關閉
     "md2ppt": True,
     "md2doc": True,
+    "printer": True,
     "settings": True,
 }
 
@@ -163,6 +167,7 @@ APP_DISPLAY_NAMES: dict[str, str] = {
     "platform-admin": "平台管理",
     "md2ppt": "簡報生成",
     "md2doc": "文件生成",
+    "printer": "列印",
     "settings": "系統設定",
 }
 

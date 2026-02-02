@@ -11,6 +11,11 @@
         "-c",
         "set -a && source /path/to/your/project/.env && set +a && uvx nanobanana-py"
       ]
+    },
+    "printer": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["printer-mcp"]
     }
   }
 }
