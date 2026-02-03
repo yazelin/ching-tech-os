@@ -70,6 +70,11 @@ MCP Server SHALL 提供 `search_nas_files` 工具搜尋多個 NAS 共享掛載�
 - **THEN** 可依使用者權限過濾搜尋來源字典
 - **AND** 不需修改搜尋邏輯本身
 
+#### Scenario: 安全限制
+- **GIVEN** 搜尋範圍限定於已設定的掛載點（唯讀掛載）
+- **WHEN** AI 嘗試搜尋其他路徑
+- **THEN** 系統拒絕並回傳錯誤
+
 ### Requirement: 取得 NAS 檔案資訊 MCP 工具
 MCP Server SHALL 提供 `get_nas_file_info` 工具讓 AI 助手取得特定檔案的詳細資訊。
 
