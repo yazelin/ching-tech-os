@@ -1,15 +1,24 @@
 {
   "mcpServers": {
     "ching-tech-os": {
+      "type": "stdio",
       "command": "bash",
-      "args": ["-c", "cd /home/ct/SDD/ching-tech-os/backend && uv run python -m ching_tech_os.mcp_cli"]
+      "args": ["-c", "cd /path/to/ching-tech-os/backend && uv run python -m ching_tech_os.mcp_cli"]
+    },
+    "erpnext": {
+      "type": "stdio",
+      "command": "bash",
+      "args": [
+        "-c",
+        "set -a && source /path/to/ching-tech-os/.env && set +a && uvx erpnext-mcp"
+      ]
     },
     "nanobanana": {
       "type": "stdio",
       "command": "bash",
       "args": [
         "-c",
-        "set -a && source /path/to/your/project/.env && set +a && uvx nanobanana-py"
+        "set -a && source /path/to/ching-tech-os/.env && set +a && uvx nanobanana-py"
       ]
     },
     "printer": {
