@@ -526,7 +526,36 @@ async def process_message_with_ai(
             "mcp__printer__cancel_job",
             "mcp__printer__print_test_page",
         ]
-        all_tools = agent_tools + mcp_tools + nanobanana_tools + printer_tools + ["Read"]
+        # 加入 ERPNext MCP 工具（廠商/客戶/庫存/專案管理）
+        erpnext_tools = [
+            "mcp__erpnext__list_documents",
+            "mcp__erpnext__get_document",
+            "mcp__erpnext__create_document",
+            "mcp__erpnext__update_document",
+            "mcp__erpnext__delete_document",
+            "mcp__erpnext__submit_document",
+            "mcp__erpnext__cancel_document",
+            "mcp__erpnext__run_report",
+            "mcp__erpnext__get_count",
+            "mcp__erpnext__get_list_with_summary",
+            "mcp__erpnext__run_method",
+            "mcp__erpnext__search_link",
+            "mcp__erpnext__list_doctypes",
+            "mcp__erpnext__get_doctype_meta",
+            "mcp__erpnext__get_stock_balance",
+            "mcp__erpnext__get_stock_ledger",
+            "mcp__erpnext__get_item_price",
+            "mcp__erpnext__make_mapped_doc",
+            "mcp__erpnext__get_party_balance",
+            "mcp__erpnext__get_supplier_details",  # 支援別名搜尋
+            "mcp__erpnext__get_customer_details",  # 支援別名搜尋
+            "mcp__erpnext__upload_file",
+            "mcp__erpnext__upload_file_from_url",
+            "mcp__erpnext__list_files",
+            "mcp__erpnext__download_file",
+            "mcp__erpnext__get_file_url",
+        ]
+        all_tools = agent_tools + mcp_tools + nanobanana_tools + printer_tools + erpnext_tools + ["Read"]
 
         # 計時開始
         start_time = time.time()

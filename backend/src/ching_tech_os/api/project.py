@@ -1,4 +1,13 @@
-"""專案管理 API"""
+"""專案管理 API
+
+⚠️ DEPRECATED: 此 API 已停用，功能已遷移至 ERPNext
+請改用 ERPNext MCP 工具或直接在 ERPNext 系統操作：http://ct.erp
+
+遷移對應：
+- 專案查詢：mcp__erpnext__list_documents (doctype="Project")
+- 專案詳情：mcp__erpnext__get_document (doctype="Project", name="專案名稱")
+- 任務管理：mcp__erpnext__list_documents (doctype="Task")
+"""
 
 import mimetypes
 from urllib.parse import quote

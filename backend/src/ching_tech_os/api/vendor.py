@@ -1,4 +1,13 @@
-"""廠商管理 API"""
+"""廠商管理 API
+
+⚠️ DEPRECATED: 此 API 已停用，功能已遷移至 ERPNext
+請改用 ERPNext MCP 工具或直接在 ERPNext 系統操作：http://ct.erp
+
+遷移對應：
+- 廠商查詢：mcp__erpnext__list_documents (doctype="Supplier")
+- 廠商詳情：mcp__erpnext__get_document (doctype="Supplier", name="廠商名稱")
+- 新增廠商：mcp__erpnext__create_document (doctype="Supplier")
+"""
 
 from uuid import UUID
 

@@ -17,120 +17,93 @@ logger = logging.getLogger("bot.agents")
 # ============================================================
 
 # 專案管理工具說明（對應 app: project-management）
-PROJECT_TOOLS_PROMPT = """【專案管理】
-- query_project: 查詢專案（可用關鍵字搜尋，取得專案 ID）
-- create_project: 建立新專案（輸入名稱，可選描述和日期）
-- update_project: 更新專案資訊（名稱、描述、狀態、日期）⚠️需權限
-- add_project_member: 新增專案成員（is_internal 預設 True，外部聯絡人設為 False）🔗可綁定
-- update_project_member: 更新成員資訊（角色、聯絡方式等）⚠️需權限
-- add_project_milestone: 新增專案里程碑（可設定類型、預計日期、狀態）
-- update_milestone: 更新里程碑（狀態、預計/實際日期等）⚠️需權限
-- get_project_milestones: 取得專案里程碑（需要 project_id）
-- add_project_meeting: 新增會議記錄（標題必填，日期/地點/參與者/內容可選）⚠️需權限
-- update_project_meeting: 更新會議記錄（標題、日期、內容等）⚠️需權限
-- get_project_meetings: 取得專案會議記錄（需要 project_id）
-- get_project_members: 取得專案成員與聯絡人（需要 project_id）
+# 此功能已遷移至 ERPNext，以下為 ERPNext 操作指引
+PROJECT_TOOLS_PROMPT = """【專案管理】（使用 ERPNext）
+專案管理功能已遷移至 ERPNext 系統，請使用 ERPNext MCP 工具操作：
 
-【發包/交貨管理】
-- add_delivery_schedule: 新增發包記錄（廠商、料件必填，數量/發包日/交貨日可選）
-- update_delivery_schedule: 更新發包記錄
-  · 用 delivery_id 或 vendor+item 匹配記錄
-  · new_vendor: 更新廠商名稱
-  · new_item: 更新料件名稱
-  · new_quantity: 更新數量
-  · new_status: 更新狀態
-  · order_date: 更新發包日
-  · expected_delivery_date: 更新預計交貨日
-  · actual_delivery_date: 更新實際到貨日
-  · new_notes: 更新備註
-- get_delivery_schedules: 查詢專案發包記錄（可依狀態或廠商過濾）
-- 狀態值：pending(待發包)、ordered(已發包)、delivered(已到貨)、completed(已完成)
+【查詢專案】
+- mcp__erpnext__list_documents: 查詢專案列表
+  · doctype: "Project"
+  · fields: ["name", "project_name", "status", "expected_start_date", "expected_end_date"]
+  · filters: 可依狀態過濾，如 '{"status": "Open"}'
+- mcp__erpnext__get_document: 取得專案詳情
+  · doctype: "Project"
+  · name: 專案名稱
 
-【專案連結管理】
-- add_project_link: 新增專案連結（title 標題、url 網址必填，description 描述可選）
-- get_project_links: 查詢專案連結列表
-- update_project_link: 更新連結（可更新 title、url、description）
-- delete_project_link: 刪除連結
+【任務管理】（對應原本的里程碑）
+- mcp__erpnext__list_documents: 查詢專案任務
+  · doctype: "Task"
+  · filters: '{"project": "專案名稱"}'
+- mcp__erpnext__create_document: 新增任務
+  · doctype: "Task"
+  · data: {"subject": "任務名稱", "project": "專案名稱", "status": "Open"}
 
-【專案附件管理】
-- add_project_attachment: 從 NAS 添加附件到專案
-  · nas_path: 直接使用 get_message_attachments 返回的路徑（如 users/.../images/...）
-  · 也支援 search_nas_files 返回的路徑或完整 nas:// 格式
-  · description: 描述（可選）
-- get_project_attachments: 查詢專案附件列表
-- update_project_attachment: 更新附件描述
-- delete_project_attachment: 刪除附件
+【專案操作範例】
+1. 查詢所有進行中的專案：
+   mcp__erpnext__list_documents(doctype="Project", filters='{"status":"Open"}')
+2. 查詢特定專案的任務：
+   mcp__erpnext__list_documents(doctype="Task", filters='{"project":"專案名稱"}')
+3. 更新任務狀態為完成：
+   mcp__erpnext__update_document(doctype="Task", name="TASK-00001", data='{"status":"Completed"}')
 
-【重要：工具呼叫參數】
-所有工具呼叫時，必須從【對話識別】區塊取得並傳入以下參數：
-- ctos_tenant_id: 租戶 ID（必傳，用於多租戶資料隔離）
-- ctos_user_id: 用戶 ID（權限檢查用，若顯示「未關聯」則不傳）
-範例：query_project(keyword="...", ctos_tenant_id=從對話識別取得的值, ctos_user_id=從對話識別取得的值)
-
-【專案權限控制】
-標記「⚠️需權限」的工具需要傳入 ctos_user_id 參數：
-- 若用戶未關聯 CTOS 帳號（顯示「未關聯」），告知用戶需要聯繫管理員關聯帳號
-- 只有專案成員才能更新該專案的資料
-
-【成員自動綁定】
-標記「🔗可綁定」的工具（add_project_member）：
-- 新增內部成員時，傳入 ctos_user_id 可自動綁定帳號
-- 綁定後該成員即可進行專案更新操作
-- 範例：add_project_member(project_id=..., name="用戶名", is_internal=True, ctos_user_id=從對話識別取得的值)"""
+【直接操作 ERPNext】
+若需要更複雜的操作，請直接在 ERPNext 系統操作：http://ct.erp"""
 
 # 物料/庫存管理工具說明（對應 app: inventory）
-INVENTORY_TOOLS_PROMPT = """【物料/庫存管理】
-- query_inventory: 查詢物料/庫存
-  · keyword: 搜尋關鍵字（名稱、型號或規格，會自動忽略連字符和空格）
-  · item_id: 物料 ID（查詢特定物料詳情和近期進出貨記錄）
-  · category: 類別過濾
-  · vendor: 廠商名稱過濾（例如：查詢 Keyence 的物料）
-  · low_stock: 設為 true 只顯示庫存不足的物料
-- add_inventory_item: 新增物料
-  · name: 物料名稱（必填）
-  · model: 型號
-  · specification: 規格
-  · unit: 單位（如：個、台、公斤）
-  · category: 類別
-  · default_vendor: 預設廠商
-  · storage_location: 存放庫位（如 A-1-3 表示 A 區 1 排 3 號）
-  · min_stock: 最低庫存量（低於此會顯示警告）
-- update_inventory_item: 更新物料資訊
-  · item_id 或 item_name: 物料識別（擇一提供）
-  · 可更新：name、model、specification、unit、category、default_vendor、storage_location、min_stock、notes
-- record_inventory_in: 記錄進貨
-  · quantity: 進貨數量（必填）
-  · item_id 或 item_name: 物料識別（擇一提供，item_name 會模糊匹配）
-  · vendor: 廠商名稱
-  · project_id 或 project_name: 關聯專案（可選）
-  · transaction_date: 進貨日期（YYYY-MM-DD，預設今日）
-- record_inventory_out: 記錄出貨/領料
-  · quantity: 出貨數量（必填）
-  · item_id 或 item_name: 物料識別（擇一提供）
-  · project_id 或 project_name: 關聯專案（可選）
-  · transaction_date: 出貨日期（YYYY-MM-DD，預設今日）
-- adjust_inventory: 庫存調整（盤點校正）
-  · new_quantity: 新的庫存數量（必填）
-  · reason: 調整原因（必填，如「盤點調整」、「損耗」）
-  · item_id 或 item_name: 物料識別
+# 此功能已遷移至 ERPNext，以下為 ERPNext 操作指引
+INVENTORY_TOOLS_PROMPT = """【物料/庫存管理】（使用 ERPNext）
+物料與庫存管理功能已遷移至 ERPNext 系統，請使用 ERPNext MCP 工具操作：
 
-【訂購記錄管理】
-- add_inventory_order: 新增訂購記錄
-  · order_quantity: 訂購數量（必填）
-  · item_id 或 item_name: 物料識別（擇一提供）
-  · order_date: 下單日期（YYYY-MM-DD）
-  · expected_delivery_date: 預計交貨日期（YYYY-MM-DD）
-  · vendor: 訂購廠商
-  · project_id 或 project_name: 關聯專案（可選）
-- update_inventory_order: 更新訂購記錄
-  · order_id: 訂購記錄 ID（必填）
-  · status: 狀態，可選：pending（待下單）、ordered（已下單）、delivered（已交貨）、cancelled（已取消）
-  · actual_delivery_date: 實際交貨日期（YYYY-MM-DD）
-  · 其他欄位皆可更新
-- get_inventory_orders: 查詢訂購記錄
-  · item_id 或 item_name: 物料識別（可選，不指定則查詢全部）
-  · status: 狀態過濾（pending/ordered/delivered/cancelled）
-- 流程：訂購 → 交貨後更新狀態為 delivered → 使用 record_inventory_in 記錄入庫"""
+【查詢物料】
+- mcp__erpnext__list_documents: 查詢物料列表
+  · doctype: "Item"
+  · fields: ["item_code", "item_name", "item_group", "stock_uom"]
+  · filters: 可依類別過濾，如 '{"item_group": "零件"}'
+- mcp__erpnext__get_document: 取得物料詳情
+  · doctype: "Item"
+  · name: 物料代碼
+
+【查詢庫存】
+- mcp__erpnext__get_stock_balance: 查詢即時庫存
+  · item_code: 物料代碼（可選）
+  · warehouse: 倉庫名稱（可選）
+- mcp__erpnext__get_stock_ledger: 查詢庫存異動記錄
+  · item_code: 物料代碼（可選）
+  · warehouse: 倉庫名稱（可選）
+  · limit: 回傳筆數（預設 50）
+
+【庫存異動】
+- mcp__erpnext__create_document: 建立 Stock Entry
+  · doctype: "Stock Entry"
+  · data: 包含 stock_entry_type、items 等欄位
+  · stock_entry_type 常用值：
+    - "Material Receipt"：收料入庫
+    - "Material Issue"：發料出庫
+    - "Material Transfer"：倉庫間調撥
+
+【廠商/客戶管理】
+⭐ 首選工具（一次取得完整資料，支援別名搜尋）：
+- mcp__erpnext__get_supplier_details: 查詢廠商完整資料
+  · keyword: 關鍵字搜尋（支援別名，如「健保局」、「104人力銀行」）
+  · 回傳：名稱、地址、電話、傳真、聯絡人
+- mcp__erpnext__get_customer_details: 查詢客戶完整資料
+  · keyword: 關鍵字搜尋（支援別名）
+  · 回傳：名稱、地址、電話、傳真、聯絡人
+
+進階操作：
+- mcp__erpnext__list_documents: 查詢列表（doctype: "Supplier" 或 "Customer"）
+- mcp__erpnext__create_document: 新增廠商/客戶
+
+【操作範例】
+1. 查詢庫存：
+   mcp__erpnext__get_stock_balance(item_code="CTOS-ABC123")
+2. 查詢物料清單：
+   mcp__erpnext__list_documents(doctype="Item", fields='["item_code","item_name","stock_uom"]')
+3. 收料入庫：
+   mcp__erpnext__create_document(doctype="Stock Entry", data='{"stock_entry_type":"Material Receipt","items":[{"item_code":"CTOS-ABC123","qty":10,"t_warehouse":"Stores - 擎添工業"}]}')
+
+【直接操作 ERPNext】
+若需要更複雜的操作（如採購單、批號管理），請直接在 ERPNext 系統操作：http://ct.erp"""
 
 # 知識庫工具說明（對應 app: knowledge-base）
 KNOWLEDGE_TOOLS_PROMPT = """【知識庫】
@@ -393,12 +366,12 @@ def generate_usage_tips_prompt(
     """
     tips: list[str] = []
 
-    # 專案相關流程
+    # 專案相關流程（已遷移至 ERPNext）
     if app_permissions.get("project-management", False):
         tips.extend([
-            "1. 先用 query_project 搜尋專案名稱取得 ID，若不存在可用 create_project 建立",
-            "2. 建立專案後，可用 add_project_member 新增成員，add_project_milestone 新增里程碑",
-            "3. 用戶說「A 廠商的 XX 已經到貨了」時，用 update_delivery_schedule 更新狀態為 delivered",
+            "1. 專案管理已遷移至 ERPNext，使用 mcp__erpnext__list_documents(doctype='Project') 查詢專案",
+            "2. 使用 mcp__erpnext__list_documents(doctype='Task', filters='{\"project\":\"專案名稱\"}') 查詢任務",
+            "3. 複雜操作請引導用戶直接在 ERPNext 系統操作：http://ct.erp",
         ])
 
     # 知識庫相關流程
@@ -410,13 +383,12 @@ def generate_usage_tips_prompt(
             f"{len(tips)+1}. 用戶要求將圖片加入知識庫時，先用 get_message_attachments 查詢附件，再用 add_note_with_attachments 加入",
         ])
 
-    # 庫存相關流程
+    # 庫存相關流程（已遷移至 ERPNext）
     if app_permissions.get("inventory-management", False):
         tips.extend([
-            f"{len(tips)+1}. 用戶查詢庫存時，用 query_inventory 搜尋物料",
-            f"{len(tips)+1}. 用戶說「進貨 XX 10 個」時，用 record_inventory_in 記錄",
-            f"{len(tips)+1}. 用戶說「從倉庫領料 XX 5 個給某專案」時，用 record_inventory_out 並關聯專案",
-            f"{len(tips)+1}. 用戶說「盤點後 XX 實際有 20 個」時，用 adjust_inventory 調整庫存",
+            f"{len(tips)+1}. 庫存管理已遷移至 ERPNext，使用 mcp__erpnext__get_stock_balance 查詢庫存",
+            f"{len(tips)+1}. 使用 mcp__erpnext__list_documents(doctype='Item') 查詢物料清單",
+            f"{len(tips)+1}. 收料/發料請引導用戶在 ERPNext 建立 Stock Entry：http://ct.erp",
         ])
 
     # 檔案相關流程

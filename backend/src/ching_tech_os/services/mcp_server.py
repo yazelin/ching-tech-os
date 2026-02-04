@@ -113,7 +113,13 @@ async def check_mcp_tool_permission(
         TOOL_APP_MAPPING,
         APP_DISPLAY_NAMES,
         DEFAULT_APP_PERMISSIONS,
+        is_tool_deprecated,
     )
+
+    # 檢查工具是否已停用（遷移至 ERPNext）
+    is_deprecated, deprecated_message = is_tool_deprecated(tool_name)
+    if is_deprecated:
+        return (False, deprecated_message)
 
     # 不需要特定權限的工具，直接放行
     required_app = TOOL_APP_MAPPING.get(tool_name)

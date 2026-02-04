@@ -36,6 +36,8 @@ dependencies = [
     # 認證相關
     "bcrypt>=4.0.0",
     "email-validator>=2.0.0",
+    "pandas>=3.0.0",
+    "python-dotenv>=1.2.1",
 ]
 
 [project.optional-dependencies]

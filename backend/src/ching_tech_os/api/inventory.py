@@ -1,4 +1,13 @@
-"""物料管理 API"""
+"""物料管理 API
+
+⚠️ DEPRECATED: 此 API 已停用，功能已遷移至 ERPNext
+請改用 ERPNext MCP 工具或直接在 ERPNext 系統操作：http://ct.erp
+
+遷移對應：
+- 物料查詢：mcp__erpnext__list_documents (doctype="Item")
+- 庫存查詢：mcp__erpnext__get_stock_balance
+- 入庫/出庫：mcp__erpnext__create_document (doctype="Stock Entry")
+"""
 
 from uuid import UUID
 

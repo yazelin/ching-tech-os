@@ -19,6 +19,90 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================
+# 已停用的 MCP 工具（遷移至 ERPNext）
+# ============================================================
+
+# 已停用的工具會返回提示訊息，引導使用者使用 ERPNext
+DEPRECATED_TOOLS: dict[str, str] = {
+    # 專案管理工具 - 遷移至 ERPNext Project
+    "query_project": "專案管理",
+    "create_project": "專案管理",
+    "update_project": "專案管理",
+    "add_project_member": "專案管理",
+    "update_project_member": "專案管理",
+    "get_project_members": "專案管理",
+    "add_project_milestone": "專案管理",
+    "update_milestone": "專案管理",
+    "get_project_milestones": "專案管理",
+    "add_project_meeting": "專案管理",
+    "update_project_meeting": "專案管理",
+    "get_project_meetings": "專案管理",
+    "add_delivery_schedule": "專案管理",
+    "update_delivery_schedule": "專案管理",
+    "get_delivery_schedules": "專案管理",
+    "add_project_link": "專案管理",
+    "get_project_links": "專案管理",
+    "update_project_link": "專案管理",
+    "delete_project_link": "專案管理",
+    "add_project_attachment": "專案管理",
+    "get_project_attachments": "專案管理",
+    "update_project_attachment": "專案管理",
+    "delete_project_attachment": "專案管理",
+    # 廠商管理工具 - 遷移至 ERPNext Supplier
+    "query_vendors": "廠商管理",
+    "add_vendor": "廠商管理",
+    "update_vendor": "廠商管理",
+    # 物料管理工具 - 遷移至 ERPNext Item/Stock
+    "query_inventory": "物料管理",
+    "add_inventory_item": "物料管理",
+    "update_inventory_item": "物料管理",
+    "record_inventory_in": "物料管理",
+    "record_inventory_out": "物料管理",
+    "adjust_inventory": "物料管理",
+    "query_project_inventory": "物料管理",
+    "add_inventory_order": "物料管理",
+    "update_inventory_order": "物料管理",
+    "get_inventory_orders": "物料管理",
+}
+
+# ERPNext 工具對應指引
+ERPNEXT_GUIDANCE: dict[str, str] = {
+    "專案管理": """請使用 ERPNext MCP 工具：
+- 專案查詢：mcp__erpnext__list_documents (doctype="Project")
+- 任務管理：mcp__erpnext__list_documents (doctype="Task")""",
+    "廠商管理": """請使用 ERPNext MCP 工具：
+- 廠商查詢：mcp__erpnext__list_documents (doctype="Supplier")
+- 新增廠商：mcp__erpnext__create_document (doctype="Supplier")""",
+    "物料管理": """請使用 ERPNext MCP 工具：
+- 物料查詢：mcp__erpnext__list_documents (doctype="Item")
+- 庫存查詢：mcp__erpnext__get_stock_balance
+- 入庫/出庫：mcp__erpnext__create_document (doctype="Stock Entry")""",
+}
+
+
+def is_tool_deprecated(tool_name: str) -> tuple[bool, str | None]:
+    """檢查工具是否已停用
+
+    Args:
+        tool_name: 工具名稱
+
+    Returns:
+        (is_deprecated, error_message): 若停用則返回 True 和錯誤訊息
+    """
+    clean_name = tool_name.replace("mcp__ching-tech-os__", "")
+    category = DEPRECATED_TOOLS.get(clean_name)
+    if category:
+        guidance = ERPNEXT_GUIDANCE.get(category, "")
+        message = f"""❌ 此功能已遷移至 ERPNext
+
+{guidance}
+
+或直接在 ERPNext 系統操作：http://ct.erp"""
+        return True, message
+    return False, None
+
+
+# ============================================================
 # MCP 工具與 App 權限對應
 # ============================================================
 

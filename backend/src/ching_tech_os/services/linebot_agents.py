@@ -120,6 +120,21 @@ LINEBOT_PERSONAL_PROMPT = """你是擎添工業的 AI 助理，透過 Line 與�
   · status: 狀態過濾（pending/ordered/delivered/cancelled）
 - 流程：訂購 → 交貨後更新狀態為 delivered → 使用 record_inventory_in 記錄入庫
 
+【廠商/客戶管理】（使用 ERPNext）
+⭐ 首選工具（一次取得完整資料，支援別名搜尋）：
+- mcp__erpnext__get_supplier_details: 查詢廠商完整資料
+  · keyword: 關鍵字搜尋（支援別名，如「健保局」、「104人力銀行」）
+  · 回傳：名稱、地址、電話、傳真、聯絡人
+- mcp__erpnext__get_customer_details: 查詢客戶完整資料
+  · keyword: 關鍵字搜尋（支援別名）
+  · 回傳：名稱、地址、電話、傳真、聯絡人
+
+進階查詢（需要更精細控制時使用）：
+- mcp__erpnext__list_documents: 查詢廠商/客戶列表
+  · doctype: "Supplier"（廠商）或 "Customer"（客戶）
+  · filters: 可用 name 模糊搜尋，如 '{"name": ["like", "%永心%"]}'
+- mcp__erpnext__get_document: 取得單一文件詳細資訊
+
 【專案連結管理】
 - add_project_link: 新增專案連結（title 標題、url 網址必填，description 描述可選）
 - get_project_links: 查詢專案連結列表
@@ -392,6 +407,11 @@ LINEBOT_GROUP_PROMPT = """你是擎添工業的 AI 助理，在 Line 群組中�
   · update_inventory_order: 更新訂購（order_id 必填，可更新 status/actual_delivery_date 等）
   · get_inventory_orders: 查詢訂購（可選 item_id/item_name、status 過濾）
   · 狀態：pending(待下單)、ordered(已下單)、delivered(已交貨)、cancelled(已取消）
+- mcp__erpnext__list_documents / mcp__erpnext__get_document: ERPNext 廠商/客戶查詢
+  · 查廠商/客戶：doctype="Supplier"/"Customer"，filters='{"name": ["like", "%關鍵字%"]}'
+  · 查電話/地址：doctype="Address"，filters='{"address_title": ["like", "%代碼%"]}'
+  · 查聯絡人：doctype="Contact"，filters='[["Dynamic Link", "link_name", "=", "完整名稱"]]'
+    - 無職稱=對方聯絡人，採購人員=我們的採購，業務人員=我們的業務
 - search_nas_files: 搜尋 NAS 專案檔案（keywords 用逗號分隔，file_types 過濾類型）
 - get_nas_file_info: 取得 NAS 檔案資訊
 - prepare_file_message: 準備發送檔案（[FILE_MESSAGE:...] 標記需原封不動包含，圖片顯示在下方用 👇）
