@@ -2,8 +2,6 @@
 -- PostgreSQL database dump
 --
 
-\restrict B3zAt31VAvJjuvFyyx5hiB89dSnTRde1vhoLIujIBB41QJw9GGoHdACrXbvMykE
-
 -- Dumped from database version 16.11
 -- Dumped by pg_dump version 16.11
 
@@ -3281,6 +3279,3 @@ ALTER TABLE ONLY public.tenant_admins
 --
 -- PostgreSQL database dump complete
 --
-
-\unrestrict B3zAt31VAvJjuvFyyx5hiB89dSnTRde1vhoLIujIBB41QJw9GGoHdACrXbvMykE
-
