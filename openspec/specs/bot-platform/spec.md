@@ -1,7 +1,7 @@
 # bot-platform Specification
 
 ## Purpose
-TBD - created by archiving change refactor-multi-platform-bot. Update Purpose after archive.
+多平台 Bot 整合框架，支援 Line 和 Telegram 平台的統一訊息處理、AI 互動及資料儲存。
 ## Requirements
 ### Requirement: BotAdapter Protocol 定義
 系統 SHALL 定義平台無關的 BotAdapter Protocol，作為所有訊息平台的統一介面。
@@ -116,4 +116,23 @@ TBD - created by archiving change refactor-multi-platform-bot. Update Purpose af
 - **WHEN** 系統建構 Agent prompt
 - **THEN** 動態工具 prompt 生成邏輯與平台無關
 - **AND** 根據使用者的 app 權限決定可用工具
+
+### Requirement: Telegram Bot Message Reception
+Telegram Bot MUST 使用 polling（`getUpdates`）模式主動向 Telegram API 拉取訊息更新。
+
+#### Scenario: 正常 polling 接收訊息
+- **WHEN** polling 服務啟動且 Telegram 有新訊息
+- **THEN** 系統透過 `getUpdates` 取得更新並交由 `handle_update()` 處理
+
+#### Scenario: 服務啟動時自動開始 polling
+- **WHEN** FastAPI 應用程式啟動
+- **THEN** 系統自動刪除現有 webhook 並啟動 polling 背景任務
+
+#### Scenario: 服務關閉時優雅停止
+- **WHEN** FastAPI 應用程式關閉
+- **THEN** polling 任務被取消，當前處理中的訊息完成後才結束
+
+#### Scenario: 網路錯誤自動重試
+- **WHEN** polling 過程中發生網路錯誤
+- **THEN** 系統以指數退避方式自動重試，不丟失訊息（透過 offset 機制）
 

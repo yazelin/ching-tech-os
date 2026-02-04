@@ -52,7 +52,7 @@ class TelegramBotAdapter:
         reply_to: str | None = None,
         mention_user_id: str | None = None,
     ) -> SentMessage:
-        """發送文字訊息"""
+        """發送文字訊息（純文字，不使用 Markdown）"""
         kwargs: dict[str, Any] = {
             "chat_id": target,
             "text": text,

@@ -5,6 +5,24 @@
 - 使用繁體中文回應
 - 程式碼註解使用繁體中文
 
+## 版本管理
+
+版本號遵循 [Semantic Versioning](https://semver.org/)：`MAJOR.MINOR.PATCH`
+
+### 版本號位置（需同步更新）
+更新版本時，必須同時修改以下三個檔案：
+- `backend/pyproject.toml` → `version = "x.x.x"`
+- `backend/src/ching_tech_os/__init__.py` → `__version__ = "x.x.x"`
+- `backend/src/ching_tech_os/main.py` → FastAPI `version="x.x.x"`
+
+### 何時更新版本
+- **MAJOR (x.0.0)**：破壞性變更（API 不相容、資料庫 schema 大改）
+- **MINOR (0.x.0)**：新功能、重大整合（向下相容）
+- **PATCH (0.0.x)**：Bug 修復、小改動、文件更新
+
+### 版本更新指令
+當用戶說「bump version」、「更新版本」或完成重大功能時，主動詢問是否需要更新版本號。
+
 ## 資料庫
 - 資料庫 schema 變更必須使用 Alembic migration
 - Migration 檔案放在 `backend/migrations/versions/`
@@ -66,7 +84,7 @@ MCP 工具定義在 `services/mcp_server.py`。
 
 **重要**：MCP Server 是獨立執行的，不會經過 FastAPI 的啟動流程，因此：
 - 需要資料庫操作時，**必須**先呼叫 `await ensure_db_connection()` 確保連線
-- 參考現有的 `create_project`、`add_note` 等工具的寫法
+- 參考現有的 `add_note`、`search_knowledge` 等工具的寫法
 
 ```python
 @mcp.tool()
@@ -248,9 +266,12 @@ docs/
 ├── frontend.md              # 前端開發指南
 ├── linebot.md               # Line Bot 整合
 ├── mcp-server.md            # MCP Server（AI 工具）
+├── multi-tenant.md          # 多租戶架構
 ├── realtime.md              # Socket.IO 即時通訊
 ├── security.md              # 認證與安全
-└── smb-nas-architecture.md  # SMB/NAS 架構
+├── smb-nas-architecture.md  # SMB/NAS 架構
+├── telegram-bot.md          # Telegram Bot 整合
+└── tenant-admin-guide.md    # 租戶管理員指南
 ```
 
 ### 文件更新時機

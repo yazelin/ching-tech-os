@@ -1,6 +1,6 @@
 [project]
 name = "ching-tech-os"
-version = "0.1.0"
+version = "0.2.0"
 description = "Ching Tech OS Backend"
 requires-python = ">=3.11"
 dependencies = [
@@ -36,6 +36,8 @@ dependencies = [
     # 認證相關
     "bcrypt>=4.0.0",
     "email-validator>=2.0.0",
+    "pandas>=3.0.0",
+    "python-dotenv>=1.2.1",
 ]
 
 [project.optional-dependencies]
