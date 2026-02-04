@@ -66,7 +66,7 @@ MCP 工具定義在 `services/mcp_server.py`。
 
 **重要**：MCP Server 是獨立執行的，不會經過 FastAPI 的啟動流程，因此：
 - 需要資料庫操作時，**必須**先呼叫 `await ensure_db_connection()` 確保連線
-- 參考現有的 `create_project`、`add_note` 等工具的寫法
+- 參考現有的 `add_note`、`search_knowledge` 等工具的寫法
 
 ```python
 @mcp.tool()
@@ -248,9 +248,12 @@ docs/
 ├── frontend.md              # 前端開發指南
 ├── linebot.md               # Line Bot 整合
 ├── mcp-server.md            # MCP Server（AI 工具）
+├── multi-tenant.md          # 多租戶架構
 ├── realtime.md              # Socket.IO 即時通訊
 ├── security.md              # 認證與安全
-└── smb-nas-architecture.md  # SMB/NAS 架構
+├── smb-nas-architecture.md  # SMB/NAS 架構
+├── telegram-bot.md          # Telegram Bot 整合
+└── tenant-admin-guide.md    # 租戶管理員指南
 ```
 
 ### 文件更新時機
