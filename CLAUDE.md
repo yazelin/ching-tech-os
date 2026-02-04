@@ -5,6 +5,24 @@
 - 使用繁體中文回應
 - 程式碼註解使用繁體中文
 
+## 版本管理
+
+版本號遵循 [Semantic Versioning](https://semver.org/)：`MAJOR.MINOR.PATCH`
+
+### 版本號位置（需同步更新）
+更新版本時，必須同時修改以下三個檔案：
+- `backend/pyproject.toml` → `version = "x.x.x"`
+- `backend/src/ching_tech_os/__init__.py` → `__version__ = "x.x.x"`
+- `backend/src/ching_tech_os/main.py` → FastAPI `version="x.x.x"`
+
+### 何時更新版本
+- **MAJOR (x.0.0)**：破壞性變更（API 不相容、資料庫 schema 大改）
+- **MINOR (0.x.0)**：新功能、重大整合（向下相容）
+- **PATCH (0.0.x)**：Bug 修復、小改動、文件更新
+
+### 版本更新指令
+當用戶說「bump version」、「更新版本」或完成重大功能時，主動詢問是否需要更新版本號。
+
 ## 資料庫
 - 資料庫 schema 變更必須使用 Alembic migration
 - Migration 檔案放在 `backend/migrations/versions/`
