@@ -1570,9 +1570,8 @@ async def list_groups(
 
         # 查詢列表
         query = f"""
-            SELECT g.*, p.name as project_name
+            SELECT g.*
             FROM bot_groups g
-            LEFT JOIN projects p ON g.project_id = p.id
             WHERE {where_clause}
             ORDER BY g.updated_at DESC
             LIMIT ${param_idx} OFFSET ${param_idx + 1}
@@ -1703,12 +1702,7 @@ async def get_group_by_id(
     tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         row = await conn.fetchrow(
-            """
-            SELECT g.*, p.name as project_name
-            FROM bot_groups g
-            LEFT JOIN projects p ON g.project_id = p.id
-            WHERE g.id = $1 AND g.tenant_id = $2
-            """,
+            "SELECT * FROM bot_groups WHERE id = $1 AND tenant_id = $2",
             group_id,
             tid,
         )

@@ -1201,19 +1201,11 @@ async def build_system_prompt(
     if line_group_id:
         async with get_connection() as conn:
             group = await conn.fetchrow(
-                """
-                SELECT g.name, g.project_id, p.name as project_name
-                FROM bot_groups g
-                LEFT JOIN projects p ON g.project_id = p.id
-                WHERE g.id = $1
-                """,
+                "SELECT name FROM bot_groups WHERE id = $1",
                 line_group_id,
             )
             if group:
                 base_prompt += f"\n\n目前群組：{group['name'] or '未命名群組'}"
-                if group["project_name"]:
-                    base_prompt += f"\n綁定專案：{group['project_name']}"
-                    base_prompt += f"\n專案 ID（供工具查詢用）：{group['project_id']}"
         # 加入群組 ID 和用戶身份識別
         base_prompt += f"\n\n【對話識別】\n平台：{platform_label}"
         base_prompt += f"\ngroup_id: {line_group_id}"
