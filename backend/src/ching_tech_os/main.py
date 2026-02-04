@@ -14,7 +14,7 @@ from .services.session import session_manager
 from .services.terminal import terminal_service
 from .services.scheduler import start_scheduler, stop_scheduler
 from .services.linebot_agents import ensure_default_linebot_agents
-from .api import auth, knowledge, login_records, messages, nas, user, ai_router, ai_management, project, linebot_router, telegram_router, share, files, inventory, vendor, presentation, tenant, config_public
+from .api import auth, knowledge, login_records, messages, nas, user, ai_router, ai_management, linebot_router, telegram_router, share, files, presentation, tenant, config_public
 from .api.admin import tenants as admin_tenants
 
 # 建立 Socket.IO 伺服器
@@ -101,15 +101,12 @@ app.include_router(user.admin_router)  # 管理員 API
 app.include_router(user.tenant_router)  # 租戶管理員 API
 app.include_router(ai_router.router)
 app.include_router(ai_management.router)
-app.include_router(project.router)
 app.include_router(linebot_router.router, prefix="/api/bot")
 app.include_router(linebot_router.line_router, prefix="/api/bot/line")
 app.include_router(telegram_router.router, prefix="/api/bot/telegram")
 app.include_router(share.router)
 app.include_router(share.public_router)
 app.include_router(files.router)
-app.include_router(inventory.router)
-app.include_router(vendor.router)
 app.include_router(presentation.router)
 app.include_router(tenant.router)  # 租戶自助服務
 app.include_router(admin_tenants.router)  # 平台管理員租戶管理

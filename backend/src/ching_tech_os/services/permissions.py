@@ -19,65 +19,15 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================
-# 已停用的 MCP 工具（遷移至 ERPNext）
+# 已停用的 MCP 工具（已移除）
 # ============================================================
 
-# 已停用的工具會返回提示訊息，引導使用者使用 ERPNext
-DEPRECATED_TOOLS: dict[str, str] = {
-    # 專案管理工具 - 遷移至 ERPNext Project
-    "query_project": "專案管理",
-    "create_project": "專案管理",
-    "update_project": "專案管理",
-    "add_project_member": "專案管理",
-    "update_project_member": "專案管理",
-    "get_project_members": "專案管理",
-    "add_project_milestone": "專案管理",
-    "update_milestone": "專案管理",
-    "get_project_milestones": "專案管理",
-    "add_project_meeting": "專案管理",
-    "update_project_meeting": "專案管理",
-    "get_project_meetings": "專案管理",
-    "add_delivery_schedule": "專案管理",
-    "update_delivery_schedule": "專案管理",
-    "get_delivery_schedules": "專案管理",
-    "add_project_link": "專案管理",
-    "get_project_links": "專案管理",
-    "update_project_link": "專案管理",
-    "delete_project_link": "專案管理",
-    "add_project_attachment": "專案管理",
-    "get_project_attachments": "專案管理",
-    "update_project_attachment": "專案管理",
-    "delete_project_attachment": "專案管理",
-    # 廠商管理工具 - 遷移至 ERPNext Supplier
-    "query_vendors": "廠商管理",
-    "add_vendor": "廠商管理",
-    "update_vendor": "廠商管理",
-    # 物料管理工具 - 遷移至 ERPNext Item/Stock
-    "query_inventory": "物料管理",
-    "add_inventory_item": "物料管理",
-    "update_inventory_item": "物料管理",
-    "record_inventory_in": "物料管理",
-    "record_inventory_out": "物料管理",
-    "adjust_inventory": "物料管理",
-    "query_project_inventory": "物料管理",
-    "add_inventory_order": "物料管理",
-    "update_inventory_order": "物料管理",
-    "get_inventory_orders": "物料管理",
-}
+# 原有的專案/廠商/物料管理工具已完全移除（遷移至 ERPNext）
+# 保留此結構以供未來使用
+DEPRECATED_TOOLS: dict[str, str] = {}
 
-# ERPNext 工具對應指引
-ERPNEXT_GUIDANCE: dict[str, str] = {
-    "專案管理": """請使用 ERPNext MCP 工具：
-- 專案查詢：mcp__erpnext__list_documents (doctype="Project")
-- 任務管理：mcp__erpnext__list_documents (doctype="Task")""",
-    "廠商管理": """請使用 ERPNext MCP 工具：
-- 廠商查詢：mcp__erpnext__list_documents (doctype="Supplier")
-- 新增廠商：mcp__erpnext__create_document (doctype="Supplier")""",
-    "物料管理": """請使用 ERPNext MCP 工具：
-- 物料查詢：mcp__erpnext__list_documents (doctype="Item")
-- 庫存查詢：mcp__erpnext__get_stock_balance
-- 入庫/出庫：mcp__erpnext__create_document (doctype="Stock Entry")""",
-}
+# ERPNext 工具對應指引（已整合至 AI Agent Prompt）
+ERPNEXT_GUIDANCE: dict[str, str] = {}
 
 
 def is_tool_deprecated(tool_name: str) -> tuple[bool, str | None]:
@@ -89,16 +39,7 @@ def is_tool_deprecated(tool_name: str) -> tuple[bool, str | None]:
     Returns:
         (is_deprecated, error_message): 若停用則返回 True 和錯誤訊息
     """
-    clean_name = tool_name.replace("mcp__ching-tech-os__", "")
-    category = DEPRECATED_TOOLS.get(clean_name)
-    if category:
-        guidance = ERPNEXT_GUIDANCE.get(category, "")
-        message = f"""❌ 此功能已遷移至 ERPNext
-
-{guidance}
-
-或直接在 ERPNext 系統操作：http://ct.erp"""
-        return True, message
+    # 目前無停用工具（已移除的工具不再存在）
     return False, None
 
 
@@ -108,32 +49,8 @@ def is_tool_deprecated(tool_name: str) -> tuple[bool, str | None]:
 
 # 工具名稱對應需要的 App 權限
 # None 表示不需要特定權限（基礎功能）
+# 注意：專案/廠商/物料管理工具已移除（遷移至 ERPNext）
 TOOL_APP_MAPPING: dict[str, str | None] = {
-    # 專案管理工具
-    "query_project": "project-management",
-    "create_project": "project-management",
-    "update_project": "project-management",
-    "add_project_member": "project-management",
-    "update_project_member": "project-management",
-    "get_project_members": "project-management",
-    "add_project_milestone": "project-management",
-    "update_milestone": "project-management",
-    "get_project_milestones": "project-management",
-    "add_project_meeting": "project-management",
-    "update_project_meeting": "project-management",
-    "get_project_meetings": "project-management",
-    "add_delivery_schedule": "project-management",
-    "update_delivery_schedule": "project-management",
-    "get_delivery_schedules": "project-management",
-    "add_project_link": "project-management",
-    "update_project_link": "project-management",
-    "delete_project_link": "project-management",
-    "get_project_links": "project-management",
-    "add_project_attachment": "project-management",
-    "update_project_attachment": "project-management",
-    "delete_project_attachment": "project-management",
-    "get_project_attachments": "project-management",
-
     # 知識庫工具
     "search_knowledge": "knowledge-base",
     "get_knowledge_item": "knowledge-base",
@@ -154,22 +71,6 @@ TOOL_APP_MAPPING: dict[str, str | None] = {
     "prepare_file_message": "file-manager",
     "convert_pdf_to_images": "file-manager",
 
-    # 庫存管理工具
-    "query_inventory": "inventory-management",
-    "add_inventory_item": "inventory-management",
-    "update_inventory_item": "inventory-management",
-    "record_inventory_in": "inventory-management",
-    "record_inventory_out": "inventory-management",
-    "adjust_inventory": "inventory-management",
-    "add_inventory_order": "inventory-management",
-    "update_inventory_order": "inventory-management",
-    "get_inventory_orders": "inventory-management",
-
-    # 廠商管理工具
-    "query_vendors": "vendor-management",
-    "add_vendor": "vendor-management",
-    "update_vendor": "vendor-management",
-
     # 記憶管理工具
     "get_memories": "memory-manager",
     "add_memory": "memory-manager",
@@ -189,6 +90,7 @@ TOOL_APP_MAPPING: dict[str, str | None] = {
     "summarize_chat": None,           # 群組對話摘要
     "create_share_link": None,        # 分享連結（基礎功能）
     "share_knowledge_attachment": None,  # 分享知識庫附件（基礎功能）
+    "download_web_image": None,       # 下載網路圖片
 }
 
 # ============================================================
