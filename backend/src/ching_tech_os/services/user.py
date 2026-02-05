@@ -59,32 +59,24 @@ async def get_user_by_username(username: str) -> dict | None:
         return None
 
 
-async def get_user_for_auth(
-    username: str,
-    tenant_id: UUID | str,
-) -> dict | None:
+async def get_user_for_auth(username: str) -> dict | None:
     """取得用於認證的使用者資料（包含密碼雜湊）
 
     Args:
         username: 使用者帳號
-        tenant_id: 租戶 UUID
 
     Returns:
         使用者資料或 None
     """
-    if isinstance(tenant_id, str):
-        tenant_id = UUID(tenant_id)
-
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
-            SELECT id, username, display_name, tenant_id, role,
+            SELECT id, username, display_name, role,
                    password_hash, must_change_password, is_active
             FROM users
-            WHERE username = $1 AND tenant_id = $2
+            WHERE username = $1
             """,
             username,
-            tenant_id,
         )
         if row:
             return dict(row)
@@ -498,24 +490,17 @@ async def get_user_preferences(user_id: int) -> dict:
         return {"theme": "dark"}
 
 
-async def get_user_role_and_permissions(
-    user_id: int,
-    tenant_id: UUID | str | None = None,
-) -> dict:
+async def get_user_role_and_permissions(user_id: int) -> dict:
     """取得使用者的角色和權限設定
 
-    角色判斷邏輯：
-    1. 先檢查 users.role 是否為 platform_admin（平台管理員不受租戶限制）
-    2. 如果有 tenant_id，檢查 tenant_admins 表判斷是否為該租戶的管理員
-    3. 否則返回 user
+    角色直接從 users.role 欄位讀取（admin 或 user）
 
     Args:
         user_id: 使用者 ID
-        tenant_id: 租戶 ID（用於判斷是否為該租戶的管理員）
 
     Returns:
         包含 role、permissions 和 user_data 的 dict
-        - role: 使用者角色（user/tenant_admin/platform_admin）
+        - role: 使用者角色（admin/user）
         - permissions: 從 preferences 中提取的 permissions 設定
         - user_data: 完整的使用者資料（供 get_user_app_permissions_sync 使用）
     """
@@ -527,21 +512,7 @@ async def get_user_role_and_permissions(
         if not row:
             return {"role": "user", "permissions": None, "user_data": None}
 
-        # 平台管理員不受租戶限制
-        if row["role"] == "platform_admin":
-            role = "platform_admin"
-        elif tenant_id:
-            # 從 tenant_admins 表判斷是否為該租戶的管理員
-            tid = UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id
-            admin_row = await conn.fetchrow(
-                "SELECT id FROM tenant_admins WHERE user_id = $1 AND tenant_id = $2",
-                user_id, tid,
-            )
-            role = "tenant_admin" if admin_row else "user"
-        else:
-            # 沒有 tenant_id 時，fallback 到 users.role
-            role = row["role"] or "user"
-
+        role = row["role"] or "user"
         preferences = _parse_preferences(row["preferences"])
         permissions = preferences.get("permissions")
 
@@ -807,44 +778,26 @@ async def delete_user(
         return "DELETE 1" in result
 
 
-async def get_user_role(
-    user_id: int | None,
-    tenant_id: UUID | str | None = None,
-) -> str:
+async def get_user_role(user_id: int | None) -> str:
     """從資料庫取得使用者的角色
 
-    角色判斷邏輯：
-    1. 先檢查 users.role 是否為 platform_admin（平台管理員不受租戶限制）
-    2. 如果有 tenant_id，檢查 tenant_admins 表判斷是否為該租戶的管理員
-    3. 否則返回 user
+    直接從 users.role 欄位讀取（admin 或 user）
 
     Args:
         user_id: 使用者 ID
-        tenant_id: 租戶 UUID（用於判斷是否為該租戶的管理員）
 
     Returns:
-        角色字串：platform_admin / tenant_admin / user
+        角色字串：admin / user
     """
     if user_id is None:
         return "user"
 
     async with get_connection() as conn:
-        # 先檢查是否為平台管理員
         row = await conn.fetchrow(
             "SELECT role FROM users WHERE id = $1",
             user_id,
         )
-        if row and row["role"] == "platform_admin":
-            return "platform_admin"
-
-        # 從 tenant_admins 表判斷是否為該租戶的管理員
-        if tenant_id:
-            tid = UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id
-            admin_row = await conn.fetchrow(
-                "SELECT id FROM tenant_admins WHERE user_id = $1 AND tenant_id = $2",
-                user_id, tid,
-            )
-            if admin_row:
-                return "tenant_admin"
+        if row:
+            return row["role"] or "user"
 
     return "user"

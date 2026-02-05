@@ -14,8 +14,7 @@ from .services.session import session_manager
 from .services.terminal import terminal_service
 from .services.scheduler import start_scheduler, stop_scheduler
 from .services.linebot_agents import ensure_default_linebot_agents
-from .api import auth, knowledge, login_records, messages, nas, user, ai_router, ai_management, linebot_router, telegram_router, share, files, presentation, tenant, config_public
-from .api.admin import tenants as admin_tenants
+from .api import auth, knowledge, login_records, messages, nas, user, ai_router, ai_management, linebot_router, telegram_router, share, files, presentation, config_public
 
 # 建立 Socket.IO 伺服器
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
@@ -98,7 +97,6 @@ app.include_router(login_records.router)
 app.include_router(nas.router)
 app.include_router(user.router)
 app.include_router(user.admin_router)  # 管理員 API
-app.include_router(user.tenant_router)  # 租戶管理員 API
 app.include_router(ai_router.router)
 app.include_router(ai_management.router)
 app.include_router(linebot_router.router, prefix="/api/bot")
@@ -108,8 +106,6 @@ app.include_router(share.router)
 app.include_router(share.public_router)
 app.include_router(files.router)
 app.include_router(presentation.router)
-app.include_router(tenant.router)  # 租戶自助服務
-app.include_router(admin_tenants.router)  # 平台管理員租戶管理
 app.include_router(config_public.router)  # 公開配置 API
 
 
