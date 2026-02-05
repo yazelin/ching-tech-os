@@ -41,7 +41,7 @@
 - [ ] 3.2 刪除 `api/tenant.py`（~1300 行）- 包含 Bot 設定 API，需先遷移
 - [ ] 3.3 刪除 `api/admin/tenants.py`（~600 行）
 - [ ] 3.4 刪除 `models/tenant.py`
-- [ ] 3.5 更新 `main.py`：移除租戶相關路由註冊
+- [x] 3.5 更新 `main.py`：移除租戶相關路由註冊 ✓
   - 移除 tenant_router
   - 移除 admin_tenants_router
 
@@ -50,12 +50,12 @@
 - [x] 4.1 更新 `models/auth.py`：
   - 移除 SessionData 中的 tenant_id 欄位
   - 簡化 role 類型（只有 admin/user）
-- [ ] 4.2 更新 `api/auth.py`：
-  - 移除 `resolve_tenant_id()` 呼叫
-  - 移除登入時的 tenant_code 參數處理
-  - 移除 `require_can_manage_target()` 的跨租戶檢查
-  - 簡化 `get_user_role()` - 只判斷 admin/user
-- [ ] 4.3 更新 `/api/auth/login` 回應格式：移除 tenant 物件
+- [x] 4.2 更新 `api/auth.py`：
+  - 移除 `resolve_tenant_id()` 呼叫 ✓
+  - 移除登入時的 tenant_code 參數處理 ✓
+  - 移除 `require_can_manage_target()` 的跨租戶檢查 ✓
+  - 簡化 `get_user_role()` - 只判斷 admin/user ✓
+- [x] 4.3 更新 `/api/auth/login` 回應格式：移除 tenant 物件 ✓
 - [ ] 4.4 更新 `/api/user/me` 回應格式：移除 tenant 相關欄位
 - [ ] 4.5 更新 `services/permissions.py`：
   - 移除 platform_admin 角色

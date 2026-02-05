@@ -250,42 +250,17 @@ _tenant_secrets_cache: list[dict] | None = None
 _tenant_secrets_cache_time: float = 0
 
 
-async def _load_tenant_secrets() -> list[dict]:
-    """從資料庫載入所有租戶的 Line Bot secrets"""
-    from . import tenant as tenant_service
-    return await tenant_service.get_all_tenant_line_secrets()
-
-
-async def get_cached_tenant_secrets() -> list[dict]:
-    """取得快取的租戶 secrets
-
-    包含 TTL 機制，5 分鐘後自動重新載入。
+def get_line_secrets() -> dict:
+    """取得 Line Bot secrets（從環境變數）
 
     Returns:
-        包含 tenant_id, channel_id, channel_secret 的列表
+        包含 channel_id, channel_secret 的字典
     """
-    global _tenant_secrets_cache, _tenant_secrets_cache_time
-
-    now = time.time()
-
-    # 檢查快取是否過期
-    if _tenant_secrets_cache is None or (now - _tenant_secrets_cache_time) > TENANT_SECRETS_CACHE_TTL:
-        _tenant_secrets_cache = await _load_tenant_secrets()
-        _tenant_secrets_cache_time = now
-        logger.debug(f"已重新載入租戶 secrets 快取，共 {len(_tenant_secrets_cache)} 筆")
-
-    return _tenant_secrets_cache
-
-
-def invalidate_tenant_secrets_cache():
-    """清除租戶 secrets 快取
-
-    當租戶更新 Line Bot 設定時呼叫。
-    """
-    global _tenant_secrets_cache, _tenant_secrets_cache_time
-    _tenant_secrets_cache = None
-    _tenant_secrets_cache_time = 0
-    logger.debug("已清除租戶 secrets 快取")
+    return {
+        "channel_id": settings.line_channel_id,
+        "channel_secret": settings.line_channel_secret,
+        "access_token": settings.line_channel_access_token,
+    }
 
 
 # ============================================================
@@ -312,25 +287,13 @@ def get_webhook_parser(channel_secret: str | None = None) -> WebhookParser:
     return WebhookParser(secret)
 
 
-async def get_messaging_api(tenant_id: UUID | str | None = None) -> AsyncMessagingApi:
+async def get_messaging_api() -> AsyncMessagingApi:
     """取得 Messaging API 客戶端
-
-    Args:
-        tenant_id: 租戶 ID，指定時會使用該租戶的 access token
 
     Returns:
         AsyncMessagingApi 客戶端
     """
-    access_token = None
-
-    # 如果指定租戶，嘗試取得該租戶的 access token
-    if tenant_id:
-        from . import tenant as tenant_service
-        credentials = await tenant_service.get_tenant_line_credentials(tenant_id)
-        if credentials:
-            access_token = credentials.get("access_token")
-
-    config = get_line_config(access_token)
+    config = get_line_config()
     api_client = AsyncApiClient(config)
     return AsyncMessagingApi(api_client)
 
@@ -1047,27 +1010,16 @@ async def download_and_save_file(
         return None
 
 
-async def download_line_content(
-    message_id: str,
-    tenant_id: UUID | str | None = None,
-) -> bytes | None:
+async def download_line_content(message_id: str) -> bytes | None:
     """從 Line API 下載檔案內容
 
     Args:
         message_id: Line 訊息 ID
-        tenant_id: 租戶 ID（用於選擇正確的 access token）
 
     Returns:
         檔案內容 bytes，失敗時回傳 None
     """
-    # 取得正確的 access token
     access_token = settings.line_channel_access_token
-    if tenant_id:
-        from . import tenant as tenant_service
-        credentials = await tenant_service.get_tenant_line_credentials(tenant_id)
-        if credentials and credentials.get("access_token"):
-            access_token = credentials["access_token"]
-
     url = f"https://api-data.line.me/v2/bot/message/{message_id}/content"
     headers = {"Authorization": f"Bearer {access_token}"}
 
