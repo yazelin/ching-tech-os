@@ -50,6 +50,6 @@
 - [x] 7.1 執行遷移腳本 dry-run
 - [x] 7.2 執行正式遷移
 - [x] 7.3 驗證遷移結果（筆數比對）
-- [ ] 7.4 測試 ERPNext MCP 工具操作
-- [ ] 7.5 測試 Line Bot 使用 ERPNext 功能
-- [ ] 7.6 測試前端 ERPNext 入口
+- [x] 7.4 測試 ERPNext MCP 工具操作
+- [x] 7.5 測試 Line Bot 使用 ERPNext 功能（查詢功能）
+- [x] 7.6 測試前端 ERPNext 入口
