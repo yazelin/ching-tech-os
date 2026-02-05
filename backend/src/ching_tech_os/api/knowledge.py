@@ -76,7 +76,6 @@ async def list_knowledge(
             topics=topics,
             scope=scope,
             current_username=session.username,
-            tenant_id=session.tenant_id,
         )
     except KnowledgeError as e:
         raise HTTPException(
@@ -95,7 +94,7 @@ async def get_tags(
 ) -> TagsResponse:
     """取得所有可用標籤（按類型分組，專案從資料庫動態載入）"""
     try:
-        return await get_all_tags(tenant_id=session.tenant_id)
+        return await get_all_tags()
     except KnowledgeError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -115,7 +114,7 @@ async def rebuild_knowledge_index(
     掃描所有知識檔案並重新建立 index.json。
     """
     try:
-        return rebuild_index(tenant_id=session.tenant_id)
+        return rebuild_index()
     except KnowledgeError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -170,9 +169,8 @@ async def get_local_asset(
             detail="無效的路徑",
         )
 
-    # 使用租戶專屬路徑
-    tenant_id = session.tenant_id if session.tenant_id else None
-    assets_base = Path(settings.get_tenant_knowledge_path(tenant_id)) / "assets"
+    # 使用知識庫路徑
+    assets_base = Path(settings.get_tenant_knowledge_path(None)) / "assets"
     file_path = assets_base / path
 
     if not file_path.exists():
@@ -211,7 +209,7 @@ async def get_single_knowledge(
         kb_id: 知識 ID（如 kb-001）
     """
     try:
-        return get_knowledge(kb_id, tenant_id=session.tenant_id)
+        return get_knowledge(kb_id)
     except KnowledgeNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -253,8 +251,8 @@ async def create_new_knowledge(
             )
 
     try:
-        # 傳入 owner（建立個人知識時使用）和 tenant_id
-        result = create_knowledge(data, owner=session.username, tenant_id=session.tenant_id)
+        # 傳入 owner（建立個人知識時使用）
+        result = create_knowledge(data, owner=session.username)
 
         # 記錄到訊息中心
         try:
@@ -294,7 +292,7 @@ async def update_existing_knowledge(
     """
     # 取得知識以檢查權限
     try:
-        knowledge = get_knowledge(kb_id, tenant_id=session.tenant_id)
+        knowledge = get_knowledge(kb_id)
     except KnowledgeNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -313,7 +311,7 @@ async def update_existing_knowledge(
         )
 
     try:
-        result = update_knowledge(kb_id, data, tenant_id=session.tenant_id)
+        result = update_knowledge(kb_id, data)
 
         # 記錄到訊息中心
         try:
@@ -352,7 +350,7 @@ async def delete_existing_knowledge(
     """
     # 取得知識以檢查權限
     try:
-        knowledge = get_knowledge(kb_id, tenant_id=session.tenant_id)
+        knowledge = get_knowledge(kb_id)
     except KnowledgeNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -371,7 +369,7 @@ async def delete_existing_knowledge(
         )
 
     try:
-        delete_knowledge(kb_id, tenant_id=session.tenant_id)
+        delete_knowledge(kb_id)
 
         # 記錄到訊息中心
         try:
@@ -407,7 +405,7 @@ async def get_knowledge_history(
     使用 git log --follow 追蹤檔案歷史（含重命名）。
     """
     try:
-        return get_history(kb_id, tenant_id=session.tenant_id)
+        return get_history(kb_id)
     except KnowledgeNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -435,7 +433,7 @@ async def get_knowledge_version(
     使用 git show 取得該版本的檔案內容。
     """
     try:
-        return get_version(kb_id, commit, tenant_id=session.tenant_id)
+        return get_version(kb_id, commit)
     except KnowledgeNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -464,7 +462,7 @@ async def upload_knowledge_attachment(
     """
     # 確認知識存在
     try:
-        get_knowledge(kb_id, tenant_id=session.tenant_id)
+        get_knowledge(kb_id)
     except KnowledgeNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -474,7 +472,7 @@ async def upload_knowledge_attachment(
     try:
         content = await file.read()
         filename = file.filename or "unnamed"
-        attachment = upload_attachment(kb_id, filename, content, description, tenant_id=session.tenant_id)
+        attachment = upload_attachment(kb_id, filename, content, description)
         return {
             "success": True,
             "attachment": attachment.model_dump(),
@@ -504,7 +502,7 @@ async def delete_knowledge_attachment(
     """
     # 確認知識存在
     try:
-        get_knowledge(kb_id, tenant_id=session.tenant_id)
+        get_knowledge(kb_id)
     except KnowledgeNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -512,7 +510,7 @@ async def delete_knowledge_attachment(
         )
 
     try:
-        delete_attachment(kb_id, attachment_idx, tenant_id=session.tenant_id)
+        delete_attachment(kb_id, attachment_idx)
     except KnowledgeError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -540,7 +538,7 @@ async def update_knowledge_attachment(
     """
     # 確認知識存在
     try:
-        get_knowledge(kb_id, tenant_id=session.tenant_id)
+        get_knowledge(kb_id)
     except KnowledgeNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -553,7 +551,6 @@ async def update_knowledge_attachment(
             attachment_idx,
             description=data.description,
             attachment_type=data.type,
-            tenant_id=session.tenant_id,
         )
     except KnowledgeError as e:
         raise HTTPException(

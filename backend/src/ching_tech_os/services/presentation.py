@@ -367,7 +367,6 @@ async def generate_html_presentation(
     image_source: str = "pexels",
     outline_json: Optional[str | dict] = None,
     output_format: str = "html",
-    tenant_id: Optional[str] = None,
 ) -> dict:
     """
     生成 Marp 簡報（HTML 或 PDF）
@@ -380,7 +379,6 @@ async def generate_html_presentation(
         image_source: 圖片來源（pexels, huggingface, nanobanana）
         outline_json: 直接傳入大綱 JSON
         output_format: 輸出格式（html 或 pdf）
-        tenant_id: 租戶 ID（多租戶模式下存到租戶專屬目錄）
 
     Returns:
         包含簡報資訊和 NAS 路徑的 dict
@@ -462,11 +460,7 @@ async def generate_html_presentation(
     safe_topic = sanitize_filename(pres_title)
     filename = f"{safe_topic}_{timestamp}{output_ext}"
 
-    # 多租戶模式：存到租戶專屬目錄
-    if tenant_id:
-        relative_path = f"tenants/{tenant_id}/{PRESENTATION_NAS_PATH}"
-    else:
-        relative_path = PRESENTATION_NAS_PATH
+    relative_path = PRESENTATION_NAS_PATH
 
     # 確保目錄存在（使用本機掛載點建立）
     local_dir = f"{settings.ctos_mount_path}/{relative_path}"

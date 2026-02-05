@@ -46,7 +46,7 @@ async def list_prompts(
     可選參數：
     - category: 依分類過濾（system, task, template）
     """
-    items = await ai_manager.get_prompts(category, tenant_id=session.tenant_id)
+    items = await ai_manager.get_prompts(category)
     return {"items": items, "total": len(items)}
 
 
@@ -57,7 +57,7 @@ async def create_prompt(
 ):
     """建立新 Prompt"""
     try:
-        prompt = await ai_manager.create_prompt(data, tenant_id=session.tenant_id)
+        prompt = await ai_manager.create_prompt(data)
         return prompt
     except Exception as e:
         if "duplicate key" in str(e):
@@ -71,12 +71,12 @@ async def get_prompt(
     session: SessionData = Depends(get_current_session),
 ):
     """取得 Prompt 詳情"""
-    prompt = await ai_manager.get_prompt(prompt_id, tenant_id=session.tenant_id)
+    prompt = await ai_manager.get_prompt(prompt_id)
     if prompt is None:
         raise HTTPException(status_code=404, detail="Prompt 不存在")
 
     # 取得引用此 Prompt 的 Agents
-    agents = await ai_manager.get_prompt_referencing_agents(prompt_id, tenant_id=session.tenant_id)
+    agents = await ai_manager.get_prompt_referencing_agents(prompt_id)
     prompt["referencing_agents"] = agents
 
     return prompt
@@ -90,7 +90,7 @@ async def update_prompt(
 ):
     """更新 Prompt"""
     try:
-        prompt = await ai_manager.update_prompt(prompt_id, data, tenant_id=session.tenant_id)
+        prompt = await ai_manager.update_prompt(prompt_id, data)
         if prompt is None:
             raise HTTPException(status_code=404, detail="Prompt 不存在")
         return prompt
@@ -109,7 +109,7 @@ async def delete_prompt(
 
     如果 Prompt 被 Agent 引用，會回傳錯誤。
     """
-    success, error = await ai_manager.delete_prompt(prompt_id, tenant_id=session.tenant_id)
+    success, error = await ai_manager.delete_prompt(prompt_id)
     if not success:
         if error:
             raise HTTPException(status_code=400, detail=error)
@@ -127,7 +127,7 @@ async def list_agents(
     session: SessionData = Depends(get_current_session),
 ):
     """取得 Agent 列表"""
-    items = await ai_manager.get_agents(tenant_id=session.tenant_id)
+    items = await ai_manager.get_agents()
     return {"items": items, "total": len(items)}
 
 
@@ -138,7 +138,7 @@ async def create_agent(
 ):
     """建立新 Agent"""
     try:
-        agent = await ai_manager.create_agent(data, tenant_id=session.tenant_id)
+        agent = await ai_manager.create_agent(data)
         return agent
     except Exception as e:
         if "duplicate key" in str(e):
@@ -164,7 +164,7 @@ async def get_agent(
     session: SessionData = Depends(get_current_session),
 ):
     """取得 Agent 詳情"""
-    agent = await ai_manager.get_agent(agent_id, tenant_id=session.tenant_id)
+    agent = await ai_manager.get_agent(agent_id)
     if agent is None:
         raise HTTPException(status_code=404, detail="Agent 不存在")
     return agent
@@ -178,7 +178,7 @@ async def update_agent(
 ):
     """更新 Agent"""
     try:
-        agent = await ai_manager.update_agent(agent_id, data, tenant_id=session.tenant_id)
+        agent = await ai_manager.update_agent(agent_id, data)
         if agent is None:
             raise HTTPException(status_code=404, detail="Agent 不存在")
         return agent
@@ -197,7 +197,7 @@ async def delete_agent(
 
     相關的 AI logs 會保留（agent_id 設為 null）。
     """
-    success = await ai_manager.delete_agent(agent_id, tenant_id=session.tenant_id)
+    success = await ai_manager.delete_agent(agent_id)
     if not success:
         raise HTTPException(status_code=404, detail="Agent 不存在")
     return {"success": True}
@@ -235,9 +235,7 @@ async def list_logs(
         start_date=start_date,
         end_date=end_date,
     )
-    items, total = await ai_manager.get_logs(
-        filter_data, page, page_size, tenant_id=session.tenant_id
-    )
+    items, total = await ai_manager.get_logs(filter_data, page, page_size)
     return {
         "items": items,
         "total": total,
@@ -260,9 +258,7 @@ async def get_log_stats(
     - start_date: 開始日期
     - end_date: 結束日期
     """
-    stats = await ai_manager.get_log_stats(
-        agent_id, start_date, end_date, tenant_id=session.tenant_id
-    )
+    stats = await ai_manager.get_log_stats(agent_id, start_date, end_date)
     return stats
 
 
@@ -272,7 +268,7 @@ async def get_log(
     session: SessionData = Depends(get_current_session),
 ):
     """取得 AI Log 詳情"""
-    log = await ai_manager.get_log(log_id, tenant_id=session.tenant_id)
+    log = await ai_manager.get_log(log_id)
     if log is None:
         raise HTTPException(status_code=404, detail="Log 不存在")
     return log
@@ -292,5 +288,5 @@ async def test_agent(
 
     使用指定的 Agent 處理測試訊息，並記錄到 ai_logs。
     """
-    result = await ai_manager.test_agent(data.agent_id, data.message, tenant_id=session.tenant_id)
+    result = await ai_manager.test_agent(data.agent_id, data.message)
     return result
