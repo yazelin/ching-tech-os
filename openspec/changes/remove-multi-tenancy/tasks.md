@@ -37,10 +37,10 @@
 
 ## 3. 後端 - 移除租戶模組
 
-- [ ] 3.1 刪除 `services/tenant.py`（~500 行）
-- [ ] 3.2 刪除 `api/tenant.py`（~1300 行）- 包含 Bot 設定 API，需先遷移
-- [ ] 3.3 刪除 `api/admin/tenants.py`（~600 行）
-- [ ] 3.4 刪除 `models/tenant.py`
+- [x] 3.1 刪除 `services/tenant.py`（~500 行）✓
+- [x] 3.2 刪除 `api/tenant.py`（~1300 行）✓
+- [x] 3.3 刪除 `api/admin/tenants.py`（~600 行）✓
+- [x] 3.4 刪除 `models/tenant.py` ✓
 - [x] 3.5 更新 `main.py`：移除租戶相關路由註冊 ✓
   - 移除 tenant_router
   - 移除 admin_tenants_router
