@@ -329,9 +329,8 @@ async def get_agent(agent_id: UUID, tenant_id: UUID | str | None = None) -> dict
         return result
 
 
-async def get_agent_by_name(name: str, tenant_id: UUID | str | None = None) -> dict | None:
+async def get_agent_by_name(name: str) -> dict | None:
     """依名稱取得 Agent（含關聯的 Prompt）"""
-    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
@@ -344,10 +343,9 @@ async def get_agent_by_name(name: str, tenant_id: UUID | str | None = None) -> d
                    p.created_at as prompt_created_at, p.updated_at as prompt_updated_at
             FROM ai_agents a
             LEFT JOIN ai_prompts p ON a.system_prompt_id = p.id
-            WHERE a.name = $1 AND a.tenant_id = $2
+            WHERE a.name = $1
             """,
             name,
-            tid,
         )
         if row is None:
             return None
@@ -770,7 +768,7 @@ async def call_agent(
     tid = _get_tenant_id(tenant_id)
 
     # 取得 Agent
-    agent = await get_agent_by_name(agent_name, tenant_id=tid)
+    agent = await get_agent_by_name(agent_name)
     if agent is None:
         return {
             "success": False,

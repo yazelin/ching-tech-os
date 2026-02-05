@@ -152,7 +152,7 @@ async def get_agent_by_name(
     session: SessionData = Depends(get_current_session),
 ):
     """依名稱取得 Agent"""
-    agent = await ai_manager.get_agent_by_name(name, tenant_id=session.tenant_id)
+    agent = await ai_manager.get_agent_by_name(name)
     if agent is None:
         raise HTTPException(status_code=404, detail="Agent 不存在")
     return agent

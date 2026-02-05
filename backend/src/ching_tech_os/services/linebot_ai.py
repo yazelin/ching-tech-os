@@ -824,7 +824,7 @@ async def log_linebot_ai_call(
     try:
         # 根據對話類型取得對應的 Agent
         agent_name = AGENT_LINEBOT_GROUP if is_group else AGENT_LINEBOT_PERSONAL
-        agent = await ai_manager.get_agent_by_name(agent_name, tenant_id=tenant_id)
+        agent = await ai_manager.get_agent_by_name(agent_name)
         agent_id = agent["id"] if agent else None
         prompt_id = agent.get("system_prompt", {}).get("id") if agent else None
 

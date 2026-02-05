@@ -378,72 +378,28 @@ class PathManager:
         return zone in (StorageZone.SHARED, StorageZone.NAS)
 
     # ========================
-    # 租戶路徑相關方法
+    # 單一租戶路徑屬性
     # ========================
 
-    def get_tenant_base_path(self, tenant_id: str | None = None) -> str:
-        """取得租戶的基礎路徑
+    @property
+    def knowledge_base_path(self) -> str:
+        """取得知識庫基礎路徑"""
+        return f"{self._settings.ctos_mount_path}/knowledge"
 
-        Args:
-            tenant_id: 租戶 ID，None 則使用預設租戶
+    @property
+    def linebot_base_path(self) -> str:
+        """取得 Line Bot 檔案基礎路徑"""
+        return f"{self._settings.ctos_mount_path}/linebot"
 
-        Returns:
-            租戶基礎路徑，如 /mnt/nas/ctos/tenants/{tenant_id}
-        """
-        tid = tenant_id or DEFAULT_TENANT_ID
-        return f"{self._settings.ctos_mount_path}/tenants/{tid}"
+    @property
+    def attachments_base_path(self) -> str:
+        """取得附件基礎路徑"""
+        return f"{self._settings.ctos_mount_path}/attachments"
 
-    def get_tenant_knowledge_path(self, tenant_id: str | None = None) -> str:
-        """取得租戶的知識庫路徑"""
-        return f"{self.get_tenant_base_path(tenant_id)}/knowledge"
-
-    def get_tenant_linebot_path(self, tenant_id: str | None = None) -> str:
-        """取得租戶的 Line Bot 檔案路徑"""
-        return f"{self.get_tenant_base_path(tenant_id)}/linebot"
-
-    def get_tenant_attachments_path(self, tenant_id: str | None = None) -> str:
-        """取得租戶的附件路徑"""
-        return f"{self.get_tenant_base_path(tenant_id)}/attachments"
-
-    def get_tenant_ai_generated_path(self, tenant_id: str | None = None) -> str:
-        """取得租戶的 AI 生成檔案路徑"""
-        return f"{self.get_tenant_base_path(tenant_id)}/ai-generated"
-
-    def validate_tenant_path(
-        self, path: str, tenant_id: str, require_exists: bool = False
-    ) -> bool:
-        """驗證路徑是否屬於指定租戶
-
-        Args:
-            path: 檔案路徑（URI 或絕對路徑）
-            tenant_id: 租戶 ID
-            require_exists: 是否要求檔案存在
-
-        Returns:
-            True 如果路徑屬於該租戶，False 否則
-        """
-        try:
-            parsed = self.parse(path)
-        except ValueError:
-            return False
-
-        # 只有 CTOS zone 有租戶隔離
-        if parsed.zone != StorageZone.CTOS:
-            return True  # 其他 zone 不做租戶驗證
-
-        # 取得租戶的檔案系統路徑
-        fs_path = self.to_filesystem(path, tenant_id)
-
-        # 驗證路徑是否在租戶目錄下
-        tenant_base = self.get_tenant_base_path(tenant_id)
-        if not fs_path.startswith(tenant_base):
-            return False
-
-        # 檢查檔案是否存在
-        if require_exists and not Path(fs_path).exists():
-            return False
-
-        return True
+    @property
+    def ai_generated_base_path(self) -> str:
+        """取得 AI 生成檔案基礎路徑"""
+        return f"{self._settings.ctos_mount_path}/ai-generated"
 
 
 # 全域單例

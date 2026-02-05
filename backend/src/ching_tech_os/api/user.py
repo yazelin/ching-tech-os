@@ -101,7 +101,7 @@ async def get_current_user(
     session: SessionData = Depends(get_current_session),
 ) -> UserInfo:
     """取得目前登入使用者的資訊，包含權限"""
-    user = await get_user_by_username(session.username, tenant_id=session.tenant_id)
+    user = await get_user_by_username(session.username)
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -143,7 +143,7 @@ async def update_current_user(
             session.username, request.display_name, tenant_id=session.tenant_id
         )
     else:
-        user = await get_user_by_username(session.username, tenant_id=session.tenant_id)
+        user = await get_user_by_username(session.username)
 
     if user is None:
         raise HTTPException(

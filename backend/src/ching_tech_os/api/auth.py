@@ -372,7 +372,7 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
     else:
         # 使用者不存在（SMB 認證但尚未建立用戶記錄）
         try:
-            user_id = await upsert_user(request.username, tenant_id=tenant_id)
+            user_id = await upsert_user(request.username)
         except Exception as e:
             logger.error(f"Failed to upsert user '{request.username}': {e}")
             raise HTTPException(
@@ -510,7 +510,7 @@ async def change_password(
     if user_id is None:
         # 嘗試建立使用者記錄
         try:
-            user_id = await upsert_user(session.username, session.tenant_id)
+            user_id = await upsert_user(session.username)
         except Exception:
             return ChangePasswordResponse(success=False, error="無法建立使用者記錄")
 

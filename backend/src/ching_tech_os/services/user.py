@@ -7,72 +7,52 @@ from ..config import settings, DEFAULT_TENANT_UUID
 from ..database import get_connection
 
 
-async def upsert_user(username: str, tenant_id: UUID | str | None = None) -> int:
+async def upsert_user(username: str) -> int:
     """建立或更新使用者記錄
 
     如果使用者不存在，建立新記錄；否則更新最後登入時間。
-    使用者唯一性在租戶範圍內驗證（同租戶不能有重複帳號）。
 
     Args:
         username: 使用者帳號
-        tenant_id: 租戶 UUID（可選，預設使用預設租戶）
 
     Returns:
         使用者 ID
     """
-    # 處理 tenant_id
-    if tenant_id is None:
-        tenant_id = UUID(settings.default_tenant_id)
-    elif isinstance(tenant_id, str):
-        tenant_id = UUID(tenant_id)
-
     async with get_connection() as conn:
-        # 嘗試插入或更新（使用 tenant_id + username 的複合唯一鍵）
+        # 嘗試插入或更新（使用 username 唯一鍵）
         result = await conn.fetchrow(
             """
-            INSERT INTO users (username, tenant_id, last_login_at)
-            VALUES ($1, $2, $3)
-            ON CONFLICT (tenant_id, username) DO UPDATE
-            SET last_login_at = $3
+            INSERT INTO users (username, last_login_at)
+            VALUES ($1, $2)
+            ON CONFLICT (username) DO UPDATE
+            SET last_login_at = $2
             RETURNING id
             """,
             username,
-            tenant_id,
             datetime.now(),
         )
         return result["id"]
 
 
-async def get_user_by_username(
-    username: str,
-    tenant_id: UUID | str | None = None,
-) -> dict | None:
+async def get_user_by_username(username: str) -> dict | None:
     """根據帳號取得使用者資料
 
     Args:
         username: 使用者帳號
-        tenant_id: 租戶 UUID（可選，預設使用預設租戶）
 
     Returns:
         使用者資料或 None
     """
-    # 處理 tenant_id
-    if tenant_id is None:
-        tenant_id = UUID(settings.default_tenant_id)
-    elif isinstance(tenant_id, str):
-        tenant_id = UUID(tenant_id)
-
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
             SELECT id, username, display_name, created_at, last_login_at,
-                   preferences, tenant_id, role, password_hash, email,
+                   preferences, role, password_hash, email,
                    password_changed_at, must_change_password, is_active
             FROM users
-            WHERE username = $1 AND tenant_id = $2
+            WHERE username = $1
             """,
             username,
-            tenant_id,
         )
         if row:
             return dict(row)

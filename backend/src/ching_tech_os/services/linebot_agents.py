@@ -426,7 +426,7 @@ async def ensure_default_linebot_agents(tenant_id: UUID | str | None = None) -> 
         agent_name = agent_config["name"]
 
         # 檢查 Agent 是否存在
-        existing_agent = await ai_manager.get_agent_by_name(agent_name, tenant_id=tid)
+        existing_agent = await ai_manager.get_agent_by_name(agent_name)
         if existing_agent:
             logger.debug(f"Agent '{agent_name}' 已存在，跳過建立")
             continue
@@ -481,4 +481,4 @@ async def get_linebot_agent(
     """
     tid = _get_tenant_id(tenant_id)
     agent_name = AGENT_LINEBOT_GROUP if is_group else AGENT_LINEBOT_PERSONAL
-    return await ai_manager.get_agent_by_name(agent_name, tenant_id=tid)
+    return await ai_manager.get_agent_by_name(agent_name)

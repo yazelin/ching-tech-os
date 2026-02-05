@@ -65,9 +65,7 @@ class SessionData(BaseModel):
     user_id: int | None = None  # 資料庫中的使用者 ID
     created_at: datetime
     expires_at: datetime
-    # 多租戶欄位
-    tenant_id: UUID | None = None  # 租戶 UUID
-    role: str = "user"  # user, tenant_admin, platform_admin
+    role: str = "user"  # admin, user
     # App 權限（登入時載入，避免每次 API 都查資料庫）
     app_permissions: dict[str, bool] = {}
 
