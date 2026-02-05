@@ -57,37 +57,6 @@ async def ensure_db_connection():
 
 
 # ============================================================
-# 租戶 ID 輔助函數
-# ============================================================
-
-# 預設租戶 ID（與其他服務一致）
-DEFAULT_TENANT_ID = UUID("00000000-0000-0000-0000-000000000000")
-
-
-def _get_tenant_id(tenant_id: str | None) -> str:
-    """
-    取得租戶 ID 字串
-
-    Args:
-        tenant_id: 租戶 ID 字串，None 則返回預設租戶
-
-    Returns:
-        租戶 ID 字串（UUID 格式）
-    """
-    if tenant_id is None:
-        return str(DEFAULT_TENANT_ID)
-    if isinstance(tenant_id, UUID):
-        return str(tenant_id)
-    # 驗證是否為有效的 UUID 格式
-    try:
-        UUID(tenant_id)  # 只驗證，不使用
-        return tenant_id
-    except ValueError:
-        logger.warning(f"無效的租戶 ID: {tenant_id}，使用預設租戶")
-        return str(DEFAULT_TENANT_ID)
-
-
-# ============================================================
 # 權限檢查輔助函數
 # ============================================================
 
@@ -164,7 +133,6 @@ async def check_mcp_tool_permission(
 async def check_project_member_permission(
     project_id: str,
     user_id: int,
-    tenant_id: str | None = None,
 ) -> bool:
     """
     檢查用戶是否為專案成員
@@ -172,24 +140,20 @@ async def check_project_member_permission(
     Args:
         project_id: 專案 UUID 字串
         user_id: CTOS 用戶 ID
-        tenant_id: 租戶 ID 字串
 
     Returns:
         True 表示用戶是專案成員，可以操作
     """
     from uuid import UUID as UUID_type
-    tid = _get_tenant_id(tenant_id)
     await ensure_db_connection()
     async with get_connection() as conn:
         exists = await conn.fetchval(
             """
             SELECT 1 FROM project_members pm
-            JOIN projects p ON pm.project_id = p.id
-            WHERE pm.project_id = $1 AND pm.user_id = $2 AND p.tenant_id = $3
+            WHERE pm.project_id = $1 AND pm.user_id = $2
             """,
             UUID_type(project_id),
             user_id,
-            tid,
         )
         return exists is not None
 
@@ -207,7 +171,6 @@ async def search_knowledge(
     limit: int = 5,
     line_user_id: str | None = None,
     ctos_user_id: int | None = None,
-    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     搜尋知識庫
@@ -219,7 +182,6 @@ async def search_knowledge(
         limit: 最大結果數量，預設 5
         line_user_id: Line 用戶 ID（從對話識別取得，用於搜尋個人知識）
         ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於搜尋個人知識）
-        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     await ensure_db_connection()
 
@@ -255,7 +217,6 @@ async def search_knowledge(
             project=project,
             category=category,
             current_username=current_username,
-            tenant_id=ctos_tenant_id,
         )
 
         if not result.items:
@@ -292,7 +253,6 @@ async def search_knowledge(
 async def get_knowledge_item(
     kb_id: str,
     ctos_user_id: int | None = None,
-    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     取得知識庫文件的完整內容
@@ -300,7 +260,6 @@ async def get_knowledge_item(
     Args:
         kb_id: 知識 ID（如 kb-001、kb-002）
         ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
-        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     await ensure_db_connection()
 
@@ -313,7 +272,7 @@ async def get_knowledge_item(
     from pathlib import Path
 
     try:
-        item = kb_service.get_knowledge(kb_id, tenant_id=ctos_tenant_id)
+        item = kb_service.get_knowledge(kb_id)
 
         # 格式化輸出
         tags_str = ", ".join(item.tags.topics) if item.tags.topics else "無標籤"
@@ -357,7 +316,6 @@ async def update_knowledge_item(
     level: str | None = None,
     type: str | None = None,
     ctos_user_id: int | None = None,
-    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     更新知識庫文件
@@ -374,7 +332,6 @@ async def update_knowledge_item(
         level: 難度層級，如 beginner、intermediate、advanced（不填則不更新）
         type: 知識類型，如 note、spec、guide（不填則不更新）
         ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於設定 personal 知識的 owner）
-        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     await ensure_db_connection()
 
@@ -423,7 +380,7 @@ async def update_knowledge_item(
             tags=tags,
         )
 
-        item = kb_service.update_knowledge(kb_id, update_data, tenant_id=ctos_tenant_id)
+        item = kb_service.update_knowledge(kb_id, update_data)
 
         scope_info = f"（{item.scope}）" if item.scope else ""
         return f"✅ 已更新 [{item.id}] {item.title}{scope_info}"
@@ -439,7 +396,6 @@ async def add_attachments_to_knowledge(
     attachments: list[str],
     descriptions: list[str] | None = None,
     ctos_user_id: int | None = None,
-    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     為現有知識庫新增附件
@@ -449,7 +405,6 @@ async def add_attachments_to_knowledge(
         attachments: 附件的 NAS 路徑列表（從 get_message_attachments 取得）
         descriptions: 附件描述列表（與 attachments 一一對應，如「圖1 水切爐」）
         ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
-        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     await ensure_db_connection()
 
@@ -466,7 +421,7 @@ async def add_attachments_to_knowledge(
 
     # 確認知識存在
     try:
-        knowledge = kb_service.get_knowledge(kb_id, tenant_id=ctos_tenant_id)
+        knowledge = kb_service.get_knowledge(kb_id)
     except Exception:
         return f"找不到知識 {kb_id}"
 
@@ -480,7 +435,7 @@ async def add_attachments_to_knowledge(
 
     for i, nas_path in enumerate(attachments):
         try:
-            kb_service.copy_linebot_attachment_to_knowledge(kb_id, nas_path, tenant_id=ctos_tenant_id)
+            kb_service.copy_linebot_attachment_to_knowledge(kb_id, nas_path)
             success_count += 1
 
             # 如果有對應的描述，更新附件描述
@@ -516,7 +471,6 @@ async def add_attachments_to_knowledge(
 async def delete_knowledge_item(
     kb_id: str,
     ctos_user_id: int | None = None,
-    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     刪除知識庫文件
@@ -524,7 +478,6 @@ async def delete_knowledge_item(
     Args:
         kb_id: 知識 ID（如 kb-001）
         ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
-        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     await ensure_db_connection()
 
@@ -536,7 +489,7 @@ async def delete_knowledge_item(
     from . import knowledge as kb_service
 
     try:
-        kb_service.delete_knowledge(kb_id, tenant_id=ctos_tenant_id)
+        kb_service.delete_knowledge(kb_id)
         return f"✅ 已刪除知識 {kb_id}"
 
     except Exception as e:
@@ -548,7 +501,6 @@ async def delete_knowledge_item(
 async def get_knowledge_attachments(
     kb_id: str,
     ctos_user_id: int | None = None,
-    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     取得知識庫的附件列表
@@ -556,7 +508,6 @@ async def get_knowledge_attachments(
     Args:
         kb_id: 知識 ID（如 kb-001、kb-002）
         ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
-        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     await ensure_db_connection()
 
@@ -569,7 +520,7 @@ async def get_knowledge_attachments(
     from pathlib import Path
 
     try:
-        item = kb_service.get_knowledge(kb_id, tenant_id=ctos_tenant_id)
+        item = kb_service.get_knowledge(kb_id)
 
         if not item.attachments:
             return f"知識 {kb_id} 沒有附件"
@@ -603,7 +554,6 @@ async def update_knowledge_attachment(
     attachment_index: int,
     description: str | None = None,
     ctos_user_id: int | None = None,
-    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     更新知識庫附件的說明
@@ -613,7 +563,6 @@ async def update_knowledge_attachment(
         attachment_index: 附件索引（從 0 開始，可用 get_knowledge_attachments 查詢）
         description: 附件說明（如「圖1 水切爐畫面」）
         ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
-        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     await ensure_db_connection()
 
@@ -630,7 +579,6 @@ async def update_knowledge_attachment(
             kb_id=kb_id,
             attachment_idx=attachment_index,
             description=description,
-            tenant_id=ctos_tenant_id,
         )
 
         filename = Path(attachment.path).name
@@ -648,7 +596,6 @@ async def read_knowledge_attachment(
     attachment_index: int = 0,
     max_chars: int = 15000,
     ctos_user_id: int | None = None,
-    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     讀取知識庫附件的內容
@@ -658,7 +605,6 @@ async def read_knowledge_attachment(
         attachment_index: 附件索引（從 0 開始，可用 get_knowledge_attachments 查詢）
         max_chars: 最大字元數限制，預設 15000（避免超過 CLI 的 25000 token 限制）
         ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
-        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     await ensure_db_connection()
 
@@ -672,7 +618,7 @@ async def read_knowledge_attachment(
     from pathlib import Path
 
     try:
-        item = kb_service.get_knowledge(kb_id, tenant_id=ctos_tenant_id)
+        item = kb_service.get_knowledge(kb_id)
 
         if not item.attachments:
             return f"知識 {kb_id} 沒有附件"
@@ -686,7 +632,7 @@ async def read_knowledge_attachment(
 
         # 解析路徑並轉換為檔案系統路徑（傳入 tenant_id 以正確解析 CTOS 路徑）
         try:
-            fs_path = path_manager.to_filesystem(attachment.path, tenant_id=ctos_tenant_id)
+            fs_path = path_manager.to_filesystem(attachment.path)
         except ValueError as e:
             return f"無法解析附件路徑：{e}"
 
@@ -789,7 +735,6 @@ async def add_note(
     line_group_id: str | None = None,
     line_user_id: str | None = None,
     ctos_user_id: int | None = None,
-    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     新增筆記到知識庫
@@ -803,7 +748,6 @@ async def add_note(
         line_group_id: Line 群組的內部 UUID（從對話識別取得，群組對話時使用）
         line_user_id: Line 用戶 ID（從對話識別取得，個人對話時使用）
         ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於判斷帳號綁定）
-        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     await ensure_db_connection()
 
@@ -850,7 +794,7 @@ async def add_note(
             author=owner_username or "linebot",
         )
 
-        result = kb_service.create_knowledge(data, owner=owner_username, project_id=project_id, tenant_id=ctos_tenant_id)
+        result = kb_service.create_knowledge(data, owner=owner_username, project_id=project_id)
 
         # 組裝回應訊息
         scope_text = {"global": "全域", "personal": "個人", "project": "專案"}.get(scope, scope)
@@ -872,7 +816,6 @@ async def add_note_with_attachments(
     line_group_id: str | None = None,
     line_user_id: str | None = None,
     ctos_user_id: int | None = None,
-    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     新增筆記到知識庫並加入附件
@@ -887,7 +830,6 @@ async def add_note_with_attachments(
         line_group_id: Line 群組的內部 UUID（從對話識別取得，群組對話時使用）
         line_user_id: Line 用戶 ID（從對話識別取得，個人對話時使用）
         ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於判斷帳號綁定）
-        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     await ensure_db_connection()
 
@@ -936,7 +878,7 @@ async def add_note_with_attachments(
             author=owner_username or "linebot",
         )
 
-        result = kb_service.create_knowledge(data, owner=owner_username, project_id=knowledge_project_id, tenant_id=ctos_tenant_id)
+        result = kb_service.create_knowledge(data, owner=owner_username, project_id=knowledge_project_id)
         kb_id = result.id
 
         # 2. 處理附件
@@ -945,7 +887,7 @@ async def add_note_with_attachments(
 
         for nas_path in attachments:
             try:
-                kb_service.copy_linebot_attachment_to_knowledge(kb_id, nas_path, tenant_id=ctos_tenant_id)
+                kb_service.copy_linebot_attachment_to_knowledge(kb_id, nas_path)
                 success_count += 1
             except Exception as e:
                 logger.warning(f"附件複製失敗 {nas_path}: {e}")
@@ -975,7 +917,6 @@ async def summarize_chat(
     line_group_id: str,
     hours: int = 24,
     max_messages: int = 50,
-    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     取得 Line 群組聊天記錄，供 AI 摘要使用
@@ -984,11 +925,9 @@ async def summarize_chat(
         line_group_id: Line 群組的內部 UUID
         hours: 取得最近幾小時的訊息，預設 24
         max_messages: 最大訊息數量，預設 50
-        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     await ensure_db_connection()
-    tid = _get_tenant_id(ctos_tenant_id)
-
+    
     async with get_connection() as conn:
         # 計算時間範圍
         since = datetime.now() - timedelta(hours=hours)
@@ -1043,7 +982,6 @@ async def get_message_attachments(
     days: int = 7,
     file_type: str | None = None,
     limit: int = 20,
-    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     查詢對話中的附件（圖片、檔案等），用於將附件加入知識庫
@@ -1054,11 +992,9 @@ async def get_message_attachments(
         days: 查詢最近幾天的附件，預設 7 天，可根據用戶描述調整
         file_type: 檔案類型過濾（image, file, video, audio），不填則查詢全部
         limit: 最大回傳數量，預設 20
-        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     await ensure_db_connection()
-    tid = _get_tenant_id(ctos_tenant_id)
-
+    
     if not line_user_id and not line_group_id:
         return "請提供 line_user_id 或 line_group_id"
 
@@ -1154,7 +1090,6 @@ async def search_nas_files(
     file_types: str | None = None,
     limit: int = 100,
     ctos_user_id: int | None = None,
-    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     搜尋 NAS 共享檔案
@@ -1164,7 +1099,6 @@ async def search_nas_files(
         file_types: 檔案類型過濾，多個類型用逗號分隔（如：pdf,xlsx,dwg）
         limit: 最大回傳數量，預設 100
         ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
-        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     await ensure_db_connection()
 
@@ -1175,8 +1109,7 @@ async def search_nas_files(
 
     # 此工具搜尋的是公司共用區，不是租戶隔離區
     # 公司共用檔案是跨租戶共用的，因此不需要 tenant_id 過濾
-    _tid = _get_tenant_id(ctos_tenant_id)  # noqa: F841 保留以備日後需要
-    from pathlib import Path
+        from pathlib import Path
     from ..config import settings
 
     # 搜尋來源定義（shared zone 的子來源）
@@ -1362,7 +1295,6 @@ async def search_nas_files(
 async def get_nas_file_info(
     file_path: str,
     ctos_user_id: int | None = None,
-    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     取得 NAS 檔案詳細資訊
@@ -1370,7 +1302,6 @@ async def get_nas_file_info(
     Args:
         file_path: 檔案路徑（相對於 /mnt/nas/projects 或完整路徑）
         ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
-        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     await ensure_db_connection()
 
@@ -1379,13 +1310,12 @@ async def get_nas_file_info(
     if not allowed:
         return f"❌ {error_msg}"
 
-    tid = _get_tenant_id(ctos_tenant_id)  # noqa: F841 保留以備日後需要
-    from pathlib import Path
+        from pathlib import Path
     from .share import validate_nas_file_path, NasFileNotFoundError, NasFileAccessDenied
 
     # 統一使用 validate_nas_file_path 進行路徑驗證（支援 shared://projects/...、shared://circuits/... 等）
     try:
-        full_path = validate_nas_file_path(file_path, tenant_id=tid)
+        full_path = validate_nas_file_path(file_path)
     except NasFileNotFoundError as e:
         return f"錯誤：{e}"
     except NasFileAccessDenied as e:
@@ -1447,7 +1377,6 @@ async def read_document(
     file_path: str,
     max_chars: int = 50000,
     ctos_user_id: int | None = None,
-    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     讀取文件內容（支援 Word、Excel、PowerPoint、PDF）
@@ -1458,7 +1387,6 @@ async def read_document(
         file_path: NAS 檔案路徑（nas:// 格式、相對路徑或完整路徑）
         max_chars: 最大字元數限制，預設 50000
         ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
-        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     await ensure_db_connection()
 
@@ -1468,8 +1396,7 @@ async def read_document(
         return f"❌ {error_msg}"
 
     # 支援 CTOS zone（需要 tenant_id）和 SHARED zone
-    tid = _get_tenant_id(ctos_tenant_id)
-    from pathlib import Path
+        from pathlib import Path
     from ..config import settings
     from . import document_reader
     from .path_manager import path_manager, StorageZone
@@ -1482,7 +1409,7 @@ async def read_document(
         return f"錯誤：{e}"
 
     # 取得實際檔案系統路徑（傳入 tenant_id 以正確解析 CTOS 路徑）
-    resolved_path = path_manager.to_filesystem(file_path, tenant_id=tid)
+    resolved_path = path_manager.to_filesystem(file_path)
     full_path = Path(resolved_path)
 
     # 安全檢查：只允許 CTOS 和 SHARED 區域（不允許 TEMP/LOCAL）
@@ -1554,7 +1481,6 @@ async def create_share_link(
     resource_type: str,
     resource_id: str,
     expires_in: str | None = "24h",
-    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     建立公開分享連結，讓沒有帳號的人也能查看知識庫或下載檔案
@@ -1565,12 +1491,9 @@ async def create_share_link(
             - nas_file: NAS 檔案（路徑）
         resource_id: 資源 ID（如 kb-001 或 NAS 檔案路徑）
         expires_in: 有效期限，可選 1h、24h、7d、null（永久），預設 24h
-        ctos_tenant_id: 租戶 ID（從對話識別取得）
 
     注意：專案分享功能已遷移至 ERPNext，請直接在 ERPNext 系統操作。
     """
-    # 預留租戶 ID 參數，未來用於驗證資源權限
-    tid = _get_tenant_id(ctos_tenant_id)  # noqa: F841
     await ensure_db_connection()
 
     from .share import (
@@ -1599,7 +1522,7 @@ async def create_share_link(
             expires_in=expires_in,
         )
         # 使用 system 作為建立者（Line Bot 代理建立）
-        result = await _create_share_link(data, "linebot", tenant_id=tid)
+        result = await _create_share_link(data, "linebot")
 
         # 轉換為台北時區顯示
         if result.expires_at:
@@ -1629,7 +1552,6 @@ async def share_knowledge_attachment(
     kb_id: str,
     attachment_idx: int,
     expires_in: str | None = "24h",
-    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     分享知識庫附件（適用於 .md2ppt 或 .md2doc 檔案）
@@ -1643,12 +1565,10 @@ async def share_knowledge_attachment(
         kb_id: 知識庫 ID（如 kb-001）
         attachment_idx: 附件索引（從 0 開始，依照知識庫中的附件順序）
         expires_in: 有效期限，可選 1h、24h、7d、null（永久），預設 24h
-        ctos_tenant_id: 租戶 ID（從對話識別取得）
 
     Returns:
         分享連結資訊，包含密碼
     """
-    tid = _get_tenant_id(ctos_tenant_id)
     await ensure_db_connection()
 
     from pathlib import Path
@@ -1667,7 +1587,7 @@ async def share_knowledge_attachment(
 
     try:
         # 取得知識庫
-        knowledge = get_knowledge(kb_id, tenant_id=tid)
+        knowledge = get_knowledge(kb_id)
 
         # 檢查附件索引
         if attachment_idx < 0 or attachment_idx >= len(knowledge.attachments):
@@ -1687,7 +1607,7 @@ async def share_knowledge_attachment(
         if parsed.zone == StorageZone.CTOS and parsed.path.startswith("knowledge/"):
             # CTOS 區的知識庫檔案
             nas_path = parsed.path.replace("knowledge/", "", 1)
-            content = get_nas_attachment(nas_path, tenant_id=tid).decode('utf-8')
+            content = get_nas_attachment(nas_path).decode('utf-8')
         elif parsed.zone == StorageZone.LOCAL:
             # 本機檔案
             from .local_file import create_knowledge_file_service
@@ -1707,7 +1627,7 @@ async def share_knowledge_attachment(
             filename=filename,
             expires_in=expires_in,
         )
-        result = await _create_share_link(data, "linebot", tenant_id=tid)
+        result = await _create_share_link(data, "linebot")
 
         # 根據檔案類型產生前端 URL
         from ..config import settings
@@ -1762,7 +1682,6 @@ async def send_nas_file(
     line_group_id: str | None = None,
     telegram_chat_id: str | None = None,
     ctos_user_id: int | None = None,
-    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     直接發送 NAS 檔案給用戶。圖片會直接顯示在對話中，其他檔案會發送下載連結。
@@ -1773,7 +1692,6 @@ async def send_nas_file(
         line_group_id: Line 群組的內部 UUID（群組對話時使用，從【對話識別】取得）
         telegram_chat_id: Telegram chat ID（從【對話識別】取得）
         ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
-        ctos_tenant_id: 租戶 ID（從對話識別取得）
 
     注意：
     - 圖片（jpg/jpeg/png/gif/webp）< 10MB 會直接顯示
@@ -1788,8 +1706,7 @@ async def send_nas_file(
         return f"❌ {error_msg}"
 
     # 取得租戶 ID 用於資料庫查詢過濾
-    tid = _get_tenant_id(ctos_tenant_id)
-
+    
     from pathlib import Path
     from .share import (
         create_share_link as _create_share_link,
@@ -1806,7 +1723,7 @@ async def send_nas_file(
 
     # 驗證檔案路徑（傳入 tenant_id 以正確解析 CTOS 路徑）
     try:
-        full_path = validate_nas_file_path(file_path, tenant_id=tid)
+        full_path = validate_nas_file_path(file_path)
     except NasFileNotFoundError as e:
         return f"錯誤：{e}"
     except NasFileAccessDenied as e:
@@ -1831,7 +1748,7 @@ async def send_nas_file(
             resource_id=file_path,
             expires_in="24h",
         )
-        result = await _create_share_link(data, "linebot", tenant_id=tid)
+        result = await _create_share_link(data, "linebot")
     except Exception as e:
         return f"建立分享連結失敗：{e}"
 
@@ -1982,7 +1899,6 @@ def _build_file_message_info(
 async def prepare_file_message(
     file_path: str,
     ctos_user_id: int | None = None,
-    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     準備檔案訊息供 Line Bot 回覆。圖片會直接顯示在回覆中，其他檔案會以連結形式呈現。
@@ -1994,7 +1910,6 @@ async def prepare_file_message(
               例如：local://knowledge/assets/images/kb-001-demo.png
                    ctos://knowledge/attachments/kb-001/file.pdf
         ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
-        ctos_tenant_id: 租戶 ID（從對話識別取得）
 
     Returns:
         包含檔案訊息標記的字串，系統會自動處理並在回覆中顯示圖片或連結
@@ -2007,8 +1922,7 @@ async def prepare_file_message(
         return f"❌ {error_msg}"
 
     # 取得租戶 ID，用於 CTOS zone 路徑解析
-    tid = _get_tenant_id(ctos_tenant_id)
-
+    
     import json
     import re
     from pathlib import Path
@@ -2036,7 +1950,7 @@ async def prepare_file_message(
         # 使用 path_manager 解析路徑
         try:
             parsed = path_manager.parse(file_path)
-            fs_path = Path(path_manager.to_filesystem(file_path, tenant_id=tid))
+            fs_path = Path(path_manager.to_filesystem(file_path))
         except ValueError as e:
             return f"錯誤：無法解析路徑 - {e}"
 
@@ -2073,7 +1987,7 @@ async def prepare_file_message(
                 resource_id=kb_id,
                 expires_in="24h",
             )
-            result = await _create_share_link(data, "linebot", tenant_id=tid)
+            result = await _create_share_link(data, "linebot")
         except Exception as e:
             return f"建立分享連結失敗：{e}"
 
@@ -2095,7 +2009,7 @@ async def prepare_file_message(
         # ===== NAS 檔案處理 =====
         # 驗證檔案路徑（傳入 tenant_id 以正確解析 CTOS 路徑）
         try:
-            full_path = validate_nas_file_path(file_path, tenant_id=tid)
+            full_path = validate_nas_file_path(file_path)
         except NasFileNotFoundError as e:
             return f"錯誤：{e}"
         except NasFileAccessDenied as e:
@@ -2112,7 +2026,7 @@ async def prepare_file_message(
                 resource_id=file_path,
                 expires_in="24h",
             )
-            result = await _create_share_link(data, "linebot", tenant_id=tid)
+            result = await _create_share_link(data, "linebot")
         except Exception as e:
             return f"建立分享連結失敗：{e}"
 
@@ -2152,7 +2066,6 @@ async def prepare_file_message(
 async def download_web_image(
     url: str,
     ctos_user_id: int | None = None,
-    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     下載網路圖片並準備為回覆訊息。用於將網路上找到的參考圖片傳送給用戶。
@@ -2163,7 +2076,6 @@ async def download_web_image(
     Args:
         url: 圖片的完整 URL（支援 jpg、jpeg、png、gif、webp 格式）
         ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
-        ctos_tenant_id: 租戶 ID（從對話識別取得）
 
     Returns:
         包含檔案訊息標記的字串，系統會自動在回覆中顯示圖片
@@ -2200,7 +2112,6 @@ async def convert_pdf_to_images(
     dpi: int = 150,
     max_pages: int = 20,
     ctos_user_id: int | None = None,
-    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     將 PDF 轉換為圖片
@@ -2217,7 +2128,6 @@ async def convert_pdf_to_images(
         dpi: 解析度，預設 150，範圍 72-600
         max_pages: 最大頁數限制，預設 20
         ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
-        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     await ensure_db_connection()
 
@@ -2232,8 +2142,7 @@ async def convert_pdf_to_images(
         }, ensure_ascii=False)
 
     # 取得租戶 ID，用於 CTOS zone 路徑解析
-    tid = _get_tenant_id(ctos_tenant_id)
-    from pathlib import Path as FilePath
+        from pathlib import Path as FilePath
 
     from ..config import settings
     from .document_reader import (
@@ -2276,7 +2185,7 @@ async def convert_pdf_to_images(
         }, ensure_ascii=False)
 
     # 取得實際檔案系統路徑（傳入 tenant_id 以正確解析 CTOS 路徑）
-    actual_path = path_manager.to_filesystem(pdf_path, tenant_id=tid)
+    actual_path = path_manager.to_filesystem(pdf_path)
 
     # 檢查檔案存在
     if not FilePath(actual_path).exists():
@@ -2357,7 +2266,6 @@ async def generate_presentation(
     image_source: str = "pexels",
     outline_json: str | dict | None = None,
     output_format: str = "html",
-    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     生成簡報（HTML 或 PDF，使用 Marp）
@@ -2445,8 +2353,7 @@ async def generate_presentation(
         outline_json = _json.dumps(outline_json, ensure_ascii=False)
 
     # 取得租戶 ID
-    tid = _get_tenant_id(ctos_tenant_id)
-
+    
     try:
         result = await generate_html_presentation(
             topic=topic or "簡報",
@@ -2456,7 +2363,6 @@ async def generate_presentation(
             image_source=image_source,
             outline_json=outline_json,
             output_format=output_format,
-            tenant_id=tid,
         )
 
         theme_names = {
@@ -2511,7 +2417,6 @@ async def add_memory(
     title: str | None = None,
     line_group_id: str | None = None,
     line_user_id: str | None = None,
-    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     新增記憶
@@ -2521,7 +2426,6 @@ async def add_memory(
         title: 記憶標題（方便識別），若未提供系統會自動產生
         line_group_id: Line 群組的內部 UUID（群組對話時使用，從對話識別取得）
         line_user_id: Line 用戶 ID（個人對話時使用，從對話識別取得）
-        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     await ensure_db_connection()
 
@@ -2551,9 +2455,8 @@ async def add_memory(
 
     elif line_user_id:
         # 個人記憶：需要查詢用戶的內部 UUID
-        # 同一個 Line 用戶可能在多個租戶有記錄，必須用 tenant_id 過濾
         from .linebot import get_line_user_record
-        user_row = await get_line_user_record(line_user_id, ctos_tenant_id, "id")
+        user_row = await get_line_user_record(line_user_id, "id")
         if not user_row:
             return "❌ 找不到用戶"
 
@@ -2577,7 +2480,6 @@ async def add_memory(
 async def get_memories(
     line_group_id: str | None = None,
     line_user_id: str | None = None,
-    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     查詢記憶
@@ -2585,7 +2487,6 @@ async def get_memories(
     Args:
         line_group_id: Line 群組的內部 UUID（群組對話時使用，從對話識別取得）
         line_user_id: Line 用戶 ID（個人對話時使用，從對話識別取得）
-        ctos_tenant_id: 租戶 ID（從對話識別取得）
     """
     await ensure_db_connection()
 
@@ -2622,9 +2523,8 @@ async def get_memories(
 
     elif line_user_id:
         # 個人記憶
-        # 同一個 Line 用戶可能在多個租戶有記錄，必須用 tenant_id 過濾
         from .linebot import get_line_user_record
-        user_row = await get_line_user_record(line_user_id, ctos_tenant_id, "id")
+        user_row = await get_line_user_record(line_user_id, "id")
         if not user_row:
             return "❌ 找不到用戶"
 
@@ -3392,7 +3292,6 @@ async def generate_md2ppt(
     content: str,
     style: str | None = None,
     ctos_user_id: int | None = None,
-    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     產生 MD2PPT 格式的簡報內容，並建立帶密碼保護的分享連結
@@ -3404,7 +3303,6 @@ async def generate_md2ppt(
         content: 要轉換為簡報的內容或主題
         style: 風格需求（如：科技藍、簡約深色），不填則自動選擇
         ctos_user_id: CTOS 用戶 ID（從對話識別取得）
-        ctos_tenant_id: 租戶 ID（從對話識別取得）
 
     Returns:
         分享連結和存取密碼
@@ -3414,8 +3312,7 @@ async def generate_md2ppt(
     from ..models.share import ShareLinkCreate
 
     await ensure_db_connection()
-    tid = _get_tenant_id(ctos_tenant_id)
-
+    
     # 組合 prompt
     style_hint = f"【風格需求】：{style}\n" if style else ""
     user_prompt = f"{style_hint}【內容】：\n{content}"
@@ -3452,7 +3349,6 @@ async def generate_md2ppt(
         share_link = await create_share_link(
             data=share_data,
             created_by="linebot-ai",
-            tenant_id=tid,
         )
 
         # 產生 MD2PPT 連結
@@ -3466,11 +3362,8 @@ async def generate_md2ppt(
         file_id = str(uuid.uuid4())[:8]
         filename = f"presentation-{file_id}.md2ppt"
 
-        # 保存到 ai-generated 目錄（多租戶支援）
-        if tid:
-            save_dir = Path(settings.ctos_mount_path) / "tenants" / str(tid) / "linebot" / "ai-generated"
-        else:
-            save_dir = Path(settings.ctos_mount_path) / "linebot" / "files" / "ai-generated"
+        # 保存到 ai-generated 目錄
+        save_dir = Path(settings.ctos_mount_path) / "linebot" / "files" / "ai-generated"
 
         save_dir.mkdir(parents=True, exist_ok=True)
         save_path = save_dir / filename
@@ -3499,7 +3392,6 @@ async def generate_md2ppt(
 async def generate_md2doc(
     content: str,
     ctos_user_id: int | None = None,
-    ctos_tenant_id: str | None = None,
 ) -> str:
     """
     產生 MD2DOC 格式的文件內容，並建立帶密碼保護的分享連結
@@ -3509,7 +3401,6 @@ async def generate_md2doc(
     Args:
         content: 要轉換為文件的內容
         ctos_user_id: CTOS 用戶 ID（從對話識別取得）
-        ctos_tenant_id: 租戶 ID（從對話識別取得）
 
     Returns:
         分享連結和存取密碼
@@ -3519,8 +3410,7 @@ async def generate_md2doc(
     from ..models.share import ShareLinkCreate
 
     await ensure_db_connection()
-    tid = _get_tenant_id(ctos_tenant_id)
-
+    
     user_prompt = f"請將以下內容轉換為 MD2DOC 格式的文件：\n\n{content}"
 
     try:
@@ -3555,7 +3445,6 @@ async def generate_md2doc(
         share_link = await create_share_link(
             data=share_data,
             created_by="linebot-ai",
-            tenant_id=tid,
         )
 
         # 產生 MD2DOC 連結
@@ -3569,11 +3458,8 @@ async def generate_md2doc(
         file_id = str(uuid.uuid4())[:8]
         filename = f"document-{file_id}.md2doc"
 
-        # 保存到 ai-generated 目錄（多租戶支援）
-        if tid:
-            save_dir = Path(settings.ctos_mount_path) / "tenants" / str(tid) / "linebot" / "ai-generated"
-        else:
-            save_dir = Path(settings.ctos_mount_path) / "linebot" / "files" / "ai-generated"
+        # 保存到 ai-generated 目錄
+        save_dir = Path(settings.ctos_mount_path) / "linebot" / "files" / "ai-generated"
 
         save_dir.mkdir(parents=True, exist_ok=True)
         save_path = save_dir / filename
@@ -3622,7 +3508,6 @@ ALLOWED_PRINT_PATHS = ("/mnt/nas/", "/tmp/ctos/")
 async def prepare_print_file(
     file_path: str,
     ctos_user_id: int | None = None,
-    ctos_tenant_id: str | None = None,
 ) -> str:
     """將虛擬路徑轉換為可列印的絕對路徑，Office 文件會自動轉為 PDF
 
@@ -3650,14 +3535,12 @@ async def prepare_print_file(
     import asyncio as _asyncio
     from pathlib import Path
 
-    tid = ctos_tenant_id
-
     # 路徑轉換：虛擬路徑 → 絕對路徑
     try:
         from .path_manager import path_manager
 
         if "://" in file_path:
-            actual_path = Path(path_manager.to_filesystem(file_path, tenant_id=tid))
+            actual_path = Path(path_manager.to_filesystem(file_path))
         else:
             actual_path = Path(file_path)
     except Exception as e:

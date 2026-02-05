@@ -160,21 +160,27 @@ class TestGetTempImagePath:
 # ============================================================
 
 class TestIsBindTenantCommand:
-    """測試綁定租戶指令"""
+    """測試綁定租戶指令
 
-    def test_bind_command_chinese(self):
+    注意：多租戶功能已移除，is_bind_tenant_command 現在永遠返回 False
+    """
+
+    def test_bind_command_chinese_disabled(self):
+        """租戶綁定指令已停用"""
         is_cmd, code = is_bind_tenant_command("/綁定 COMPANY01")
-        assert is_cmd is True
-        assert code == "COMPANY01"
+        assert is_cmd is False
+        assert code is None
 
-    def test_bind_command_english(self):
+    def test_bind_command_english_disabled(self):
+        """租戶綁定指令已停用"""
         is_cmd, code = is_bind_tenant_command("/bind COMPANY01")
-        assert is_cmd is True
-        assert code == "COMPANY01"
+        assert is_cmd is False
+        assert code is None
 
-    def test_bind_without_code(self):
+    def test_bind_without_code_disabled(self):
+        """租戶綁定指令已停用"""
         is_cmd, code = is_bind_tenant_command("/綁定")
-        assert is_cmd is True
+        assert is_cmd is False
         assert code is None
 
     def test_not_bind_command(self):

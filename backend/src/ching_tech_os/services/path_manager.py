@@ -9,11 +9,6 @@
 - local://   → 本機小檔案 (應用程式 data 目錄)
 - nas://     → NAS 共享（透過 SMB 存取，用於檔案管理器）
 
-多租戶模式下，CTOS zone 會映射到租戶專屬目錄：
-- /mnt/nas/ctos/tenants/{tenant_id}/knowledge/
-- /mnt/nas/ctos/tenants/{tenant_id}/linebot/
-- /mnt/nas/ctos/tenants/{tenant_id}/attachments/
-
 範例：
 - ctos://knowledge/kb-001/file.pdf
 - ctos://linebot/groups/C123/images/2026-01-05/abc.jpg
@@ -30,10 +25,6 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional
 import re
-
-# 預設租戶 UUID（用於單租戶模式和向後相容）
-DEFAULT_TENANT_ID = "00000000-0000-0000-0000-000000000000"
-
 
 class StorageZone(Enum):
     """儲存區域"""
@@ -233,14 +224,11 @@ class PathManager:
             raw=path
         )
 
-    def to_filesystem(
-        self, path: str, tenant_id: str | None = None
-    ) -> str:
+    def to_filesystem(self, path: str) -> str:
         """轉換為實際檔案系統路徑
 
         Args:
             path: 輸入路徑（任何格式）
-            tenant_id: 租戶 ID（用於 CTOS zone 的租戶隔離）
 
         Returns:
             實際的檔案系統絕對路徑
@@ -259,26 +247,13 @@ class PathManager:
         if parsed.zone == StorageZone.TEMP and parsed.path.startswith("bot/"):
             return f"/tmp/bot-files/{parsed.path.removeprefix('bot/')}"
 
-        # LOCAL zone 知識庫路徑的多租戶支援
-        # 多租戶模式下，local://knowledge/... 實際存在租戶的 NAS 目錄
+        # LOCAL zone 知識庫路徑
         if parsed.zone == StorageZone.LOCAL and parsed.path.startswith("knowledge/"):
-            if tenant_id:
-                # 多租戶：映射到租戶專屬目錄
-                # local://knowledge/assets/images/... → /mnt/nas/ctos/tenants/{tenant_id}/knowledge/assets/images/...
-                return f"{self._settings.ctos_mount_path}/tenants/{tenant_id}/{parsed.path}"
-            else:
-                # 單租戶：使用本機 data 目錄
-                # 處理舊格式 knowledge/images/ → knowledge/assets/images/
-                if parsed.path.startswith("knowledge/images/"):
-                    new_path = "knowledge/assets/images/" + parsed.path[len("knowledge/images/"):]
-                    return f"{mount_path}/{new_path}"
-                return f"{mount_path}/{parsed.path}"
-
-        # CTOS zone 支援租戶隔離
-        if parsed.zone == StorageZone.CTOS and tenant_id:
-            # 映射到租戶專屬目錄
-            # ctos://knowledge/... → /mnt/nas/ctos/tenants/{tenant_id}/knowledge/...
-            return f"{self._settings.ctos_mount_path}/tenants/{tenant_id}/{parsed.path}"
+            # 處理舊格式 knowledge/images/ → knowledge/assets/images/
+            if parsed.path.startswith("knowledge/images/"):
+                new_path = "knowledge/assets/images/" + parsed.path[len("knowledge/images/"):]
+                return f"{mount_path}/{new_path}"
+            return f"{mount_path}/{parsed.path}"
 
         # SHARED zone 子來源解析
         if parsed.zone == StorageZone.SHARED:
@@ -334,12 +309,11 @@ class PathManager:
         """
         return self.to_storage(path)
 
-    def exists(self, path: str, tenant_id: str | None = None) -> bool:
+    def exists(self, path: str) -> bool:
         """檢查檔案是否存在
 
         Args:
             path: 輸入路徑（任何格式）
-            tenant_id: 租戶 ID（用於 CTOS zone 的租戶隔離）
 
         Returns:
             檔案是否存在
@@ -351,7 +325,7 @@ class PathManager:
         if parsed.zone == StorageZone.NAS:
             # NAS zone 無法直接檢查，回傳 True（由 API 層處理實際檢查）
             return True
-        fs_path = self.to_filesystem(path, tenant_id)
+        fs_path = self.to_filesystem(path)
         return Path(fs_path).exists()
 
     def get_zone(self, path: str) -> StorageZone:

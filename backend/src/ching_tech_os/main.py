@@ -157,12 +157,11 @@ async def short_share_url(token: str):
         link_info = await get_link_info(token)
         resource_type = link_info["resource_type"]
         resource_id = link_info["resource_id"]
-        tenant_id = link_info.get("tenant_id")
 
         if resource_type == "knowledge":
             from .services.knowledge import get_knowledge
             try:
-                kb = get_knowledge(resource_id, tenant_id=tenant_id)
+                kb = get_knowledge(resource_id)
                 og_title = f"{kb.title} - 擎添工業"
                 # 截取前 100 字作為描述
                 content_preview = (kb.content or "")[:100].replace("\n", " ").strip()

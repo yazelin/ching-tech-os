@@ -83,30 +83,6 @@ async def get_line_user_record(
 
 
 # ============================================================
-# 已移除的多租戶函數（保留空實作以維持相容性）
-# ============================================================
-# 以下函數在單一租戶架構中不再需要，但保留函數名稱以避免呼叫端錯誤
-
-
-async def resolve_tenant_for_message(
-    line_group_id: str | None,
-    line_user_id: str | None,
-) -> None:
-    """已棄用：單一租戶模式下不需要解析租戶"""
-    return None
-
-
-async def _migrate_group_to_tenant(line_group_id: str, tenant_id: UUID) -> None:
-    """已棄用：單一租戶模式下不需要遷移群組"""
-    pass
-
-
-def _get_tenant_id(tenant_id: UUID | str | None) -> None:
-    """已棄用：返回 None 以保持向後相容"""
-    return None
-
-
-# ============================================================
 # 常數定義
 # ============================================================
 
@@ -214,70 +190,20 @@ def verify_signature(body: bytes, signature: str, channel_secret: str | None = N
     return hmac.compare_digest(signature, expected_signature)
 
 
-async def verify_signature_multi_tenant(body: bytes, signature: str) -> UUID | None:
-    """多租戶簽章驗證
-
-    遍歷所有租戶的 channel_secret 進行驗證，
-    驗證成功則回傳該租戶的 ID。
-
-    流程：
-    1. 先嘗試各租戶的 secret（獨立 Bot 模式）
-    2. 全部失敗則嘗試環境變數的 secret（共用 Bot 模式）
+async def verify_webhook_signature(body: bytes, signature: str) -> tuple[bool, None, None]:
+    """驗證 Webhook 簽章
 
     Args:
         body: 請求內容
         signature: X-Line-Signature header
 
     Returns:
-        租戶 UUID 或 None（使用預設 Bot 時回傳 None，需從群組綁定判斷）
-    """
-    # 1. 嘗試各租戶的 secret（獨立 Bot 模式）
-    tenant_secrets = await get_cached_tenant_secrets()
-
-    for tenant_info in tenant_secrets:
-        secret = tenant_info.get("channel_secret")
-        if secret and verify_signature(body, signature, secret):
-            tenant_id = tenant_info["tenant_id"]
-            logger.debug(f"簽章驗證成功，租戶: {tenant_id}")
-            return tenant_id
-
-    # 2. 嘗試環境變數的 secret（共用 Bot 模式）
-    if verify_signature(body, signature):
-        logger.debug("簽章驗證成功，使用共用 Bot")
-        return None  # None 表示使用共用 Bot，需從群組綁定判斷租戶
-
-    logger.warning("所有簽章驗證失敗")
-    return None  # 這裡也回傳 None，但外層需要檢查是否驗證失敗
-
-
-async def verify_webhook_signature(body: bytes, signature: str) -> tuple[bool, UUID | None, str | None]:
-    """驗證 Webhook 簽章並識別租戶
-
-    這是對外的主要驗證函數。
-
-    Args:
-        body: 請求內容
-        signature: X-Line-Signature header
-
-    Returns:
-        (是否驗證成功, 租戶 UUID, channel_secret)
-        - (True, tenant_id, secret): 驗證成功，識別為指定租戶（獨立 Bot）
-        - (True, None, None): 驗證成功，使用共用 Bot（需從群組綁定判斷租戶）
+        (是否驗證成功, None, None)
+        - (True, None, None): 驗證成功
         - (False, None, None): 驗證失敗
     """
-    # 1. 先嘗試各租戶的 secret
-    tenant_secrets = await get_cached_tenant_secrets()
-
-    for tenant_info in tenant_secrets:
-        secret = tenant_info.get("channel_secret")
-        if secret and verify_signature(body, signature, secret):
-            tenant_id = tenant_info["tenant_id"]
-            logger.debug(f"Webhook 驗證成功（獨立 Bot），租戶: {tenant_id}")
-            return True, tenant_id, secret
-
-    # 2. 嘗試環境變數的 secret
     if verify_signature(body, signature):
-        logger.debug("Webhook 驗證成功（共用 Bot）")
+        logger.debug("Webhook 驗證成功")
         return True, None, None
 
     logger.warning("Webhook 簽章驗證失敗")
@@ -470,7 +396,6 @@ async def get_or_create_group(
 
 async def get_group_profile(
     line_group_id: str,
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> dict | None:
     """從 Line API 取得群組 profile
 
@@ -493,7 +418,6 @@ async def get_group_profile(
 
 async def handle_join_event(
     line_group_id: str,
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> None:
     """處理加入群組事件（包含重新加入）
 
@@ -524,7 +448,6 @@ async def handle_join_event(
 
 async def handle_leave_event(
     line_group_id: str,
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> None:
     """處理離開群組事件
 
@@ -545,7 +468,6 @@ async def handle_leave_event(
 
 async def get_line_group_external_id(
     group_uuid: UUID,
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> str | None:
     """從內部 UUID 取得 Line 群組的外部 ID
 
@@ -575,7 +497,6 @@ async def save_message(
     content: str | None,
     reply_token: str | None = None,
     is_from_bot: bool = False,
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> UUID:
     """儲存訊息到資料庫，回傳訊息 UUID
 
@@ -685,7 +606,6 @@ async def save_bot_response(
     content: str,
     responding_to_line_user_id: str | None = None,
     line_message_id: str | None = None,
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> UUID:
     """儲存 Bot 回應訊息到資料庫
 
@@ -745,7 +665,6 @@ async def save_file_record(
     mime_type: str | None = None,
     nas_path: str | None = None,
     duration: int | None = None,
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> UUID:
     """儲存檔案記錄，回傳檔案 UUID
 
@@ -794,7 +713,6 @@ async def download_and_save_file(
     line_group_id: str | None = None,
     line_user_id: str | None = None,
     file_name: str | None = None,
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> str | None:
     """下載 Line 檔案並儲存到 NAS，回傳 NAS 路徑
 
@@ -960,7 +878,6 @@ def guess_mime_type(content: bytes) -> str:
 async def save_to_nas(
     relative_path: str,
     content: bytes,
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> bool:
     """儲存檔案到 NAS（透過掛載路徑）
 
@@ -988,7 +905,6 @@ async def save_to_nas(
 async def reply_text(
     reply_token: str,
     text: str,
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> str | None:
     """回覆文字訊息
 
@@ -1054,7 +970,6 @@ def create_text_message_with_mention(
 async def reply_messages(
     reply_token: str,
     messages: list[TextMessage | TextMessageV2 | ImageMessage],
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> list[str]:
     """回覆多則訊息（文字 + 圖片混合）
 
@@ -1118,7 +1033,6 @@ def _parse_line_error(error: Exception) -> str:
 async def push_text(
     to: str,
     text: str,
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> tuple[str | None, str | None]:
     """主動推送文字訊息
 
@@ -1150,7 +1064,6 @@ async def push_image(
     to: str,
     image_url: str,
     preview_url: str | None = None,
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> tuple[str | None, str | None]:
     """主動推送圖片訊息
 
@@ -1185,7 +1098,6 @@ async def push_image(
 async def push_messages(
     to: str,
     messages: list[TextMessage | ImageMessage],
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> tuple[list[str], str | None]:
     """主動推送多則訊息（最多 5 則）
 
@@ -1302,7 +1214,6 @@ async def list_groups(
     platform_type: str | None = None,
     limit: int = 50,
     offset: int = 0,
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> tuple[list[dict], int]:
     """列出群組
 
@@ -1360,7 +1271,6 @@ async def list_messages(
     platform_type: str | None = None,
     limit: int = 50,
     offset: int = 0,
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> tuple[list[dict], int]:
     """列出訊息
 
@@ -1419,7 +1329,6 @@ async def list_users(
     platform_type: str | None = None,
     limit: int = 50,
     offset: int = 0,
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> tuple[list[dict], int]:
     """列出用戶
 
@@ -1459,7 +1368,6 @@ async def list_users(
 
 async def get_group_by_id(
     group_id: UUID,
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> dict | None:
     """取得群組詳情
 
@@ -1476,7 +1384,6 @@ async def get_group_by_id(
 
 async def get_user_by_id(
     user_id: UUID,
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> dict | None:
     """取得用戶詳情
 
@@ -1494,7 +1401,6 @@ async def get_user_by_id(
 async def bind_group_to_project(
     group_id: UUID,
     project_id: UUID,
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> bool:
     """綁定群組到專案
 
@@ -1517,7 +1423,6 @@ async def bind_group_to_project(
 
 async def unbind_group_from_project(
     group_id: UUID,
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> bool:
     """解除群組與專案的綁定
 
@@ -1538,7 +1443,6 @@ async def unbind_group_from_project(
 
 async def delete_group(
     group_id: UUID,
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> dict | None:
     """刪除群組及其相關資料
 
@@ -1591,7 +1495,6 @@ async def list_files(
     platform_type: str | None = None,
     limit: int = 50,
     offset: int = 0,
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> tuple[list[dict], int]:
     """列出檔案
 
@@ -1665,7 +1568,6 @@ async def list_files(
 
 async def get_file_by_id(
     file_id: UUID,
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> dict | None:
     """取得單一檔案詳情
 
@@ -1697,7 +1599,6 @@ async def get_file_by_id(
 
 async def read_file_from_nas(
     nas_path: str,
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> bytes | None:
     """從 NAS 讀取檔案（透過掛載路徑）
 
@@ -1718,7 +1619,6 @@ async def read_file_from_nas(
 
 async def delete_file(
     file_id: UUID,
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> bool:
     """刪除檔案（從 NAS 和資料庫）
 
@@ -1776,7 +1676,6 @@ async def delete_file(
 async def generate_binding_code(
     user_id: int,
     platform_type: str = "line",
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> tuple[str, datetime]:
     """
     產生 6 位數字綁定驗證碼
@@ -1821,7 +1720,6 @@ async def generate_binding_code(
 async def verify_binding_code(
     line_user_uuid: UUID,
     code: str,
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> tuple[bool, str]:
     """
     驗證綁定驗證碼並完成綁定
@@ -1916,7 +1814,6 @@ async def verify_binding_code(
 
 async def unbind_line_user(
     user_id: int,
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
     platform_type: str | None = None,
 ) -> bool:
     """
@@ -1961,7 +1858,6 @@ async def unbind_line_user(
 
 async def get_binding_status(
     user_id: int,
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> dict:
     """
     取得 CTOS 用戶的多平台綁定狀態
@@ -2043,7 +1939,6 @@ async def is_binding_code_format(content: str) -> bool:
 async def check_line_access(
     line_user_uuid: UUID,
     line_group_uuid: UUID | None = None,
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> tuple[bool, str | None]:
     """
     檢查 Line 用戶是否有權限使用 Bot
@@ -2084,7 +1979,6 @@ async def check_line_access(
 async def update_group_settings(
     group_id: UUID,
     allow_ai_response: bool,
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> bool:
     """
     更新群組設定
@@ -2109,34 +2003,18 @@ async def update_group_settings(
         return result == "UPDATE 1"
 
 
-async def update_group_tenant(
-    group_id: UUID,
-    new_tenant_id: UUID,
-    current_tenant_id: UUID | str | None = None,
-) -> bool:
-    """
-    已棄用：單一租戶模式下不需要更新群組租戶
-
-    此函數保留以維持向後相容性，永遠返回 True。
-    """
-    return True
-
-
-async def bind_group_to_tenant_by_code(
-    line_group_id: str,
-    tenant_code: str,
-) -> tuple[bool, str, UUID | None]:
-    """
-    已棄用：單一租戶模式下不需要綁定群組到租戶
-
-    此函數保留以維持向後相容性，永遠返回成功。
-    """
-    return True, "單一租戶模式，無需綁定。", None
-
-
 def is_bind_tenant_command(text: str) -> tuple[bool, str | None]:
     """
-    檢查是否為綁定租戶指令
+    已棄用：單一租戶模式下不需要綁定租戶指令
+
+    此函數保留以維持向後相容性，永遠返回 False。
+    """
+    return False, None
+
+
+def _legacy_is_bind_tenant_command(text: str) -> tuple[bool, str | None]:
+    """
+    檢查是否為綁定租戶指令（已棄用的內部邏輯）
 
     支援格式：
     - /綁定 公司代碼
@@ -2168,7 +2046,6 @@ async def list_users_with_binding(
     platform_type: str | None = None,
     limit: int = 50,
     offset: int = 0,
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> tuple[list[dict], int]:
     """列出用戶（包含 CTOS 綁定資訊）
 
@@ -2215,7 +2092,6 @@ async def list_users_with_binding(
 
 async def reset_conversation(
     line_user_id: str,
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> bool:
     """重置用戶的對話歷史
 
@@ -2297,7 +2173,6 @@ def get_temp_image_path(line_message_id: str) -> str:
 async def ensure_temp_image(
     line_message_id: str,
     nas_path: str,
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> str | None:
     """確保圖片暫存檔存在
 
@@ -2340,7 +2215,6 @@ async def ensure_temp_image(
 
 async def get_image_info_by_line_message_id(
     line_message_id: str,
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> dict | None:
     """透過 Line 訊息 ID 取得圖片資訊
 
@@ -2389,7 +2263,6 @@ async def ensure_temp_file(
     nas_path: str,
     filename: str,
     file_size: int | None = None,
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> str | None:
     """確保檔案暫存檔存在
 
@@ -2541,7 +2414,6 @@ async def ensure_temp_file(
 
 async def get_file_info_by_line_message_id(
     line_message_id: str,
-    _: UUID | str | None = None,  # tenant_id: 已棄用，保留參數以維持相容性
 ) -> dict | None:
     """透過 Line 訊息 ID 取得檔案資訊（非圖片）
 
