@@ -4,7 +4,6 @@ from datetime import date
 from decimal import Decimal
 from uuid import UUID
 
-from ..config import settings
 from ..database import get_connection
 from ..models.inventory import (
     InventoryItemCreate,
@@ -48,15 +47,6 @@ class InventoryOrderNotFoundError(InventoryError):
     pass
 
 
-def _get_tenant_id(tenant_id: UUID | str | None) -> UUID:
-    """處理 tenant_id 參數"""
-    if tenant_id is None:
-        return UUID(settings.default_tenant_id)
-    if isinstance(tenant_id, str):
-        return UUID(tenant_id)
-    return tenant_id
-
-
 # ============================================
 # 物料主檔 CRUD
 # ============================================
@@ -67,20 +57,18 @@ async def list_inventory_items(
     category: str | None = None,
     vendor: str | None = None,
     low_stock: bool = False,
-    tenant_id: UUID | str | None = None,
 ) -> InventoryItemListResponse:
     """列出物料"""
-    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         sql = """
             SELECT
                 id, name, model, specification, unit, category,
                 storage_location, default_vendor, current_stock, min_stock, updated_at
             FROM inventory_items
-            WHERE tenant_id = $1
+            WHERE 1=1
         """
-        params = [tid]
-        param_idx = 2
+        params = []
+        param_idx = 1
 
         if query:
             # 正規化搜尋：移除連字符和空格後再比較
@@ -137,15 +125,12 @@ async def list_inventory_items(
 
 async def get_inventory_item(
     item_id: UUID,
-    tenant_id: UUID | str | None = None,
 ) -> InventoryItemResponse:
     """取得物料詳情"""
-    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         row = await conn.fetchrow(
-            "SELECT * FROM inventory_items WHERE id = $1 AND tenant_id = $2",
+            "SELECT * FROM inventory_items WHERE id = $1",
             item_id,
-            tid,
         )
         if not row:
             raise InventoryItemNotFoundError(f"物料 {item_id} 不存在")
@@ -171,15 +156,12 @@ async def get_inventory_item(
 
 async def get_inventory_item_by_name(
     name: str,
-    tenant_id: UUID | str | None = None,
 ) -> InventoryItemResponse | None:
     """依名稱取得物料"""
-    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         row = await conn.fetchrow(
-            "SELECT * FROM inventory_items WHERE name = $1 AND tenant_id = $2",
+            "SELECT * FROM inventory_items WHERE name = $1",
             name,
-            tid,
         )
         if not row:
             return None
@@ -206,23 +188,20 @@ async def get_inventory_item_by_name(
 async def search_inventory_items(
     keyword: str,
     limit: int = 10,
-    tenant_id: UUID | str | None = None,
 ) -> list[InventoryItemListItem]:
     """搜尋物料（模糊匹配）"""
-    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         rows = await conn.fetch(
             """
             SELECT id, name, model, specification, unit, category, storage_location,
                    current_stock, min_stock, updated_at
             FROM inventory_items
-            WHERE tenant_id = $1 AND (name ILIKE $2 OR specification ILIKE $2 OR model ILIKE $2)
+            WHERE name ILIKE $1 OR specification ILIKE $1 OR model ILIKE $1
             ORDER BY
-                CASE WHEN name ILIKE $3 THEN 0 ELSE 1 END,
+                CASE WHEN name ILIKE $2 THEN 0 ELSE 1 END,
                 name ASC
-            LIMIT $4
+            LIMIT $3
             """,
-            tid,
             f"%{keyword}%",
             f"{keyword}%",
             limit,
@@ -249,16 +228,13 @@ async def search_inventory_items(
 async def create_inventory_item(
     data: InventoryItemCreate,
     created_by: str | None = None,
-    tenant_id: UUID | str | None = None,
 ) -> InventoryItemResponse:
     """建立物料"""
-    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
-        # 檢查名稱是否重複（在同一租戶內）
+        # 檢查名稱是否重複
         existing = await conn.fetchrow(
-            "SELECT id FROM inventory_items WHERE name = $1 AND tenant_id = $2",
+            "SELECT id FROM inventory_items WHERE name = $1",
             data.name,
-            tid,
         )
         if existing:
             raise InventoryError(f"物料名稱 '{data.name}' 已存在")
@@ -267,8 +243,8 @@ async def create_inventory_item(
             """
             INSERT INTO inventory_items (
                 name, model, specification, unit, category, default_vendor,
-                storage_location, min_stock, notes, created_by, tenant_id
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                storage_location, min_stock, notes, created_by
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             RETURNING *
             """,
             data.name,
@@ -281,7 +257,6 @@ async def create_inventory_item(
             data.min_stock,
             data.notes,
             created_by,
-            tid,
         )
 
         return InventoryItemResponse(
@@ -306,27 +281,23 @@ async def create_inventory_item(
 async def update_inventory_item(
     item_id: UUID,
     data: InventoryItemUpdate,
-    tenant_id: UUID | str | None = None,
 ) -> InventoryItemResponse:
     """更新物料"""
-    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
-        # 檢查物料是否存在（在同一租戶內）
+        # 檢查物料是否存在
         existing = await conn.fetchrow(
-            "SELECT * FROM inventory_items WHERE id = $1 AND tenant_id = $2",
+            "SELECT * FROM inventory_items WHERE id = $1",
             item_id,
-            tid,
         )
         if not existing:
             raise InventoryItemNotFoundError(f"物料 {item_id} 不存在")
 
-        # 如果要更新名稱，檢查是否重複（在同一租戶內）
+        # 如果要更新名稱，檢查是否重複
         if data.name and data.name != existing["name"]:
             duplicate = await conn.fetchrow(
-                "SELECT id FROM inventory_items WHERE name = $1 AND id != $2 AND tenant_id = $3",
+                "SELECT id FROM inventory_items WHERE name = $1 AND id != $2",
                 data.name,
                 item_id,
-                tid,
             )
             if duplicate:
                 raise InventoryError(f"物料名稱 '{data.name}' 已存在")
@@ -344,14 +315,13 @@ async def update_inventory_item(
                 param_idx += 1
 
         if not update_fields:
-            return await get_inventory_item(item_id, tenant_id=tid)
+            return await get_inventory_item(item_id)
 
         params.append(item_id)
-        params.append(tid)
         sql = f"""
             UPDATE inventory_items
             SET {', '.join(update_fields)}
-            WHERE id = ${param_idx} AND tenant_id = ${param_idx + 1}
+            WHERE id = ${param_idx}
             RETURNING *
         """
 
@@ -378,15 +348,12 @@ async def update_inventory_item(
 
 async def delete_inventory_item(
     item_id: UUID,
-    tenant_id: UUID | str | None = None,
 ) -> None:
     """刪除物料"""
-    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         result = await conn.execute(
-            "DELETE FROM inventory_items WHERE id = $1 AND tenant_id = $2",
+            "DELETE FROM inventory_items WHERE id = $1",
             item_id,
-            tid,
         )
         if result == "DELETE 0":
             raise InventoryItemNotFoundError(f"物料 {item_id} 不存在")
@@ -400,10 +367,8 @@ async def delete_inventory_item(
 async def list_inventory_transactions(
     item_id: UUID,
     limit: int = 50,
-    tenant_id: UUID | str | None = None,
 ) -> InventoryTransactionListResponse:
     """列出物料的進出貨記錄"""
-    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         rows = await conn.fetch(
             """
@@ -413,12 +378,11 @@ async def list_inventory_transactions(
                 p.name as project_name
             FROM inventory_transactions t
             LEFT JOIN projects p ON t.project_id = p.id
-            WHERE t.item_id = $1 AND t.tenant_id = $2
+            WHERE t.item_id = $1
             ORDER BY t.transaction_date DESC, t.created_at DESC
-            LIMIT $3
+            LIMIT $2
             """,
             item_id,
-            tid,
             limit,
         )
 
@@ -441,9 +405,8 @@ async def list_inventory_transactions(
 
         # 取得總數
         total = await conn.fetchval(
-            "SELECT COUNT(*) FROM inventory_transactions WHERE item_id = $1 AND tenant_id = $2",
+            "SELECT COUNT(*) FROM inventory_transactions WHERE item_id = $1",
             item_id,
-            tid,
         )
 
         return InventoryTransactionListResponse(items=items, total=total)
@@ -451,10 +414,8 @@ async def list_inventory_transactions(
 
 async def get_inventory_transaction(
     transaction_id: UUID,
-    tenant_id: UUID | str | None = None,
 ) -> InventoryTransactionResponse:
     """取得進出貨記錄詳情"""
-    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
@@ -462,10 +423,9 @@ async def get_inventory_transaction(
                 t.*, p.name as project_name
             FROM inventory_transactions t
             LEFT JOIN projects p ON t.project_id = p.id
-            WHERE t.id = $1 AND t.tenant_id = $2
+            WHERE t.id = $1
             """,
             transaction_id,
-            tid,
         )
         if not row:
             raise InventoryTransactionNotFoundError(f"進出貨記錄 {transaction_id} 不存在")
@@ -489,28 +449,24 @@ async def create_inventory_transaction(
     item_id: UUID,
     data: InventoryTransactionCreate,
     created_by: str | None = None,
-    tenant_id: UUID | str | None = None,
 ) -> InventoryTransactionResponse:
     """建立進出貨記錄"""
-    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
-        # 檢查物料是否存在（在同一租戶內）
+        # 檢查物料是否存在
         item = await conn.fetchrow(
-            "SELECT id, current_stock FROM inventory_items WHERE id = $1 AND tenant_id = $2",
+            "SELECT id, current_stock FROM inventory_items WHERE id = $1",
             item_id,
-            tid,
         )
         if not item:
             raise InventoryItemNotFoundError(f"物料 {item_id} 不存在")
 
         # 類型已由 Pydantic 的 TransactionType Enum 驗證
 
-        # 驗證專案是否存在（如果有指定，在同一租戶內）
+        # 驗證專案是否存在（如果有指定）
         if data.project_id:
             project = await conn.fetchrow(
-                "SELECT id FROM projects WHERE id = $1 AND tenant_id = $2",
+                "SELECT id FROM projects WHERE id = $1",
                 data.project_id,
-                tid,
             )
             if not project:
                 raise InventoryError(f"專案 {data.project_id} 不存在")
@@ -518,8 +474,8 @@ async def create_inventory_transaction(
         row = await conn.fetchrow(
             """
             INSERT INTO inventory_transactions (
-                item_id, type, quantity, transaction_date, vendor, project_id, notes, created_by, tenant_id
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                item_id, type, quantity, transaction_date, vendor, project_id, notes, created_by
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING *
             """,
             item_id,
@@ -530,7 +486,6 @@ async def create_inventory_transaction(
             data.project_id,
             data.notes,
             created_by,
-            tid,
         )
 
         # 取得專案名稱
@@ -559,15 +514,12 @@ async def create_inventory_transaction(
 
 async def delete_inventory_transaction(
     transaction_id: UUID,
-    tenant_id: UUID | str | None = None,
 ) -> None:
     """刪除進出貨記錄"""
-    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         result = await conn.execute(
-            "DELETE FROM inventory_transactions WHERE id = $1 AND tenant_id = $2",
+            "DELETE FROM inventory_transactions WHERE id = $1",
             transaction_id,
-            tid,
         )
         if result == "DELETE 0":
             raise InventoryTransactionNotFoundError(f"進出貨記錄 {transaction_id} 不存在")
@@ -578,31 +530,27 @@ async def delete_inventory_transaction(
 # ============================================
 
 
-async def get_categories(tenant_id: UUID | str | None = None) -> list[str]:
+async def get_categories() -> list[str]:
     """取得所有類別"""
-    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         rows = await conn.fetch(
             """
             SELECT DISTINCT category FROM inventory_items
-            WHERE tenant_id = $1 AND category IS NOT NULL AND category != ''
+            WHERE category IS NOT NULL AND category != ''
             ORDER BY category
             """,
-            tid,
         )
         return [row["category"] for row in rows]
 
 
-async def get_low_stock_count(tenant_id: UUID | str | None = None) -> int:
+async def get_low_stock_count() -> int:
     """取得庫存不足的物料數量"""
-    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         count = await conn.fetchval(
             """
             SELECT COUNT(*) FROM inventory_items
-            WHERE tenant_id = $1 AND min_stock IS NOT NULL AND current_stock < min_stock
+            WHERE min_stock IS NOT NULL AND current_stock < min_stock
             """,
-            tid,
         )
         return count or 0
 
@@ -658,7 +606,6 @@ async def find_item_by_id_or_name(
     item_id: str | None = None,
     item_name: str | None = None,
     include_stock: bool = False,
-    tenant_id: UUID | str | None = None,
 ) -> ItemLookupResult:
     """
     依 ID 或名稱查詢物料（模糊匹配）
@@ -667,7 +614,6 @@ async def find_item_by_id_or_name(
         item_id: 物料 ID
         item_name: 物料名稱（會模糊匹配）
         include_stock: 是否包含庫存欄位
-        tenant_id: 租戶 ID
 
     Returns:
         ItemLookupResult 包含查詢結果、錯誤訊息或候選列表
@@ -675,15 +621,13 @@ async def find_item_by_id_or_name(
     if not item_id and not item_name:
         return ItemLookupResult(error="請提供物料 ID 或物料名稱")
 
-    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         if item_id:
             try:
                 columns = "id, name, unit, current_stock" if include_stock else "id, name, unit"
                 row = await conn.fetchrow(
-                    f"SELECT {columns} FROM inventory_items WHERE id = $1 AND tenant_id = $2",
+                    f"SELECT {columns} FROM inventory_items WHERE id = $1",
                     UUID(item_id),
-                    tid,
                 )
                 if not row:
                     return ItemLookupResult(error=f"找不到物料 ID: {item_id}")
@@ -695,11 +639,10 @@ async def find_item_by_id_or_name(
             rows = await conn.fetch(
                 f"""
                 SELECT {columns} FROM inventory_items
-                WHERE tenant_id = $1 AND name ILIKE $2
-                ORDER BY CASE WHEN name = $3 THEN 0 ELSE 1 END, name
+                WHERE name ILIKE $1
+                ORDER BY CASE WHEN name = $2 THEN 0 ELSE 1 END, name
                 LIMIT 5
                 """,
-                tid,
                 f"%{item_name}%",
                 item_name,
             )
@@ -720,7 +663,6 @@ async def find_item_by_id_or_name(
 async def find_project_by_id_or_name(
     project_id: str | None = None,
     project_name: str | None = None,
-    tenant_id: UUID | str | None = None,
 ) -> ProjectLookupResult:
     """
     依 ID 或名稱查詢專案（模糊匹配）
@@ -728,7 +670,6 @@ async def find_project_by_id_or_name(
     Args:
         project_id: 專案 ID
         project_name: 專案名稱（會模糊匹配）
-        tenant_id: 租戶 ID
 
     Returns:
         ProjectLookupResult 包含查詢結果、錯誤訊息或候選列表
@@ -736,14 +677,12 @@ async def find_project_by_id_or_name(
     if not project_id and not project_name:
         return ProjectLookupResult()  # 無專案，不是錯誤
 
-    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         if project_id:
             try:
                 row = await conn.fetchrow(
-                    "SELECT id, name FROM projects WHERE id = $1 AND tenant_id = $2",
+                    "SELECT id, name FROM projects WHERE id = $1",
                     UUID(project_id),
-                    tid,
                 )
                 if not row:
                     return ProjectLookupResult(error=f"找不到專案 ID: {project_id}")
@@ -752,8 +691,7 @@ async def find_project_by_id_or_name(
                 return ProjectLookupResult(error=f"無效的專案 ID 格式: {project_id}")
         else:
             rows = await conn.fetch(
-                "SELECT id, name FROM projects WHERE tenant_id = $1 AND name ILIKE $2 LIMIT 3",
-                tid,
+                "SELECT id, name FROM projects WHERE name ILIKE $1 LIMIT 3",
                 f"%{project_name}%",
             )
             if not rows:
@@ -772,7 +710,6 @@ async def find_project_by_id_or_name(
 async def get_item_with_transactions(
     item_id: UUID,
     limit: int = 5,
-    tenant_id: UUID | str | None = None,
 ) -> dict:
     """
     取得物料詳情及近期交易記錄
@@ -780,17 +717,14 @@ async def get_item_with_transactions(
     Args:
         item_id: 物料 ID
         limit: 交易記錄數量限制
-        tenant_id: 租戶 ID
 
     Returns:
         包含物料資訊和交易記錄的字典
     """
-    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         row = await conn.fetchrow(
-            "SELECT * FROM inventory_items WHERE id = $1 AND tenant_id = $2",
+            "SELECT * FROM inventory_items WHERE id = $1",
             item_id,
-            tid,
         )
         if not row:
             raise InventoryItemNotFoundError(f"物料 {item_id} 不存在")
@@ -800,12 +734,11 @@ async def get_item_with_transactions(
             SELECT t.*, p.name as project_name
             FROM inventory_transactions t
             LEFT JOIN projects p ON t.project_id = p.id
-            WHERE t.item_id = $1 AND t.tenant_id = $2
+            WHERE t.item_id = $1
             ORDER BY t.transaction_date DESC, t.created_at DESC
-            LIMIT $3
+            LIMIT $2
             """,
             item_id,
-            tid,
             limit,
         )
 
@@ -824,7 +757,6 @@ async def create_inventory_transaction_mcp(
     project_id: UUID | None = None,
     notes: str | None = None,
     created_by: str = "linebot",
-    tenant_id: UUID | str | None = None,
 ) -> Decimal:
     """
     建立進出貨記錄（MCP 專用，返回更新後的庫存）
@@ -838,18 +770,16 @@ async def create_inventory_transaction_mcp(
         project_id: 專案 ID
         notes: 備註
         created_by: 建立者
-        tenant_id: 租戶 ID
 
     Returns:
         更新後的庫存數量
     """
-    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         await conn.execute(
             """
             INSERT INTO inventory_transactions (
-                item_id, type, quantity, transaction_date, vendor, project_id, notes, created_by, tenant_id
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                item_id, type, quantity, transaction_date, vendor, project_id, notes, created_by
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             """,
             item_id,
             transaction_type,
@@ -859,13 +789,11 @@ async def create_inventory_transaction_mcp(
             project_id,
             notes,
             created_by,
-            tid,
         )
 
         new_stock = await conn.fetchval(
-            "SELECT current_stock FROM inventory_items WHERE id = $1 AND tenant_id = $2",
+            "SELECT current_stock FROM inventory_items WHERE id = $1",
             item_id,
-            tid,
         )
         return new_stock or Decimal("0")
 
@@ -1131,25 +1059,21 @@ async def update_inventory_order(
 
 async def get_project_inventory_status(
     project_id: UUID,
-    tenant_id: UUID | str | None = None,
 ) -> dict:
     """
     查詢指定專案的物料進出貨狀態
 
     Args:
         project_id: 專案 ID
-        tenant_id: 租戶 ID
 
     Returns:
         包含專案名稱和各物料進出貨彙總的字典
     """
-    tid = _get_tenant_id(tenant_id)
     async with get_connection() as conn:
         # 取得專案名稱
         project = await conn.fetchrow(
-            "SELECT name FROM projects WHERE id = $1 AND tenant_id = $2",
+            "SELECT name FROM projects WHERE id = $1",
             project_id,
-            tid,
         )
         if not project:
             raise InventoryError(f"專案 {project_id} 不存在")
@@ -1160,7 +1084,7 @@ async def get_project_inventory_status(
             WITH project_items AS (
                 SELECT DISTINCT item_id
                 FROM inventory_transactions
-                WHERE project_id = $1 AND tenant_id = $2
+                WHERE project_id = $1
                 UNION
                 SELECT DISTINCT item_id
                 FROM inventory_orders
@@ -1175,12 +1099,11 @@ async def get_project_inventory_status(
             FROM project_items pi
             JOIN inventory_items i ON pi.item_id = i.id
             LEFT JOIN inventory_transactions t
-                ON pi.item_id = t.item_id AND t.project_id = $1 AND t.tenant_id = $2
+                ON pi.item_id = t.item_id AND t.project_id = $1
             GROUP BY i.id, i.name, i.unit
             ORDER BY i.name
             """,
             project_id,
-            tid,
         )
 
         items = [
