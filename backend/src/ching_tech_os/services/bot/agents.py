@@ -5,9 +5,6 @@
 """
 
 import logging
-from uuid import UUID
-
-from ...config import settings
 
 logger = logging.getLogger("bot.agents")
 
@@ -401,12 +398,3 @@ def generate_usage_tips_prompt(
         return ""
 
     return "使用工具的流程：\n" + "\n".join(tips)
-
-
-def get_tenant_id(tenant_id: UUID | str | None) -> UUID:
-    """處理 tenant_id 參數，轉換為 UUID"""
-    if tenant_id is None:
-        return UUID(settings.default_tenant_id)
-    if isinstance(tenant_id, str):
-        return UUID(tenant_id)
-    return tenant_id

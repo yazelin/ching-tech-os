@@ -5,7 +5,6 @@
 
 import logging
 from datetime import datetime
-from uuid import UUID
 
 from telegram import Bot, Message
 
@@ -46,10 +45,9 @@ def _generate_telegram_nas_path(
 async def download_telegram_photo(
     bot: Bot,
     message: Message,
-    message_uuid: UUID,
+    message_uuid: str,
     chat_id: str,
     is_group: bool,
-    tenant_id: UUID,
 ) -> str | None:
     """下載 Telegram 圖片並儲存到 NAS
 
@@ -59,7 +57,6 @@ async def download_telegram_photo(
         message_uuid: bot_messages 的 UUID
         chat_id: chat ID
         is_group: 是否為群組
-        tenant_id: 租戶 ID
 
     Returns:
         NAS 路徑，失敗回傳 None
@@ -86,7 +83,7 @@ async def download_telegram_photo(
         )
 
         # 儲存到 NAS
-        success = await save_to_nas(nas_path, content, tenant_id=tenant_id)
+        success = await save_to_nas(nas_path, content)
         if not success:
             logger.error(f"儲存圖片到 NAS 失敗: {nas_path}")
             return None
@@ -98,7 +95,6 @@ async def download_telegram_photo(
             file_size=photo.file_size,
             mime_type="image/jpeg",
             nas_path=nas_path,
-            tenant_id=tenant_id,
         )
 
         logger.info(f"已儲存 Telegram 圖片: {nas_path}")
@@ -112,10 +108,9 @@ async def download_telegram_photo(
 async def download_telegram_document(
     bot: Bot,
     message: Message,
-    message_uuid: UUID,
+    message_uuid: str,
     chat_id: str,
     is_group: bool,
-    tenant_id: UUID,
 ) -> str | None:
     """下載 Telegram 檔案並儲存到 NAS
 
@@ -125,7 +120,6 @@ async def download_telegram_document(
         message_uuid: bot_messages 的 UUID
         chat_id: chat ID
         is_group: 是否為群組
-        tenant_id: 租戶 ID
 
     Returns:
         NAS 路徑，失敗回傳 None
@@ -156,7 +150,7 @@ async def download_telegram_document(
         )
 
         # 儲存到 NAS
-        success = await save_to_nas(nas_path, content, tenant_id=tenant_id)
+        success = await save_to_nas(nas_path, content)
         if not success:
             logger.error(f"儲存檔案到 NAS 失敗: {nas_path}")
             return None
@@ -169,7 +163,6 @@ async def download_telegram_document(
             file_size=doc.file_size,
             mime_type=doc.mime_type,
             nas_path=nas_path,
-            tenant_id=tenant_id,
         )
 
         logger.info(f"已儲存 Telegram 檔案: {file_name} -> {nas_path}")
