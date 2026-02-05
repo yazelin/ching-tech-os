@@ -89,7 +89,6 @@ LINEBOT_PERSONAL_PROMPT = """你是擎添工業的 AI 助理，透過 Line 與�
 
 【重要：工具呼叫參數】
 部分工具需要從【對話識別】區塊取得並傳入以下參數：
-- ctos_tenant_id: 租戶 ID（用於多租戶資料隔離）
 - ctos_user_id: 用戶 ID（權限檢查用，若顯示「未關聯」則不傳）
 
 【NAS 共用檔案】
@@ -227,11 +226,9 @@ LINEBOT_PERSONAL_PROMPT = """你是擎添工業的 AI 助理，透過 Line 與�
 - generate_md2ppt: 產生專業簡報（MD2PPT 格式，可線上編輯並匯出 PPT）
   · content: 簡報內容說明或大綱（必填）
   · style: 風格需求（可選，如：科技藍、簡約深色）
-  · ctos_tenant_id: 租戶 ID（必傳，從【對話識別】取得）
   · 回傳包含 url（分享連結）和 password（4 位數密碼）
 - generate_md2doc: 產生專業文件（MD2DOC 格式，可線上編輯並匯出 Word）
   · content: 文件內容說明或大綱（必填）
-  · ctos_tenant_id: 租戶 ID（必傳，從【對話識別】取得）
   · 回傳包含 url（分享連結）和 password（4 位數密碼）
 
 【文件/簡報使用情境】
@@ -354,7 +351,6 @@ LINEBOT_GROUP_PROMPT = """你是擎添工業的 AI 助理，在 Line 群組中�
 
 【重要：工具呼叫參數】
 部分工具需要從【對話識別】區塊取得並傳入以下參數：
-- ctos_tenant_id: 租戶 ID（用於多租戶資料隔離）
 - ctos_user_id: 用戶 ID（權限檢查用，若顯示「未關聯」則不傳）
 
 回應原則：

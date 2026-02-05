@@ -630,7 +630,7 @@ async def read_knowledge_attachment(
         filename = Path(attachment.path).name
         file_ext = Path(attachment.path).suffix.lower()
 
-        # 解析路徑並轉換為檔案系統路徑（傳入 tenant_id 以正確解析 CTOS 路徑）
+        # 解析路徑並轉換為檔案系統路徑
         try:
             fs_path = path_manager.to_filesystem(attachment.path)
         except ValueError as e:
@@ -943,14 +943,12 @@ async def summarize_chat(
               AND m.created_at >= $2
               AND m.message_type = 'text'
               AND m.content IS NOT NULL
-              AND m.tenant_id = $4
             ORDER BY m.created_at ASC
             LIMIT $3
             """,
             UUID(line_group_id),
             since,
             max_messages,
-            tid,
         )
 
         if not rows:
@@ -958,9 +956,8 @@ async def summarize_chat(
 
         # 取得群組名稱
         group = await conn.fetchrow(
-            "SELECT name FROM bot_groups WHERE id = $1 AND tenant_id = $2",
+            "SELECT name FROM bot_groups WHERE id = $1",
             UUID(line_group_id),
-            tid,
         )
         group_name = group["name"] if group else "未知群組"
 
@@ -1002,10 +999,10 @@ async def get_message_attachments(
         # 計算時間範圍
         since = datetime.now() - timedelta(days=days)
 
-        # 建立查詢條件（包含租戶過濾）
-        conditions = ["m.created_at >= $1", "m.tenant_id = $2"]
-        params: list = [since, tid]
-        param_idx = 3
+        # 建立查詢條件
+        conditions = ["m.created_at >= $1"]
+        params: list = [since]
+        param_idx = 2
 
         if line_group_id:
             conditions.append(f"m.bot_group_id = ${param_idx}")
@@ -1108,7 +1105,7 @@ async def search_nas_files(
         return f"❌ {error_msg}"
 
     # 此工具搜尋的是公司共用區，不是租戶隔離區
-    # 公司共用檔案是跨租戶共用的，因此不需要 tenant_id 過濾
+    # 公司共用檔案
         from pathlib import Path
     from ..config import settings
 
@@ -1395,7 +1392,7 @@ async def read_document(
     if not allowed:
         return f"❌ {error_msg}"
 
-    # 支援 CTOS zone（需要 tenant_id）和 SHARED zone
+    # 支援 CTOS zone 和 SHARED zone
         from pathlib import Path
     from ..config import settings
     from . import document_reader
@@ -1408,7 +1405,7 @@ async def read_document(
     except ValueError as e:
         return f"錯誤：{e}"
 
-    # 取得實際檔案系統路徑（傳入 tenant_id 以正確解析 CTOS 路徑）
+    # 取得實際檔案系統路徑
     resolved_path = path_manager.to_filesystem(file_path)
     full_path = Path(resolved_path)
 
@@ -1611,7 +1608,7 @@ async def share_knowledge_attachment(
         elif parsed.zone == StorageZone.LOCAL:
             # 本機檔案
             from .local_file import create_knowledge_file_service
-            _, _, assets_path, _ = _get_tenant_paths_for_knowledge(tid)
+            _, _, assets_path, _ = _get_knowledge_paths()
             file_name_only = parsed.path.split("/")[-1]
             local_path = assets_path / "images" / file_name_only
             content = local_path.read_text(encoding='utf-8')
@@ -1664,11 +1661,11 @@ async def share_knowledge_attachment(
         return f"建立分享連結時發生錯誤：{e}"
 
 
-def _get_tenant_paths_for_knowledge(tenant_id: str | None = None):
-    """取得租戶專屬的知識庫路徑（內部輔助函數）"""
+def _get_knowledge_paths():
+    """取得知識庫路徑（內部輔助函數）"""
     from ..config import settings
     from pathlib import Path
-    base_path = Path(settings.get_tenant_knowledge_path(tenant_id))
+    base_path = Path(settings.get_tenant_knowledge_path(None))
     entries_path = base_path / "entries"
     assets_path = base_path / "assets"
     index_path = base_path / "index.json"
@@ -1721,7 +1718,7 @@ async def send_nas_file(
     if not line_user_id and not line_group_id and not telegram_chat_id:
         return "錯誤：請從【對話識別】區塊取得 line_user_id、line_group_id 或 telegram_chat_id"
 
-    # 驗證檔案路徑（傳入 tenant_id 以正確解析 CTOS 路徑）
+    # 驗證檔案路徑
     try:
         full_path = validate_nas_file_path(file_path)
     except NasFileNotFoundError as e:
@@ -1787,12 +1784,11 @@ async def send_nas_file(
     # line_group_id 是內部 UUID，需要轉換為 Line group ID
     target_id = None
     if line_group_id:
-        # 查詢 Line group ID（加入 tenant_id 過濾以確保安全）
+        # 查詢 Line group ID
         async with get_connection() as conn:
             row = await conn.fetchrow(
-                "SELECT platform_group_id FROM bot_groups WHERE id = $1 AND tenant_id = $2",
+                "SELECT platform_group_id FROM bot_groups WHERE id = $1",
                 UUID(line_group_id),
-                tid,
             )
             if row:
                 target_id = row["platform_group_id"]
@@ -2007,7 +2003,7 @@ async def prepare_file_message(
 
     else:
         # ===== NAS 檔案處理 =====
-        # 驗證檔案路徑（傳入 tenant_id 以正確解析 CTOS 路徑）
+        # 驗證檔案路徑
         try:
             full_path = validate_nas_file_path(file_path)
         except NasFileNotFoundError as e:
@@ -2184,7 +2180,7 @@ async def convert_pdf_to_images(
             "error": f"不允許存取 {parsed.zone.value}:// 區域的檔案"
         }, ensure_ascii=False)
 
-    # 取得實際檔案系統路徑（傳入 tenant_id 以正確解析 CTOS 路徑）
+    # 取得實際檔案系統路徑
     actual_path = path_manager.to_filesystem(pdf_path)
 
     # 檢查檔案存在

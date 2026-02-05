@@ -191,22 +191,20 @@ AI_DOCUMENT_TOOLS_PROMPT = """【AI 文件/簡報生成】
 - generate_md2ppt: 產生專業簡報（MD2PPT 格式，可線上編輯並匯出 PPTX）
   · content: 簡報主題或內容說明（必填，盡量詳細描述）
   · style: 風格需求（可選，如：科技藍、溫暖橙、清新綠、極簡灰、電競紫）
-  · ctos_tenant_id: 租戶 ID（必傳，從【對話識別】取得）
   · 回傳：分享連結 url 和 4 位數密碼 password
 - generate_md2doc: 產生專業文件（MD2DOC 格式，可線上編輯並匯出 Word）
   · content: 文件內容說明或大綱（必填）
-  · ctos_tenant_id: 租戶 ID（必傳，從【對話識別】取得）
   · 回傳：分享連結 url 和 4 位數密碼 password
 
 【文件/簡報使用情境】
 1. 用戶說「幫我做一份簡報介紹公司產品」
-   → generate_md2ppt(content="公司產品介紹簡報，需要包含產品特色、優勢、應用案例", ctos_tenant_id=...)
+   → generate_md2ppt(content="公司產品介紹簡報，需要包含產品特色、優勢、應用案例")
 2. 用戶說「做一份科技風的 AI 應用簡報」
-   → generate_md2ppt(content="AI 應用介紹", style="科技藍", ctos_tenant_id=...)
+   → generate_md2ppt(content="AI 應用介紹", style="科技藍")
 3. 用戶說「幫我寫一份設備操作 SOP」
-   → generate_md2doc(content="設備操作 SOP，包含開機、操作流程、關機步驟、注意事項", ctos_tenant_id=...)
+   → generate_md2doc(content="設備操作 SOP，包含開機、操作流程、關機步驟、注意事項")
 4. 用戶說「做一份教學文件說明如何使用系統」
-   → generate_md2doc(content="系統使用教學文件", ctos_tenant_id=...)
+   → generate_md2doc(content="系統使用教學文件")
 
 【回覆格式】
 生成完成後，回覆用戶：
@@ -271,7 +269,6 @@ PRINTER_TOOLS_PROMPT = """【列印功能】
   · file_path: 檔案路徑（必填）
     - 虛擬路徑：ctos://knowledge/attachments/report.pdf、shared://projects/...
     - 絕對路徑：/mnt/nas/ctos/...
-  · ctos_tenant_id: 租戶 ID（必傳）
   · 回傳：可列印的絕對路徑
 
 步驟 2 - 實際列印（printer-mcp 工具）：
@@ -297,10 +294,10 @@ PRINTER_TOOLS_PROMPT = """【列印功能】
 【列印使用情境】
 1. 用戶說「把知識庫的報告印出來」
    → search_knowledge("報告") 找到檔案路徑
-   → prepare_print_file(file_path="ctos://knowledge/...", ctos_tenant_id=...)
+   → prepare_print_file(file_path="ctos://knowledge/...")
    → mcp__printer__print_file(file_path="回傳的絕對路徑")
 2. 用戶說「印 3 份 A3 橫式」
-   → prepare_print_file(file_path=..., ctos_tenant_id=...)
+   → prepare_print_file(file_path=...)
    → mcp__printer__print_file(file_path=..., copies=3, page_size="A3", orientation="landscape")
 3. 用戶說「列出印表機」
    → mcp__printer__list_printers()（不需要步驟 1）"""
