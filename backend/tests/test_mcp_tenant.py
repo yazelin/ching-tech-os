@@ -5,9 +5,13 @@
 - 專案工具租戶過濾
 - 知識庫工具租戶過濾
 - 庫存工具租戶過濾
+
+注意：多租戶功能已移除，這些測試暫時跳過
 """
 
 import pytest
+
+pytestmark = pytest.mark.skip(reason="多租戶功能已移除，測試待刪除或重構")
 from datetime import datetime
 from unittest.mock import AsyncMock, patch, MagicMock
 from uuid import UUID

@@ -116,7 +116,7 @@ async def get_current_user(
     has_password = bool(user.get("password_hash"))
 
     # is_admin 改為基於 role 判斷
-    user_is_admin = session.role in ("tenant_admin", "platform_admin")
+    user_is_admin = session.role == "admin"
 
     return UserInfo(
         id=user["id"],
@@ -156,7 +156,7 @@ async def update_current_user(
     permissions = get_user_permissions_for_role(session.role, preferences)
 
     # is_admin 改為基於 role 判斷
-    user_is_admin = session.role in ("tenant_admin", "platform_admin")
+    user_is_admin = session.role == "admin"
 
     return UserInfo(
         id=user["id"],
@@ -234,8 +234,8 @@ tenant_router = APIRouter(prefix="/api/tenant", tags=["tenant"])
 
 
 async def require_admin(session: SessionData = Depends(get_current_session)) -> SessionData:
-    """要求管理員權限的 dependency（租戶管理員或平台管理員）"""
-    if session.role not in ("tenant_admin", "platform_admin"):
+    """要求管理員權限的 dependency"""
+    if session.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="需要管理員權限",
@@ -266,7 +266,7 @@ async def list_users(
                 id=user["id"],
                 username=user["username"],
                 display_name=user["display_name"],
-                is_admin=user.get("role") in ("tenant_admin", "platform_admin"),
+                is_admin=user.get("role") == "admin",
                 permissions=UserPermissions(**permissions),
                 created_at=user["created_at"],
                 last_login_at=user["last_login_at"],
@@ -291,7 +291,7 @@ async def list_users(
                 id=user["id"],
                 username=user["username"],
                 display_name=user["display_name"],
-                is_admin=user_role in ("tenant_admin", "platform_admin"),
+                is_admin=user_role == "admin",
                 permissions=UserPermissions(**permissions),
                 created_at=user["created_at"],
                 last_login_at=user["last_login_at"],
@@ -330,7 +330,7 @@ async def list_tenant_users_api(
             id=user["id"],
             username=user["username"],
             display_name=user["display_name"],
-            is_admin=user_role in ("tenant_admin", "platform_admin"),
+            is_admin=user_role == "admin",
             permissions=UserPermissions(**permissions),
             created_at=user["created_at"],
             last_login_at=user["last_login_at"],

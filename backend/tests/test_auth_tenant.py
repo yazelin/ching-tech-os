@@ -5,9 +5,13 @@
 - 多租戶模式登入（需提供 tenant_code）
 - 租戶管理員角色識別
 - Session 包含 tenant_id
+
+注意：多租戶功能已移除，這些測試暫時跳過
 """
 
 import pytest
+
+pytestmark = pytest.mark.skip(reason="多租戶功能已移除，測試待刪除或重構")
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, patch, MagicMock
 from uuid import UUID

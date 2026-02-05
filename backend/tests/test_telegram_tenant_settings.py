@@ -10,10 +10,14 @@
 用法：
     cd backend
     uv run pytest tests/test_telegram_tenant_settings.py -v
+
+注意：多租戶功能已移除，這些測試暫時跳過
 """
 
 import json
 import pytest
+
+pytestmark = pytest.mark.skip(reason="多租戶功能已移除，測試待刪除或重構")
 from unittest.mock import AsyncMock, patch, MagicMock
 from uuid import UUID, uuid4
 

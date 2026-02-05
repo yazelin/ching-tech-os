@@ -4,9 +4,13 @@
 - 租戶解析
 - 租戶資料 CRUD
 - 租戶管理員權限
+
+注意：多租戶功能已移除，這些測試暫時跳過
 """
 
 import pytest
+
+pytestmark = pytest.mark.skip(reason="多租戶功能已移除，測試待刪除或重構")
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID
