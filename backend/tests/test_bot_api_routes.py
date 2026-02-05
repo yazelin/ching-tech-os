@@ -14,17 +14,12 @@ import pytest
 pytestmark = pytest.mark.skip(reason="移除多租戶架構後，Bot API 需要重構")
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, patch, MagicMock
-from uuid import UUID
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from ching_tech_os.api.linebot_router import router as bot_router
-from ching_tech_os.api.tenant import router as tenant_router
 from ching_tech_os.api.auth import get_current_session
 from ching_tech_os.models.auth import SessionData
-
-
-MOCK_TENANT_ID = UUID("11111111-1111-1111-1111-111111111111")
 
 
 def create_session_override(username: str, user_id: int = 1, role: str = "user"):
@@ -38,7 +33,6 @@ def create_session_override(username: str, user_id: int = 1, role: str = "user")
             user_id=user_id,
             created_at=now,
             expires_at=now + timedelta(hours=1),
-            tenant_id=MOCK_TENANT_ID,
             role=role,
         )
     return override
@@ -50,7 +44,6 @@ def create_bot_app():
     app = FastAPI()
     app.include_router(bot_router, prefix="/api/bot")
     app.include_router(line_router, prefix="/api/bot/line")
-    app.include_router(tenant_router)
     return app
 
 
@@ -64,7 +57,7 @@ class TestBotApiRoutes:
     def setup_method(self):
         self.app = create_bot_app()
         self.app.dependency_overrides[get_current_session] = create_session_override(
-            "testuser", role="tenant_admin"
+            "testuser", role="admin"
         )
         self.client = TestClient(self.app)
 
@@ -103,7 +96,7 @@ class TestBotApiRoutes:
 
         with patch.object(linebot_router, "verify_webhook_signature", new_callable=AsyncMock) as mock_verify, \
              patch.object(linebot_router, "get_webhook_parser") as mock_parser:
-            mock_verify.return_value = (True, MOCK_TENANT_ID, "test-secret")
+            mock_verify.return_value = (True, "test-secret")
             mock_parser_instance = MagicMock()
             mock_parser_instance.parse.return_value = []
             mock_parser.return_value = mock_parser_instance
@@ -135,32 +128,3 @@ class TestBotApiRoutes:
         assert response.status_code in (404, 405)
 
 
-# ============================================================
-# /api/tenant/bot 路由測試
-# ============================================================
-
-class TestTenantBotRoutes:
-    """/api/tenant/bot 路由可達性測試"""
-
-    def setup_method(self):
-        self.app = create_bot_app()
-        self.app.dependency_overrides[get_current_session] = create_session_override(
-            "admin", role="tenant_admin"
-        )
-        self.client = TestClient(self.app)
-
-    def test_tenant_bot_settings_returns_200(self):
-        """/api/tenant/bot 應回傳 200"""
-        with patch("ching_tech_os.services.tenant.get_tenant_line_credentials", new_callable=AsyncMock) as mock_creds:
-            mock_creds.return_value = None
-            response = self.client.get("/api/tenant/bot")
-            assert response.status_code == 200
-            assert response.json()["configured"] is False
-
-    def test_tenant_bot_delete_returns_200(self):
-        """/api/tenant/bot DELETE 應回傳 200"""
-        with patch("ching_tech_os.services.tenant.update_tenant_line_settings", new_callable=AsyncMock) as mock_update, \
-             patch("ching_tech_os.services.linebot.invalidate_tenant_secrets_cache"):
-            mock_update.return_value = True
-            response = self.client.delete("/api/tenant/bot")
-            assert response.status_code == 200

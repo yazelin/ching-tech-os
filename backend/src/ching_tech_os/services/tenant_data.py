@@ -1,6 +1,8 @@
 """租戶資料匯出/匯入服務
 
 提供租戶資料的備份與還原功能。
+
+注意：此模組將在移除多租戶後重構為 data_export.py。
 """
 
 import io
@@ -12,9 +14,16 @@ from pathlib import Path
 from uuid import UUID, uuid4
 from typing import Any
 
+from pydantic import BaseModel
+
 from ..config import settings
 from ..database import get_connection
-from ..models.tenant import TenantExportRequest
+
+
+class TenantExportRequest(BaseModel):
+    """租戶資料匯出請求"""
+    include_files: bool = True
+    include_ai_logs: bool = False
 
 
 class TenantDataError(Exception):

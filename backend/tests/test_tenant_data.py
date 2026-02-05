@@ -22,12 +22,12 @@ from ching_tech_os.services.tenant_data import (
     TenantImportService,
     TenantMigrationService,
     TenantDataValidator,
+    TenantExportRequest,
     export_tenant_data,
     import_tenant_data,
     validate_tenant_data,
     migrate_tenant,
 )
-from ching_tech_os.models.tenant import TenantExportRequest
 
 
 # 測試用租戶 ID

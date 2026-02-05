@@ -1,7 +1,6 @@
 """使用者相關資料模型"""
 
 from datetime import datetime
-from uuid import UUID
 from pydantic import BaseModel
 
 
@@ -22,9 +21,7 @@ class UserInfo(BaseModel):
     last_login_at: datetime | None
     is_admin: bool = False
     permissions: UserPermissions | None = None
-    # 多租戶欄位
-    tenant_id: UUID | None = None
-    role: str = "user"  # user, tenant_admin, platform_admin
+    role: str = "user"  # admin, user
     # 密碼狀態
     has_password: bool = False  # 是否已設定密碼（用於顯示變更/設定密碼按鈕）
 
@@ -46,10 +43,7 @@ class AdminUserInfo(BaseModel):
     created_at: datetime
     last_login_at: datetime | None
     is_active: bool = True
-    # 多租戶欄位
-    tenant_id: UUID | None = None
-    role: str = "user"
-    tenant_name: str | None = None  # 租戶名稱（平台管理員查詢時顯示）
+    role: str = "user"  # admin, user
 
 
 class AdminUserListResponse(BaseModel):
