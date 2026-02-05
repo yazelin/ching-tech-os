@@ -497,11 +497,8 @@ async def get_tenant_usage(tenant_id: UUID | str) -> TenantUsage:
             tenant_id,
         )
 
-        # 統計專案數量
-        project_count = await conn.fetchval(
-            "SELECT COUNT(*) FROM projects WHERE tenant_id = $1",
-            tenant_id,
-        )
+        # 專案管理已遷移至 ERPNext，不再統計
+        project_count = 0
 
         # 統計知識庫數量（從檔案系統計算，這裡暫時回傳 0）
         knowledge_count = 0
