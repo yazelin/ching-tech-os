@@ -131,11 +131,11 @@ class TestErrorHandling:
         plaintext = "secret"
 
         # 使用金鑰 A 加密
-        with patch.dict(os.environ, {"TENANT_SECRET_KEY": "key-a"}):
+        with patch.dict(os.environ, {"BOT_SECRET_KEY": "key-a"}):
             encrypted = encrypt_credential(plaintext)
 
         # 使用金鑰 B 解密
-        with patch.dict(os.environ, {"TENANT_SECRET_KEY": "key-b"}):
+        with patch.dict(os.environ, {"BOT_SECRET_KEY": "key-b"}):
             with pytest.raises(ValueError, match="解密失敗"):
                 decrypt_credential(encrypted)
 
@@ -151,15 +151,15 @@ class TestKeyHandling:
         """未設定環境變數時使用預設金鑰"""
         # 確保環境變數未設定
         with patch.dict(os.environ, {}, clear=True):
-            # 移除 TENANT_SECRET_KEY
-            os.environ.pop("TENANT_SECRET_KEY", None)
+            # 移除 BOT_SECRET_KEY
+            os.environ.pop("BOT_SECRET_KEY", None)
             key = _get_encryption_key()
             assert len(key) == 32  # SHA-256 產生 32 bytes
 
     def test_custom_key_from_env(self):
         """應使用環境變數中的金鑰"""
         custom_key = "my-custom-secret-key"
-        with patch.dict(os.environ, {"TENANT_SECRET_KEY": custom_key}):
+        with patch.dict(os.environ, {"BOT_SECRET_KEY": custom_key}):
             key = _get_encryption_key()
             assert len(key) == 32
 
@@ -167,10 +167,10 @@ class TestKeyHandling:
         """不同金鑰應產生無法互相解密的密文"""
         plaintext = "secret"
 
-        with patch.dict(os.environ, {"TENANT_SECRET_KEY": "key-1"}):
+        with patch.dict(os.environ, {"BOT_SECRET_KEY": "key-1"}):
             encrypted1 = encrypt_credential(plaintext)
 
-        with patch.dict(os.environ, {"TENANT_SECRET_KEY": "key-2"}):
+        with patch.dict(os.environ, {"BOT_SECRET_KEY": "key-2"}):
             encrypted2 = encrypt_credential(plaintext)
             # 密文不同
             assert encrypted1 != encrypted2

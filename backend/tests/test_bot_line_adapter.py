@@ -32,11 +32,11 @@ class TestLineBotAdapterProtocol:
         adapter = LineBotAdapter()
         assert isinstance(adapter, BotAdapter)
 
-    def test_with_tenant_id(self):
-        from uuid import uuid4
-        tid = uuid4()
-        adapter = LineBotAdapter(tenant_id=tid)
-        assert adapter.tenant_id == tid
+    def test_no_tenant_id(self):
+        """租戶功能已移除，LineBotAdapter 不再需要 tenant_id"""
+        adapter = LineBotAdapter()
+        # 確認不會有 tenant_id 屬性錯誤
+        assert adapter.platform_type == "line"
 
 
 # ============================================================
@@ -55,7 +55,7 @@ class TestSendText:
             result = await adapter.send_text("U123", "hello")
             assert result.message_id == "msg123"
             assert result.platform_type == "line"
-            mock_push.assert_called_once_with("U123", "hello", tenant_id=None)
+            mock_push.assert_called_once_with("U123", "hello")
 
     @pytest.mark.asyncio
     async def test_send_text_error(self):
@@ -117,7 +117,6 @@ class TestSendImage:
             mock_push.assert_called_once_with(
                 "U123", "https://img.com/full.jpg",
                 preview_url="https://img.com/thumb.jpg",
-                tenant_id=None,
             )
 
 

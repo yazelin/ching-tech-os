@@ -51,8 +51,6 @@ class BotContext:
     """
     platform_type: PlatformType
     conversation_type: ConversationType
-    tenant_id: UUID | None = None
-    bot_tenant_id: UUID | None = None  # Bot credentials 所屬租戶
     # 內部 UUID（資料庫中的 ID）
     user_uuid: UUID | None = None
     group_uuid: UUID | None = None

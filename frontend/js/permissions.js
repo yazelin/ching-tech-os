@@ -51,7 +51,7 @@ const PermissionsModule = (function() {
   }
 
   /**
-   * 檢查是否為管理員（租戶管理員或平台管理員）
+   * 檢查是否為管理員
    * @returns {boolean}
    */
   function isAdmin() {
@@ -59,7 +59,7 @@ const PermissionsModule = (function() {
     const session = typeof LoginModule !== 'undefined' ? LoginModule.getSession() : null;
     // 優先使用 session 的 role，因為它更準確
     const role = session?.role || user?.role;
-    return role === 'tenant_admin' || role === 'platform_admin';
+    return role === 'admin';
   }
 
   /**
@@ -74,21 +74,8 @@ const PermissionsModule = (function() {
 
     const role = session?.role || user?.role;
 
-    // 平台管理員擁有所有權限
-    if (role === 'platform_admin') return true;
-
-    // 平台管理僅限平台管理員
-    if (appId === 'platform-admin') return false;
-
-    // 租戶管理員：檢查權限設定
-    // 注意：租戶管理員的 App 權限由平台管理員控制
-    if (role === 'tenant_admin') {
-      // 租戶管理功能對租戶管理員總是開放
-      if (appId === 'tenant-admin') return true;
-      // 其他 App 需要檢查權限設定
-      if (!user?.permissions?.apps) return true;  // 舊資料預設全開
-      return user.permissions.apps[appId] !== false;  // 除非明確禁止
-    }
+    // 管理員擁有所有權限
+    if (role === 'admin') return true;
 
     // 一般使用者：檢查權限設定，預設為 false
     if (!user?.permissions?.apps) return false;
@@ -111,24 +98,6 @@ const PermissionsModule = (function() {
   }
 
   /**
-   * 檢查是否為平台管理員
-   * @returns {boolean}
-   */
-  function isPlatformAdmin() {
-    const session = typeof LoginModule !== 'undefined' ? LoginModule.getSession() : null;
-    return session?.role === 'platform_admin';
-  }
-
-  /**
-   * 檢查是否為租戶管理員
-   * @returns {boolean}
-   */
-  function isTenantAdmin() {
-    const session = typeof LoginModule !== 'undefined' ? LoginModule.getSession() : null;
-    return session?.role === 'tenant_admin' || session?.role === 'platform_admin';
-  }
-
-  /**
    * 取得可存取的應用程式列表
    * @param {Array} allApps - 所有應用程式列表
    * @returns {Array}
@@ -140,10 +109,7 @@ const PermissionsModule = (function() {
     return allApps.filter(app => {
       // 檢查角色要求
       if (app.requireRole) {
-        if (app.requireRole === 'platform_admin' && userRole !== 'platform_admin') {
-          return false;
-        }
-        if (app.requireRole === 'tenant_admin' && userRole !== 'tenant_admin' && userRole !== 'platform_admin') {
+        if (app.requireRole === 'admin' && userRole !== 'admin') {
           return false;
         }
       }
@@ -166,8 +132,6 @@ const PermissionsModule = (function() {
     loadCurrentUser,
     getCurrentUser,
     isAdmin,
-    isPlatformAdmin,
-    isTenantAdmin,
     canAccessApp,
     canAccessKnowledge,
     getAccessibleApps,

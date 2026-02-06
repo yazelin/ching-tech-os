@@ -4,6 +4,7 @@
 - 建立全域知識需要 global_write 權限
 - 編輯/刪除權限檢查
 - 個人知識只有擁有者可操作
+
 """
 
 import pytest

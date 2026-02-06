@@ -266,12 +266,10 @@ docs/
 ├── frontend.md              # 前端開發指南
 ├── linebot.md               # Line Bot 整合
 ├── mcp-server.md            # MCP Server（AI 工具）
-├── multi-tenant.md          # 多租戶架構
 ├── realtime.md              # Socket.IO 即時通訊
 ├── security.md              # 認證與安全
 ├── smb-nas-architecture.md  # SMB/NAS 架構
-├── telegram-bot.md          # Telegram Bot 整合
-└── tenant-admin-guide.md    # 租戶管理員指南
+└── telegram-bot.md          # Telegram Bot 整合
 ```
 
 ### 文件更新時機

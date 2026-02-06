@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from ..config import settings
-from ..models.auth import LoginRequest, LoginResponse, LogoutResponse, ErrorResponse, TenantBriefInfo
+from ..models.auth import LoginRequest, LoginResponse, LogoutResponse, ErrorResponse
 from ..models.login_record import DeviceInfo as LoginRecordDeviceInfo, DeviceType, GeoLocation
 from ..models.message import MessageSeverity, MessageSource
 from ..services.session import session_manager, SessionData
@@ -16,14 +16,6 @@ from ..services.password import verify_password
 from ..services.login_record import record_login
 from ..services.message import log_message
 from ..services.geoip import resolve_ip_location, parse_device_info
-from ..services.tenant import (
-    resolve_tenant_id,
-    get_tenant_by_id,
-    get_tenant_admin_role,
-    get_tenant_settings,
-    TenantNotFoundError,
-    TenantSuspendedError,
-)
 from ..api.message_events import emit_new_message, emit_unread_count
 
 logger = logging.getLogger(__name__)
@@ -116,8 +108,7 @@ def get_session_from_token_or_query(
 # 角色權限階層（數字越大權限越高）
 ROLE_HIERARCHY = {
     "user": 1,
-    "tenant_admin": 2,
-    "platform_admin": 3,
+    "admin": 2,
 }
 
 
@@ -130,80 +121,52 @@ def can_manage_user(operator_role: str | None, target_role: str | None) -> bool:
     """檢查操作者是否可以管理目標使用者
 
     規則：
-    - platform_admin 可管理所有人（包括其他 platform_admin）
-    - tenant_admin 只能管理 user
+    - admin 可管理所有人（包括其他 admin）
     - user 不能管理任何人
     """
-    operator_level = get_role_level(operator_role)
-    target_level = get_role_level(target_role)
-
-    # platform_admin 可管理所有人
-    if operator_role == "platform_admin":
+    # admin 可管理所有人
+    if operator_role == "admin":
         return True
 
-    # 其他角色只能管理比自己低的角色
-    return operator_level > target_level
+    # user 不能管理任何人
+    return False
 
 
-async def require_platform_admin(
+async def require_admin(
     session: SessionData = Depends(get_current_session),
 ) -> SessionData:
-    """要求平台管理員權限
+    """要求管理員權限
 
     Raises:
-        HTTPException: 若不是平台管理員
+        HTTPException: 若不是管理員
     """
-    if session.role != "platform_admin":
+    if session.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="需要平台管理員權限",
+            detail="需要管理員權限",
         )
     return session
 
 
-async def require_tenant_admin_or_above(
-    session: SessionData = Depends(get_current_session),
-) -> SessionData:
-    """要求租戶管理員或更高權限
-
-    Raises:
-        HTTPException: 若不是租戶管理員或平台管理員
-    """
-    if session.role not in ("tenant_admin", "platform_admin"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="需要租戶管理員或更高權限",
-        )
-    return session
 
 
 async def require_can_manage_target(
-    session: SessionData, target_role: str | None, target_tenant_id: str | None = None
+    session: SessionData, target_role: str | None
 ) -> None:
     """檢查是否可以管理目標使用者
 
     Args:
         session: 操作者的 session
         target_role: 目標使用者的角色
-        target_tenant_id: 目標使用者的租戶 ID（可選）
 
     Raises:
         HTTPException: 若無權限
     """
-    # 檢查角色階層
     if not can_manage_user(session.role, target_role):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="無權限操作此使用者",
         )
-
-    # 非平台管理員需要檢查租戶隔離
-    if session.role != "platform_admin" and target_tenant_id is not None:
-        if str(session.tenant_id) != str(target_tenant_id):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="無權限操作其他租戶的使用者",
-            )
 
 
 def get_client_ip(req: Request) -> str:
@@ -234,20 +197,10 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
     支援兩種認證方式：
     1. 密碼認證：使用者已設定密碼（password_hash 不為 NULL）
     2. SMB 認證：使用者尚未設定密碼，fallback 到 NAS SMB 驗證（過渡期）
-
-    多租戶模式下需要提供 tenant_code 參數。
     """
     # 取得客戶端資訊
     ip_address = get_client_ip(req)
     user_agent = req.headers.get("user-agent", "")
-
-    # 解析租戶 ID
-    try:
-        tenant_id = await resolve_tenant_id(request.tenant_code)
-    except TenantNotFoundError:
-        return LoginResponse(success=False, error="租戶代碼不存在")
-    except TenantSuspendedError:
-        return LoginResponse(success=False, error="此租戶帳號已被停用")
 
     # 解析地理位置
     geo = resolve_ip_location(ip_address)
@@ -264,7 +217,7 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
     )
 
     # 先嘗試從資料庫查找使用者
-    user_data = await get_user_for_auth(request.username, tenant_id)
+    user_data = await get_user_for_auth(request.username)
 
     auth_success = False
     use_password_auth = False
@@ -286,20 +239,11 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
         else:
             auth_success = False
     else:
-        # 使用者沒有密碼，檢查租戶是否啟用 NAS 驗證
-        try:
-            tenant_settings = await get_tenant_settings(tenant_id)
-        except TenantNotFoundError:
-            return LoginResponse(success=False, error="租戶不存在")
-
-        if tenant_settings.enable_nas_auth:
-            # 租戶啟用 NAS 驗證，使用租戶設定的 NAS 主機
+        # 使用者沒有密碼，嘗試 SMB 認證（如果啟用）
+        if settings.enable_nas_auth:
             smb = create_smb_service(
                 request.username,
                 request.password,
-                host=tenant_settings.nas_auth_host,  # None 表示使用系統預設
-                port=tenant_settings.nas_auth_port,
-                share=tenant_settings.nas_auth_share,
             )
             try:
                 smb.test_auth()
@@ -312,7 +256,7 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
                     detail="無法連線至檔案伺服器",
                 )
         else:
-            # 租戶未啟用 NAS 驗證，且使用者不存在或無密碼
+            # 未啟用 NAS 驗證，且使用者不存在或無密碼
             if user_data is None:
                 return LoginResponse(success=False, error="帳號不存在")
             else:
@@ -372,7 +316,7 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
     else:
         # 使用者不存在（SMB 認證但尚未建立用戶記錄）
         try:
-            user_id = await upsert_user(request.username, tenant_id=tenant_id)
+            user_id = await upsert_user(request.username)
         except Exception as e:
             logger.error(f"Failed to upsert user '{request.username}': {e}")
             raise HTTPException(
@@ -380,8 +324,8 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
                 detail="無法建立使用者記錄，請稍後再試。",
             )
 
-    # 從 tenant_admins 表判斷角色（而非 users.role 欄位）
-    user_role = await get_user_role(user_id, tenant_id)
+    # 從 users.role 欄位取得角色
+    user_role = await get_user_role(user_id)
 
     # 取得使用者的 App 權限（供 session 快取使用）
     from ..services.permissions import get_user_app_permissions_sync
@@ -396,7 +340,6 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
         request.username,
         session_password,
         user_id=user_id,
-        tenant_id=tenant_id,
         role=user_role,
         app_permissions=app_permissions,
     )
@@ -443,25 +386,10 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
     except Exception:
         pass
 
-    # 取得租戶資訊（用於回應）
-    tenant_brief = None
-    try:
-        tenant_data = await get_tenant_by_id(tenant_id)
-        if tenant_data:
-            tenant_brief = TenantBriefInfo(
-                id=tenant_data["id"],
-                code=tenant_data["code"],
-                name=tenant_data["name"],
-                plan=tenant_data["plan"],
-            )
-    except Exception:
-        pass
-
     return LoginResponse(
         success=True,
         token=token,
         username=request.username,
-        tenant=tenant_brief,
         role=user_role,
         must_change_password=must_change_password,
     )
@@ -510,12 +438,12 @@ async def change_password(
     if user_id is None:
         # 嘗試建立使用者記錄
         try:
-            user_id = await upsert_user(session.username, session.tenant_id)
+            user_id = await upsert_user(session.username)
         except Exception:
             return ChangePasswordResponse(success=False, error="無法建立使用者記錄")
 
     # 取得使用者資料
-    user_data = await get_user_for_auth(session.username, session.tenant_id)
+    user_data = await get_user_for_auth(session.username)
 
     # 判斷是否為首次設定密碼
     has_password = user_data and user_data.get("password_hash")

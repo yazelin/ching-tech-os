@@ -4,7 +4,6 @@
 """
 
 import logging
-from uuid import UUID
 
 from . import ai_manager
 from ..models.ai import AiPromptCreate, AiAgentCreate
@@ -21,7 +20,6 @@ from .bot.agents import (  # noqa: F401
     APP_PROMPT_MAPPING,
     generate_tools_prompt,
     generate_usage_tips_prompt,
-    get_tenant_id as _get_tenant_id,
 )
 
 logger = logging.getLogger("linebot_agents")
@@ -91,7 +89,6 @@ LINEBOT_PERSONAL_PROMPT = """你是擎添工業的 AI 助理，透過 Line 與�
 
 【重要：工具呼叫參數】
 部分工具需要從【對話識別】區塊取得並傳入以下參數：
-- ctos_tenant_id: 租戶 ID（用於多租戶資料隔離）
 - ctos_user_id: 用戶 ID（權限檢查用，若顯示「未關聯」則不傳）
 
 【NAS 共用檔案】
@@ -229,11 +226,9 @@ LINEBOT_PERSONAL_PROMPT = """你是擎添工業的 AI 助理，透過 Line 與�
 - generate_md2ppt: 產生專業簡報（MD2PPT 格式，可線上編輯並匯出 PPT）
   · content: 簡報內容說明或大綱（必填）
   · style: 風格需求（可選，如：科技藍、簡約深色）
-  · ctos_tenant_id: 租戶 ID（必傳，從【對話識別】取得）
   · 回傳包含 url（分享連結）和 password（4 位數密碼）
 - generate_md2doc: 產生專業文件（MD2DOC 格式，可線上編輯並匯出 Word）
   · content: 文件內容說明或大綱（必填）
-  · ctos_tenant_id: 租戶 ID（必傳，從【對話識別】取得）
   · 回傳包含 url（分享連結）和 password（4 位數密碼）
 
 【文件/簡報使用情境】
@@ -356,7 +351,6 @@ LINEBOT_GROUP_PROMPT = """你是擎添工業的 AI 助理，在 Line 群組中�
 
 【重要：工具呼叫參數】
 部分工具需要從【對話識別】區塊取得並傳入以下參數：
-- ctos_tenant_id: 租戶 ID（用於多租戶資料隔離）
 - ctos_user_id: 用戶 ID（權限檢查用，若顯示「未關聯」則不傳）
 
 回應原則：
@@ -410,30 +404,25 @@ DEFAULT_LINEBOT_AGENTS = [
 ]
 
 
-async def ensure_default_linebot_agents(tenant_id: UUID | str | None = None) -> None:
+async def ensure_default_linebot_agents() -> None:
     """
     確保預設的 Line Bot Agent 存在。
 
     如果 Agent 已存在則跳過（保留使用者修改）。
     如果不存在則建立 Agent 和對應的 Prompt。
-
-    Args:
-        tenant_id: 租戶 ID
     """
-    tid = _get_tenant_id(tenant_id)
-
     for agent_config in DEFAULT_LINEBOT_AGENTS:
         agent_name = agent_config["name"]
 
         # 檢查 Agent 是否存在
-        existing_agent = await ai_manager.get_agent_by_name(agent_name, tenant_id=tid)
+        existing_agent = await ai_manager.get_agent_by_name(agent_name)
         if existing_agent:
             logger.debug(f"Agent '{agent_name}' 已存在，跳過建立")
             continue
 
         # 檢查 Prompt 是否存在
         prompt_config = agent_config["prompt"]
-        existing_prompt = await ai_manager.get_prompt_by_name(prompt_config["name"], tenant_id=tid)
+        existing_prompt = await ai_manager.get_prompt_by_name(prompt_config["name"])
 
         if existing_prompt:
             prompt_id = existing_prompt["id"]
@@ -447,7 +436,7 @@ async def ensure_default_linebot_agents(tenant_id: UUID | str | None = None) -> 
                 content=prompt_config["content"],
                 description=prompt_config["description"],
             )
-            new_prompt = await ai_manager.create_prompt(prompt_data, tenant_id=tid)
+            new_prompt = await ai_manager.create_prompt(prompt_data)
             prompt_id = new_prompt["id"]
             logger.info(f"已建立 Prompt: {prompt_config['name']}")
 
@@ -460,25 +449,20 @@ async def ensure_default_linebot_agents(tenant_id: UUID | str | None = None) -> 
             system_prompt_id=prompt_id,
             is_active=True,
         )
-        await ai_manager.create_agent(agent_data, tenant_id=tid)
+        await ai_manager.create_agent(agent_data)
         logger.info(f"已建立 Agent: {agent_name}")
 
 
-async def get_linebot_agent(
-    is_group: bool,
-    tenant_id: UUID | str | None = None,
-) -> dict | None:
+async def get_linebot_agent(is_group: bool) -> dict | None:
     """
     取得 Line Bot Agent 設定。
 
     Args:
         is_group: 是否為群組對話
-        tenant_id: 租戶 ID
 
     Returns:
         Agent 設定字典，包含 model 和 system_prompt
         如果找不到則回傳 None
     """
-    tid = _get_tenant_id(tenant_id)
     agent_name = AGENT_LINEBOT_GROUP if is_group else AGENT_LINEBOT_PERSONAL
-    return await ai_manager.get_agent_by_name(agent_name, tenant_id=tid)
+    return await ai_manager.get_agent_by_name(agent_name)

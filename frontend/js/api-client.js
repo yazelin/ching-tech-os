@@ -123,67 +123,6 @@ const APIClient = (function() {
     return request('/ai/prompts');
   }
 
-  // ========== Tenant API ==========
-
-  /**
-   * Get current tenant info
-   * @returns {Promise<Object>}
-   */
-  async function getTenantInfo() {
-    return request('/tenant/info');
-  }
-
-  /**
-   * Get tenant usage statistics
-   * @returns {Promise<Object>}
-   */
-  async function getTenantUsage() {
-    return request('/tenant/usage');
-  }
-
-  /**
-   * Update tenant settings
-   * @param {Object} data - { name?, settings? }
-   * @returns {Promise<Object>}
-   */
-  async function updateTenantSettings(data) {
-    return request('/tenant/settings', {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    });
-  }
-
-  /**
-   * List tenant admins
-   * @returns {Promise<Array>}
-   */
-  async function getTenantAdmins() {
-    return request('/tenant/admins');
-  }
-
-  /**
-   * Add tenant admin
-   * @param {Object} data - { user_id, role }
-   * @returns {Promise<Object>}
-   */
-  async function addTenantAdmin(data) {
-    return request('/tenant/admins', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  }
-
-  /**
-   * Remove tenant admin
-   * @param {string} userId
-   * @returns {Promise<Object>}
-   */
-  async function removeTenantAdmin(userId) {
-    return request(`/tenant/admins/${userId}`, {
-      method: 'DELETE',
-    });
-  }
-
   // ========== Generic HTTP Methods ==========
 
   /**
@@ -246,14 +185,6 @@ const APIClient = (function() {
     deleteChat,
     updateChat,
     getPrompts,
-
-    // Tenant
-    getTenantInfo,
-    getTenantUsage,
-    updateTenantSettings,
-    getTenantAdmins,
-    addTenantAdmin,
-    removeTenantAdmin,
   };
 })();
 

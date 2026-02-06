@@ -61,15 +61,12 @@ def _check_path_traversal(path: str) -> None:
         )
 
 
-def _get_file_path(
-    zone: StorageZone, path: str, tenant_id: str | None = None
-) -> Path:
+def _get_file_path(zone: StorageZone, path: str) -> Path:
     """根據 zone 和 path 取得實際檔案路徑（不支援 NAS zone）
 
     Args:
         zone: 儲存區域
         path: 相對路徑
-        tenant_id: 租戶 ID（用於 CTOS zone 的租戶隔離）
 
     Returns:
         實際檔案路徑
@@ -77,7 +74,7 @@ def _get_file_path(
     if zone == StorageZone.NAS:
         raise ValueError("NAS zone 不支援本地檔案路徑，請使用 _read_nas_file()")
     uri = f"{zone.value}://{path}"
-    fs_path = path_manager.to_filesystem(uri, tenant_id)
+    fs_path = path_manager.to_filesystem(uri)
     return Path(fs_path)
 
 
@@ -258,18 +255,15 @@ def _read_file_content(
             detail="請指定檔案路徑",
         )
 
-    # NAS zone：透過 SMB 讀取（不受租戶隔離影響）
+    # NAS zone：透過 SMB 讀取
     if storage_zone == StorageZone.NAS:
         content = _read_nas_file(path, session, nas_token)
         filename = path.split("/")[-1]
         mime_type = _get_mime_type(filename)
         return content, filename, mime_type
 
-    # 取得租戶 ID（用於 CTOS zone 的租戶隔離）
-    tenant_id = getattr(session, "tenant_id", None)
-
     # 其他 zone：透過本地檔案系統讀取
-    file_path = _get_file_path(storage_zone, path, tenant_id)
+    file_path = _get_file_path(storage_zone, path)
     content = _read_local_file(file_path)
     filename = file_path.name
     mime_type = _get_mime_type(filename)

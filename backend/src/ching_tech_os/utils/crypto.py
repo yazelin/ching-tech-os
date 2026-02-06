@@ -14,12 +14,12 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 def _get_encryption_key() -> bytes:
     """取得加密金鑰
 
-    從環境變數 TENANT_SECRET_KEY 讀取。
+    從環境變數 BOT_SECRET_KEY 讀取。
     如果未設定，使用預設金鑰（僅限開發環境）。
     """
-    key_str = os.getenv("TENANT_SECRET_KEY", "")
+    key_str = os.getenv("BOT_SECRET_KEY", "")
     if not key_str:
-        # 開發環境預設金鑰（生產環境必須設定 TENANT_SECRET_KEY）
+        # 開發環境預設金鑰（生產環境必須設定 BOT_SECRET_KEY）
         key_str = "ching-tech-os-default-dev-key-2024"
 
     # 使用 SHA-256 產生固定長度的金鑰（32 bytes = 256 bits）

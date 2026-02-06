@@ -290,87 +290,49 @@ class LocalFileService:
 
 # 便利函式：建立各功能的服務實例
 
-# 預設租戶 UUID（用於單租戶模式和向後相容）
-DEFAULT_TENANT_ID = "00000000-0000-0000-0000-000000000000"
 
-
-def create_knowledge_file_service(tenant_id: str | None = None) -> LocalFileService:
+def create_knowledge_file_service() -> LocalFileService:
     """建立知識庫檔案服務
 
-    Args:
-        tenant_id: 租戶 ID，None 則使用舊路徑（向後相容）
-
     Returns:
         LocalFileService 實例
     """
-    if tenant_id:
-        # 多租戶模式：使用租戶專屬路徑
-        base_path = f"{settings.ctos_mount_path}/tenants/{tenant_id}/knowledge"
-    else:
-        # 單租戶模式：使用舊路徑
-        base_path = settings.knowledge_local_path
-    return LocalFileService(base_path)
+    return LocalFileService(settings.knowledge_local_path)
 
 
-def create_project_file_service(tenant_id: str | None = None) -> LocalFileService:
+def create_project_file_service() -> LocalFileService:
     """建立專案檔案服務
 
-    Args:
-        tenant_id: 租戶 ID，None 則使用舊路徑（向後相容）
-
     Returns:
         LocalFileService 實例
     """
-    if tenant_id:
-        # 多租戶模式：使用租戶專屬路徑
-        base_path = f"{settings.ctos_mount_path}/tenants/{tenant_id}/projects"
-    else:
-        # 單租戶模式：使用舊路徑
-        base_path = settings.project_local_path
-    return LocalFileService(base_path)
+    return LocalFileService(settings.project_local_path)
 
 
-def create_linebot_file_service(tenant_id: str | None = None) -> LocalFileService:
+def create_linebot_file_service() -> LocalFileService:
     """建立 Line Bot 檔案服務
 
-    Args:
-        tenant_id: 租戶 ID，None 則使用舊路徑（向後相容）
-
     Returns:
         LocalFileService 實例
     """
-    if tenant_id:
-        # 多租戶模式：使用租戶專屬路徑
-        base_path = f"{settings.ctos_mount_path}/tenants/{tenant_id}/linebot"
-    else:
-        # 單租戶模式：使用舊路徑
-        base_path = settings.linebot_local_path
-    return LocalFileService(base_path)
+    return LocalFileService(settings.linebot_local_path)
 
 
-def create_attachments_file_service(tenant_id: str | None = None) -> LocalFileService:
+def create_attachments_file_service() -> LocalFileService:
     """建立附件檔案服務
 
-    Args:
-        tenant_id: 租戶 ID，None 則使用預設租戶
-
     Returns:
         LocalFileService 實例
     """
-    tid = tenant_id or DEFAULT_TENANT_ID
-    base_path = f"{settings.ctos_mount_path}/tenants/{tid}/attachments"
+    base_path = f"{settings.ctos_mount_path}/attachments"
     return LocalFileService(base_path)
 
 
-def create_ai_generated_file_service(tenant_id: str | None = None) -> LocalFileService:
+def create_ai_generated_file_service() -> LocalFileService:
     """建立 AI 生成檔案服務
-
-    Args:
-        tenant_id: 租戶 ID，None 則使用預設租戶
 
     Returns:
         LocalFileService 實例
     """
-    tid = tenant_id or DEFAULT_TENANT_ID
-    base_path = f"{settings.ctos_mount_path}/tenants/{tid}/ai-generated"
+    base_path = f"{settings.ctos_mount_path}/ai-generated"
     return LocalFileService(base_path)

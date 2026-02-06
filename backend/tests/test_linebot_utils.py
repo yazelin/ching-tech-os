@@ -3,7 +3,6 @@
 測試對象：linebot.py 中的純函式（不需要資料庫）
 - is_reset_command: 重置對話指令檢查
 - is_binding_code_format: 驗證碼格式檢查
-- is_bind_tenant_command: 綁定租戶指令檢查
 - is_readable_file: 可讀取檔案判斷
 - is_legacy_office_file: 舊版 Office 格式判斷
 - is_document_file: 文件格式判斷
@@ -24,7 +23,6 @@ from ching_tech_os.services.linebot import (
     is_legacy_office_file,
     is_document_file,
     get_temp_image_path,
-    is_bind_tenant_command,
     should_trigger_ai,
     generate_nas_path,
 )
@@ -153,38 +151,6 @@ class TestGetTempImagePath:
     def test_normal_path(self):
         path = get_temp_image_path("msg123")
         assert path == "/tmp/bot-images/msg123.jpg"
-
-
-# ============================================================
-# is_bind_tenant_command 測試
-# ============================================================
-
-class TestIsBindTenantCommand:
-    """測試綁定租戶指令"""
-
-    def test_bind_command_chinese(self):
-        is_cmd, code = is_bind_tenant_command("/綁定 COMPANY01")
-        assert is_cmd is True
-        assert code == "COMPANY01"
-
-    def test_bind_command_english(self):
-        is_cmd, code = is_bind_tenant_command("/bind COMPANY01")
-        assert is_cmd is True
-        assert code == "COMPANY01"
-
-    def test_bind_without_code(self):
-        is_cmd, code = is_bind_tenant_command("/綁定")
-        assert is_cmd is True
-        assert code is None
-
-    def test_not_bind_command(self):
-        is_cmd, code = is_bind_tenant_command("hello")
-        assert is_cmd is False
-        assert code is None
-
-    def test_empty(self):
-        is_cmd, code = is_bind_tenant_command("")
-        assert is_cmd is False
 
 
 # ============================================================

@@ -145,20 +145,13 @@ class TestGetUserPermissions:
 class TestGetUserPermissionsForRole:
     """get_user_permissions_for_role() 函數測試"""
 
-    def test_platform_admin_gets_full_permissions(self):
-        """平台管理員應取得完整權限"""
-        perms = get_user_permissions_for_role("platform_admin", None)
+    def test_admin_gets_full_permissions(self):
+        """管理員應取得完整權限"""
+        perms = get_user_permissions_for_role("admin", None)
         assert perms["apps"]["terminal"] is True
         assert perms["apps"]["code-editor"] is True
         assert perms["knowledge"]["global_write"] is True
         assert perms["knowledge"]["global_delete"] is True
-
-    def test_tenant_admin_gets_tenant_admin_permissions(self):
-        """租戶管理員應取得租戶管理員權限"""
-        perms = get_user_permissions_for_role("tenant_admin", None)
-        assert perms["apps"]["file-manager"] is True
-        assert perms["apps"]["terminal"] is False  # 高風險，預設關閉
-        assert perms["knowledge"]["global_write"] is True
 
     def test_user_gets_default_permissions(self):
         """一般使用者應取得預設權限"""
@@ -181,10 +174,10 @@ class TestGetUserPermissionsForRole:
 class TestHasAppPermission:
     """has_app_permission() 函數測試"""
 
-    def test_platform_admin_has_all_permissions(self):
-        """平台管理員應有所有應用程式權限"""
-        assert has_app_permission("platform_admin", None, "terminal") is True
-        assert has_app_permission("platform_admin", None, "code-editor") is True
+    def test_admin_has_all_permissions(self):
+        """管理員應有所有應用程式權限"""
+        assert has_app_permission("admin", None, "terminal") is True
+        assert has_app_permission("admin", None, "code-editor") is True
 
     def test_user_default_closed_app(self):
         """一般使用者應無法存取預設關閉的應用程式"""
@@ -212,17 +205,17 @@ class TestHasAppPermission:
 class TestCheckKnowledgePermission:
     """check_knowledge_permission() 函數測試"""
 
-    def test_platform_admin_has_all_permissions(self):
-        """平台管理員應有所有知識庫權限"""
+    def test_admin_has_all_permissions(self):
+        """管理員應有所有知識庫權限"""
         # check_knowledge_permission(role, username, preferences, knowledge_owner, knowledge_scope, action)
         # 全域知識
-        assert check_knowledge_permission("platform_admin", "admin", None, None, "global", "read") is True
-        assert check_knowledge_permission("platform_admin", "admin", None, None, "global", "write") is True
-        assert check_knowledge_permission("platform_admin", "admin", None, None, "global", "delete") is True
+        assert check_knowledge_permission("admin", "adminuser", None, None, "global", "read") is True
+        assert check_knowledge_permission("admin", "adminuser", None, None, "global", "write") is True
+        assert check_knowledge_permission("admin", "adminuser", None, None, "global", "delete") is True
         # 個人知識
-        assert check_knowledge_permission("platform_admin", "admin", None, "user1", "personal", "read") is True
-        assert check_knowledge_permission("platform_admin", "admin", None, "user1", "personal", "write") is True
-        assert check_knowledge_permission("platform_admin", "admin", None, "user1", "personal", "delete") is True
+        assert check_knowledge_permission("admin", "adminuser", None, "user1", "personal", "read") is True
+        assert check_knowledge_permission("admin", "adminuser", None, "user1", "personal", "write") is True
+        assert check_knowledge_permission("admin", "adminuser", None, "user1", "personal", "delete") is True
 
     def test_personal_knowledge_owner_has_full_control(self):
         """個人知識擁有者應有完全控制權"""

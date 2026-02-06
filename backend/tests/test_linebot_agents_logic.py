@@ -7,6 +7,7 @@
 用法：
     cd backend
     uv run pytest tests/test_linebot_agents_logic.py -v
+
 """
 
 import pytest
@@ -31,10 +32,10 @@ class TestGenerateToolsPrompt:
         assert "query_project" not in prompt
 
     def test_project_management_permission(self):
-        """有專案管理權限"""
+        """有專案管理權限（已遷移至 ERPNext）"""
         prompt = generate_tools_prompt({"project-management": True})
-        assert "query_project" in prompt
-        assert "create_project" in prompt
+        assert "mcp__erpnext__list_documents" in prompt
+        assert "Project" in prompt
 
     def test_knowledge_base_permission(self):
         """有知識庫權限"""
@@ -42,9 +43,9 @@ class TestGenerateToolsPrompt:
         assert "search_knowledge" in prompt
 
     def test_inventory_permission(self):
-        """有庫存管理權限"""
+        """有庫存管理權限（已遷移至 ERPNext）"""
         prompt = generate_tools_prompt({"inventory-management": True})
-        assert "query_inventory" in prompt
+        assert "mcp__erpnext__get_stock_balance" in prompt
 
     def test_file_manager_permission(self):
         """有檔案管理權限"""
@@ -59,9 +60,9 @@ class TestGenerateToolsPrompt:
             "inventory-management": True,
         }
         prompt = generate_tools_prompt(perms)
-        assert "query_project" in prompt
+        assert "mcp__erpnext__list_documents" in prompt
         assert "search_knowledge" in prompt
-        assert "query_inventory" in prompt
+        assert "mcp__erpnext__get_stock_balance" in prompt
 
     def test_disabled_permission(self):
         """權限設為 False"""
@@ -78,9 +79,9 @@ class TestGenerateUsageTipsPrompt:
         assert tips == ""
 
     def test_project_tips(self):
-        """專案管理使用提示"""
+        """專案管理使用提示（已遷移至 ERPNext）"""
         tips = generate_usage_tips_prompt({"project-management": True})
-        assert "query_project" in tips
+        assert "mcp__erpnext__list_documents" in tips
 
     def test_knowledge_tips(self):
         """知識庫使用提示"""
@@ -88,9 +89,9 @@ class TestGenerateUsageTipsPrompt:
         assert "search_knowledge" in tips
 
     def test_inventory_tips(self):
-        """庫存管理使用提示"""
+        """庫存管理使用提示（已遷移至 ERPNext）"""
         tips = generate_usage_tips_prompt({"inventory-management": True})
-        assert "query_inventory" in tips
+        assert "mcp__erpnext__get_stock_balance" in tips
 
 
 class TestAgentConstants:

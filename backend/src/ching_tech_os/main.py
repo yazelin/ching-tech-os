@@ -14,8 +14,7 @@ from .services.session import session_manager
 from .services.terminal import terminal_service
 from .services.scheduler import start_scheduler, stop_scheduler
 from .services.linebot_agents import ensure_default_linebot_agents
-from .api import auth, knowledge, login_records, messages, nas, user, ai_router, ai_management, linebot_router, telegram_router, share, files, presentation, tenant, config_public
-from .api.admin import tenants as admin_tenants
+from .api import auth, knowledge, login_records, messages, nas, user, ai_router, ai_management, linebot_router, telegram_router, share, files, presentation, config_public, bot_settings
 
 # 建立 Socket.IO 伺服器
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
@@ -48,6 +47,12 @@ def ensure_directories():
 async def lifespan(app: FastAPI):
     """應用程式生命週期管理"""
     # 啟動時
+    if not settings.bot_secret_key:
+        import logging
+        logging.getLogger(__name__).warning(
+            "BOT_SECRET_KEY 未設定，Bot 憑證加密將使用預設金鑰（不安全）。"
+            "請在 .env 中設定 BOT_SECRET_KEY。"
+        )
     ensure_directories()  # 確保必要目錄存在
     await init_db_pool()
     await ensure_default_linebot_agents()  # 確保 Line Bot Agent 存在
@@ -98,7 +103,6 @@ app.include_router(login_records.router)
 app.include_router(nas.router)
 app.include_router(user.router)
 app.include_router(user.admin_router)  # 管理員 API
-app.include_router(user.tenant_router)  # 租戶管理員 API
 app.include_router(ai_router.router)
 app.include_router(ai_management.router)
 app.include_router(linebot_router.router, prefix="/api/bot")
@@ -108,9 +112,8 @@ app.include_router(share.router)
 app.include_router(share.public_router)
 app.include_router(files.router)
 app.include_router(presentation.router)
-app.include_router(tenant.router)  # 租戶自助服務
-app.include_router(admin_tenants.router)  # 平台管理員租戶管理
 app.include_router(config_public.router)  # 公開配置 API
+app.include_router(bot_settings.router)  # Bot 設定管理 API
 
 
 @app.get("/api/health")
@@ -161,12 +164,11 @@ async def short_share_url(token: str):
         link_info = await get_link_info(token)
         resource_type = link_info["resource_type"]
         resource_id = link_info["resource_id"]
-        tenant_id = link_info.get("tenant_id")
 
         if resource_type == "knowledge":
             from .services.knowledge import get_knowledge
             try:
-                kb = get_knowledge(resource_id, tenant_id=tenant_id)
+                kb = get_knowledge(resource_id)
                 og_title = f"{kb.title} - 擎添工業"
                 # 截取前 100 字作為描述
                 content_preview = (kb.content or "")[:100].replace("\n", " ").strip()

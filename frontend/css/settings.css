@@ -403,16 +403,6 @@
   font-weight: 500;
 }
 
-.role-badge.role-platform_admin {
-  background-color: rgba(156, 39, 176, 0.2);
-  color: #ce93d8;
-}
-
-.role-badge.role-tenant_admin {
-  background-color: rgba(255, 152, 0, 0.2);
-  color: #ffb74d;
-}
-
 .role-badge.role-user {
   background-color: var(--bg-surface-dark);
   color: var(--text-secondary);
@@ -548,6 +538,86 @@
   gap: var(--spacing-sm);
   padding: var(--spacing-md) var(--spacing-lg);
   border-top: 1px solid var(--border-light);
+}
+
+/* ==========================================================================
+   Bot Settings (Bot 設定)
+   ========================================================================== */
+
+.bot-settings-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.bot-platform-card {
+  position: relative;
+}
+
+.bot-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.bot-field-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.bot-field-label {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.bot-field-input-group {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.bot-field-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.bot-field-source {
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface-dark);
+}
+
+.bot-source-set {
+  color: var(--color-success);
+}
+
+.bot-source-none {
+  color: var(--text-muted);
+}
+
+.bot-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-md);
+  flex-wrap: wrap;
+}
+
+.bot-status-msg {
+  margin-top: var(--spacing-sm);
+  font-size: var(--font-size-sm);
+  min-height: 1.5em;
+}
+
+.bot-status-success {
+  color: var(--color-success);
+}
+
+.bot-status-error {
+  color: var(--color-error);
 }
 
 /* ==========================================================================
