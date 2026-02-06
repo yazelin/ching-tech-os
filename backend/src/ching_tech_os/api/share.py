@@ -69,7 +69,7 @@ async def create_link(
     elif data.resource_type == "knowledge":
         try:
             knowledge = get_knowledge(data.resource_id)
-            # 權限檢查（platform_admin 和 tenant_admin 已在 check_knowledge_permission 中處理）
+            # 權限檢查（admin 已在 check_knowledge_permission 中處理）
             preferences = await get_user_preferences(session.user_id) if session.user_id else None
             if not check_knowledge_permission(
                 session.role, session.username, preferences, knowledge.owner, knowledge.scope, "write"
@@ -128,11 +128,10 @@ async def list_links(
     """列出分享連結
 
     Args:
-        view: "mine" 只顯示自己的，"all" 顯示全部（管理員或租戶管理員）
+        view: "mine" 只顯示自己的，"all" 顯示全部（管理員）
     """
     try:
-        # 平台管理員或租戶管理員都可以看全部
-        user_is_admin = session.role in ("platform_admin", "tenant_admin")
+        user_is_admin = session.role == "admin"
 
         # 管理員可以選擇查看全部
         if view == "all" and user_is_admin:
@@ -165,8 +164,7 @@ async def delete_link(
     連結建立者或管理員可以撤銷。
     """
     try:
-        # 平台管理員或租戶管理員可以撤銷任何連結
-        is_admin_user = session.role in ("platform_admin", "tenant_admin")
+        is_admin_user = session.role == "admin"
         await revoke_link(token, session.username, is_admin_user)
     except ShareLinkNotFoundError:
         raise HTTPException(
@@ -335,7 +333,7 @@ async def get_public_attachment(token: str, path: str) -> Response:
             assets_path = "assets/" + path[len("local/"):]
 
             # 讀取本機檔案
-            assets_base = FilePath(settings.get_tenant_knowledge_path(None))
+            assets_base = FilePath(settings.knowledge_local_path)
             file_path = assets_base / assets_path
 
             if not file_path.exists():

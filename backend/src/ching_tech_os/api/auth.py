@@ -148,9 +148,6 @@ async def require_admin(
     return session
 
 
-# 向後相容別名
-require_platform_admin = require_admin
-require_tenant_admin_or_above = require_admin
 
 
 async def require_can_manage_target(

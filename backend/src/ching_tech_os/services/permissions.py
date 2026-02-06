@@ -114,7 +114,6 @@ DEFAULT_APP_PERMISSIONS: dict[str, bool] = {
     "linebot": True,
     "memory-manager": True,
     "share-manager": True,
-    "tenant-admin": False,      # 管理功能，預設關閉
     "md2ppt": True,
     "md2doc": True,
     "printer": True,
@@ -149,47 +148,11 @@ APP_DISPLAY_NAMES: dict[str, str] = {
     "linebot": "Line Bot",
     "memory-manager": "記憶管理",
     "share-manager": "分享管理",
-    "tenant-admin": "租戶管理",
-    "platform-admin": "平台管理",
     "md2ppt": "簡報生成",
     "md2doc": "文件生成",
     "printer": "列印",
     "settings": "系統設定",
 }
-
-# 租戶管理員預設權限
-# 租戶管理員預設開啟大部分功能，但高風險功能預設關閉
-DEFAULT_TENANT_ADMIN_APP_PERMISSIONS: dict[str, bool] = {
-    "file-manager": True,
-    "terminal": False,          # 高風險，預設關閉
-    "code-editor": False,       # 高風險，預設關閉
-    "project-management": True,
-    "inventory-management": True,
-    "vendor-management": True,
-    "ai-assistant": True,
-    "prompt-editor": True,
-    "agent-settings": True,
-    "ai-log": True,
-    "knowledge-base": True,
-    "linebot": True,
-    "memory-manager": True,
-    "share-manager": True,
-    "tenant-admin": True,       # 租戶管理員可以管理租戶
-    "platform-admin": False,    # 永遠禁止
-    "md2ppt": True,
-    "md2doc": True,
-    "settings": True,
-}
-
-# 完整租戶管理員預設權限結構
-DEFAULT_TENANT_ADMIN_PERMISSIONS: dict[str, dict[str, bool]] = {
-    "apps": DEFAULT_TENANT_ADMIN_APP_PERMISSIONS.copy(),
-    "knowledge": {
-        "global_write": True,   # 租戶管理員預設可編輯全域知識
-        "global_delete": True,  # 租戶管理員預設可刪除全域知識
-    },
-}
-
 
 # ============================================================
 # 權限檢查函數
@@ -241,19 +204,15 @@ def get_user_permissions_for_role(role: str, preferences: dict | None) -> dict[s
     """根據角色取得使用者權限
 
     Args:
-        role: 使用者角色（platform_admin, tenant_admin, user）
+        role: 使用者角色（admin, user）
         preferences: 使用者的 preferences JSONB 欄位
 
     Returns:
         權限結構
     """
-    # 平台管理員擁有所有權限
-    if role == "platform_admin":
+    # 管理員擁有所有權限
+    if role == "admin":
         return get_full_permissions()
-
-    # 租戶管理員使用預設租戶管理員權限
-    if role == "tenant_admin":
-        return deep_merge(DEFAULT_TENANT_ADMIN_PERMISSIONS.copy(), preferences.get("permissions", {}) if preferences else {})
 
     # 一般使用者使用預設權限合併個人設定
     return get_user_permissions(preferences)
@@ -266,33 +225,17 @@ def has_app_permission(
 ) -> bool:
     """基於角色和權限設定檢查 App 權限
 
-    這是新版的權限檢查函數，支援角色階層。
-
     Args:
-        role: 使用者角色（platform_admin, tenant_admin, user）
+        role: 使用者角色（admin, user）
         permissions: 使用者的 permissions 設定
         app_id: 應用程式 ID
 
     Returns:
         是否有權限使用該應用程式
     """
-    # 平台管理員擁有所有權限
-    if role == "platform_admin":
+    # 管理員擁有所有權限
+    if role == "admin":
         return True
-
-    # 租戶管理員：除了 platform-admin 外，檢查 permissions
-    if role == "tenant_admin":
-        if app_id == "platform-admin":
-            return False  # 永遠禁止
-
-        # 如果有明確設定，使用設定值
-        if permissions and "apps" in permissions:
-            app_perms = permissions["apps"]
-            if app_id in app_perms:
-                return app_perms[app_id]
-
-        # 否則使用租戶管理員預設值
-        return DEFAULT_TENANT_ADMIN_APP_PERMISSIONS.get(app_id, True)
 
     # 一般使用者：檢查 permissions，預設使用 DEFAULT_APP_PERMISSIONS
     if permissions and "apps" in permissions:
@@ -329,16 +272,12 @@ async def get_user_app_permissions(user_id: int) -> dict[str, bool]:
     preferences = row["preferences"] or {}
     permissions = preferences.get("permissions", {})
 
-    # 根據角色決定基礎權限
-    if role == "platform_admin":
+    # 管理員擁有所有權限
+    if role == "admin":
         return {app_id: True for app_id in DEFAULT_APP_PERMISSIONS}
 
-    if role == "tenant_admin":
-        base_perms = DEFAULT_TENANT_ADMIN_APP_PERMISSIONS.copy()
-    else:
-        base_perms = DEFAULT_APP_PERMISSIONS.copy()
-
-    # 合併使用者自訂權限
+    # 一般使用者使用預設權限合併個人設定
+    base_perms = DEFAULT_APP_PERMISSIONS.copy()
     user_app_perms = permissions.get("apps", {})
     base_perms.update(user_app_perms)
 
@@ -354,23 +293,18 @@ def get_user_app_permissions_sync(
     用於登入流程（不需要額外查詢資料庫）
 
     Args:
-        role: 使用者角色（user, tenant_admin, platform_admin）
+        role: 使用者角色（admin, user）
         user_data: 使用者資料（包含 preferences）
 
     Returns:
         App 權限設定 dict
     """
-    # 平台管理員擁有所有權限
-    if role == "platform_admin":
+    # 管理員擁有所有權限
+    if role == "admin":
         return {app_id: True for app_id in DEFAULT_APP_PERMISSIONS}
 
-    # 取得基礎權限
-    if role == "tenant_admin":
-        base_perms = DEFAULT_TENANT_ADMIN_APP_PERMISSIONS.copy()
-    else:
-        base_perms = DEFAULT_APP_PERMISSIONS.copy()
-
-    # 合併使用者自訂權限（如果有的話）
+    # 一般使用者使用預設權限合併個人設定
+    base_perms = DEFAULT_APP_PERMISSIONS.copy()
     if user_data:
         preferences = user_data.get("preferences") or {}
         permissions = preferences.get("permissions", {})
@@ -388,15 +322,15 @@ def get_mcp_tools_for_user(
     """根據使用者權限過濾可用的 MCP 工具
 
     Args:
-        role: 使用者角色（platform_admin, tenant_admin, user）
+        role: 使用者角色（admin, user）
         permissions: 使用者的 permissions 設定
         all_tool_names: 所有可用的工具名稱列表
 
     Returns:
         過濾後的工具名稱列表
     """
-    # 平台管理員可以使用所有工具
-    if role == "platform_admin":
+    # 管理員可以使用所有工具
+    if role == "admin":
         return all_tool_names
 
     allowed_tools = []
@@ -428,14 +362,14 @@ def check_tool_permission(
 
     Args:
         tool_name: 工具名稱（可含或不含 MCP 前綴）
-        role: 使用者角色
+        role: 使用者角色（admin, user）
         permissions: 使用者權限設定
 
     Returns:
         是否有權限使用該工具
     """
-    # 平台管理員可以使用所有工具
-    if role == "platform_admin":
+    # 管理員可以使用所有工具
+    if role == "admin":
         return True
 
     # 移除 MCP 前綴
@@ -463,7 +397,7 @@ def check_knowledge_permission(
     """檢查知識庫權限（同步版本，不支援專案知識）
 
     Args:
-        role: 使用者角色（platform_admin, tenant_admin, user）
+        role: 使用者角色（admin, user）
         username: 使用者帳號（用於檢查個人知識擁有者）
         preferences: 使用者的 preferences JSONB 欄位
         knowledge_owner: 知識的擁有者（None 表示全域知識）
@@ -475,8 +409,8 @@ def check_knowledge_permission(
 
     注意：專案知識（scope=project）請使用 check_knowledge_permission_async
     """
-    # 平台管理員和租戶管理員擁有所有權限
-    if role in ("platform_admin", "tenant_admin"):
+    # 管理員擁有所有權限
+    if role == "admin":
         return True
 
     # 擁有全域權限的使用者可以編輯/刪除任何知識（用於管理目的）
@@ -554,7 +488,7 @@ async def check_knowledge_permission_async(
     """檢查知識庫權限（async 版本，支援專案知識）
 
     Args:
-        role: 使用者角色（platform_admin, tenant_admin, user）
+        role: 使用者角色（admin, user）
         username: 使用者帳號（用於檢查個人知識擁有者）
         preferences: 使用者的 preferences JSONB 欄位
         knowledge_owner: 知識的擁有者（None 表示全域知識）
@@ -566,8 +500,8 @@ async def check_knowledge_permission_async(
     Returns:
         是否有權限執行該操作
     """
-    # 平台管理員和租戶管理員擁有所有權限
-    if role in ("platform_admin", "tenant_admin"):
+    # 管理員擁有所有權限
+    if role == "admin":
         return True
 
     # 擁有全域權限的使用者可以編輯/刪除任何知識（用於管理目的）
@@ -650,8 +584,8 @@ def require_app_permission(app_id: str) -> Callable:
 
     async def checker(session: SessionData = Depends(get_current_session)) -> SessionData:
         """檢查使用者是否有指定的 App 權限"""
-        # 平台管理員擁有所有權限
-        if session.role == "platform_admin":
+        # 管理員擁有所有權限
+        if session.role == "admin":
             return session
 
         # 檢查 session 中的權限快取

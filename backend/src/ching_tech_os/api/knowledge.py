@@ -170,7 +170,7 @@ async def get_local_asset(
         )
 
     # 使用知識庫路徑
-    assets_base = Path(settings.get_tenant_knowledge_path(None)) / "assets"
+    assets_base = Path(settings.knowledge_local_path) / "assets"
     file_path = assets_base / path
 
     if not file_path.exists():
