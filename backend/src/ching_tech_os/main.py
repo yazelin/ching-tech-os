@@ -47,6 +47,12 @@ def ensure_directories():
 async def lifespan(app: FastAPI):
     """應用程式生命週期管理"""
     # 啟動時
+    if not settings.bot_secret_key:
+        import logging
+        logging.getLogger(__name__).warning(
+            "BOT_SECRET_KEY 未設定，Bot 憑證加密將使用預設金鑰（不安全）。"
+            "請在 .env 中設定 BOT_SECRET_KEY。"
+        )
     ensure_directories()  # 確保必要目錄存在
     await init_db_pool()
     await ensure_default_linebot_agents()  # 確保 Line Bot Agent 存在
