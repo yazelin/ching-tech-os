@@ -193,10 +193,10 @@
 
 - [x] 19.1 測試登入功能（無租戶代碼）✓ — 密碼認證正常，回應無 tenant 物件
 - [x] 19.2 測試使用者管理功能（admin/user 角色）✓ — 11 使用者，只有 admin/user 角色
-- [ ] 19.3 測試 Line Bot webhook 驗證（新憑證來源）— 需手動從 Line 發訊息測試
+- [x] 19.3 測試 Line Bot webhook 驗證 ✓ — webhook 200 OK，訊息儲存、AI 觸發、回覆正常
 - [x] 19.4 測試 Bot 設定 API ✓ — Line/Telegram GET/test 端點正常，連線測試成功
 - [x] 19.5 測試知識庫功能（新路徑）✓ — 13 筆條目正常讀取
-- [ ] 19.6 測試 AI 對話功能 — 需手動從前端測試
+- [x] 19.6 測試 AI 對話功能 ✓ — AI Agents API 正常（7 個 Agent），Line Bot AI 回覆正常
 - [x] 19.7 測試 MCP 工具（無 ctos_tenant_id）✓ — 29 工具無 tenant 參數，search_knowledge 正常
 - [x] 19.8 測試檔案存取（新路徑結構）✓ — NAS 檔案遷移完成，分享連結 API 正常
 - [x] 19.9 全面掃描殘留引用 ✓ — 前端零殘留，後端僅 tenant_data.py（已刪除）
@@ -208,5 +208,5 @@
 - [x] 20.3 資料庫 migration（001-004）已執行 ✓
 - [x] 20.4 NAS 檔案遷移已完成 ✓
 - [x] 20.5 後端服務已重啟並正常運行 ✓
-- [ ] 20.6 清除前端快取
-- [ ] 20.7 最終驗證所有功能（需瀏覽器手動驗證）
+- [x] 20.6 前端快取：無 nginx 代理，由 FastAPI StaticFiles 提供，瀏覽器硬刷新即可 ✓
+- [ ] 20.7 最終驗證所有功能（需瀏覽器手動驗證：Bot 設定 UI）
