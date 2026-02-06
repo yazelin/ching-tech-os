@@ -14,6 +14,7 @@ import httpx
 
 from ..config import settings
 from .smb import SMBService
+from .workers import run_in_smb_pool
 from .claude_agent import call_claude
 from .huggingface_image import generate_image_with_flux, is_fallback_available
 
@@ -472,12 +473,14 @@ async def generate_html_presentation(
             username=settings.nas_user,
             password=settings.nas_password,
         )
-        smb.connect()
-
         nas_file_path = f"ching-tech-os/{relative_path}/{filename}"
         file_data = output_content if output_format == "pdf" else output_content.encode("utf-8")
-        smb.write_file(settings.nas_share, nas_file_path, file_data)
-        smb.disconnect()
+
+        def _upload():
+            with smb:
+                smb.write_file(settings.nas_share, nas_file_path, file_data)
+
+        await run_in_smb_pool(_upload)
 
         logger.info(f"{output_format.upper()} 簡報已儲存: {nas_file_path}")
 
