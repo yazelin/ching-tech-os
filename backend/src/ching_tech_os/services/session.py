@@ -1,26 +1,34 @@
-"""Session 管理服務"""
+"""Session 管理服務（PostgreSQL 持久化）
+
+將 session 資料儲存於 PostgreSQL，server 重啟後 session 不失效。
+SMB 密碼以 AES-256-GCM 加密儲存。
+"""
 
 import asyncio
+import logging
 import uuid as uuid_lib
 from datetime import datetime, timedelta
 from typing import Optional
-from uuid import UUID
 
 from ..config import settings
+from ..database import get_connection
 from ..models.auth import SessionData
+from ..utils.crypto import encrypt_credential, decrypt_credential
+
+logger = logging.getLogger(__name__)
 
 
 class SessionManager:
-    """Session 管理器
+    """Session 管理器（PostgreSQL 持久化）
 
-    以記憶體儲存 session 資料，server 重啟後 session 失效。
+    將 session 資料儲存於 PostgreSQL sessions 表，
+    SMB 密碼以 AES-256-GCM 加密。
     """
 
     def __init__(self):
-        self._sessions: dict[str, SessionData] = {}
         self._cleanup_task: asyncio.Task | None = None
 
-    def create_session(
+    async def create_session(
         self,
         username: str,
         password: str,
@@ -37,29 +45,36 @@ class SessionManager:
             nas_host: NAS 主機位址
             user_id: 資料庫中的使用者 ID
             role: 用戶角色（admin, user）
-            app_permissions: App 權限設定（可選，若為 None 則根據 role 使用預設值）
+            app_permissions: App 權限設定
 
         Returns:
             session token (UUID)
         """
         token = str(uuid_lib.uuid4())
-        now = datetime.now()
-        expires_at = now + timedelta(hours=settings.session_ttl_hours)
+        expires_at = datetime.now() + timedelta(hours=settings.session_ttl_hours)
 
-        self._sessions[token] = SessionData(
-            username=username,
-            password=password,
-            nas_host=nas_host or settings.nas_host,
-            user_id=user_id,
-            created_at=now,
-            expires_at=expires_at,
-            role=role,
-            app_permissions=app_permissions or {},
-        )
+        # 加密密碼
+        password_enc = encrypt_credential(password) if password else ""
+
+        async with get_connection() as conn:
+            await conn.execute(
+                """
+                INSERT INTO sessions (token, user_id, username, password_enc, nas_host, role, app_permissions, expires_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                """,
+                token,
+                user_id,
+                username,
+                password_enc,
+                nas_host or settings.nas_host,
+                role,
+                app_permissions or {},
+                expires_at,
+            )
 
         return token
 
-    def get_session(self, token: str) -> Optional[SessionData]:
+    async def get_session(self, token: str) -> Optional[SessionData]:
         """取得 session 資料
 
         Args:
@@ -68,17 +83,35 @@ class SessionManager:
         Returns:
             SessionData 或 None（若不存在或已過期）
         """
-        session = self._sessions.get(token)
-        if session is None:
+        async with get_connection() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT username, password_enc, nas_host, user_id,
+                       created_at, expires_at, role, app_permissions
+                FROM sessions
+                WHERE token = $1 AND expires_at > NOW()
+                """,
+                token,
+            )
+
+        if row is None:
             return None
 
-        if datetime.now() > session.expires_at:
-            self.delete_session(token)
-            return None
+        # 解密密碼
+        password = decrypt_credential(row["password_enc"]) if row["password_enc"] else ""
 
-        return session
+        return SessionData(
+            username=row["username"],
+            password=password,
+            nas_host=row["nas_host"],
+            user_id=row["user_id"],
+            created_at=row["created_at"],
+            expires_at=row["expires_at"],
+            role=row["role"],
+            app_permissions=row["app_permissions"] or {},
+        )
 
-    def delete_session(self, token: str) -> bool:
+    async def delete_session(self, token: str) -> bool:
         """刪除 session
 
         Args:
@@ -87,28 +120,28 @@ class SessionManager:
         Returns:
             是否成功刪除
         """
-        if token in self._sessions:
-            del self._sessions[token]
-            return True
-        return False
+        async with get_connection() as conn:
+            result = await conn.execute(
+                "DELETE FROM sessions WHERE token = $1",
+                token,
+            )
+        return result == "DELETE 1"
 
-    def cleanup_expired(self) -> int:
+    async def cleanup_expired(self) -> int:
         """清理過期的 session
 
         Returns:
             清理的 session 數量
         """
-        now = datetime.now()
-        expired_tokens = [
-            token
-            for token, session in self._sessions.items()
-            if now > session.expires_at
-        ]
-
-        for token in expired_tokens:
-            del self._sessions[token]
-
-        return len(expired_tokens)
+        async with get_connection() as conn:
+            result = await conn.execute(
+                "DELETE FROM sessions WHERE expires_at < NOW()"
+            )
+        # result is like "DELETE 5"
+        try:
+            return int(result.split()[-1])
+        except (ValueError, IndexError):
+            return 0
 
     async def start_cleanup_task(self):
         """啟動背景清理任務"""
@@ -119,9 +152,12 @@ class SessionManager:
             interval = settings.session_cleanup_interval_minutes * 60
             while True:
                 await asyncio.sleep(interval)
-                count = self.cleanup_expired()
-                if count > 0:
-                    print(f"Cleaned up {count} expired sessions")
+                try:
+                    count = await self.cleanup_expired()
+                    if count > 0:
+                        logger.info("Cleaned up %d expired sessions", count)
+                except Exception as e:
+                    logger.error("Session cleanup failed: %s", e)
 
         self._cleanup_task = asyncio.create_task(cleanup_loop())
 
@@ -135,10 +171,13 @@ class SessionManager:
                 pass
             self._cleanup_task = None
 
-    @property
-    def active_session_count(self) -> int:
+    async def get_active_session_count(self) -> int:
         """目前活躍的 session 數量"""
-        return len(self._sessions)
+        async with get_connection() as conn:
+            count = await conn.fetchval(
+                "SELECT COUNT(*) FROM sessions WHERE expires_at > NOW()"
+            )
+        return count or 0
 
 
 # 全域 session manager 實例

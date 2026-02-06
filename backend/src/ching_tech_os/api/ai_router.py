@@ -16,7 +16,7 @@ from ..services.session import session_manager
 router = APIRouter(prefix="/api/ai", tags=["AI"])
 
 
-def get_current_user_id(request: Request) -> int:
+async def get_current_user_id(request: Request) -> int:
     """從 session 取得當前使用者 ID
 
     TODO: 實作完整的使用者認證後，這裡應該從 DB 查詢 user_id
@@ -27,7 +27,7 @@ def get_current_user_id(request: Request) -> int:
         # 開發模式：允許未登入使用，使用預設 user_id
         return 1
 
-    session = session_manager.get_session(token)
+    session = await session_manager.get_session(token)
     if not session:
         raise HTTPException(status_code=401, detail="未登入或 session 已過期")
 

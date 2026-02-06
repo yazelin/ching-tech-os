@@ -53,7 +53,7 @@ async def get_current_session(token: str = Depends(get_token)) -> SessionData:
     Raises:
         HTTPException: 若 token 無效或過期
     """
-    session = session_manager.get_session(token)
+    session = await session_manager.get_session(token)
     if session is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -63,7 +63,7 @@ async def get_current_session(token: str = Depends(get_token)) -> SessionData:
     return session
 
 
-def get_session_from_token_or_query(
+async def get_session_from_token_or_query(
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
     token: str | None = None,  # Query parameter
 ) -> SessionData:
@@ -91,7 +91,7 @@ def get_session_from_token_or_query(
             detail="未授權，請重新登入",
         )
 
-    session = session_manager.get_session(actual_token)
+    session = await session_manager.get_session(actual_token)
     if session is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -336,7 +336,7 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
     # SMB 認證時仍需保留密碼（過渡期，供檔案操作使用）
     session_password = "" if use_password_auth else request.password
 
-    token = session_manager.create_session(
+    token = await session_manager.create_session(
         request.username,
         session_password,
         user_id=user_id,
@@ -398,7 +398,7 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
 @router.post("/logout", response_model=LogoutResponse)
 async def logout(token: str = Depends(get_token)) -> LogoutResponse:
     """登出並清除 session"""
-    session_manager.delete_session(token)
+    await session_manager.delete_session(token)
     return LogoutResponse(success=True)
 
 
