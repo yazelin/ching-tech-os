@@ -1,7 +1,7 @@
 """Line Bot 服務
 
 處理：
-- Webhook 簽章驗證（多租戶支援）
+- Webhook 簽章驗證
 - 訊息儲存（群組+個人）
 - 群組加入/離開事件
 - NAS 檔案儲存
@@ -108,24 +108,6 @@ MIME_TO_EXTENSION = {
 
 
 # ============================================================
-# Line Bot 憑證
-# ============================================================
-
-
-def get_line_secrets() -> dict:
-    """取得 Line Bot secrets（從環境變數）
-
-    Returns:
-        包含 channel_id, channel_secret 的字典
-    """
-    return {
-        "channel_id": settings.line_channel_id,
-        "channel_secret": settings.line_channel_secret,
-        "access_token": settings.line_channel_access_token,
-    }
-
-
-# ============================================================
 # Line Bot 客戶端
 # ============================================================
 
@@ -161,7 +143,7 @@ async def get_messaging_api() -> AsyncMessagingApi:
 
 
 # ============================================================
-# Webhook 簽章驗證（多租戶支援）
+# Webhook 簽章驗證
 # ============================================================
 
 def verify_signature(body: bytes, signature: str, channel_secret: str | None = None) -> bool:

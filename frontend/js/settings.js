@@ -1,6 +1,6 @@
 /**
  * ChingTech OS - Settings Application
- * 系統設定應用程式：主題設定、偏好管理、使用者管理
+ * 系統設定應用程式：主題設定、偏好管理、使用者管理、Bot 設定
  */
 
 const SettingsApp = (function () {
@@ -44,6 +44,10 @@ const SettingsApp = (function () {
             <li class="settings-nav-item" data-section="users">
               <span class="icon">${getIcon('account-group')}</span>
               <span>使用者管理</span>
+            </li>
+            <li class="settings-nav-item" data-section="bot-settings">
+              <span class="icon">${getIcon('robot')}</span>
+              <span>Bot 設定</span>
             </li>
             ` : ''}
           </ul>
@@ -136,6 +140,16 @@ const SettingsApp = (function () {
               </div>
             </div>
           </section>
+
+          <section class="settings-section" id="section-bot-settings">
+            <h2 class="settings-section-title">Bot 設定</h2>
+            <div class="bot-settings-container">
+              <div class="users-loading">
+                <span class="icon">${getIcon('loading', 'mdi-spin')}</span>
+                <span>載入中...</span>
+              </div>
+            </div>
+          </section>
           ` : ''}
         </main>
 
@@ -149,6 +163,10 @@ const SettingsApp = (function () {
           <button class="mobile-tab-item" data-section="users">
             <span class="icon">${getIcon('account-group')}</span>
             <span class="mobile-tab-label">使用者</span>
+          </button>
+          <button class="mobile-tab-item" data-section="bot-settings">
+            <span class="icon">${getIcon('robot')}</span>
+            <span class="mobile-tab-label">Bot</span>
           </button>
           ` : ''}
         </nav>
@@ -232,6 +250,10 @@ const SettingsApp = (function () {
     // 如果切換到使用者管理，載入使用者列表
     if (sectionId === 'users') {
       loadUsersList(windowEl);
+    }
+    // 如果切換到 Bot 設定，載入設定
+    if (sectionId === 'bot-settings') {
+      loadBotSettings(windowEl);
     }
   }
 
@@ -479,6 +501,238 @@ const SettingsApp = (function () {
         alert(`更新權限失敗：${error.message}`);
       }
     });
+  }
+
+  // ============================================================
+  // Bot 設定
+  // ============================================================
+
+  // 平台設定定義
+  const BOT_PLATFORMS = {
+    line: {
+      name: 'Line Bot',
+      icon: 'message-text',
+      fields: [
+        { key: 'channel_secret', label: 'Channel Secret', type: 'password' },
+        { key: 'channel_access_token', label: 'Channel Access Token', type: 'password' },
+      ],
+    },
+    telegram: {
+      name: 'Telegram Bot',
+      icon: 'robot',
+      fields: [
+        { key: 'bot_token', label: 'Bot Token', type: 'password' },
+        { key: 'webhook_secret', label: 'Webhook Secret', type: 'password' },
+        { key: 'admin_chat_id', label: 'Admin Chat ID', type: 'text' },
+      ],
+    },
+  };
+
+  /**
+   * 載入 Bot 設定
+   * @param {HTMLElement} windowEl
+   */
+  async function loadBotSettings(windowEl) {
+    const container = windowEl.querySelector('.bot-settings-container');
+    if (!container) return;
+
+    const token = LoginModule.getToken();
+    let html = '';
+
+    for (const [platform, config] of Object.entries(BOT_PLATFORMS)) {
+      try {
+        const resp = await fetch(`/api/admin/bot-settings/${platform}`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+
+        html += renderBotPlatformCard(platform, config, data);
+      } catch (error) {
+        html += `
+          <div class="settings-group">
+            <h3 class="settings-group-title">
+              <span class="icon">${getIcon(config.icon)}</span> ${config.name}
+            </h3>
+            <div class="users-error">
+              <span class="icon">${getIcon('alert-circle')}</span>
+              <span>載入失敗：${error.message}</span>
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    container.innerHTML = html;
+    bindBotSettingsEvents(container, windowEl);
+  }
+
+  /**
+   * 渲染單一平台設定卡片
+   */
+  function renderBotPlatformCard(platform, config, data) {
+    const fields = data.fields || {};
+
+    return `
+      <div class="settings-group bot-platform-card" data-platform="${platform}">
+        <h3 class="settings-group-title">
+          <span class="icon">${getIcon(config.icon)}</span> ${config.name}
+        </h3>
+        <div class="bot-fields">
+          ${config.fields.map(field => {
+            const status = fields[field.key] || {};
+            const source = status.source || 'none';
+            const sourceLabel = source === 'database' ? '資料庫' : source === 'env' ? '環境變數' : '未設定';
+            const sourceClass = source === 'none' ? 'bot-source-none' : 'bot-source-set';
+
+            return `
+              <div class="bot-field-row">
+                <label class="bot-field-label">${field.label}</label>
+                <div class="bot-field-input-group">
+                  <input type="${field.type}" class="input bot-field-input"
+                    name="${field.key}" placeholder="${status.has_value ? status.masked_value : '未設定'}"
+                    data-platform="${platform}" data-key="${field.key}">
+                  <span class="bot-field-source ${sourceClass}" title="來源: ${sourceLabel}">${sourceLabel}</span>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+        <div class="bot-actions">
+          <button class="btn btn-primary btn-sm bot-save-btn" data-platform="${platform}">
+            <span class="icon">${getIcon('content-save')}</span> 儲存
+          </button>
+          <button class="btn btn-ghost btn-sm bot-test-btn" data-platform="${platform}">
+            <span class="icon">${getIcon('connection')}</span> 測試連線
+          </button>
+          <button class="btn btn-ghost btn-sm bot-clear-btn" data-platform="${platform}">
+            <span class="icon">${getIcon('delete')}</span> 清除
+          </button>
+        </div>
+        <div class="bot-status-msg" data-platform="${platform}"></div>
+      </div>
+    `;
+  }
+
+  /**
+   * 綁定 Bot 設定事件
+   */
+  function bindBotSettingsEvents(container, windowEl) {
+    // 儲存按鈕
+    container.querySelectorAll('.bot-save-btn').forEach(btn => {
+      btn.addEventListener('click', () => saveBotSettings(btn.dataset.platform, container, windowEl));
+    });
+
+    // 測試連線按鈕
+    container.querySelectorAll('.bot-test-btn').forEach(btn => {
+      btn.addEventListener('click', () => testBotConnection(btn.dataset.platform, container));
+    });
+
+    // 清除按鈕
+    container.querySelectorAll('.bot-clear-btn').forEach(btn => {
+      btn.addEventListener('click', () => clearBotSettings(btn.dataset.platform, container, windowEl));
+    });
+  }
+
+  /**
+   * 顯示 Bot 設定狀態訊息
+   */
+  function showBotStatus(container, platform, message, isError = false) {
+    const el = container.querySelector(`.bot-status-msg[data-platform="${platform}"]`);
+    if (el) {
+      el.textContent = message;
+      el.className = `bot-status-msg ${isError ? 'bot-status-error' : 'bot-status-success'}`;
+      setTimeout(() => { el.textContent = ''; el.className = 'bot-status-msg'; }, 5000);
+    }
+  }
+
+  /**
+   * 儲存 Bot 設定
+   */
+  async function saveBotSettings(platform, container, windowEl) {
+    const inputs = container.querySelectorAll(`.bot-field-input[data-platform="${platform}"]`);
+    const credentials = {};
+    inputs.forEach(input => {
+      if (input.value.trim()) {
+        credentials[input.dataset.key] = input.value.trim();
+      }
+    });
+
+    if (Object.keys(credentials).length === 0) {
+      showBotStatus(container, platform, '請至少填入一個欄位', true);
+      return;
+    }
+
+    try {
+      const token = LoginModule.getToken();
+      const resp = await fetch(`/api/admin/bot-settings/${platform}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(credentials),
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json();
+        throw new Error(err.detail || '儲存失敗');
+      }
+
+      showBotStatus(container, platform, '設定已儲存');
+      // 清空輸入欄位並重新載入
+      inputs.forEach(input => { input.value = ''; });
+      loadBotSettings(windowEl);
+    } catch (error) {
+      showBotStatus(container, platform, `儲存失敗：${error.message}`, true);
+    }
+  }
+
+  /**
+   * 測試 Bot 連線
+   */
+  async function testBotConnection(platform, container) {
+    showBotStatus(container, platform, '測試中...');
+
+    try {
+      const token = LoginModule.getToken();
+      const resp = await fetch(`/api/admin/bot-settings/${platform}/test`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+
+      const data = await resp.json();
+      showBotStatus(container, platform, data.message, !data.success);
+    } catch (error) {
+      showBotStatus(container, platform, `測試失敗：${error.message}`, true);
+    }
+  }
+
+  /**
+   * 清除 Bot 設定
+   */
+  async function clearBotSettings(platform, container, windowEl) {
+    const platformName = BOT_PLATFORMS[platform]?.name || platform;
+    if (!confirm(`確定要清除 ${platformName} 的資料庫設定？\n清除後將使用環境變數的設定。`)) {
+      return;
+    }
+
+    try {
+      const token = LoginModule.getToken();
+      const resp = await fetch(`/api/admin/bot-settings/${platform}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+
+      if (!resp.ok) throw new Error('清除失敗');
+
+      const data = await resp.json();
+      showBotStatus(container, platform, `已清除 ${data.deleted} 筆設定`);
+      loadBotSettings(windowEl);
+    } catch (error) {
+      showBotStatus(container, platform, `清除失敗：${error.message}`, true);
+    }
   }
 
   /**

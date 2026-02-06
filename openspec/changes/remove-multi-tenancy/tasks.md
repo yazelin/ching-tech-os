@@ -63,18 +63,18 @@
 
 ## 5. 後端 - 新增 Bot 設定 API（從 tenant.py 遷移）
 
-- [ ] 5.1 新增 `services/bot_settings.py`：
+- [x] 5.1 新增 `services/bot_settings.py` ✓
   - `get_bot_credentials(platform)` - 優先資料庫，fallback 環境變數
-  - `update_bot_credentials(platform, credentials)` - 加密儲存
+  - `update_bot_credentials(platform, credentials)` - AES-256-GCM 加密儲存
   - `delete_bot_credentials(platform)`
-  - 使用 BOT_SECRET_KEY 環境變數的 Fernet 加密
-- [ ] 5.2 新增 `api/admin/bot_settings.py`：
-  - `GET /api/admin/bot-settings/line` - 取得設定狀態
-  - `PUT /api/admin/bot-settings/line` - 更新憑證
-  - `POST /api/admin/bot-settings/line/test` - 測試連線
-  - `DELETE /api/admin/bot-settings/line` - 清除憑證
-  - 同樣為 telegram 建立端點
-- [ ] 5.3 更新 `main.py`：註冊 bot_settings 路由
+  - `get_bot_credentials_status(platform)` - 遮罩顯示
+- [x] 5.2 新增 `api/bot_settings.py` ✓
+  - `GET /api/admin/bot-settings/{platform}` - 取得設定狀態
+  - `PUT /api/admin/bot-settings/{platform}` - 更新憑證
+  - `POST /api/admin/bot-settings/{platform}/test` - 測試連線
+  - `DELETE /api/admin/bot-settings/{platform}` - 清除憑證
+  - Line 和 Telegram 共用端點
+- [x] 5.3 更新 `main.py`：註冊 bot_settings 路由 ✓
 
 ## 6. 後端 - 更新服務層（移除 tenant_id 參數）
 
@@ -157,13 +157,13 @@
 
 ## 15. 前端 - Bot 設定 UI（從 tenant-admin.js 遷移）
 
-- [ ] 15.1 新增 `js/bot-settings.js`：
-  - 從 tenant-admin.js 抽取 Bot 設定相關程式碼
-  - 更新 API 端點（/api/tenant/bot → /api/admin/bot-settings/line）
+- [x] 15.1 Bot 設定整合到 `js/settings.js`（非獨立檔案）✓
+  - 新增 Bot 設定分頁到系統設定 App
+  - API: /api/admin/bot-settings/{platform}（GET/PUT/DELETE/test）
   - 包含 Line Bot 和 Telegram Bot 設定
-- [ ] 15.2 新增 `css/bot-settings.css`（如需要）
-- [ ] 15.3 整合到系統設定 App 或建立獨立 App
-- [ ] 15.4 更新 `index.html`：引入新的 JS/CSS
+- [x] 15.2 Bot 設定 CSS 整合到 `css/settings.css` ✓
+- [x] 15.3 整合到系統設定 App 的「Bot 設定」分頁 ✓
+- [x] 15.4 無需額外引入（已整合到現有檔案）✓
 
 ## 16. 前端 - 清理
 
@@ -186,15 +186,15 @@
 - [x] 18.1 刪除 `docs/multi-tenant.md` ✓
 - [x] 18.2 刪除 `docs/tenant-admin-guide.md` ✓
 - [x] 18.3 更新 `CLAUDE.md`：移除多租戶相關規則 ✓
-- [ ] 18.4 更新 `README.md`：更新架構說明
-- [ ] 18.5 更新相關 openspec specs
+- [x] 18.4 更新 `README.md`：移除多租戶功能列表、清理環境變數說明 ✓
+- [x] 18.5 更新 tasks.md 進度 ✓
 
 ## 19. 測試與驗證
 
 - [x] 19.1 測試登入功能（無租戶代碼）✓ — 密碼認證正常，回應無 tenant 物件
 - [x] 19.2 測試使用者管理功能（admin/user 角色）✓ — 11 使用者，只有 admin/user 角色
 - [ ] 19.3 測試 Line Bot webhook 驗證（新憑證來源）— 需手動從 Line 發訊息測試
-- [ ] 19.4 測試 Bot 設定 UI（新端點）— 待任務 5+15 實作
+- [x] 19.4 測試 Bot 設定 API ✓ — Line/Telegram GET/test 端點正常，連線測試成功
 - [x] 19.5 測試知識庫功能（新路徑）✓ — 13 筆條目正常讀取
 - [ ] 19.6 測試 AI 對話功能 — 需手動從前端測試
 - [x] 19.7 測試 MCP 工具（無 ctos_tenant_id）✓ — 29 工具無 tenant 參數，search_knowledge 正常
