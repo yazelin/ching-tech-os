@@ -34,8 +34,6 @@
   <link rel="stylesheet" href="css/share-dialog.css">
   <link rel="stylesheet" href="css/share-manager.css">
   <link rel="stylesheet" href="css/memory-manager.css">
-  <link rel="stylesheet" href="css/tenant-admin.css">
-  <link rel="stylesheet" href="css/platform-admin.css">
 
   <!-- xterm.js -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css">
@@ -57,14 +55,6 @@
       </div>
 
       <div class="header-right">
-        <!-- Tenant Info (多租戶模式顯示) -->
-        <div class="header-tenant" id="headerTenant" style="display: none;">
-          <span class="icon" id="iconTenant"></span>
-          <span id="headerTenantName" class="header-tenant-name">租戶</span>
-        </div>
-
-        <div class="header-divider header-tenant-divider" id="tenantDivider" style="display: none;"></div>
-
         <!-- System Time -->
         <div class="header-time">
           <span class="icon" id="iconClock"></span>
@@ -113,7 +103,6 @@
   <script src="js/file-utils.js"></script>
   <script src="js/path-utils.js"></script>
   <script src="js/login.js"></script>
-  <script src="js/tenant-context.js"></script>
   <script src="js/header.js"></script>
   <script src="js/window.js"></script>
   <script src="js/notification.js"></script>
@@ -141,8 +130,6 @@
   <script src="js/share-dialog.js"></script>
   <script src="js/share-manager.js"></script>
   <script src="js/memory-manager.js"></script>
-  <script src="js/tenant-admin.js"></script>
-  <script src="js/platform-admin.js"></script>
   <script src="js/desktop.js"></script>
   <script>
     // 初始化 Header icons
@@ -150,7 +137,6 @@
     document.getElementById('iconMessages').innerHTML = getIcon('bell-outline');
     document.getElementById('iconUser').innerHTML = getIcon('account-circle');
     document.getElementById('iconLogout').innerHTML = getIcon('logout');
-    document.getElementById('iconTenant').innerHTML = getIcon('office-building');
   </script>
   <script>
     // Initialize desktop when DOM is ready
@@ -167,9 +153,6 @@
         window.location.href = 'login.html';
         return;
       }
-
-      // 載入租戶資訊
-      await TenantContext.init();
 
       // 載入使用者資訊（包含權限）
       await PermissionsModule.init();

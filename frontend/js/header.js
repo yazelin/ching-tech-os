@@ -94,43 +94,6 @@ const HeaderModule = (function() {
   }
 
   /**
-   * Display tenant information in header (if available)
-   */
-  function displayTenantInfo() {
-    const tenantElement = document.getElementById('headerTenant');
-    const tenantNameElement = document.getElementById('headerTenantName');
-    const tenantDivider = document.getElementById('tenantDivider');
-
-    if (!tenantElement || !tenantNameElement) return;
-
-    // 檢查是否有租戶資訊
-    if (typeof TenantContext !== 'undefined' && TenantContext.hasTenant()) {
-      const tenantName = TenantContext.getTenantName();
-      if (tenantName) {
-        tenantNameElement.textContent = tenantName;
-        tenantElement.style.display = '';
-        if (tenantDivider) tenantDivider.style.display = '';
-        return;
-      }
-    }
-
-    // 嘗試從 LoginModule 取得
-    if (typeof LoginModule !== 'undefined') {
-      const tenant = LoginModule.getTenant();
-      if (tenant && tenant.name) {
-        tenantNameElement.textContent = tenant.name;
-        tenantElement.style.display = '';
-        if (tenantDivider) tenantDivider.style.display = '';
-        return;
-      }
-    }
-
-    // 隱藏租戶區塊
-    tenantElement.style.display = 'none';
-    if (tenantDivider) tenantDivider.style.display = 'none';
-  }
-
-  /**
    * Handle user name click - open profile window
    */
   function handleUserNameClick() {
@@ -195,9 +158,6 @@ const HeaderModule = (function() {
 
     // Display username
     displayUsername();
-
-    // Display tenant info
-    displayTenantInfo();
 
     // Attach logout handler
     const logoutBtn = document.getElementById('logoutBtn');

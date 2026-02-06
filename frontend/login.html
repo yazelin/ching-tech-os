@@ -31,22 +31,6 @@
         <!-- Error Message -->
         <div class="login-error" id="loginError"></div>
 
-        <!-- Tenant Code Field (多租戶模式顯示) -->
-        <div class="form-group" id="tenantCodeGroup" style="display: none;">
-          <label for="tenantCode">公司代碼</label>
-          <div class="input-icon">
-            <input
-              type="text"
-              id="tenantCode"
-              name="tenantCode"
-              class="input"
-              placeholder="請輸入公司代碼"
-              autocomplete="organization"
-            >
-            <span class="icon" id="iconDomain"></span>
-          </div>
-        </div>
-
         <!-- Username Field -->
         <div class="form-group">
           <label for="username">使用者名稱</label>
@@ -107,7 +91,6 @@
     document.getElementById('iconAccount').innerHTML = getIcon('account');
     document.getElementById('iconLock').innerHTML = getIcon('lock');
     document.getElementById('iconLogin').innerHTML = getIcon('login');
-    document.getElementById('iconDomain').innerHTML = getIcon('domain');
     document.getElementById('copyrightYear').textContent = new Date().getFullYear();
 
     // 主題切換按鈕
@@ -126,25 +109,6 @@
       updateThemeIcon();
     });
 
-    // 檢查多租戶模式
-    (async function checkMultiTenantMode() {
-      try {
-        const response = await fetch('/api/config/tenant-mode');
-        if (response.ok) {
-          const data = await response.json();
-          if (data.multi_tenant_mode) {
-            document.getElementById('tenantCodeGroup').style.display = '';
-            // 從 URL 參數或 localStorage 讀取上次使用的租戶代碼，預設為 chingtech
-            const urlParams = new URLSearchParams(window.location.search);
-            const tenantCode = urlParams.get('tenant') || localStorage.getItem('chingtech_last_tenant') || 'default';
-            document.getElementById('tenantCode').value = tenantCode;
-          }
-        }
-      } catch (e) {
-        // 單租戶模式或伺服器不可用，隱藏租戶代碼欄位
-        console.log('[Login] Running in single-tenant mode');
-      }
-    })();
   </script>
 </body>
 </html>

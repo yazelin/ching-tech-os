@@ -403,16 +403,6 @@
   font-weight: 500;
 }
 
-.role-badge.role-platform_admin {
-  background-color: rgba(156, 39, 176, 0.2);
-  color: #ce93d8;
-}
-
-.role-badge.role-tenant_admin {
-  background-color: rgba(255, 152, 0, 0.2);
-  color: #ffb74d;
-}
-
 .role-badge.role-user {
   background-color: var(--bg-surface-dark);
   color: var(--text-secondary);
