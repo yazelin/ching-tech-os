@@ -6,8 +6,8 @@ SMB 密碼以 AES-256-GCM 加密儲存。
 
 import asyncio
 import logging
+import time
 import uuid as uuid_lib
-from datetime import datetime, timedelta
 from typing import Optional
 
 from ..config import settings
@@ -17,16 +17,51 @@ from ..utils.crypto import encrypt_credential, decrypt_credential
 
 logger = logging.getLogger(__name__)
 
+# Session cache TTL（秒）— 減少高頻 DB 查詢
+_CACHE_TTL = 30
+
+
+class _SessionCache:
+    """簡易 TTL cache（不需外部套件）
+
+    儲存 token → (SessionData, expire_time) 的對應。
+    """
+
+    def __init__(self, ttl: int = _CACHE_TTL):
+        self._store: dict[str, tuple[SessionData, float]] = {}
+        self._ttl = ttl
+
+    def get(self, token: str) -> SessionData | None:
+        entry = self._store.get(token)
+        if entry is None:
+            return None
+        data, expire_at = entry
+        if time.monotonic() > expire_at:
+            del self._store[token]
+            return None
+        return data
+
+    def set(self, token: str, data: SessionData) -> None:
+        self._store[token] = (data, time.monotonic() + self._ttl)
+
+    def delete(self, token: str) -> None:
+        self._store.pop(token, None)
+
+    def clear(self) -> None:
+        self._store.clear()
+
 
 class SessionManager:
     """Session 管理器（PostgreSQL 持久化）
 
     將 session 資料儲存於 PostgreSQL sessions 表，
     SMB 密碼以 AES-256-GCM 加密。
+    get_session 搭配 TTL cache 減少 DB 查詢次數。
     """
 
     def __init__(self):
         self._cleanup_task: asyncio.Task | None = None
+        self._cache = _SessionCache()
 
     async def create_session(
         self,
@@ -51,7 +86,6 @@ class SessionManager:
             session token (UUID)
         """
         token = str(uuid_lib.uuid4())
-        expires_at = datetime.now() + timedelta(hours=settings.session_ttl_hours)
 
         # 加密密碼
         password_enc = encrypt_credential(password) if password else ""
@@ -60,7 +94,7 @@ class SessionManager:
             await conn.execute(
                 """
                 INSERT INTO sessions (token, user_id, username, password_enc, nas_host, role, app_permissions, expires_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, NOW() + $8 * INTERVAL '1 hour')
                 """,
                 token,
                 user_id,
@@ -69,7 +103,7 @@ class SessionManager:
                 nas_host or settings.nas_host,
                 role,
                 app_permissions or {},
-                expires_at,
+                float(settings.session_ttl_hours),
             )
 
         return token
@@ -77,19 +111,27 @@ class SessionManager:
     async def get_session(self, token: str) -> Optional[SessionData]:
         """取得 session 資料
 
+        優先從 TTL cache 取得，cache miss 時查 DB 並更新 last_accessed_at。
+
         Args:
             token: session token
 
         Returns:
             SessionData 或 None（若不存在或已過期）
         """
+        # 先查 cache
+        cached = self._cache.get(token)
+        if cached is not None:
+            return cached
+
+        # Cache miss → 查 DB 並更新 last_accessed_at
         async with get_connection() as conn:
             row = await conn.fetchrow(
                 """
-                SELECT username, password_enc, nas_host, user_id,
-                       created_at, expires_at, role, app_permissions
-                FROM sessions
+                UPDATE sessions SET last_accessed_at = NOW()
                 WHERE token = $1 AND expires_at > NOW()
+                RETURNING username, password_enc, nas_host, user_id,
+                          created_at, expires_at, role, app_permissions
                 """,
                 token,
             )
@@ -100,7 +142,7 @@ class SessionManager:
         # 解密密碼
         password = decrypt_credential(row["password_enc"]) if row["password_enc"] else ""
 
-        return SessionData(
+        session = SessionData(
             username=row["username"],
             password=password,
             nas_host=row["nas_host"],
@@ -111,6 +153,10 @@ class SessionManager:
             app_permissions=row["app_permissions"] or {},
         )
 
+        # 寫入 cache
+        self._cache.set(token, session)
+        return session
+
     async def delete_session(self, token: str) -> bool:
         """刪除 session
 
@@ -120,6 +166,7 @@ class SessionManager:
         Returns:
             是否成功刪除
         """
+        self._cache.delete(token)
         async with get_connection() as conn:
             result = await conn.execute(
                 "DELETE FROM sessions WHERE token = $1",

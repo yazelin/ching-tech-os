@@ -96,7 +96,8 @@ async def nas_connect(
     Token 預設有效期為 30 分鐘，操作時會自動延長。
     """
     try:
-        token = nas_connection_manager.create_connection(
+        token = await run_in_smb_pool(
+            nas_connection_manager.create_connection,
             host=request.host,
             username=request.username,
             password=request.password,
