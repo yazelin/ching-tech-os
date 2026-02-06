@@ -26,7 +26,7 @@ from ..linebot import (
     save_file_record,
     verify_binding_code,
 )
-from ..mcp_server import get_mcp_tool_names
+from ..mcp import get_mcp_tool_names
 from ..permissions import get_mcp_tools_for_user, get_user_app_permissions_sync
 from ..user import get_user_role_and_permissions
 from .media import download_telegram_document, download_telegram_photo

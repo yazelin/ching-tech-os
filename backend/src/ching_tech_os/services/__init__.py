@@ -49,7 +49,7 @@ from ching_tech_os.services.knowledge import (
     KnowledgeNotFoundError,
 )
 
-from ching_tech_os.services.mcp_server import (
+from ching_tech_os.services.mcp import (
     get_mcp_tools,
     get_mcp_tool_names,
     execute_tool,

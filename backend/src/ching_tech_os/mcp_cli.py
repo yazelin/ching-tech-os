@@ -5,7 +5,7 @@
   uv run python -m ching_tech_os.mcp_cli
 """
 
-from ching_tech_os.services.mcp_server import mcp
+from ching_tech_os.services.mcp import mcp
 
 if __name__ == "__main__":
     mcp.run()

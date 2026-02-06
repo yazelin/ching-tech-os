@@ -120,7 +120,7 @@ async def auto_prepare_generated_images(
     logger.info(f"自動處理未發送的生成圖片: {unprocessed_files}")
 
     # 呼叫 prepare_file_message 處理未發送的圖片
-    from .mcp_server import prepare_file_message
+    from .mcp.nas_tools import prepare_file_message
 
     file_messages = []
     for file_path in unprocessed_files:
@@ -492,7 +492,7 @@ async def process_message_with_ai(
             user_message = f"[回覆 {sender} 的訊息：「{quoted_text}」]\n{user_message}"
 
         # MCP 工具列表（動態取得）
-        from .mcp_server import get_mcp_tool_names
+        from .mcp import get_mcp_tool_names
         mcp_tools = await get_mcp_tool_names(exclude_group_only=not is_group)
 
         # 過濾 MCP 工具（根據使用者權限，使用前面已取得的 user_role 和 user_permissions）
@@ -602,7 +602,7 @@ async def process_message_with_ai(
                 if fallback_path:
                     # Fallback 成功，準備圖片訊息
                     logger.info(f"Fallback 成功 ({service_used}): {fallback_path}")
-                    from .mcp_server import prepare_file_message
+                    from .mcp.nas_tools import prepare_file_message
                     file_msg = await prepare_file_message(fallback_path)
 
                     # 加入 fallback 通知
