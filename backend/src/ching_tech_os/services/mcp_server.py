@@ -1106,7 +1106,7 @@ async def search_nas_files(
 
     # 此工具搜尋的是公司共用區，不是租戶隔離區
     # 公司共用檔案
-        from pathlib import Path
+    from pathlib import Path
     from ..config import settings
 
     # 搜尋來源定義（shared zone 的子來源）
@@ -1307,7 +1307,7 @@ async def get_nas_file_info(
     if not allowed:
         return f"❌ {error_msg}"
 
-        from pathlib import Path
+    from pathlib import Path
     from .share import validate_nas_file_path, NasFileNotFoundError, NasFileAccessDenied
 
     # 統一使用 validate_nas_file_path 進行路徑驗證（支援 shared://projects/...、shared://circuits/... 等）
@@ -1393,7 +1393,7 @@ async def read_document(
         return f"❌ {error_msg}"
 
     # 支援 CTOS zone 和 SHARED zone
-        from pathlib import Path
+    from pathlib import Path
     from ..config import settings
     from . import document_reader
     from .path_manager import path_manager, StorageZone

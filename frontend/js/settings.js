@@ -9,6 +9,13 @@ const SettingsApp = (function () {
   const APP_ID = 'settings';
   let currentWindowId = null;
 
+  /** HTML 特殊字元跳脫 */
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
   // 應用程式名稱對照
   const APP_NAMES = {
     'file-manager': '檔案管理',
@@ -282,7 +289,7 @@ const SettingsApp = (function () {
       container.innerHTML = `
         <div class="users-error">
           <span class="icon">${getIcon('alert-circle')}</span>
-          <span>載入使用者列表失敗：${error.message}</span>
+          <span>載入使用者列表失敗：${escapeHtml(error.message)}</span>
         </div>
       `;
     }
@@ -290,9 +297,10 @@ const SettingsApp = (function () {
 
   /**
    * 檢查是否可以管理目標使用者
-   * 權限階層：admin > user
+   * 前端刻意隱藏 admin 對 admin 的操作按鈕，避免管理員互相修改權限。
+   * 後端 API 仍允許 admin 管理其他 admin（以備特殊需求）。
    * @param {string} targetRole - 目標使用者角色
-   * @returns {boolean} - 管理員可以管理非管理員使用者
+   * @returns {boolean}
    */
   function canManageUser(targetRole) {
     return targetRole !== 'admin';
@@ -335,18 +343,21 @@ const SettingsApp = (function () {
             const roleIcon = userRole === 'admin' ? 'shield-crown' : '';
             const roleClass = userRole === 'admin' ? 'user-admin-badge' : '';
 
+            const safeUsername = escapeHtml(user.username);
+            const safeDisplayName = escapeHtml(user.display_name || '-');
+
             return `
               <tr data-user-id="${user.id}">
                 <td>
                   ${roleIcon ? `<span class="${roleClass} icon" title="${getRoleDisplay(userRole)}">${getIcon(roleIcon)}</span>` : ''}
-                  ${user.username}
+                  ${safeUsername}
                 </td>
-                <td>${user.display_name || '-'}</td>
+                <td>${safeDisplayName}</td>
                 <td><span class="role-badge role-${userRole}">${getRoleDisplay(userRole)}</span></td>
                 <td>${user.last_login_at ? new Date(user.last_login_at).toLocaleString('zh-TW') : '-'}</td>
                 <td>
                   ${canManage_
-                    ? `<button class="btn btn-ghost btn-sm user-permissions-btn" data-user-id="${user.id}" data-username="${user.username}">
+                    ? `<button class="btn btn-ghost btn-sm user-permissions-btn" data-user-id="${user.id}" data-username="${safeUsername}">
                         <span class="icon">${getIcon('shield-edit')}</span> 設定權限
                        </button>`
                     : `<span class="user-admin-label">${getRoleDisplay(userRole)}</span>`

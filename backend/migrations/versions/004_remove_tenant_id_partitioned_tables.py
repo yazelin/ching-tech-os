@@ -58,5 +58,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # 不支援回滾
-    pass
+    raise NotImplementedError("這是破壞性 migration，無法 downgrade。請從備份還原。")

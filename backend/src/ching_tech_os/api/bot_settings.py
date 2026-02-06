@@ -63,6 +63,21 @@ class TelegramBotCredentials(BaseModel):
     admin_chat_id: str = ""
 
 
+class UpdateBotSettingsRequest(BaseModel):
+    """更新 Bot 設定請求（通用，允許任意欄位組合）"""
+    channel_secret: str | None = None
+    channel_access_token: str | None = None
+    bot_token: str | None = None
+    webhook_secret: str | None = None
+    admin_chat_id: str | None = None
+
+
+class UpdateBotSettingsResponse(BaseModel):
+    """更新回應"""
+    success: bool
+    message: str
+
+
 class FieldStatus(BaseModel):
     """欄位狀態"""
     has_value: bool
@@ -102,22 +117,22 @@ async def get_settings_status(
     return await get_bot_credentials_status(platform)
 
 
-@router.put("/{platform}")
+@router.put("/{platform}", response_model=UpdateBotSettingsResponse)
 async def update_settings(
     platform: str,
-    body: dict,
+    body: UpdateBotSettingsRequest,
     session: SessionData = Depends(require_admin),
 ):
     """更新 Bot 憑證"""
     _validate_platform(platform)
 
-    # 過濾空值（不更新空字串的欄位）
-    credentials = {k: v for k, v in body.items() if v}
+    # 過濾 None 和空字串（只更新有值的欄位）
+    credentials = {k: v for k, v in body.model_dump(exclude_none=True).items() if v}
     if not credentials:
         raise HTTPException(status_code=400, detail="至少需要一個非空欄位")
 
     await update_bot_credentials(platform, credentials)
-    return {"success": True, "message": f"{platform} 設定已更新"}
+    return UpdateBotSettingsResponse(success=True, message=f"{platform} 設定已更新")
 
 
 @router.delete("/{platform}", response_model=BotSettingsDeleteResponse)
