@@ -332,8 +332,8 @@ async def get_public_attachment(token: str, path: str) -> Response:
             # 將 local/ 轉換為 assets/
             assets_path = "assets/" + path[len("local/"):]
 
-            # 讀取本機檔案
-            assets_base = FilePath(settings.knowledge_local_path)
+            # 讀取本機檔案（assets 儲存在 knowledge_data_path）
+            assets_base = FilePath(settings.knowledge_data_path)
             file_path = assets_base / assets_path
 
             if not file_path.exists():
