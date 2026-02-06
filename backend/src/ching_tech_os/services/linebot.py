@@ -2003,45 +2003,6 @@ async def update_group_settings(
         return result == "UPDATE 1"
 
 
-def is_bind_tenant_command(text: str) -> tuple[bool, str | None]:
-    """
-    已棄用：單一租戶模式下不需要綁定租戶指令
-
-    此函數保留以維持向後相容性，永遠返回 False。
-    """
-    return False, None
-
-
-def _legacy_is_bind_tenant_command(text: str) -> tuple[bool, str | None]:
-    """
-    檢查是否為綁定租戶指令（已棄用的內部邏輯）
-
-    支援格式：
-    - /綁定 公司代碼
-    - /bind 公司代碼
-
-    Args:
-        text: 訊息文字
-
-    Returns:
-        (是否為綁定指令, 租戶代碼)
-    """
-    if not text:
-        return False, None
-
-    text = text.strip()
-
-    # 支援 /綁定 和 /bind 指令
-    for prefix in ["/綁定 ", "/綁定", "/bind ", "/bind"]:
-        if text.lower().startswith(prefix.lower()):
-            code = text[len(prefix):].strip()
-            if code:
-                return True, code
-            return True, None
-
-    return False, None
-
-
 async def list_users_with_binding(
     platform_type: str | None = None,
     limit: int = 50,
