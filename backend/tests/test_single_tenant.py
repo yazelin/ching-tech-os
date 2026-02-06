@@ -70,21 +70,19 @@ class TestSimplifiedRoles:
 class TestBotSettings:
     """Bot 憑證設定（需要新建 bot_settings.py）"""
 
-    @pytest.mark.asyncio
-    async def test_get_line_credentials_from_db(self):
-        """從 bot_settings 表讀取 Line 憑證"""
-        try:
-            from ching_tech_os.services.bot_settings import get_line_credentials
-        except ImportError:
-            pytest.skip("bot_settings module not yet created")
-
-    @pytest.mark.asyncio
-    async def test_get_telegram_credentials_from_db(self):
-        """從 bot_settings 表讀取 Telegram 憑證"""
-        try:
-            from ching_tech_os.services.bot_settings import get_telegram_credentials
-        except ImportError:
-            pytest.skip("bot_settings module not yet created")
+    def test_bot_settings_module_exists(self):
+        """bot_settings 模組應存在且可正常匯入"""
+        from ching_tech_os.services.bot_settings import (
+            get_line_credentials,
+            get_telegram_credentials,
+            get_bot_credentials,
+            update_bot_credentials,
+            delete_bot_credentials,
+            get_bot_credentials_status,
+            SUPPORTED_PLATFORMS,
+        )
+        assert "line" in SUPPORTED_PLATFORMS
+        assert "telegram" in SUPPORTED_PLATFORMS
 
 
 # ============================================================
@@ -169,20 +167,19 @@ class TestMcpToolsNoTenantId:
 
     def test_mcp_tools_signature(self):
         """檢查 MCP 工具函數簽名不包含 ctos_tenant_id"""
-        # 這個測試會在 mcp_server.py 修改後通過
-        try:
-            from ching_tech_os.services.mcp_server import mcp
-            import inspect
+        from ching_tech_os.services.mcp_server import mcp
+        import inspect
 
-            # 取得所有工具
-            for tool_name, tool_func in mcp._tools.items():
-                sig = inspect.signature(tool_func)
-                params = list(sig.parameters.keys())
+        # 取得所有工具
+        tools = mcp._tool_manager._tools
+        assert len(tools) > 0, "應有至少一個 MCP 工具"
 
-                assert 'ctos_tenant_id' not in params, \
-                    f"Tool {tool_name} should not have ctos_tenant_id param"
-        except Exception:
-            pytest.skip("MCP tools not yet modified")
+        for tool_name, tool in tools.items():
+            sig = inspect.signature(tool.fn)
+            params = list(sig.parameters.keys())
+
+            assert 'ctos_tenant_id' not in params, \
+                f"Tool {tool_name} should not have ctos_tenant_id param"
 
 
 # ============================================================

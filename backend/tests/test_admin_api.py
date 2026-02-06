@@ -5,12 +5,9 @@
 - 管理員可以正常存取
 - 權限更新功能
 
-注意：由於移除多租戶架構，部分 API 需要重構，暫時跳過
 """
 
 import pytest
-
-pytestmark = pytest.mark.skip(reason="移除多租戶架構後，API 需要重構")
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, patch
 from uuid import UUID
@@ -249,18 +246,17 @@ class TestUserApi:
             assert data["is_admin"] is False
 
     def test_admin_user_has_full_permissions(self):
-        """平台管理員應有完整權限"""
-        mock_platform_admin = {**MOCK_ADMIN_USER, "role": "platform_admin"}
+        """管理員應有完整權限"""
         with patch("ching_tech_os.api.user.get_user_by_username", new_callable=AsyncMock) as mock_get:
-            mock_get.return_value = mock_platform_admin
+            mock_get.return_value = MOCK_ADMIN_USER
 
-            self.app.dependency_overrides[get_current_session] = create_session_override("admin", role="platform_admin")
+            self.app.dependency_overrides[get_current_session] = create_session_override("admin", role="admin")
             client = TestClient(self.app)
 
             response = client.get("/api/user/me")
             assert response.status_code == 200
             data = response.json()
             assert data["is_admin"] is True
-            # 平台管理員應有所有應用程式權限
+            # 管理員應有所有應用程式權限
             assert data["permissions"]["apps"]["terminal"] is True
             assert data["permissions"]["apps"]["code-editor"] is True

@@ -5,12 +5,9 @@
 - 編輯/刪除權限檢查
 - 個人知識只有擁有者可操作
 
-注意：移除多租戶架構後，部分權限邏輯需要重構
 """
 
 import pytest
-
-pytestmark = pytest.mark.skip(reason="移除多租戶架構後，權限邏輯需要重構")
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, patch, MagicMock
 from fastapi import FastAPI
