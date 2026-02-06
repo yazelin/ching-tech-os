@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
+from uuid import UUID
 
 
 class PlatformType(str, Enum):
@@ -51,8 +52,8 @@ class BotContext:
     platform_type: PlatformType
     conversation_type: ConversationType
     # 內部 UUID（資料庫中的 ID）
-    user_uuid: str | None = None
-    group_uuid: str | None = None
+    user_uuid: UUID | None = None
+    group_uuid: UUID | None = None
     # 平台原生 ID
     platform_user_id: str | None = None
     platform_group_id: str | None = None
@@ -60,7 +61,7 @@ class BotContext:
     user_display_name: str | None = None
     ctos_user_id: int | None = None
     # 訊息資訊
-    message_uuid: str | None = None
+    message_uuid: UUID | None = None
     # 平台特定資料（如 Line 的 reply_token、quoted_message_id）
     platform_data: dict = field(default_factory=dict)
 

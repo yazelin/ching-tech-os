@@ -30,6 +30,7 @@ from ching_tech_os.models.knowledge import (
     TagsResponse,
     VersionResponse,
 )
+from ching_tech_os.database import get_connection
 from ching_tech_os.services.local_file import (
     LocalFileService,
     LocalFileError,
@@ -703,11 +704,22 @@ def delete_knowledge(kb_id: str) -> None:
 
 
 async def get_all_tags() -> TagsResponse:
-    """取得所有標籤"""
+    """取得所有標籤（專案從資料庫動態載入）"""
     index = _load_index()
 
-    # 保留 "common" 作為通用專案選項
-    all_projects = ["common"]
+    # 從資料庫取得活躍專案列表
+    try:
+        async with get_connection() as conn:
+            rows = await conn.fetch(
+                "SELECT name FROM projects WHERE status = 'active' ORDER BY name"
+            )
+            db_projects = [row["name"] for row in rows]
+    except Exception as e:
+        logger.error(f"從資料庫取得專案列表失敗: {e}")
+        db_projects = []
+
+    # 合併資料庫專案，保留 "common" 作為通用選項
+    all_projects = sorted(set(db_projects + ["common"]))
 
     return TagsResponse(
         projects=all_projects,
