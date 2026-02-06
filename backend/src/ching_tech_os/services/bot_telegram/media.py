@@ -8,7 +8,7 @@ from datetime import datetime
 
 from telegram import Bot, Message
 
-from ..linebot import save_file_record, save_to_nas
+from ..bot_line import save_file_record, save_to_nas
 
 logger = logging.getLogger("bot_telegram.media")
 

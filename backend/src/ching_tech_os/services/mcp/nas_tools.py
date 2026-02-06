@@ -581,7 +581,7 @@ async def send_nas_file(
                 return f"無法直接發送（{e2}），以下是下載連結：\n{result.full_url}\n（24 小時內有效）"
 
     # === Line 發送 ===
-    from ..linebot import push_image, push_text
+    from ..bot_line import push_image, push_text
 
     # 決定發送目標（優先使用群組 ID）
     # line_group_id 是內部 UUID，需要轉換為 Line group ID

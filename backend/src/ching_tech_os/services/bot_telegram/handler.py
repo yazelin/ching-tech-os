@@ -20,7 +20,7 @@ from ..linebot_ai import (
     get_conversation_context,
     log_linebot_ai_call,
 )
-from ..linebot import (
+from ..bot_line import (
     check_line_access,
     is_binding_code_format,
     save_file_record,
@@ -306,13 +306,13 @@ async def _get_reply_context(message, bot=None) -> str:
     nas_path = row["nas_path"]
 
     if msg_type == "image" and nas_path:
-        from ..linebot import ensure_temp_image
+        from ..bot_line import ensure_temp_image
         temp_path = await ensure_temp_image(reply_msg_id, nas_path)
         if temp_path:
             return f"[回覆圖片: {temp_path}]\n"
 
     if msg_type == "file" and nas_path and row["file_name"]:
-        from ..linebot import ensure_temp_file
+        from ..bot_line import ensure_temp_file
         from ..bot.media import is_readable_file
         if is_readable_file(row["file_name"]):
             temp_path = await ensure_temp_file(
@@ -562,7 +562,7 @@ async def _handle_media(
 
     # 組裝 AI 提示
     if msg_type == "image":
-        from ..linebot import ensure_temp_image
+        from ..bot_line import ensure_temp_image
         temp_path = await ensure_temp_image(
             f"tg_{message.message_id}", nas_path
         )
@@ -576,7 +576,7 @@ async def _handle_media(
             await adapter.send_text(chat_id, "圖片處理失敗。")
             return
     else:
-        from ..linebot import ensure_temp_file
+        from ..bot_line import ensure_temp_file
         from ..bot.media import is_readable_file
         file_name = message.document.file_name or "unknown"
         if is_readable_file(file_name):

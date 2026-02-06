@@ -43,7 +43,7 @@ class LineBotAdapter:
             reply_to: 未使用（Line 不支援引用回覆）
             mention_user_id: 要 mention 的 Line 用戶 ID
         """
-        from ..linebot import push_text, create_text_message_with_mention, push_messages
+        from .messaging import push_text, create_text_message_with_mention, push_messages
 
         if mention_user_id:
             # 使用 mention 版本
@@ -71,7 +71,7 @@ class LineBotAdapter:
         preview_url: str | None = None,
     ) -> SentMessage:
         """發送圖片訊息"""
-        from ..linebot import push_image
+        from .messaging import push_image
 
         msg_id, error = await push_image(
             target, image_url,
@@ -96,7 +96,7 @@ class LineBotAdapter:
 
         Line 不支援直接發送檔案，改用文字訊息附帶連結。
         """
-        from ..linebot import push_text
+        from .messaging import push_text
 
         # Line 沒有原生檔案訊息，用文字連結代替
         size_info = f"（{file_size}）" if file_size else ""
@@ -122,7 +122,7 @@ class LineBotAdapter:
             messages: Line 原生訊息物件列表
             reply_to: 未使用
         """
-        from ..linebot import push_messages as _push_messages
+        from .messaging import push_messages as _push_messages
 
         sent_ids, error = await _push_messages(target, messages)
         if error:
@@ -140,7 +140,7 @@ class LineBotAdapter:
         text: str,
     ) -> SentMessage:
         """使用 reply token 回覆文字（Line 專屬，非 BotAdapter 介面）"""
-        from ..linebot import reply_text as _reply_text
+        from .messaging import reply_text as _reply_text
 
         msg_id = await _reply_text(reply_token, text)
         return SentMessage(message_id=msg_id or "", platform_type="line")
@@ -151,7 +151,7 @@ class LineBotAdapter:
         messages: list,
     ) -> list[SentMessage]:
         """使用 reply token 回覆多則訊息（Line 專屬，非 BotAdapter 介面）"""
-        from ..linebot import reply_messages as _reply_messages
+        from .messaging import reply_messages as _reply_messages
 
         sent_ids = await _reply_messages(reply_token, messages)
         return [

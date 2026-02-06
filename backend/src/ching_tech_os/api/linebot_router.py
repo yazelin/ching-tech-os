@@ -44,7 +44,7 @@ from ..models.linebot import (
 )
 from ..api.auth import get_current_session
 from ..models.auth import SessionData
-from ..services.linebot import (
+from ..services.bot_line import (
     verify_webhook_signature,
     get_webhook_parser,
     save_message,
@@ -818,7 +818,7 @@ async def api_list_group_memories(
     session: SessionData = Depends(get_current_session),
 ):
     """取得群組記憶列表"""
-    from ..services.linebot import list_group_memories
+    from ..services.bot_line import list_group_memories
 
     # 檢查群組是否存在
     group = await get_group_by_id(group_id)
@@ -839,7 +839,7 @@ async def api_create_group_memory(
     session: SessionData = Depends(get_current_session),
 ):
     """新增群組記憶"""
-    from ..services.linebot import create_group_memory, get_line_user_by_ctos_user
+    from ..services.bot_line import create_group_memory, get_line_user_by_ctos_user
 
     # 檢查群組是否存在
     group = await get_group_by_id(group_id)
@@ -865,7 +865,7 @@ async def api_list_user_memories(
     session: SessionData = Depends(get_current_session),
 ):
     """取得個人記憶列表"""
-    from ..services.linebot import list_user_memories
+    from ..services.bot_line import list_user_memories
 
     # 檢查用戶是否存在
     user = await get_user_by_id(user_id)
@@ -886,7 +886,7 @@ async def api_create_user_memory(
     session: SessionData = Depends(get_current_session),
 ):
     """新增個人記憶"""
-    from ..services.linebot import create_user_memory
+    from ..services.bot_line import create_user_memory
 
     # 檢查用戶是否存在
     user = await get_user_by_id(user_id)
@@ -908,7 +908,7 @@ async def api_update_memory(
     session: SessionData = Depends(get_current_session),
 ):
     """更新記憶（群組或個人）"""
-    from ..services.linebot import update_memory
+    from ..services.bot_line import update_memory
 
     result = await update_memory(
         memory_id=memory_id,
@@ -927,7 +927,7 @@ async def api_delete_memory(
     session: SessionData = Depends(get_current_session),
 ):
     """刪除記憶"""
-    from ..services.linebot import delete_memory
+    from ..services.bot_line import delete_memory
 
     success = await delete_memory(memory_id)
     if not success:

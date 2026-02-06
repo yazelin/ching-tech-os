@@ -56,7 +56,7 @@ from ching_tech_os.services.mcp import (
     mcp,  # FastMCP 實例
 )
 
-from ching_tech_os.services.linebot import (
+from ching_tech_os.services.bot_line import (
     # Webhook
     verify_signature,
     get_webhook_parser,

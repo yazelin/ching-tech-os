@@ -19,7 +19,7 @@ from .image_fallback import (
     generate_image_with_fallback,
     get_fallback_notification,
 )
-from .linebot import (
+from .bot_line import (
     reply_text,
     reply_messages,
     push_text,
@@ -876,7 +876,7 @@ async def get_conversation_context(
         - images: 圖片資訊列表 [{"line_message_id": "...", "nas_path": "..."}]
         - files: 檔案資訊列表 [{"line_message_id": "...", "nas_path": "...", "file_name": "...", "file_size": ...}]
     """
-    from .linebot import get_temp_image_path
+    from .bot_line import get_temp_image_path
 
     async with get_connection() as conn:
         if line_group_id:
@@ -1145,7 +1145,7 @@ async def build_system_prompt(
                 ctos_user_id = user_row["user_id"]
 
     # 載入並整合自訂記憶
-    from .linebot import get_active_group_memories, get_active_user_memories
+    from .bot_line import get_active_group_memories, get_active_user_memories
 
     memories = []
     if line_group_id:

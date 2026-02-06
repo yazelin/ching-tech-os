@@ -53,7 +53,7 @@ async def add_memory(
 
     elif line_user_id:
         # 個人記憶：需要查詢用戶的內部 UUID
-        from ..linebot import get_line_user_record
+        from ..bot_line import get_line_user_record
         user_row = await get_line_user_record(line_user_id, "id")
         if not user_row:
             return "❌ 找不到用戶"
@@ -121,7 +121,7 @@ async def get_memories(
 
     elif line_user_id:
         # 個人記憶
-        from ..linebot import get_line_user_record
+        from ..bot_line import get_line_user_record
         user_row = await get_line_user_record(line_user_id, "id")
         if not user_row:
             return "❌ 找不到用戶"
