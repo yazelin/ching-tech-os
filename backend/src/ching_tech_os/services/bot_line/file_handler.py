@@ -631,8 +631,9 @@ async def ensure_temp_file(
                 tmp_path = tmp.name
 
             try:
-                # 解析文件
-                result = document_reader.extract_text(tmp_path)
+                # 解析文件（在執行緒池中執行，避免阻塞 event loop）
+                from ..workers import run_in_doc_pool
+                result = await run_in_doc_pool(document_reader.extract_text, tmp_path)
                 text_content = result.text
 
                 # 如果有錯誤訊息（部分成功），附加說明

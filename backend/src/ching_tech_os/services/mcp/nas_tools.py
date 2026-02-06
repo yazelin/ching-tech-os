@@ -442,7 +442,8 @@ async def read_document(
 
     # 解析文件
     try:
-        result = document_reader.extract_text(str(full_path))
+        from ..workers import run_in_doc_pool
+        result = await run_in_doc_pool(document_reader.extract_text, str(full_path))
 
         # 截斷過長的內容
         text = result.text
