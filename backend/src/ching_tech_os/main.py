@@ -75,6 +75,8 @@ async def lifespan(app: FastAPI):
     await terminal_service.stop_cleanup_task()
     terminal_service.close_all()
     await session_manager.stop_cleanup_task()
+    from .services.workers import shutdown_pools
+    shutdown_pools()
     await close_db_pool()
 
 

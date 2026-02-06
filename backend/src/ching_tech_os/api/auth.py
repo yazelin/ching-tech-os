@@ -11,6 +11,7 @@ from ..models.login_record import DeviceInfo as LoginRecordDeviceInfo, DeviceTyp
 from ..models.message import MessageSeverity, MessageSource
 from ..services.session import session_manager, SessionData
 from ..services.smb import create_smb_service, SMBAuthError, SMBConnectionError
+from ..services.workers import run_in_smb_pool
 from ..services.user import upsert_user, get_user_by_username, get_user_for_auth, update_last_login, get_user_role
 from ..services.password import verify_password
 from ..services.login_record import record_login
@@ -246,7 +247,7 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
                 request.password,
             )
             try:
-                smb.test_auth()
+                await run_in_smb_pool(smb.test_auth)
                 auth_success = True
             except SMBAuthError:
                 auth_success = False

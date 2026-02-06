@@ -30,6 +30,7 @@ from ..services.smb import (
     SMBService,
 )
 from ..services.nas_connection import nas_connection_manager
+from ..services.workers import run_in_smb_pool
 from .auth import get_session_from_token_or_query
 
 router = APIRouter(prefix="/api/files", tags=["files"])
@@ -121,7 +122,7 @@ def _get_nas_smb_service(
     )
 
 
-def _read_nas_file(
+async def _read_nas_file(
     path: str,
     session: SessionData,
     nas_token: str | None = None,
@@ -160,8 +161,10 @@ def _read_nas_file(
     smb, _ = _get_nas_smb_service(nas_token, session)
 
     try:
-        with smb:
-            return smb.read_file(share_name, sub_path)
+        def _read():
+            with smb:
+                return smb.read_file(share_name, sub_path)
+        return await run_in_smb_pool(_read)
     except SMBConnectionError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -225,7 +228,7 @@ def _read_local_file(file_path: Path) -> bytes:
         )
 
 
-def _read_file_content(
+async def _read_file_content(
     zone: str,
     path: str,
     session: SessionData,
@@ -257,7 +260,7 @@ def _read_file_content(
 
     # NAS zone：透過 SMB 讀取
     if storage_zone == StorageZone.NAS:
-        content = _read_nas_file(path, session, nas_token)
+        content = await _read_nas_file(path, session, nas_token)
         filename = path.split("/")[-1]
         mime_type = _get_mime_type(filename)
         return content, filename, mime_type
@@ -301,7 +304,7 @@ async def download_file(
         檔案內容，附帶 Content-Disposition header
     """
     actual_nas_token = x_nas_token or nas_token
-    content, filename, mime_type = _read_file_content(zone, path, session, actual_nas_token)
+    content, filename, mime_type = await _read_file_content(zone, path, session, actual_nas_token)
     encoded_filename = quote(filename)
 
     return Response(
@@ -343,5 +346,5 @@ async def read_file(
         檔案內容，使用適當的 MIME type
     """
     actual_nas_token = x_nas_token or nas_token
-    content, _, mime_type = _read_file_content(zone, path, session, actual_nas_token)
+    content, _, mime_type = await _read_file_content(zone, path, session, actual_nas_token)
     return Response(content=content, media_type=mime_type)

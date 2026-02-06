@@ -25,9 +25,18 @@ from ..models.nas import (
 from ..services.smb import create_smb_service, SMBError, SMBConnectionError, SMBAuthError, SMBService
 from ..services.nas_connection import nas_connection_manager, NASConnection
 from ..services.permissions import require_app_permission
+from ..services.workers import run_in_smb_pool
 from .auth import get_current_session, get_session_from_token_or_query
 
 router = APIRouter(prefix="/api/nas", tags=["nas"])
+
+
+async def _run_smb(smb: SMBService, fn):
+    """在 SMB 執行緒池中執行阻塞式操作（含自動 connect/disconnect）"""
+    def _exec():
+        with smb:
+            return fn(smb)
+    return await run_in_smb_pool(_exec)
 
 
 # ============================================================
@@ -203,11 +212,10 @@ async def list_shares(
     smb, _host = nas_conn
 
     try:
-        with smb:
-            shares = smb.list_shares()
-            return SharesResponse(
-                shares=[ShareInfo(name=s["name"], type=s["type"]) for s in shares]
-            )
+        shares = await _run_smb(smb, lambda s: s.list_shares())
+        return SharesResponse(
+            shares=[ShareInfo(name=s["name"], type=s["type"]) for s in shares]
+        )
     except SMBConnectionError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -255,20 +263,19 @@ async def browse_directory(
     sub_path = parts[1] if len(parts) > 1 else ""
 
     try:
-        with smb:
-            items = smb.browse_directory(share_name, sub_path)
-            return BrowseResponse(
-                path=f"/{path}",
-                items=[
-                    FileItem(
-                        name=item["name"],
-                        type=item["type"],
-                        size=item.get("size"),
-                        modified=item.get("modified"),
-                    )
-                    for item in items
-                ],
-            )
+        items = await _run_smb(smb, lambda s: s.browse_directory(share_name, sub_path))
+        return BrowseResponse(
+            path=f"/{path}",
+            items=[
+                FileItem(
+                    name=item["name"],
+                    type=item["type"],
+                    size=item.get("size"),
+                    modified=item.get("modified"),
+                )
+                for item in items
+            ],
+        )
     except SMBConnectionError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -386,10 +393,9 @@ async def read_file(
         )
 
     try:
-        with smb:
-            content = smb.read_file(share_name, sub_path)
-            mime_type = _get_mime_type(sub_path)
-            return Response(content=content, media_type=mime_type)
+        content = await _run_smb(smb, lambda s: s.read_file(share_name, sub_path))
+        mime_type = _get_mime_type(sub_path)
+        return Response(content=content, media_type=mime_type)
     except SMBConnectionError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -446,21 +452,20 @@ async def download_file(
     filename = sub_path.split("/")[-1]
 
     try:
-        with smb:
-            content = smb.read_file(share_name, sub_path)
-            mime_type = _get_mime_type(filename)
+        content = await _run_smb(smb, lambda s: s.read_file(share_name, sub_path))
+        mime_type = _get_mime_type(filename)
 
-            # 處理檔名編碼（支援中文）
-            from urllib.parse import quote
-            encoded_filename = quote(filename)
+        # 處理檔名編碼（支援中文）
+        from urllib.parse import quote
+        encoded_filename = quote(filename)
 
-            return Response(
-                content=content,
-                media_type=mime_type,
-                headers={
-                    "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
-                },
-            )
+        return Response(
+            content=content,
+            media_type=mime_type,
+            headers={
+                "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
+            },
+        )
     except SMBConnectionError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -516,24 +521,23 @@ async def upload_file(
 
     try:
         content = await file.read()
-        with smb:
-            smb.write_file(share_name, file_path, content)
+        await _run_smb(smb, lambda s: s.write_file(share_name, file_path, content))
 
-            # 記錄上傳操作到訊息中心
-            try:
-                await log_message(
-                    severity="info",
-                    source="file-manager",
-                    title="檔案上傳",
-                    content=f"上傳檔案: {file_path}\n大小: {len(content)} bytes",
-                    category="app",
-                    user_id=session.user_id,
-                    metadata={"path": f"/{share_name}/{file_path}", "size": len(content)}
-                )
-            except Exception as e:
-                print(f"[nas] log_message error: {e}")
+        # 記錄上傳操作到訊息中心
+        try:
+            await log_message(
+                severity="info",
+                source="file-manager",
+                title="檔案上傳",
+                content=f"上傳檔案: {file_path}\n大小: {len(content)} bytes",
+                category="app",
+                user_id=session.user_id,
+                metadata={"path": f"/{share_name}/{file_path}", "size": len(content)}
+            )
+        except Exception as e:
+            print(f"[nas] log_message error: {e}")
 
-            return OperationResponse(success=True, message="上傳成功")
+        return OperationResponse(success=True, message="上傳成功")
     except SMBConnectionError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -583,24 +587,23 @@ async def delete_file(
         )
 
     try:
-        with smb:
-            smb.delete_item(share_name, sub_path, recursive=request.recursive)
+        await _run_smb(smb, lambda s: s.delete_item(share_name, sub_path, recursive=request.recursive))
 
-            # 記錄刪除操作到訊息中心
-            try:
-                await log_message(
-                    severity="info",
-                    source="file-manager",
-                    title="檔案刪除",
-                    content=f"刪除: {request.path}",
-                    category="app",
-                    user_id=session.user_id,
-                    metadata={"path": request.path, "recursive": request.recursive}
-                )
-            except Exception as e:
-                print(f"[nas] log_message error: {e}")
+        # 記錄刪除操作到訊息中心
+        try:
+            await log_message(
+                severity="info",
+                source="file-manager",
+                title="檔案刪除",
+                content=f"刪除: {request.path}",
+                category="app",
+                user_id=session.user_id,
+                metadata={"path": request.path, "recursive": request.recursive}
+            )
+        except Exception as e:
+            print(f"[nas] log_message error: {e}")
 
-            return OperationResponse(success=True, message="刪除成功")
+        return OperationResponse(success=True, message="刪除成功")
     except SMBConnectionError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -660,9 +663,8 @@ async def rename_item(
         )
 
     try:
-        with smb:
-            smb.rename_item(share_name, sub_path, request.new_name)
-            return OperationResponse(success=True, message="重命名成功")
+        await _run_smb(smb, lambda s: s.rename_item(share_name, sub_path, request.new_name))
+        return OperationResponse(success=True, message="重命名成功")
     except SMBConnectionError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -716,9 +718,8 @@ async def create_directory(
         )
 
     try:
-        with smb:
-            smb.create_directory(share_name, sub_path)
-            return OperationResponse(success=True, message="建立成功")
+        await _run_smb(smb, lambda s: s.create_directory(share_name, sub_path))
+        return OperationResponse(success=True, message="建立成功")
     except SMBConnectionError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -783,20 +784,19 @@ async def search_files(
     share_name, sub_path = _parse_path(path)
 
     try:
-        with smb:
-            results = smb.search_files(
-                share_name=share_name,
-                path=sub_path or "",
-                query=query.strip(),
-                max_depth=max_depth,
-                max_results=max_results,
-            )
-            return SearchResponse(
-                query=query.strip(),
-                path=path,
-                results=[SearchItem(**r) for r in results],
-                total=len(results),
-            )
+        results = await _run_smb(smb, lambda s: s.search_files(
+            share_name=share_name,
+            path=sub_path or "",
+            query=query.strip(),
+            max_depth=max_depth,
+            max_results=max_results,
+        ))
+        return SearchResponse(
+            query=query.strip(),
+            path=path,
+            results=[SearchItem(**r) for r in results],
+            total=len(results),
+        )
     except SMBConnectionError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
