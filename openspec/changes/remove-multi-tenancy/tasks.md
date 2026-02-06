@@ -14,8 +14,7 @@
   - users（同時移除 NOT NULL 約束後的資料清理）
   - ai_agents、ai_chats、ai_prompts
   - bot_groups、bot_users、bot_messages、bot_files、bot_binding_codes
-- [x] 2.4 建立 Alembic migration：修改分區表結構（ai_logs, messages, login_records）
-  - 分區表保留 tenant_id 欄位但移除索引（重建分區表過於複雜）
+- [x] 2.4 建立 Alembic migration 004：移除分區表的 tenant_id 欄位（ai_logs, messages, login_records）
 - [x] 2.5 建立 Alembic migration：刪除 `tenants` 表
 - [x] 2.6 建立 Alembic migration：刪除 `tenant_admins` 表
 - [x] 2.7 建立 Alembic migration：更新 `users.role` 欄位
@@ -56,7 +55,7 @@
   - 移除 `require_can_manage_target()` 的跨租戶檢查 ✓
   - 簡化 `get_user_role()` - 只判斷 admin/user ✓
 - [x] 4.3 更新 `/api/auth/login` 回應格式：移除 tenant 物件 ✓
-- [ ] 4.4 更新 `/api/user/me` 回應格式：移除 tenant 相關欄位
+- [x] 4.4 更新 `/api/user/me` 回應格式：移除 tenant 相關欄位（models/user.py 已移除 tenant_id）
 - [ ] 4.5 更新 `services/permissions.py`：
   - 移除 platform_admin 角色
   - 移除 tenant_admin 角色
@@ -79,21 +78,27 @@
 
 ## 6. 後端 - 更新服務層（移除 tenant_id 參數）
 
-- [~] 6.1 更新 `services/user.py`：（部分完成：upsert_user, get_user_by_username）
-  - 移除所有函數的 tenant_id 參數
-  - 移除 WHERE tenant_id = ? 條件
-- [~] 6.2 更新 `services/ai_manager.py`：（部分完成：get_agent_by_name）
-- [ ] 6.3 更新 `services/ai_chat.py`：移除 tenant_id 參數
-- [ ] 6.4 更新 `services/ai_log.py`：移除 tenant_id 參數
-- [ ] 6.5 更新 `services/bot_platform.py`：
-  - 移除 tenant_id 參數
-  - 移除 BotContext 中的 tenant_id
-- [ ] 6.6 更新 `services/linebot.py`：
-  - 移除多租戶憑證邏輯（get_all_tenant_line_secrets 等）
-  - 改用 bot_settings.py 的 get_bot_credentials()
-  - 移除 invalidate_tenant_secrets_cache()
-- [ ] 6.7 更新 `services/telegram.py`：同樣改用 bot_settings.py
-- [ ] 6.8 更新 `services/knowledge.py`：移除 tenant_id 參數
+- [x] 6.1 更新 `services/user.py`：移除所有函數的 tenant_id 參數和 SQL 條件 ✓
+- [x] 6.2 更新 `services/ai_manager.py`：移除所有函數的 tenant_id 參數和 SQL 條件 ✓
+- [x] 6.3 更新 `services/ai_chat.py`：移除 tenant_id 參數 ✓
+- [x] 6.4 更新 `services/ai_log.py`：ai_logs 表已移除 tenant_id 欄位（migration 004）✓
+- [x] 6.5 更新 Bot 服務：✓
+  - `services/bot/message.py`：移除 BotContext 中的 tenant_id
+  - `services/bot/agents.py`：移除 get_tenant_id 輔助函數
+  - `services/bot_telegram/handler.py`：移除租戶解析和 tenant_id 參數
+  - `services/bot_telegram/media.py`：移除 tenant_id 參數
+  - `services/bot_line/adapter.py`：移除 tenant_id 參數
+- [x] 6.6 更新 `services/linebot.py`：移除多租戶函數和所有 tenant_id 參數 ✓
+- [x] 6.7 更新 `services/linebot_ai.py`、`services/linebot_agents.py`：移除 tenant_id 參數 ✓
+- [x] 6.8 更新 `services/knowledge.py`：移除 tenant_id 參數 ✓
+- [x] 6.9 更新其他服務：✓
+  - `services/inventory.py`：移除 tenant_id 參數
+  - `services/project.py`：移除 tenant_id 參數
+  - `services/vendor.py`：移除 tenant_id 參數
+  - `services/local_file.py`：移除 DEFAULT_TENANT_ID
+  - `services/share.py`：移除 tenant_id 參數
+  - `services/presentation.py`：移除多租戶目錄邏輯
+  - `services/path_manager.py`：簡化路徑處理
 
 ## 7. 後端 - 簡化資料匯出/匯入（tenant_data.py）
 
@@ -105,27 +110,25 @@
 
 ## 8. 後端 - 更新 MCP Server
 
-- [ ] 8.1 更新 `services/mcp_server.py`：
+- [x] 8.1 更新 `services/mcp_server.py`：✓
   - 移除所有工具的 `ctos_tenant_id` 參數
   - 移除 `_get_tenant_id()` 輔助函數
-  - 更新 search_knowledge、get_knowledge_item 等
-  - 更新 search_nas_files、send_nas_file 等
-  - 更新 add_note、add_note_with_attachments 等
-  - 更新 generate_presentation、generate_md2ppt 等
+  - 移除 SQL 查詢中的 tenant_id 條件
+  - 清理 bot/agents.py 和 linebot_agents.py 中的 ctos_tenant_id 說明
 
 ## 9. 後端 - 更新 API 路由
 
-- [ ] 9.1 更新 `api/admin/users.py`：移除租戶過濾邏輯
-- [ ] 9.2 更新 `api/bot.py`：移除 tenant_id 參數
-- [ ] 9.3 更新 `api/knowledge.py`：移除 tenant_id 參數
-- [ ] 9.4 更新 `api/ai.py`：移除 tenant_id 參數
+- [x] 9.1 更新 `api/user.py`：移除 tenant_router 和 tenant_id 參數 ✓
+- [x] 9.2 更新 `api/linebot_router.py`：移除所有 tenant_id 引用 ✓
+- [x] 9.3 更新 `api/knowledge.py`：移除 tenant_id 參數 ✓
+- [x] 9.4 更新 `api/ai_management.py`：移除 tenant_id 傳遞 ✓
+- [x] 9.5 更新 `api/share.py`：移除租戶相關邏輯 ✓
+- [x] 9.6 更新 `api/files.py`：簡化檔案路徑處理 ✓
 
 ## 10. 後端 - 路徑管理
 
-- [x] 10.1 更新 `services/path_manager.py`：
-  - 移除租戶路徑方法（get_tenant_base_path 等）
-  - 新增單一租戶路徑屬性：knowledge_base_path, linebot_base_path 等
-- [ ] 10.2 更新所有使用 PathManager 的程式碼
+- [x] 10.1 更新 `services/path_manager.py`：簡化路徑處理，移除 tenant_id 參數 ✓
+- [x] 10.2 更新所有使用 PathManager 的程式碼 ✓
 
 ## 11. 後端 - 環境變數
 
