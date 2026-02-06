@@ -192,33 +192,41 @@ class TestDatabaseSchema:
     @pytest.mark.asyncio
     async def test_bot_settings_table_exists(self):
         """bot_settings 表應該存在"""
+        import asyncpg
+        from ching_tech_os.config import settings
         try:
-            from ching_tech_os.database import get_connection
-
-            async with get_connection() as conn:
-                result = await conn.fetchrow("""
-                    SELECT EXISTS (
-                        SELECT FROM information_schema.tables
-                        WHERE table_name = 'bot_settings'
-                    )
-                """)
+            conn = await asyncpg.connect(
+                host=settings.db_host, port=settings.db_port,
+                user=settings.db_user, password=settings.db_password,
+                database=settings.db_name,
+            )
+            try:
+                result = await conn.fetchrow(
+                    "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'bot_settings')"
+                )
                 assert result['exists'], "bot_settings table should exist"
-        except Exception:
-            pytest.skip("Database not available or migration not run")
+            finally:
+                await conn.close()
+        except OSError:
+            pytest.skip("Database not available")
 
     @pytest.mark.asyncio
     async def test_tenants_table_not_exists(self):
         """tenants 表應該不存在"""
+        import asyncpg
+        from ching_tech_os.config import settings
         try:
-            from ching_tech_os.database import get_connection
-
-            async with get_connection() as conn:
-                result = await conn.fetchrow("""
-                    SELECT EXISTS (
-                        SELECT FROM information_schema.tables
-                        WHERE table_name = 'tenants'
-                    )
-                """)
+            conn = await asyncpg.connect(
+                host=settings.db_host, port=settings.db_port,
+                user=settings.db_user, password=settings.db_password,
+                database=settings.db_name,
+            )
+            try:
+                result = await conn.fetchrow(
+                    "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'tenants')"
+                )
                 assert not result['exists'], "tenants table should not exist"
-        except Exception:
-            pytest.skip("Database not available or migration not run")
+            finally:
+                await conn.close()
+        except OSError:
+            pytest.skip("Database not available")
