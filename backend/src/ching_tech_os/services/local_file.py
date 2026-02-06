@@ -13,9 +13,14 @@ from typing import Any
 from ..config import settings
 
 
-class LocalFileError(Exception):
+from .errors import ServiceError
+
+
+class LocalFileError(ServiceError):
     """本機檔案操作錯誤"""
-    pass
+
+    def __init__(self, message: str = "檔案操作錯誤"):
+        super().__init__(message, "FILE_ERROR", 500)
 
 
 class LocalFileService:

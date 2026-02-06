@@ -39,16 +39,23 @@ from ching_tech_os.services.local_file import (
 )
 
 
-class KnowledgeError(Exception):
+from .errors import ServiceError
+
+
+class KnowledgeError(ServiceError):
     """知識庫操作錯誤"""
 
-    pass
+    def __init__(self, message: str = "知識庫操作錯誤"):
+        super().__init__(message, "KNOWLEDGE_ERROR", 500)
 
 
 class KnowledgeNotFoundError(KnowledgeError):
     """知識不存在"""
 
-    pass
+    def __init__(self, message: str = "知識不存在"):
+        super().__init__(message)
+        self.code = "NOT_FOUND"
+        self.status_code = 404
 
 
 # 知識庫路徑

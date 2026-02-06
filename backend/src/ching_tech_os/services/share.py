@@ -23,49 +23,82 @@ from .project import get_project, ProjectNotFoundError
 MAX_PASSWORD_ATTEMPTS = 5
 
 
-class NasFileNotFoundError(Exception):
+from .errors import ServiceError
+
+
+class NasFileNotFoundError(ServiceError):
     """NAS 檔案不存在"""
-    pass
+
+    def __init__(self, message: str = "NAS 檔案不存在"):
+        super().__init__(message, "NOT_FOUND", 404)
 
 
-class NasFileAccessDenied(Exception):
+class NasFileAccessDenied(ServiceError):
     """NAS 檔案存取被拒絕"""
-    pass
+
+    def __init__(self, message: str = "NAS 檔案存取被拒絕"):
+        super().__init__(message, "PERMISSION_DENIED", 403)
 
 
-class ShareError(Exception):
+class ShareError(ServiceError):
     """分享連結操作錯誤"""
-    pass
+
+    def __init__(self, message: str = "分享連結操作錯誤"):
+        super().__init__(message, "SHARE_ERROR", 500)
 
 
 class ShareLinkNotFoundError(ShareError):
     """連結不存在"""
-    pass
+
+    def __init__(self, message: str = "連結不存在"):
+        super().__init__(message)
+        self.code = "NOT_FOUND"
+        self.status_code = 404
 
 
 class ShareLinkExpiredError(ShareError):
     """連結已過期"""
-    pass
+
+    def __init__(self, message: str = "連結已過期"):
+        super().__init__(message)
+        self.code = "SHARE_EXPIRED"
+        self.status_code = 410
 
 
 class ShareLinkLockedError(ShareError):
     """連結已鎖定（密碼錯誤次數過多）"""
-    pass
+
+    def __init__(self, message: str = "連結已鎖定"):
+        super().__init__(message)
+        self.code = "SHARE_LOCKED"
+        self.status_code = 423
 
 
 class PasswordRequiredError(ShareError):
     """需要密碼"""
-    pass
+
+    def __init__(self, message: str = "需要密碼"):
+        super().__init__(message)
+        self.code = "PASSWORD_REQUIRED"
+        self.status_code = 401
 
 
 class PasswordIncorrectError(ShareError):
     """密碼錯誤"""
-    pass
+
+    def __init__(self, message: str = "密碼錯誤"):
+        super().__init__(message)
+        self.code = "PASSWORD_INCORRECT"
+        self.status_code = 401
 
 
 class ResourceNotFoundError(ShareError):
     """資源不存在"""
-    pass
+
+    def __init__(self, message: str = "資源不存在"):
+        super().__init__(message)
+        self.code = "NOT_FOUND"
+        self.status_code = 404
 
 
 def generate_token(length: int = 6) -> str:

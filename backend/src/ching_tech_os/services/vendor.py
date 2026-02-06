@@ -12,19 +12,32 @@ from ..models.vendor import (
 )
 
 
-class VendorError(Exception):
+from .errors import ServiceError
+
+
+class VendorError(ServiceError):
     """廠商操作錯誤"""
-    pass
+
+    def __init__(self, message: str = "廠商操作錯誤"):
+        super().__init__(message, "VENDOR_ERROR", 500)
 
 
 class VendorNotFoundError(VendorError):
     """廠商不存在"""
-    pass
+
+    def __init__(self, message: str = "廠商不存在"):
+        super().__init__(message)
+        self.code = "NOT_FOUND"
+        self.status_code = 404
 
 
 class VendorDuplicateError(VendorError):
     """廠商編號重複"""
-    pass
+
+    def __init__(self, message: str = "廠商編號重複"):
+        super().__init__(message)
+        self.code = "CONFLICT"
+        self.status_code = 409
 
 
 async def list_vendors(

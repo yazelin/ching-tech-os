@@ -1,11 +1,12 @@
 """FastAPI 應用程式入口"""
 
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 import socketio
 
 from .config import settings
@@ -82,6 +83,27 @@ app = FastAPI(
     version="0.3.0",
     lifespan=lifespan,
 )
+
+# --- 全域 ServiceError handler ---
+from .services.errors import ServiceError  # noqa: E402
+
+_error_logger = logging.getLogger("error_handler")
+
+
+@app.exception_handler(ServiceError)
+async def service_error_handler(request: Request, exc: ServiceError) -> JSONResponse:
+    _error_logger.warning(
+        "ServiceError %s %s: [%s] %s",
+        request.method,
+        request.url.path,
+        exc.code,
+        exc.message,
+    )
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": exc.code, "message": exc.message},
+    )
+
 
 # 包裝成 ASGI 應用（Socket.IO + FastAPI）
 socket_app = socketio.ASGIApp(sio, app)

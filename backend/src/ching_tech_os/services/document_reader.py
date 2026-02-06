@@ -33,29 +33,48 @@ MAX_FILE_SIZE = {
 MAX_OUTPUT_CHARS = 100000
 
 
-class DocumentReadError(Exception):
+from .errors import ServiceError
+
+
+class DocumentReadError(ServiceError):
     """文件讀取錯誤"""
-    pass
+
+    def __init__(self, message: str = "文件讀取錯誤"):
+        super().__init__(message, "DOCUMENT_ERROR", 500)
 
 
 class PasswordProtectedError(DocumentReadError):
     """文件有密碼保護"""
-    pass
+
+    def __init__(self, message: str = "文件有密碼保護"):
+        super().__init__(message)
+        self.code = "PASSWORD_PROTECTED"
 
 
 class CorruptedFileError(DocumentReadError):
     """文件損壞"""
-    pass
+
+    def __init__(self, message: str = "文件損壞"):
+        super().__init__(message)
+        self.code = "CORRUPTED_FILE"
 
 
 class UnsupportedFormatError(DocumentReadError):
     """不支援的格式"""
-    pass
+
+    def __init__(self, message: str = "不支援的格式"):
+        super().__init__(message)
+        self.code = "UNSUPPORTED_FORMAT"
+        self.status_code = 422
 
 
 class FileTooLargeError(DocumentReadError):
     """檔案過大"""
-    pass
+
+    def __init__(self, message: str = "檔案過大"):
+        super().__init__(message)
+        self.code = "FILE_TOO_LARGE"
+        self.status_code = 413
 
 
 @dataclass

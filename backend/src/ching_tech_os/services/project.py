@@ -37,14 +37,23 @@ from ..models.project import (
 from .local_file import LocalFileService, LocalFileError, create_project_file_service, create_linebot_file_service
 
 
-class ProjectError(Exception):
+from .errors import ServiceError
+
+
+class ProjectError(ServiceError):
     """專案操作錯誤"""
-    pass
+
+    def __init__(self, message: str = "專案操作錯誤"):
+        super().__init__(message, "PROJECT_ERROR", 500)
 
 
 class ProjectNotFoundError(ProjectError):
     """專案不存在"""
-    pass
+
+    def __init__(self, message: str = "專案不存在"):
+        super().__init__(message)
+        self.code = "NOT_FOUND"
+        self.status_code = 404
 
 
 # ============================================

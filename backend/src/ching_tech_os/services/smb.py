@@ -32,36 +32,50 @@ import fnmatch
 import stat as stat_module
 
 from ..config import settings
+from .errors import ServiceError
 
 
-class SMBError(Exception):
+class SMBError(ServiceError):
     """SMB 操作錯誤"""
 
-    pass
+    def __init__(self, message: str = "SMB 操作錯誤"):
+        super().__init__(message, "SMB_ERROR", 500)
 
 
 class SMBAuthError(SMBError):
     """SMB 認證錯誤"""
 
-    pass
+    def __init__(self, message: str = "NAS 帳號或密碼錯誤"):
+        super().__init__(message)
+        self.code = "SMB_AUTH_ERROR"
+        self.status_code = 401
 
 
 class SMBConnectionError(SMBError):
     """SMB 連線錯誤"""
 
-    pass
+    def __init__(self, message: str = "無法連線至檔案伺服器"):
+        super().__init__(message)
+        self.code = "SMB_CONNECTION_ERROR"
+        self.status_code = 503
 
 
 class SMBFileNotFoundError(SMBError):
     """SMB 檔案不存在錯誤"""
 
-    pass
+    def __init__(self, message: str = "檔案不存在"):
+        super().__init__(message)
+        self.code = "NOT_FOUND"
+        self.status_code = 404
 
 
 class SMBPermissionError(SMBError):
     """SMB 權限錯誤"""
 
-    pass
+    def __init__(self, message: str = "檔案存取被拒絕"):
+        super().__init__(message)
+        self.code = "PERMISSION_DENIED"
+        self.status_code = 403
 
 
 class SMBService:

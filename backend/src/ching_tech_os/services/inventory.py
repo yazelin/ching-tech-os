@@ -27,24 +27,41 @@ from ..models.inventory import (
 )
 
 
-class InventoryError(Exception):
+from .errors import ServiceError
+
+
+class InventoryError(ServiceError):
     """物料操作錯誤"""
-    pass
+
+    def __init__(self, message: str = "物料操作錯誤"):
+        super().__init__(message, "INVENTORY_ERROR", 500)
 
 
 class InventoryItemNotFoundError(InventoryError):
     """物料不存在"""
-    pass
+
+    def __init__(self, message: str = "物料不存在"):
+        super().__init__(message)
+        self.code = "NOT_FOUND"
+        self.status_code = 404
 
 
 class InventoryTransactionNotFoundError(InventoryError):
     """進出貨記錄不存在"""
-    pass
+
+    def __init__(self, message: str = "進出貨記錄不存在"):
+        super().__init__(message)
+        self.code = "NOT_FOUND"
+        self.status_code = 404
 
 
 class InventoryOrderNotFoundError(InventoryError):
     """訂購記錄不存在"""
-    pass
+
+    def __init__(self, message: str = "訂購記錄不存在"):
+        super().__init__(message)
+        self.code = "NOT_FOUND"
+        self.status_code = 404
 
 
 # ============================================
