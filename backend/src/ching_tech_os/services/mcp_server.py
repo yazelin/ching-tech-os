@@ -1665,7 +1665,7 @@ def _get_knowledge_paths():
     """取得知識庫路徑（內部輔助函數）"""
     from ..config import settings
     from pathlib import Path
-    base_path = Path(settings.knowledge_local_path)
+    base_path = Path(settings.knowledge_data_path)
     entries_path = base_path / "entries"
     assets_path = base_path / "assets"
     index_path = base_path / "index.json"
