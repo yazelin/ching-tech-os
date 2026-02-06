@@ -56,7 +56,7 @@
   - 簡化 `get_user_role()` - 只判斷 admin/user ✓
 - [x] 4.3 更新 `/api/auth/login` 回應格式：移除 tenant 物件 ✓
 - [x] 4.4 更新 `/api/user/me` 回應格式：移除 tenant 相關欄位（models/user.py 已移除 tenant_id）
-- [ ] 4.5 更新 `services/permissions.py`：
+- [x] 4.5 更新 `services/permissions.py`：✓
   - 移除 platform_admin 角色
   - 移除 tenant_admin 角色
   - 更新權限檢查邏輯
@@ -132,37 +132,30 @@
 
 ## 11. 後端 - 環境變數
 
-- [ ] 11.1 更新 `config.py`：
-  - 移除 MULTI_TENANT_MODE
-  - 移除 DEFAULT_TENANT_ID
-  - 移除 TENANT_SECRET_KEY
-  - 新增 LINE_CHANNEL_ACCESS_TOKEN（fallback 用）
-  - 新增 LINE_CHANNEL_SECRET（fallback 用）
-  - 新增 BOT_SECRET_KEY（加密 bot_settings 用）
+- [x] 11.1 更新 `config.py`：✓
+  - 移除 MULTI_TENANT_MODE、DEFAULT_TENANT_ID、多租戶路徑方法
+  - TENANT_SECRET_KEY → BOT_SECRET_KEY
+  - LINE_CHANNEL_ACCESS_TOKEN/SECRET 已存在
 - [ ] 11.2 更新 `.env.example`
 - [ ] 11.3 更新實際 `.env` 檔案
 
 ## 12. 前端 - 登入頁面
 
-- [ ] 12.1 更新 `login.html`：移除租戶代碼輸入欄位（id="tenant-code"）
-- [ ] 12.2 更新 `js/login.js`：
-  - 移除 tenantCode 相關邏輯
-  - 簡化登入請求（只傳 username/password）
+- [x] 12.1 更新 `login.html`：移除租戶代碼輸入欄位 ✓
+- [x] 12.2 更新 `js/login.js`：移除 tenantCode、getTenant() ✓
 
 ## 13. 前端 - 租戶上下文
 
-- [ ] 13.1 刪除 `js/tenant-context.js`
-- [ ] 13.2 更新 `index.html`：移除 tenant-context.js 引入
-- [ ] 13.3 搜尋並移除所有 `getTenantId()`、`TenantContext` 的使用
+- [x] 13.1 刪除 `js/tenant-context.js` ✓
+- [x] 13.2 更新 `index.html`：移除 tenant-context.js 引入 ✓
+- [x] 13.3 搜尋並移除所有 `getTenantId()`、`TenantContext` 的使用 ✓
 
 ## 14. 前端 - 移除租戶管理 App
 
-- [ ] 14.1 刪除 `js/tenant-admin.js`（Bot 設定 UI 需先遷移到新模組）
-- [ ] 14.2 刪除 `js/platform-admin.js`
-- [ ] 14.3 更新 `js/desktop.js`：
-  - 移除租戶管理 App 註冊
-  - 移除平台管理 App 註冊
-- [ ] 14.4 更新 `index.html`：移除租戶管理相關 JS 引入
+- [x] 14.1 刪除 `js/tenant-admin.js` ✓
+- [x] 14.2 刪除 `js/platform-admin.js` ✓
+- [x] 14.3 更新 `js/desktop.js`：移除租戶/平台管理 App 註冊 ✓
+- [x] 14.4 更新 `index.html`：移除租戶管理相關 JS/CSS 引入 ✓
 
 ## 15. 前端 - Bot 設定 UI（從 tenant-admin.js 遷移）
 
@@ -176,10 +169,10 @@
 
 ## 16. 前端 - 清理
 
-- [ ] 16.1 搜尋並移除所有前端的 tenant 相關程式碼
-- [ ] 16.2 更新 `js/user-admin.js`：移除租戶相關邏輯
-- [ ] 16.3 更新角色顯示（platform_admin/tenant_admin → admin）
-- [ ] 16.4 檢查 localStorage 是否有 tenant 相關資料需清理
+- [x] 16.1 搜尋並移除所有前端的 tenant 相關程式碼 ✓
+- [x] 16.2 更新 `js/settings.js`：統一使用者管理 API ✓
+- [x] 16.3 更新角色顯示（platform_admin/tenant_admin → admin）✓
+- [x] 16.4 清理 config.js MULTI_TENANT_MODE、header.css/settings.css 租戶樣式 ✓
 
 ## 17. 檔案系統遷移
 
@@ -196,9 +189,9 @@
 
 ## 18. 文件更新
 
-- [ ] 18.1 刪除 `docs/multi-tenant.md`
-- [ ] 18.2 刪除 `docs/tenant-admin-guide.md`
-- [ ] 18.3 更新 `CLAUDE.md`：移除多租戶相關規則
+- [x] 18.1 刪除 `docs/multi-tenant.md` ✓
+- [x] 18.2 刪除 `docs/tenant-admin-guide.md` ✓
+- [x] 18.3 更新 `CLAUDE.md`：移除多租戶相關規則 ✓
 - [ ] 18.4 更新 `README.md`：更新架構說明
 - [ ] 18.5 更新相關 openspec specs
 
