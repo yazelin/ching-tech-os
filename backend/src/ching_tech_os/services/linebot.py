@@ -889,7 +889,7 @@ async def save_to_nas(
         是否成功
     """
     try:
-        file_service = create_linebot_file_service(None)
+        file_service = create_linebot_file_service()
         # write_file 會自動建立目錄
         file_service.write_file(relative_path, content)
         return True
@@ -1609,7 +1609,7 @@ async def read_file_from_nas(
         檔案內容 bytes，失敗回傳 None
     """
     try:
-        file_service = create_linebot_file_service(None)
+        file_service = create_linebot_file_service()
         content = file_service.read_file(nas_path)
         return content
     except LocalFileError as e:
@@ -1639,7 +1639,7 @@ async def delete_file(
     # 從 NAS 刪除檔案
     if nas_path:
         try:
-            file_service = create_linebot_file_service(None)
+            file_service = create_linebot_file_service()
             file_service.delete_file(nas_path)
             logger.info(f"已從 NAS 刪除檔案: {nas_path}")
         except LocalFileError as e:

@@ -71,6 +71,9 @@ class Settings:
     db_name: str = _get_env("DB_NAME", "ching_tech_os")
 
     # ===================
+    # NAS 認證
+    enable_nas_auth: bool = _get_env_bool("ENABLE_NAS_AUTH", True)
+
     # NAS 設定（統一設定，各功能共用）
     # ===================
     nas_host: str = _get_env("NAS_HOST", "192.168.11.50")
