@@ -15,6 +15,8 @@ MOUNT_CTOS_UNIT="mnt-nas-ctos.mount"
 MOUNT_CTOS_PATH="${NAS_MOUNT_BASE}/ctos"
 MOUNT_PROJECTS_UNIT="mnt-nas-projects.mount"
 MOUNT_PROJECTS_PATH="${NAS_MOUNT_BASE}/projects"
+MOUNT_CIRCUITS_UNIT="mnt-nas-circuits.mount"
+MOUNT_CIRCUITS_PATH="${NAS_MOUNT_BASE}/circuits"
 # 舊的掛載（向後相容）
 MOUNT_OLD_UNIT="mnt-nas.mount"
 
@@ -81,6 +83,20 @@ if [ -f "/etc/systemd/system/${MOUNT_PROJECTS_UNIT}" ]; then
     rm -f /etc/systemd/system/${MOUNT_PROJECTS_UNIT}
 fi
 
+# 清理 circuits 掛載
+if systemctl is-active --quiet ${MOUNT_CIRCUITS_UNIT}; then
+    echo "停止 circuits 掛載..."
+    systemctl stop ${MOUNT_CIRCUITS_UNIT}
+fi
+if systemctl is-enabled --quiet ${MOUNT_CIRCUITS_UNIT} 2>/dev/null; then
+    echo "停用 circuits 掛載..."
+    systemctl disable ${MOUNT_CIRCUITS_UNIT}
+fi
+if [ -f "/etc/systemd/system/${MOUNT_CIRCUITS_UNIT}" ]; then
+    echo "刪除 circuits mount unit 檔案..."
+    rm -f /etc/systemd/system/${MOUNT_CIRCUITS_UNIT}
+fi
+
 # 清理舊的單一掛載（向後相容）
 if systemctl is-active --quiet ${MOUNT_OLD_UNIT} 2>/dev/null; then
     echo "停止舊的 NAS 掛載..."
@@ -109,6 +125,10 @@ fi
 if [ -d "${MOUNT_PROJECTS_PATH}" ] && [ -z "$(ls -A ${MOUNT_PROJECTS_PATH} 2>/dev/null)" ]; then
     echo "刪除 projects 掛載點目錄..."
     rmdir ${MOUNT_PROJECTS_PATH} 2>/dev/null || true
+fi
+if [ -d "${MOUNT_CIRCUITS_PATH}" ] && [ -z "$(ls -A ${MOUNT_CIRCUITS_PATH} 2>/dev/null)" ]; then
+    echo "刪除 circuits 掛載點目錄..."
+    rmdir ${MOUNT_CIRCUITS_PATH} 2>/dev/null || true
 fi
 if [ -d "${NAS_MOUNT_BASE}" ] && [ -z "$(ls -A ${NAS_MOUNT_BASE} 2>/dev/null)" ]; then
     echo "刪除 NAS 掛載基礎目錄..."
