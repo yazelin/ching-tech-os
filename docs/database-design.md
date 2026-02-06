@@ -95,6 +95,33 @@ CREATE INDEX idx_ai_chats_updated_at ON ai_chats(updated_at DESC);
 ]
 ```
 
+### bot_settings 表
+
+儲存 Bot 平台憑證（AES-256-GCM 加密）。
+
+```sql
+CREATE TABLE bot_settings (
+    id SERIAL PRIMARY KEY,
+    platform VARCHAR(20) NOT NULL,     -- 平台（line / telegram）
+    key VARCHAR(100) NOT NULL,          -- 設定鍵名
+    value TEXT,                         -- 加密後的值（Base64）
+    updated_at TIMESTAMP DEFAULT NOW(),
+    CONSTRAINT uq_bot_settings_platform_key UNIQUE (platform, key)
+);
+```
+
+**支援的鍵值**：
+
+| 平台 | Key | 說明 |
+|------|-----|------|
+| line | `channel_secret` | Channel Secret（加密） |
+| line | `channel_access_token` | Channel Access Token（加密） |
+| telegram | `bot_token` | Bot Token（加密） |
+| telegram | `webhook_secret` | Webhook Secret（加密） |
+| telegram | `admin_chat_id` | 管理員 Chat ID |
+
+> **v0.3.0 變更**：移除多租戶架構（`tenants`、`tenant_admins` 表），所有資料表的 `tenant_id` 欄位已移除。使用者角色簡化為 `admin` / `user`。
+
 ## Alembic 常用指令
 
 ```bash

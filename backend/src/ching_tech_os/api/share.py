@@ -260,7 +260,7 @@ async def get_public_attachment(token: str, path: str) -> Response:
     - nas://knowledge/attachments/{kb_id}/{filename} (NAS 附件，舊格式)
     - attachments/{kb_id}/{filename} (NAS 附件)
     """
-    from pathlib import Path as FilePath
+    from pathlib import Path
 
     try:
         # 驗證 token 有效
@@ -333,7 +333,7 @@ async def get_public_attachment(token: str, path: str) -> Response:
             assets_path = "assets/" + path[len("local/"):]
 
             # 讀取本機檔案（assets 儲存在 knowledge_data_path）
-            assets_base = FilePath(settings.knowledge_data_path)
+            assets_base = Path(settings.knowledge_data_path)
             file_path = assets_base / assets_path
 
             if not file_path.exists():

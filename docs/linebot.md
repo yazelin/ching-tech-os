@@ -5,114 +5,25 @@
 
 Line Bot 整合功能，實現 Line 訊息儲存、AI 助理回應、知識庫管理與公開分享。
 
-## 多租戶架構
+## Bot 憑證管理
 
-系統支援多租戶 Line Bot 部署，每個租戶可選擇使用獨立 Bot 或共用平台 Bot。
+Line Bot 憑證支援兩種來源，資料庫設定優先於環境變數：
 
-### 部署模式
+| 來源 | 優先順序 | 說明 |
+|------|----------|------|
+| **資料庫**（`bot_settings` 表） | 優先 | 透過管理介面設定，AES-256-GCM 加密儲存 |
+| **環境變數** | 備用 | `CHING_TECH_LINE_CHANNEL_SECRET` 等 |
 
-| 模式 | 說明 | 適用場景 |
-|------|------|----------|
-| **獨立 Bot** | 租戶使用自己的 Line Bot（自行申請） | 企業客戶、品牌識別需求 |
-| **共用 Bot** | 多個租戶共用平台的 Line Bot | 小型客戶、試用租戶 |
+**管理 API**（需管理員權限）：
 
-### 運作流程
-
-```
-Line Platform
-     │
-     ▼ Webhook (X-Line-Signature)
-┌─────────────────────────────────────────────────────────────────┐
-│  FastAPI                                                         │
-│  ┌─────────────────────────────────────────────────────────────┐ │
-│  │ 1. 多租戶簽章驗證                                            │ │
-│  │    ├─ 遍歷各租戶 channel_secret 驗證                         │ │
-│  │    ├─ 驗證成功 → 取得 tenant_id（獨立 Bot 模式）             │ │
-│  │    └─ 全部失敗 → 嘗試環境變數 secret（共用 Bot 模式）        │ │
-│  └─────────────────────────────────────────────────────────────┘ │
-│                              │                                   │
-│                              ▼                                   │
-│  ┌─────────────────────────────────────────────────────────────┐ │
-│  │ 2. 租戶判定                                                  │ │
-│  │    ├─ 獨立 Bot：使用簽章驗證取得的 tenant_id                 │ │
-│  │    └─ 共用 Bot：從群組綁定或用戶 CTOS 帳號判斷               │ │
-│  └─────────────────────────────────────────────────────────────┘ │
-│                              │                                   │
-│                              ▼                                   │
-│  ┌─────────────────────────────────────────────────────────────┐ │
-│  │ 3. 回覆訊息                                                  │ │
-│  │    └─ 使用對應租戶的 access_token 發送                       │ │
-│  └─────────────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### 獨立 Bot 模式
-
-租戶使用自己申請的 Line Bot，Bot 加入群組時自動歸屬到該租戶。
-
-**設定方式**：
-1. 租戶在 Line Developers Console 建立 Messaging API Channel
-2. 設定 Webhook URL 指向平台：`https://your-domain/api/bot/line/webhook`
-3. 在租戶管理介面設定 Channel ID、Channel Secret、Access Token
-4. 平台會自動以該租戶的憑證驗證和回覆訊息
-
-**優點**：
-- 品牌識別：Bot 名稱和頭像可自訂
-- 自動歸屬：群組加入時自動識別租戶
-- 隔離性：不會與其他租戶混淆
-
-### 共用 Bot 模式
-
-多個租戶共用平台提供的 Line Bot，需透過指令綁定群組到租戶。
-
-**綁定群組**：
-```
-/綁定 {租戶代碼}
-```
-或
-```
-/bind {租戶代碼}
-```
-
-**綁定流程**：
-1. 平台 Bot 加入群組（使用預設租戶）
-2. 使用者輸入 `/綁定 acme`（acme 是租戶代碼）
-3. 系統驗證租戶代碼存在
-4. 更新 `line_groups.tenant_id` 為該租戶
-5. 同時更新相關訊息和檔案的 tenant_id
-
-**注意**：未綁定的群組會使用預設租戶處理訊息。
-
-### 租戶 Line Bot 設定 API
-
-平台管理員可透過 API 為租戶設定 Line Bot 憑證：
-
-| 端點 | 方法 | 說明 |
+| 方法 | 端點 | 說明 |
 |------|------|------|
-| `/api/admin/tenants/{id}/linebot` | GET | 取得 Line Bot 設定狀態 |
-| `/api/admin/tenants/{id}/linebot` | PUT | 設定 Line Bot 憑證 |
-| `/api/admin/tenants/{id}/linebot/test` | POST | 測試憑證有效性 |
-| `/api/admin/tenants/{id}/linebot` | DELETE | 清除 Line Bot 設定 |
+| GET | `/api/admin/bot-settings/line` | 取得憑證狀態（遮罩顯示） |
+| PUT | `/api/admin/bot-settings/line` | 更新 Line Bot 憑證 |
+| DELETE | `/api/admin/bot-settings/line` | 清除憑證（回退至環境變數） |
+| POST | `/api/admin/bot-settings/line/test` | 測試連線 |
 
-**設定請求**：
-```json
-PUT /api/admin/tenants/{tenant_id}/linebot
-{
-    "channel_id": "1234567890",
-    "channel_secret": "your_channel_secret",
-    "channel_access_token": "your_access_token"
-}
-```
-
-**回應**：
-```json
-{
-    "success": true,
-    "message": "Line Bot 設定已儲存"
-}
-```
-
-> **安全**：Channel Secret 和 Access Token 使用 AES-256 加密儲存，需設定 `TENANT_SECRET_KEY` 環境變數。
+> 憑證使用 AES-256-GCM 加密儲存，需設定 `BOT_SECRET_KEY` 環境變數。詳見 [安全機制](security.md)。
 
 ## 架構
 

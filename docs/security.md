@@ -213,6 +213,38 @@ device_type = "mobile" if ua.is_mobile else "tablet" if ua.is_tablet else "deskt
 
 ---
 
+## Bot 憑證加密
+
+### 加密演算法
+
+Bot 憑證（Line Channel Secret / Access Token、Telegram Bot Token 等）使用 AES-256-GCM 加密儲存於 `bot_settings` 表。
+
+| 項目 | 說明 |
+|------|------|
+| 演算法 | AES-256-GCM（NIST 認證的 AEAD 加密） |
+| 金鑰來源 | `BOT_SECRET_KEY` 環境變數，經 SHA-256 衍生 32 bytes |
+| Nonce | 每次加密產生 12 bytes 隨機 nonce |
+| 儲存格式 | `Base64(nonce + ciphertext + tag)` |
+
+**實作位置**：`backend/src/ching_tech_os/utils/crypto.py`
+
+### 環境變數
+
+| 變數 | 說明 |
+|------|------|
+| `BOT_SECRET_KEY` | 加密金鑰（必要，未設定時使用預設開發金鑰並發出警告） |
+
+> 生產環境必須設定 `BOT_SECRET_KEY`，否則加密金鑰為公開的預設值。
+
+### 使用者角色
+
+| 角色 | 說明 |
+|------|------|
+| `admin` | 管理員，可存取 Bot 設定、使用者管理等管理功能 |
+| `user` | 一般使用者 |
+
+---
+
 ## 安全注意事項
 
 ### Session 密碼處理

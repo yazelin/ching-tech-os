@@ -1,13 +1,7 @@
 # Ching Tech OS - 開發環境 Docker Compose
 #
-# 多租戶模式設定：
-#   - 設定 MULTI_TENANT_MODE=true 啟用多租戶模式
-#   - 詳細說明請參考 docs/multi-tenant.md
-#   - 多租戶模式 override 設定請參考 docker-compose.multi-tenant.yml
-#
 # 使用方式：
-#   單租戶模式: docker compose up -d
-#   多租戶模式: docker compose -f docker-compose.yml -f docker-compose.multi-tenant.yml up -d
+#   docker compose up -d
 
 services:
   postgres:
