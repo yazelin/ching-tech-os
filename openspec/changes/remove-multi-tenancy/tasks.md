@@ -136,8 +136,8 @@
   - 移除 MULTI_TENANT_MODE、DEFAULT_TENANT_ID、多租戶路徑方法
   - TENANT_SECRET_KEY → BOT_SECRET_KEY
   - LINE_CHANNEL_ACCESS_TOKEN/SECRET 已存在
-- [ ] 11.2 更新 `.env.example`
-- [ ] 11.3 更新實際 `.env` 檔案
+- [x] 11.2 更新 `.env.example` ✓
+- [x] 11.3 更新實際 `.env` 檔案 ✓
 
 ## 12. 前端 - 登入頁面
 
@@ -176,16 +176,12 @@
 
 ## 17. 檔案系統遷移
 
-- [ ] 17.1 確認 chingtech 租戶的 UUID
-- [ ] 17.2 移動租戶檔案到根層級：
-  ```bash
-  mv /mnt/nas/ctos/tenants/{uuid}/knowledge/* /mnt/nas/ctos/knowledge/
-  mv /mnt/nas/ctos/tenants/{uuid}/linebot/* /mnt/nas/ctos/linebot/
-  mv /mnt/nas/ctos/tenants/{uuid}/ai-generated/* /mnt/nas/ctos/ai-generated/
-  mv /mnt/nas/ctos/tenants/{uuid}/attachments/* /mnt/nas/ctos/attachments/
-  ```
-- [ ] 17.3 刪除 tenants 目錄：`rm -rf /mnt/nas/ctos/tenants/`
-- [ ] 17.4 驗證檔案存取正常
+- [x] 17.1 確認 chingtech 租戶的 UUID：fe530f72-f9f5-434c-ba0b-8bc2d6485ca3 ✓
+- [x] 17.2 移動租戶檔案到根層級（使用 rsync 合併）✓
+  - knowledge/ 17M、linebot/ 322M、ai-generated/ 179M
+  - attachments/ 6.2M、projects/ 6.2M、ai-presentations/ 1.2M
+- [x] 17.3 保留 tenants 目錄（含其他舊租戶資料，不刪除）✓
+- [x] 17.4 驗證檔案存取正常 ✓
 
 ## 18. 文件更新
 
