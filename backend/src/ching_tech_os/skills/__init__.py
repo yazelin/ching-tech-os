@@ -6,6 +6,7 @@
 import asyncio
 import logging
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
@@ -62,7 +63,7 @@ class SkillManager:
                 continue
 
             try:
-                with open(skill_yaml) as f:
+                with open(skill_yaml, encoding="utf-8") as f:
                     config = yaml.safe_load(f)
 
                 prompt = ""
@@ -80,11 +81,21 @@ class SkillManager:
                 self._skills[skill.name] = skill
                 logger.debug(f"載入 skill: {skill.name} ({len(skill.tools)} tools)")
 
-            except (OSError, yaml.YAMLError, KeyError, TypeError) as e:
+            except (yaml.YAMLError, OSError) as e:
                 logger.error(f"載入 skill 失敗 {skill_dir}: {e}")
 
         self._loaded = True
         logger.info(f"共載入 {len(self._skills)} 個 skills")
+
+    async def get_skill(self, name: str) -> Skill | None:
+        """根據名稱取得 skill"""
+        await self.load_skills()
+        return self._skills.get(name)
+
+    async def get_all_skills(self) -> list[Skill]:
+        """取得所有 skills"""
+        await self.load_skills()
+        return list(self._skills.values())
 
     async def get_skills_for_user(
         self,
@@ -133,13 +144,7 @@ class SkillManager:
         return servers
 
 
-# 全域 singleton
-_skill_manager: SkillManager | None = None
-
-
+@lru_cache(maxsize=1)
 def get_skill_manager() -> SkillManager:
-    """取得全域 SkillManager"""
-    global _skill_manager
-    if _skill_manager is None:
-        _skill_manager = SkillManager()
-    return _skill_manager
+    """取得全域 SkillManager（線程安全 singleton）"""
+    return SkillManager()

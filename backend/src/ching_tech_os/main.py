@@ -55,6 +55,12 @@ async def lifespan(app: FastAPI):
             "請在 .env 中設定 BOT_SECRET_KEY。"
         )
     ensure_directories()  # 確保必要目錄存在
+    # 預載入 Skills
+    try:
+        from .skills import get_skill_manager
+        await get_skill_manager().load_skills()
+    except Exception as e:
+        logging.getLogger(__name__).warning(f"Skills 預載入失敗: {e}")
     await init_db_pool()
     await ensure_default_linebot_agents()  # 確保 Line Bot Agent 存在
     await session_manager.start_cleanup_task()
@@ -77,6 +83,13 @@ async def lifespan(app: FastAPI):
     await session_manager.stop_cleanup_task()
     from .services.workers import shutdown_pools
     shutdown_pools()
+    # 清理 Claude agent 工作目錄基底
+    try:
+        from .services.claude_agent import _WORKING_DIR_BASE
+        import shutil
+        shutil.rmtree(_WORKING_DIR_BASE, ignore_errors=True)
+    except Exception as e:
+        logging.getLogger(__name__).warning(f"清理 Claude agent 工作目錄失敗: {e}")
     await close_db_pool()
 
 
