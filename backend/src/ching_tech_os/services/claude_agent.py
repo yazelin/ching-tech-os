@@ -315,11 +315,13 @@ async def call_claude(
         except asyncio.TimeoutError:
             logger.warning(f"call_claude TIMEOUT after {timeout}s, collected {len(tool_calls)} tool calls")
 
-            # WARNING: _text_buffer is a private attribute of ClaudeClient;
-            # may break on library updates. Wrapped in try/except for safety.
+            # NOTE: _text_buffer is a private attribute of ClaudeClient with no
+            # public equivalent as of v0.4.x. Guarded with AttributeError so
+            # library upgrades won't crash.
             try:
                 text_buffer = _clean_overgenerated_response(client._text_buffer)
             except AttributeError:
+                logger.debug("ClaudeClient._text_buffer not available; partial response lost")
                 text_buffer = ""
 
             error_msg = f"請求超時（{timeout} 秒）"
@@ -356,10 +358,12 @@ async def call_claude(
 
     except (ConnectionError, OSError, RuntimeError, asyncio.CancelledError) as e:
         logger.error(f"call_claude 錯誤: {e}", exc_info=True)
-        # WARNING: _text_buffer is a private attribute; may break on library updates.
+        # NOTE: _text_buffer is a private attribute with no public equivalent
+        # as of v0.4.x. Guarded for forward-compatibility.
         try:
             fallback_message = client._text_buffer if hasattr(client, '_text_buffer') else ""
         except AttributeError:
+            logger.debug("ClaudeClient._text_buffer not available; partial response lost")
             fallback_message = ""
         return ClaudeResponse(
             success=False,

@@ -14,7 +14,7 @@ logger = logging.getLogger("bot.agents")
 try:
     from ...skills import get_skill_manager
     _HAS_SKILL_MANAGER = True
-except Exception:
+except (ImportError, ModuleNotFoundError):
     _HAS_SKILL_MANAGER = False
 
 
@@ -327,7 +327,7 @@ APP_PROMPT_MAPPING: dict[str, str] = {
 }
 
 
-def generate_tools_prompt(
+async def generate_tools_prompt(
     app_permissions: dict[str, bool],
     is_group: bool = False,
 ) -> str:
@@ -346,10 +346,10 @@ def generate_tools_prompt(
     if _HAS_SKILL_MANAGER:
         try:
             sm = get_skill_manager()
-            result = sm.generate_tools_prompt(app_permissions, is_group)
+            result = await sm.generate_tools_prompt(app_permissions, is_group)
             if result:
                 return result
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError) as e:
             logger.warning(f"SkillManager 載入失敗，使用 fallback: {e}")
 
     # Fallback: 硬編碼 prompt

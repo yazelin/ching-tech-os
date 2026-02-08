@@ -3,6 +3,7 @@
 動態載入和管理 AI Skills，取代 bot/agents.py 的硬編碼 prompt。
 """
 
+import asyncio
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -34,14 +35,20 @@ class SkillManager:
         self._skills_dir = Path(skills_dir) if skills_dir else SKILLS_DIR
         self._skills: dict[str, Skill] = {}
         self._loaded = False
+        self._load_lock = asyncio.Lock()
 
-    def load_skills(self) -> None:
-        """掃描 skills 目錄，載入所有 skill 定義"""
-        if self._loaded:
-            return
+    async def load_skills(self) -> None:
+        """掃描 skills 目錄，載入所有 skill 定義（async-safe）"""
+        async with self._load_lock:
+            if self._loaded:
+                return
+            await asyncio.to_thread(self._load_skills_sync)
 
+    def _load_skills_sync(self) -> None:
+        """同步載入 skills（在 thread pool 中執行，避免 blocking event loop）"""
         if not self._skills_dir.exists():
             logger.warning(f"Skills 目錄不存在: {self._skills_dir}")
+            self._loaded = True
             return
 
         for skill_dir in sorted(self._skills_dir.iterdir()):
@@ -73,18 +80,18 @@ class SkillManager:
                 self._skills[skill.name] = skill
                 logger.debug(f"載入 skill: {skill.name} ({len(skill.tools)} tools)")
 
-            except Exception as e:
+            except (OSError, yaml.YAMLError, KeyError, TypeError) as e:
                 logger.error(f"載入 skill 失敗 {skill_dir}: {e}")
 
         self._loaded = True
         logger.info(f"共載入 {len(self._skills)} 個 skills")
 
-    def get_skills_for_user(
+    async def get_skills_for_user(
         self,
         app_permissions: dict[str, bool],
     ) -> list[Skill]:
         """根據使用者權限回傳可用的 skills"""
-        self.load_skills()
+        await self.load_skills()
         result = []
         for skill in self._skills.values():
             if skill.requires_app is None:
@@ -93,33 +100,33 @@ class SkillManager:
                 result.append(skill)
         return result
 
-    def generate_tools_prompt(
+    async def generate_tools_prompt(
         self,
         app_permissions: dict[str, bool],
         is_group: bool = False,
     ) -> str:
         """根據使用者權限動態生成工具說明 prompt"""
-        skills = self.get_skills_for_user(app_permissions)
+        skills = await self.get_skills_for_user(app_permissions)
         sections = [skill.prompt for skill in skills if skill.prompt]
         return "\n\n".join(sections)
 
-    def get_tool_names(
+    async def get_tool_names(
         self,
         app_permissions: dict[str, bool],
     ) -> list[str]:
         """回傳使用者可用的所有工具名稱"""
-        skills = self.get_skills_for_user(app_permissions)
+        skills = await self.get_skills_for_user(app_permissions)
         tools = []
         for skill in skills:
             tools.extend(skill.tools)
         return tools
 
-    def get_required_mcp_servers(
+    async def get_required_mcp_servers(
         self,
         app_permissions: dict[str, bool],
     ) -> set[str]:
         """回傳使用者需要的 MCP server 名稱"""
-        skills = self.get_skills_for_user(app_permissions)
+        skills = await self.get_skills_for_user(app_permissions)
         servers = set()
         for skill in skills:
             servers.update(skill.mcp_servers)

@@ -23,50 +23,57 @@ from ching_tech_os.services.linebot_agents import (
 class TestGenerateToolsPrompt:
     """測試根據權限動態生成工具 prompt"""
 
-    def test_no_permissions(self):
+    @pytest.mark.asyncio
+    async def test_no_permissions(self):
         """無任何權限時只有基礎工具"""
-        prompt = generate_tools_prompt({})
+        prompt = await generate_tools_prompt({})
         # 應該包含基礎工具
         assert len(prompt) > 0
         # 不應包含專案管理工具
         assert "query_project" not in prompt
 
-    def test_project_management_permission(self):
+    @pytest.mark.asyncio
+    async def test_project_management_permission(self):
         """有專案管理權限（已遷移至 ERPNext）"""
-        prompt = generate_tools_prompt({"project-management": True})
+        prompt = await generate_tools_prompt({"project-management": True})
         assert "mcp__erpnext__list_documents" in prompt
         assert "Project" in prompt
 
-    def test_knowledge_base_permission(self):
+    @pytest.mark.asyncio
+    async def test_knowledge_base_permission(self):
         """有知識庫權限"""
-        prompt = generate_tools_prompt({"knowledge-base": True})
+        prompt = await generate_tools_prompt({"knowledge-base": True})
         assert "search_knowledge" in prompt
 
-    def test_inventory_permission(self):
+    @pytest.mark.asyncio
+    async def test_inventory_permission(self):
         """有庫存管理權限（已遷移至 ERPNext）"""
-        prompt = generate_tools_prompt({"inventory-management": True})
+        prompt = await generate_tools_prompt({"inventory-management": True})
         assert "mcp__erpnext__get_stock_balance" in prompt
 
-    def test_file_manager_permission(self):
+    @pytest.mark.asyncio
+    async def test_file_manager_permission(self):
         """有檔案管理權限"""
-        prompt = generate_tools_prompt({"file-manager": True})
+        prompt = await generate_tools_prompt({"file-manager": True})
         assert "search_nas_files" in prompt
 
-    def test_multiple_permissions(self):
+    @pytest.mark.asyncio
+    async def test_multiple_permissions(self):
         """多個權限同時啟用"""
         perms = {
             "project-management": True,
             "knowledge-base": True,
             "inventory-management": True,
         }
-        prompt = generate_tools_prompt(perms)
+        prompt = await generate_tools_prompt(perms)
         assert "mcp__erpnext__list_documents" in prompt
         assert "search_knowledge" in prompt
         assert "mcp__erpnext__get_stock_balance" in prompt
 
-    def test_disabled_permission(self):
+    @pytest.mark.asyncio
+    async def test_disabled_permission(self):
         """權限設為 False"""
-        prompt = generate_tools_prompt({"project-management": False})
+        prompt = await generate_tools_prompt({"project-management": False})
         assert "query_project" not in prompt
 
 
