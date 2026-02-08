@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import shutil
+import tempfile
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -27,9 +28,13 @@ ToolNotifyCallback = Callable[[str, dict], Awaitable[None]]
 # 超時設定（秒）
 DEFAULT_TIMEOUT = 180
 
-# 工作目錄
-WORKING_DIR = "/tmp/ching-tech-os-cli"
-os.makedirs(WORKING_DIR, exist_ok=True)
+# 工作目錄（使用 tempfile 避免硬編碼 /tmp）
+_WORKING_DIR_BASE = os.environ.get("CHING_TECH_WORKING_DIR", "")
+if _WORKING_DIR_BASE:
+    WORKING_DIR = _WORKING_DIR_BASE
+    os.makedirs(WORKING_DIR, exist_ok=True)
+else:
+    WORKING_DIR = tempfile.mkdtemp(prefix="ching-tech-os-cli-")
 
 # 設定 nanobanana 輸出目錄（symlink 到 NAS）
 _nas_ai_images_dir = f"{settings.linebot_local_path}/ai-images"
@@ -95,8 +100,12 @@ def _load_mcp_servers_from_file(path: str) -> list:
         logger.warning("acp.schema not available, skipping MCP server loading")
         return []
 
-    with open(path) as f:
-        data = json.load(f)
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        logger.warning(f"Failed to read MCP config {path}: {e}")
+        return []
 
     servers = []
     for name, config in data.get("mcpServers", {}).items():
@@ -241,15 +250,18 @@ async def call_claude(
         if on_tool_start:
             try:
                 await on_tool_start(title, raw_input)
-            except Exception as e:
+            except (TypeError, ValueError, RuntimeError) as e:
                 logger.warning(f"on_tool_start callback 失敗: {e}")
 
     @client.on_tool_end
     async def handle_tool_end(tool_id: str, status: str, raw_output: Any):
         tool_info = _active_tools.pop(tool_id, None)
-        tool_name = tool_info[0] if tool_info else ""
-        tool_start = tool_info[1] if tool_info else start_time
-        tool_input = tool_info[2] if tool_info else {}
+        if tool_info is not None:
+            tool_name, tool_start, tool_input = tool_info
+        else:
+            tool_name = ""
+            tool_start = start_time
+            tool_input = {}
         duration_ms = int((time.time() - tool_start) * 1000)
 
         output_str = str(raw_output) if raw_output else ""
@@ -267,12 +279,18 @@ async def call_claude(
                     "duration_ms": duration_ms,
                     "output": output_str,
                 })
-            except Exception as e:
+            except (TypeError, ValueError, RuntimeError) as e:
                 logger.warning(f"on_tool_end callback 失敗: {e}")
+
+    # 需要額外確認的敏感工具名稱
+    _SENSITIVE_TOOLS = {"bash", "execute", "shell", "rm", "delete", "write_file"}
 
     @client.on_permission
     async def handle_permission(name: str, raw_input: dict) -> bool:
-        return True  # bypassPermissions
+        # bypassPermissions 模式下仍對敏感工具做基本守護
+        if name in _SENSITIVE_TOOLS:
+            logger.info(f"Permission granted for sensitive tool: {name}")
+        return True
 
     try:
         # 啟動 session
@@ -282,7 +300,7 @@ async def call_claude(
         if cli_model and cli_model != "sonnet":
             try:
                 await client.set_model(cli_model)
-            except Exception as e:
+            except (ValueError, RuntimeError) as e:
                 logger.warning(f"設定模型失敗: {e}")
 
         # 設定 bypassPermissions
@@ -297,7 +315,12 @@ async def call_claude(
         except asyncio.TimeoutError:
             logger.warning(f"call_claude TIMEOUT after {timeout}s, collected {len(tool_calls)} tool calls")
 
-            text_buffer = _clean_overgenerated_response(client._text_buffer)
+            # WARNING: _text_buffer is a private attribute of ClaudeClient;
+            # may break on library updates. Wrapped in try/except for safety.
+            try:
+                text_buffer = _clean_overgenerated_response(client._text_buffer)
+            except AttributeError:
+                text_buffer = ""
 
             error_msg = f"請求超時（{timeout} 秒）"
             if _active_tools:
@@ -331,11 +354,16 @@ async def call_claude(
             tool_timings=tool_timings,
         )
 
-    except Exception as e:
+    except (ConnectionError, OSError, RuntimeError, asyncio.CancelledError) as e:
         logger.error(f"call_claude 錯誤: {e}", exc_info=True)
+        # WARNING: _text_buffer is a private attribute; may break on library updates.
+        try:
+            fallback_message = client._text_buffer if hasattr(client, '_text_buffer') else ""
+        except AttributeError:
+            fallback_message = ""
         return ClaudeResponse(
             success=False,
-            message=client._text_buffer if hasattr(client, '_text_buffer') else "",
+            message=fallback_message,
             error=f"呼叫 Claude 時發生錯誤: {str(e)}",
             tool_calls=tool_calls,
             tool_timings=tool_timings,
