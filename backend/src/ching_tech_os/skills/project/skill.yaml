@@ -1,0 +1,10 @@
+name: project
+description: 專案管理（ERPNext）
+requires_app: project-management
+tools:
+  - mcp__erpnext__list_documents
+  - mcp__erpnext__get_document
+  - mcp__erpnext__create_document
+  - mcp__erpnext__update_document
+mcp_servers:
+  - erpnext

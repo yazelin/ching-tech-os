@@ -20,6 +20,18 @@ wheels = [
 ]
 
 [[package]]
+name = "agent-client-protocol"
+version = "0.8.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a8/a4/26698e0186933b4ab6e814626c99ee52b5522d039b5c94c983ecb3a66eed/agent_client_protocol-0.8.0.tar.gz", hash = "sha256:f9eade29167ff72a10fae7a0a0c1f27436909a790e159fb10265c2874e58d922", size = 68577, upload-time = "2026-02-07T17:08:46.513Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4b/04/e55a3c549c09c0023cb92c696c7b98d97bb657088f940e34f4bc47d1a49a/agent_client_protocol-0.8.0-py3-none-any.whl", hash = "sha256:2d5712b88b3249dbd6148b24d32c6eb8992e5663f224db6291524ac80cca8037", size = 54362, upload-time = "2026-02-07T17:08:45.575Z" },
+]
+
+[[package]]
 name = "aiohappyeyeballs"
 version = "2.6.1"
 source = { registry = "https://pypi.org/simple" }
@@ -517,6 +529,7 @@ dependencies = [
     { name = "apscheduler" },
     { name = "asyncpg" },
     { name = "bcrypt" },
+    { name = "claude-code-acp" },
     { name = "email-validator" },
     { name = "fastapi" },
     { name = "geoip2" },
@@ -539,6 +552,7 @@ dependencies = [
     { name = "python-pptx" },
     { name = "python-socketio" },
     { name = "python-telegram-bot" },
+    { name = "pyyaml" },
     { name = "smbprotocol" },
     { name = "sqlalchemy" },
     { name = "user-agents" },
@@ -565,6 +579,7 @@ requires-dist = [
     { name = "apscheduler", specifier = ">=3.11.1" },
     { name = "asyncpg", specifier = ">=0.29.0" },
     { name = "bcrypt", specifier = ">=4.0.0" },
+    { name = "claude-code-acp", specifier = ">=0.4.1" },
     { name = "email-validator", specifier = ">=2.0.0" },
     { name = "fastapi", specifier = ">=0.109.0" },
     { name = "geoip2", specifier = ">=4.8.0" },
@@ -589,6 +604,7 @@ requires-dist = [
     { name = "python-pptx", specifier = ">=0.6.0" },
     { name = "python-socketio", specifier = ">=5.10.0" },
     { name = "python-telegram-bot", specifier = ">=21.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "smbprotocol", specifier = ">=1.12.0" },
     { name = "sqlalchemy", specifier = ">=2.0.0" },
     { name = "user-agents", specifier = ">=2.2.0" },
@@ -601,6 +617,35 @@ dev = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "pytest", specifier = ">=9.0.2" },
     { name = "pytest-asyncio", specifier = ">=1.3.0" },
+]
+
+[[package]]
+name = "claude-agent-sdk"
+version = "0.1.33"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "mcp" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/57/aa/5c417ef464d3fa712d830cd56a9a79aef8dfb5bc3414aae4bae136cf4e73/claude_agent_sdk-0.1.33.tar.gz", hash = "sha256:134bf403bb7553d829dadec42c30ecef340f5d4ad1595c1bdef933a9ca3129cf", size = 61196, upload-time = "2026-02-07T19:19:53.372Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/72/31/1ac5d536013b1e38b37d71928a0db214cbd47e7bb815c21141dbc6dd93b6/claude_agent_sdk-0.1.33-py3-none-macosx_11_0_arm64.whl", hash = "sha256:57886a2dd124e5b3c9e12ec3e4841742ab3444d1e428b45ceaec8841c96698fa", size = 54323456, upload-time = "2026-02-07T19:19:39.407Z" },
+    { url = "https://files.pythonhosted.org/packages/54/36/79c3feb3f2c95591b80de39a1d3097d30bc3a9a84fcff6422f5434f1187a/claude_agent_sdk-0.1.33-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:ea0f1e4fadeec766000122723c406a6f47c6210ea11bb5cc0c88af11ef7c940c", size = 69106772, upload-time = "2026-02-07T19:19:42.998Z" },
+    { url = "https://files.pythonhosted.org/packages/03/a8/64d22ae767154da4629004a80e9f59f71b5070d55fcfade4efdfb06b1f7a/claude_agent_sdk-0.1.33-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:0ecd822c577b4ea2a52e51146a24dcea73eb69ff366bdb875785dadb116d593b", size = 69688592, upload-time = "2026-02-07T19:19:46.629Z" },
+    { url = "https://files.pythonhosted.org/packages/b8/aa/83677a3d42b047bcacf4dbe730bf5189a106b5b6746ee83f6920e5d9729a/claude_agent_sdk-0.1.33-py3-none-win_amd64.whl", hash = "sha256:a9fbd09d8f947005e087340ecd0706ed35639c946b4bd49429d3132db4cb3751", size = 72211078, upload-time = "2026-02-07T19:19:50.528Z" },
+]
+
+[[package]]
+name = "claude-code-acp"
+version = "0.4.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "agent-client-protocol" },
+    { name = "claude-agent-sdk" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c7/3c/0aefe5d72456d6f393df6258c0d86cb8b84d6ccd64aaa78d5874ce278cad/claude_code_acp-0.4.1.tar.gz", hash = "sha256:861bf9b47845dafc0775e0969cc02afca1835e66d4c3e33464ba0af39d9176ff", size = 175744, upload-time = "2026-02-06T14:33:51.047Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/30/49/ad2b8a1cbda1c919eaae2804fa29c543a15f43b40148ab240dc329b9db08/claude_code_acp-0.4.1-py3-none-any.whl", hash = "sha256:6831eb57b2e60b50af3dc0825f6b39f2bf6be8809f79ad64f4d931a613451ac4", size = 36495, upload-time = "2026-02-06T14:33:49.489Z" },
 ]
 
 [[package]]

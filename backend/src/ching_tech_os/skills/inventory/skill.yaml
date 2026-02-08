@@ -1,0 +1,13 @@
+name: inventory
+description: 物料/庫存管理（ERPNext）
+requires_app: inventory-management
+tools:
+  - mcp__erpnext__list_documents
+  - mcp__erpnext__get_document
+  - mcp__erpnext__get_stock_balance
+  - mcp__erpnext__get_stock_ledger
+  - mcp__erpnext__create_document
+  - mcp__erpnext__get_supplier_details
+  - mcp__erpnext__get_customer_details
+mcp_servers:
+  - erpnext
