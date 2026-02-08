@@ -289,7 +289,8 @@ async def call_claude(
     async def handle_permission(name: str, raw_input: dict) -> bool:
         # bypassPermissions 模式下仍對敏感工具做基本守護
         if name in _SENSITIVE_TOOLS:
-            logger.info(f"Permission granted for sensitive tool: {name}")
+            logger.warning(f"Permission denied for sensitive tool: {name}")
+            return False
         return True
 
     try:
