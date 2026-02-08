@@ -10,7 +10,10 @@ const AgentSettingsApp = (function() {
   let windowId = null;
   let agents = [];
   let prompts = [];
+  let skills = [];
   let currentAgentId = null;
+  let currentSkillName = null;
+  let currentTab = 'agents'; // 'agents' | 'skills'
   let isDirty = false;
 
   /**
@@ -203,25 +206,48 @@ const AgentSettingsApp = (function() {
    */
   function buildWindowContent() {
     return `
-      <div class="agent-settings">
-        <aside class="agent-sidebar">
-          <div class="agent-sidebar-header">
-            <button class="agent-new-btn btn btn-primary">
-              <span class="icon">${getIcon('plus')}</span>
-              <span>新增 Agent</span>
-            </button>
-          </div>
-          <div class="agent-list">
-            <!-- Agent list will be rendered here -->
-          </div>
-        </aside>
-        <main class="agent-main">
-          <div class="agent-empty-state">
-            <span class="icon">${getIcon('robot-outline')}</span>
-            <h3>選擇或建立 Agent</h3>
-            <p>從左側選擇一個 Agent 進行設定</p>
-          </div>
-        </main>
+      <div class="agent-settings-wrapper">
+        <div class="agent-settings-tabs">
+          <button class="agent-settings-tab active" data-tab="agents">Agents</button>
+          <button class="agent-settings-tab" data-tab="skills">Skills</button>
+        </div>
+        <div class="agent-settings agent-settings-tab-content active" data-tab-content="agents">
+          <aside class="agent-sidebar">
+            <div class="agent-sidebar-header">
+              <button class="agent-new-btn btn btn-primary">
+                <span class="icon">${getIcon('plus')}</span>
+                <span>新增 Agent</span>
+              </button>
+            </div>
+            <div class="agent-list">
+              <!-- Agent list will be rendered here -->
+            </div>
+          </aside>
+          <main class="agent-main">
+            <div class="agent-empty-state">
+              <span class="icon">${getIcon('robot-outline')}</span>
+              <h3>選擇或建立 Agent</h3>
+              <p>從左側選擇一個 Agent 進行設定</p>
+            </div>
+          </main>
+        </div>
+        <div class="agent-settings skill-settings agent-settings-tab-content" data-tab-content="skills">
+          <aside class="agent-sidebar skill-sidebar">
+            <div class="agent-sidebar-header">
+              <div style="padding: 4px 0; color: var(--text-muted); font-size: 13px;">已載入的 Skills</div>
+            </div>
+            <div class="skill-list">
+              <!-- Skill list will be rendered here -->
+            </div>
+          </aside>
+          <main class="agent-main skill-main">
+            <div class="agent-empty-state">
+              <span class="icon">${getIcon('puzzle-outline')}</span>
+              <h3>選擇一個 Skill</h3>
+              <p>從左側選擇一個 Skill 查看詳情</p>
+            </div>
+          </main>
+        </div>
       </div>
     `;
   }
@@ -644,6 +670,168 @@ const AgentSettingsApp = (function() {
     }
   }
 
+  // ========== Skills ==========
+
+  /**
+   * 載入 Skills
+   */
+  async function loadSkills() {
+    try {
+      const response = await fetch('/api/skills', {
+        headers: getAuthHeaders()
+      });
+      if (!response.ok) throw new Error('Failed to load skills');
+      const data = await response.json();
+      skills = data.skills || [];
+      if (!Array.isArray(skills)) skills = [];
+    } catch (e) {
+      console.error('[AgentSettings] Failed to load skills:', e);
+      skills = [];
+    }
+  }
+
+  /**
+   * 渲染 Skill 列表
+   */
+  function renderSkillList() {
+    const container = document.querySelector(`#${windowId} .skill-list`);
+    if (!container) return;
+
+    if (skills.length === 0) {
+      container.innerHTML = `
+        <div class="agent-list-empty">
+          <span class="icon">${getIcon('puzzle-outline')}</span>
+          <p>尚無 Skills</p>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = skills.map(s => {
+      const toolCount = s.tools_count || 0;
+      return `
+        <div class="agent-list-item skill-list-item ${s.name === currentSkillName ? 'active' : ''}"
+             data-skill-name="${s.name}">
+          <div class="agent-list-item-info">
+            <div class="agent-list-item-name">${s.name}</div>
+            <div class="agent-list-item-model">${s.description || '—'}</div>
+            <div class="skill-list-item-meta">
+              <span class="skill-badge">${s.requires_app || '基礎'}</span>
+              ${toolCount > 0 ? `<span class="skill-badge skill-badge-tool">${toolCount} 工具</span>` : ''}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    container.querySelectorAll('.skill-list-item').forEach(item => {
+      item.addEventListener('click', () => {
+        showSkillDetail(item.dataset.skillName);
+      });
+    });
+  }
+
+  /**
+   * 顯示 Skill 詳情
+   */
+  async function showSkillDetail(skillName) {
+    currentSkillName = skillName;
+    renderSkillList();
+
+    const main = document.querySelector(`#${windowId} .skill-main`);
+    if (!main) return;
+
+    // Fetch detail with prompt
+    try {
+      const response = await fetch(`/api/skills/${encodeURIComponent(skillName)}`, {
+        headers: getAuthHeaders()
+      });
+      if (!response.ok) throw new Error('Failed to load skill detail');
+      const skill = await response.json();
+
+      const tools = skill.tools || [];
+      const mcpServers = skill.mcp_servers || [];
+
+      main.innerHTML = `
+        <div class="agent-form skill-detail">
+          <div class="agent-form-section">
+            <div class="agent-form-section-title">基本資訊</div>
+            <div class="skill-detail-field">
+              <span class="agent-form-label">名稱</span>
+              <span class="skill-detail-value">${skill.name}</span>
+            </div>
+            <div class="skill-detail-field">
+              <span class="agent-form-label">說明</span>
+              <span class="skill-detail-value">${skill.description || '—'}</span>
+            </div>
+            <div class="skill-detail-field">
+              <span class="agent-form-label">需要的 App 權限</span>
+              <span class="skill-badge">${skill.requires_app || '基礎'}</span>
+            </div>
+          </div>
+
+          ${tools.length > 0 ? `
+            <div class="agent-form-section">
+              <div class="agent-form-section-title">工具 (${tools.length})</div>
+              <div class="skill-chips">
+                ${tools.map(t => `<span class="skill-chip">${typeof t === 'string' ? t : t.name || t}</span>`).join('')}
+              </div>
+            </div>
+          ` : ''}
+
+          ${mcpServers.length > 0 ? `
+            <div class="agent-form-section">
+              <div class="agent-form-section-title">MCP Servers</div>
+              <div class="skill-chips">
+                ${mcpServers.map(s => `<span class="skill-chip">${typeof s === 'string' ? s : s.name || JSON.stringify(s)}</span>`).join('')}
+              </div>
+            </div>
+          ` : ''}
+
+          ${skill.prompt ? `
+            <div class="agent-form-section">
+              <div class="agent-form-section-title">Prompt</div>
+              <pre class="skill-prompt-content">${escapeHtml(skill.prompt)}</pre>
+            </div>
+          ` : ''}
+        </div>
+      `;
+
+      // Mobile support
+      if (isMobileView()) {
+        const settings = document.querySelector(`#${windowId} .skill-settings`);
+        if (settings) settings.classList.add('showing-editor');
+      }
+    } catch (e) {
+      main.innerHTML = `<div class="agent-empty-state"><p>載入失敗: ${e.message}</p></div>`;
+    }
+  }
+
+  /**
+   * Escape HTML
+   */
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  /**
+   * 切換 Tab
+   */
+  function switchTab(tab) {
+    currentTab = tab;
+    const wrapper = document.querySelector(`#${windowId} .agent-settings-wrapper`);
+    if (!wrapper) return;
+
+    wrapper.querySelectorAll('.agent-settings-tab').forEach(t => {
+      t.classList.toggle('active', t.dataset.tab === tab);
+    });
+    wrapper.querySelectorAll('.agent-settings-tab-content').forEach(c => {
+      c.classList.toggle('active', c.dataset.tabContent === tab);
+    });
+  }
+
   /**
    * 顯示提示訊息
    */
@@ -659,8 +847,9 @@ const AgentSettingsApp = (function() {
   async function initApp(windowEl, wId) {
     windowId = wId;
 
-    await Promise.all([loadAgents(), loadPrompts()]);
+    await Promise.all([loadAgents(), loadPrompts(), loadSkills()]);
     renderAgentList();
+    renderSkillList();
 
     // 綁定事件
     bindEvents();
@@ -675,6 +864,11 @@ const AgentSettingsApp = (function() {
     if (newBtn) {
       newBtn.addEventListener('click', createNewAgent);
     }
+
+    // Tab 切換
+    document.querySelectorAll(`#${windowId} .agent-settings-tab`).forEach(tab => {
+      tab.addEventListener('click', () => switchTab(tab.dataset.tab));
+    });
   }
 
   /**

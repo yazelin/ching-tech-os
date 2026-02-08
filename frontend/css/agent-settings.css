@@ -2,13 +2,6 @@
  * ChingTech OS - Agent Settings Styles
  */
 
-.agent-settings {
-  display: flex;
-  height: 100%;
-  overflow: hidden;
-  background: var(--bg-primary);
-}
-
 /* 側邊欄 */
 .agent-sidebar {
   width: 260px;
@@ -400,6 +393,141 @@
 .agent-empty-state h3 {
   color: var(--text-secondary);
   margin-bottom: 8px;
+}
+
+/* ==========================================================================
+   Tab Bar & Wrapper
+   ========================================================================== */
+
+.agent-settings-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.agent-settings-tabs {
+  display: flex;
+  gap: 0;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.agent-settings-tab {
+  padding: 10px 24px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.agent-settings-tab:hover {
+  color: var(--text-primary);
+}
+
+.agent-settings-tab.active {
+  color: var(--text-primary);
+  border-bottom-color: var(--color-accent, var(--primary, #6c9fff));
+}
+
+.agent-settings-tab-content {
+  display: none;
+  flex: 1;
+  overflow: hidden;
+}
+
+.agent-settings-tab-content.active {
+  display: flex;
+}
+
+/* ==========================================================================
+   Skills
+   ========================================================================== */
+
+.skill-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.skill-list-item-meta {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.skill-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 11px;
+  border-radius: 10px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.skill-badge-tool {
+  background: rgba(108, 159, 255, 0.15);
+  color: var(--color-accent, #6c9fff);
+}
+
+.skill-detail {
+  padding: 16px;
+}
+
+.skill-detail-field {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.skill-detail-field .agent-form-label {
+  min-width: 120px;
+  flex-shrink: 0;
+}
+
+.skill-detail-value {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.skill-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.skill-chip {
+  display: inline-block;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 14px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+}
+
+.skill-prompt-content {
+  width: 100%;
+  padding: 12px;
+  background: var(--bg-input, var(--bg-tertiary));
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 400px;
+  overflow-y: auto;
+  margin: 0;
 }
 
 /* ==========================================================================

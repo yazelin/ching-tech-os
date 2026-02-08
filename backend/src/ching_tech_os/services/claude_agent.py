@@ -28,29 +28,38 @@ ToolNotifyCallback = Callable[[str, dict], Awaitable[None]]
 # 超時設定（秒）
 DEFAULT_TIMEOUT = 180
 
-# 工作目錄（使用 tempfile 避免硬編碼 /tmp）
+# 工作目錄基底（模組級只做 base，每次 call 會建立獨立子目錄）
 _WORKING_DIR_BASE = os.environ.get("CHING_TECH_WORKING_DIR", "")
-if _WORKING_DIR_BASE:
-    WORKING_DIR = _WORKING_DIR_BASE
-    os.makedirs(WORKING_DIR, exist_ok=True)
-else:
-    WORKING_DIR = tempfile.mkdtemp(prefix="ching-tech-os-cli-")
+if not _WORKING_DIR_BASE:
+    _WORKING_DIR_BASE = tempfile.mkdtemp(prefix="ching-tech-os-cli-")
+os.makedirs(_WORKING_DIR_BASE, exist_ok=True)
 
-# 設定 nanobanana 輸出目錄（symlink 到 NAS）
-_nas_ai_images_dir = f"{settings.linebot_local_path}/ai-images"
-_nanobanana_output_link = os.path.join(WORKING_DIR, "nanobanana-output")
 
-if os.path.exists(settings.linebot_local_path):
-    os.makedirs(_nas_ai_images_dir, exist_ok=True)
-    if os.path.islink(_nanobanana_output_link):
-        if os.readlink(_nanobanana_output_link) != _nas_ai_images_dir:
-            os.remove(_nanobanana_output_link)
-            os.symlink(_nas_ai_images_dir, _nanobanana_output_link)
-    elif os.path.exists(_nanobanana_output_link):
-        shutil.rmtree(_nanobanana_output_link)
-        os.symlink(_nas_ai_images_dir, _nanobanana_output_link)
-    else:
-        os.symlink(_nas_ai_images_dir, _nanobanana_output_link)
+def _create_session_workdir() -> str:
+    """為每次 AI 呼叫建立隔離的工作目錄，防止跨 session 污染"""
+    session_dir = tempfile.mkdtemp(prefix="session-", dir=_WORKING_DIR_BASE)
+
+    # 設定 nanobanana 輸出目錄（symlink 到 NAS）
+    nas_ai_images_dir = f"{settings.linebot_local_path}/ai-images"
+    if os.path.exists(settings.linebot_local_path):
+        os.makedirs(nas_ai_images_dir, exist_ok=True)
+        nanobanana_link = os.path.join(session_dir, "nanobanana-output")
+        os.symlink(nas_ai_images_dir, nanobanana_link)
+
+    # 複製 .mcp.json（唯讀副本，不可被 AI 修改原檔）
+    project_mcp = os.path.join(settings.project_root, ".mcp.json")
+    if os.path.exists(project_mcp):
+        shutil.copy2(project_mcp, os.path.join(session_dir, ".mcp.json"))
+
+    return session_dir
+
+
+def _cleanup_session_workdir(session_dir: str) -> None:
+    """清理 session 工作目錄"""
+    try:
+        shutil.rmtree(session_dir, ignore_errors=True)
+    except OSError as e:
+        logger.warning(f"清理工作目錄失敗 {session_dir}: {e}")
 
 # 模型對應表
 MODEL_MAP = {
@@ -101,7 +110,7 @@ def _load_mcp_servers_from_file(path: str) -> list:
         return []
 
     try:
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             data = json.load(f)
     except (OSError, json.JSONDecodeError) as e:
         logger.warning(f"Failed to read MCP config {path}: {e}")
@@ -123,15 +132,9 @@ def _load_mcp_servers_from_file(path: str) -> list:
     return servers
 
 
-def _build_mcp_servers() -> list:
-    """從 WORKING_DIR 的 .mcp.json 載入 MCP servers"""
-    mcp_json_path = os.path.join(WORKING_DIR, ".mcp.json")
-
-    # 如果工作目錄沒有 .mcp.json，從專案根目錄複製
-    project_mcp = os.path.join(settings.project_root, ".mcp.json")
-    if not os.path.exists(mcp_json_path) and os.path.exists(project_mcp):
-        shutil.copy2(project_mcp, mcp_json_path)
-
+def _build_mcp_servers(session_dir: str) -> list:
+    """從 session 工作目錄的 .mcp.json 載入 MCP servers"""
+    mcp_json_path = os.path.join(session_dir, ".mcp.json")
     return _load_mcp_servers_from_file(mcp_json_path)
 
 
@@ -164,7 +167,9 @@ def compose_prompt_with_history(
             if msg.get("is_summary"):
                 continue
             if sender:
-                parts.append(f"{role}[{sender}]: {content}")
+                # 清理 sender 名稱，防止 prompt injection
+                safe_sender = sender.replace("\n", " ").replace("\r", " ")[:50]
+                parts.append(f"{role}[{safe_sender}]: {content}")
             else:
                 parts.append(f"{role}: {content}")
         parts.append("")
@@ -226,9 +231,12 @@ async def call_claude(
     else:
         full_prompt = prompt
 
+    # 建立隔離的工作目錄（per-session，防止跨 session 攻擊）
+    session_dir = _create_session_workdir()
+
     # 決定是否需要 MCP servers
     # 如果 tools 為空，不載入 MCP（避免不必要的啟動開銷）
-    mcp_servers = _build_mcp_servers() if tools else []
+    mcp_servers = _build_mcp_servers(session_dir) if tools else []
 
     # 收集回應資料
     tool_calls: list[ToolCall] = []
@@ -239,7 +247,7 @@ async def call_claude(
 
     # 建立 ClaudeClient（in-process，不走 subprocess）
     client = ClaudeClient(
-        cwd=WORKING_DIR,
+        cwd=session_dir,
         mcp_servers=mcp_servers,
         system_prompt=system_prompt,
     )
@@ -282,14 +290,13 @@ async def call_claude(
             except (TypeError, ValueError, RuntimeError) as e:
                 logger.warning(f"on_tool_end callback 失敗: {e}")
 
-    # 需要額外確認的敏感工具名稱
-    _SENSITIVE_TOOLS = {"bash", "execute", "shell", "rm", "delete", "write_file"}
+    # 白名單模式 — 只允許已知安全的 MCP 工具，拒絕所有其他工具
+    _ALLOWED_TOOLS = set(t.lower() for t in (tools or []))
 
     @client.on_permission
     async def handle_permission(name: str, raw_input: dict) -> bool:
-        # bypassPermissions 模式下仍對敏感工具做基本守護
-        if name in _SENSITIVE_TOOLS:
-            logger.warning(f"Permission denied for sensitive tool: {name}")
+        if name.lower() not in _ALLOWED_TOOLS:
+            logger.warning(f"Permission DENIED for tool: {name} (not in whitelist)")
             return False
         return True
 
@@ -297,11 +304,15 @@ async def call_claude(
         # 啟動 session
         await client.start_session()
 
-        # 設定模型
+        # 設定模型（透過 session，避免環境變數並發污染）
         if cli_model and cli_model != "sonnet":
             try:
-                await client.set_model(cli_model)
-            except (ValueError, RuntimeError) as e:
+                await client.agent.set_session_model(
+                    model_id=cli_model,
+                    session_id=client.session_id,
+                )
+                logger.info(f"設定模型: {cli_model}")
+            except (ValueError, RuntimeError, AttributeError) as e:
                 logger.warning(f"設定模型失敗: {e}")
 
         # 設定 bypassPermissions
@@ -316,14 +327,9 @@ async def call_claude(
         except asyncio.TimeoutError:
             logger.warning(f"call_claude TIMEOUT after {timeout}s, collected {len(tool_calls)} tool calls")
 
-            # NOTE: _text_buffer is a private attribute of ClaudeClient with no
-            # public equivalent as of v0.4.x. Guarded with AttributeError so
-            # library upgrades won't crash.
-            try:
-                text_buffer = _clean_overgenerated_response(client._text_buffer)
-            except AttributeError:
-                logger.debug("ClaudeClient._text_buffer not available; partial response lost")
-                text_buffer = ""
+            text_buffer = _clean_overgenerated_response(
+                getattr(client, "_text_buffer", "")
+            )
 
             error_msg = f"請求超時（{timeout} 秒）"
             if _active_tools:
@@ -335,8 +341,8 @@ async def call_claude(
                 message=text_buffer,
                 error=error_msg,
                 tool_calls=tool_calls,
-                input_tokens=client.input_tokens,
-                output_tokens=client.output_tokens,
+                input_tokens=getattr(client, "input_tokens", None),
+                output_tokens=getattr(client, "output_tokens", None),
                 tool_timings=tool_timings,
             )
 
@@ -352,20 +358,14 @@ async def call_claude(
             success=True,
             message=text_response,
             tool_calls=tool_calls,
-            input_tokens=client.input_tokens,
-            output_tokens=client.output_tokens,
+            input_tokens=getattr(client, "input_tokens", None),
+            output_tokens=getattr(client, "output_tokens", None),
             tool_timings=tool_timings,
         )
 
     except (ConnectionError, OSError, RuntimeError, asyncio.CancelledError) as e:
         logger.error(f"call_claude 錯誤: {e}", exc_info=True)
-        # NOTE: _text_buffer is a private attribute with no public equivalent
-        # as of v0.4.x. Guarded for forward-compatibility.
-        try:
-            fallback_message = client._text_buffer if hasattr(client, '_text_buffer') else ""
-        except AttributeError:
-            logger.debug("ClaudeClient._text_buffer not available; partial response lost")
-            fallback_message = ""
+        fallback_message = getattr(client, "_text_buffer", "")
         return ClaudeResponse(
             success=False,
             message=fallback_message,
@@ -373,6 +373,9 @@ async def call_claude(
             tool_calls=tool_calls,
             tool_timings=tool_timings,
         )
+    finally:
+        # 清理 per-session 工作目錄
+        _cleanup_session_workdir(session_dir)
 
 
 async def call_claude_for_summary(
