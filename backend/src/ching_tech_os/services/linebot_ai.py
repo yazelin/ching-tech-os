@@ -1125,7 +1125,7 @@ async def build_system_prompt(
     if app_permissions:
         from .linebot_agents import generate_tools_prompt, generate_usage_tips_prompt
         is_group = line_group_id is not None
-        tools_prompt = generate_tools_prompt(app_permissions, is_group)
+        tools_prompt = await generate_tools_prompt(app_permissions, is_group)
         if tools_prompt:
             base_prompt += "\n\n你可以使用以下工具：\n\n" + tools_prompt
         # 加入使用說明

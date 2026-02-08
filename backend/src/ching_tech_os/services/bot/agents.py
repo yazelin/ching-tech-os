@@ -2,11 +2,20 @@
 
 從 linebot_agents.py 抽離的平台無關邏輯。
 各平台的 Agent 設定可引用這裡的工具說明 Prompt 區塊。
+
+優先從 SkillManager 載入 prompt，找不到時 fallback 到硬編碼。
 """
 
 import logging
 
 logger = logging.getLogger("bot.agents")
+
+# 嘗試載入 SkillManager
+try:
+    from ...skills import get_skill_manager
+    _HAS_SKILL_MANAGER = True
+except (ImportError, ModuleNotFoundError):
+    _HAS_SKILL_MANAGER = False
 
 
 # ============================================================
@@ -318,11 +327,13 @@ APP_PROMPT_MAPPING: dict[str, str] = {
 }
 
 
-def generate_tools_prompt(
+async def generate_tools_prompt(
     app_permissions: dict[str, bool],
     is_group: bool = False,
 ) -> str:
     """根據使用者權限動態生成工具說明 prompt
+
+    優先從 SkillManager 載入，找不到 skill 時 fallback 到硬編碼。
 
     Args:
         app_permissions: 使用者的 App 權限設定（app_id -> bool）
@@ -331,7 +342,17 @@ def generate_tools_prompt(
     Returns:
         組合後的工具說明 prompt
     """
-    # 收集有權限的工具說明
+    # 優先使用 SkillManager
+    if _HAS_SKILL_MANAGER:
+        try:
+            sm = get_skill_manager()
+            result = await sm.generate_tools_prompt(app_permissions, is_group)
+            if result:
+                return result
+        except (OSError, ValueError, RuntimeError) as e:
+            logger.warning(f"SkillManager 載入失敗，使用 fallback: {e}")
+
+    # Fallback: 硬編碼 prompt
     sections: list[str] = []
 
     # 基礎工具（不需特定權限）

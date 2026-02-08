@@ -1,7 +1,7 @@
-"""Claude CLI Agent 服務
+"""Claude Agent 服務（ClaudeClient in-process 版本）
 
-使用 asyncio.subprocess 非同步呼叫 Claude CLI。
-自己管理對話歷史，不依賴 CLI session。
+使用 claude-code-acp-py 的 ClaudeClient 連接 Claude。
+保持 ClaudeResponse / ToolCall 介面不變，linebot_ai.py 無需修改。
 """
 
 import asyncio
@@ -9,88 +9,50 @@ import json
 import logging
 import os
 import shutil
+import tempfile
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-# Tool 進度通知 callback 型態
-# on_tool_start(tool_name, tool_input) / on_tool_end(tool_name, result)
-ToolNotifyCallback = Callable[[str, dict], Awaitable[None]]
+from claude_code_acp import ClaudeClient
 
 from ..config import settings
 from . import ai_manager
 
 logger = logging.getLogger(__name__)
 
-# Claude CLI 超時設定（秒）
-DEFAULT_TIMEOUT = 180  # 延長至 3 分鐘，以支援複雜搜尋任務
+# Tool 進度通知 callback 型態（保持向後相容）
+ToolNotifyCallback = Callable[[str, dict], Awaitable[None]]
 
-# 工作目錄（使用獨立目錄，避免讀取專案的 CLAUDE.md）
-WORKING_DIR = "/tmp/ching-tech-os-cli"
-os.makedirs(WORKING_DIR, exist_ok=True)
+# 超時設定（秒）
+DEFAULT_TIMEOUT = 180
 
-# 乾淨的工作目錄（不含 MCP 設定，用於純文字生成任務）
-WORKING_DIR_PURE = "/tmp/ching-tech-os-cli-pure"
-os.makedirs(WORKING_DIR_PURE, exist_ok=True)
+# 工作目錄（使用 tempfile 避免硬編碼 /tmp）
+_WORKING_DIR_BASE = os.environ.get("CHING_TECH_WORKING_DIR", "")
+if _WORKING_DIR_BASE:
+    WORKING_DIR = _WORKING_DIR_BASE
+    os.makedirs(WORKING_DIR, exist_ok=True)
+else:
+    WORKING_DIR = tempfile.mkdtemp(prefix="ching-tech-os-cli-")
 
-# 複製 MCP 配置到工作目錄
-PROJECT_ROOT = settings.project_root
-_mcp_src = os.path.join(PROJECT_ROOT, ".mcp.json")
-_mcp_dst = os.path.join(WORKING_DIR, ".mcp.json")
-if os.path.exists(_mcp_src):
-    shutil.copy2(_mcp_src, _mcp_dst)
-
-# 設定 nanobanana 輸出目錄（symlink 到 NAS，讓生成的圖片可以透過 Line Bot 發送）
+# 設定 nanobanana 輸出目錄（symlink 到 NAS）
 _nas_ai_images_dir = f"{settings.linebot_local_path}/ai-images"
 _nanobanana_output_link = os.path.join(WORKING_DIR, "nanobanana-output")
 
-# 建立 NAS 目錄（如果不存在）
 if os.path.exists(settings.linebot_local_path):
     os.makedirs(_nas_ai_images_dir, exist_ok=True)
-
-    # 建立 symlink（如果不存在或指向錯誤位置）
     if os.path.islink(_nanobanana_output_link):
-        # 檢查是否指向正確位置
         if os.readlink(_nanobanana_output_link) != _nas_ai_images_dir:
             os.remove(_nanobanana_output_link)
             os.symlink(_nas_ai_images_dir, _nanobanana_output_link)
     elif os.path.exists(_nanobanana_output_link):
-        # 是普通目錄，移除後建立 symlink
         shutil.rmtree(_nanobanana_output_link)
         os.symlink(_nas_ai_images_dir, _nanobanana_output_link)
     else:
-        # 不存在，直接建立 symlink
         os.symlink(_nas_ai_images_dir, _nanobanana_output_link)
 
-
-def _find_claude_path() -> str:
-    """尋找 Claude CLI 路徑"""
-    # 先嘗試 PATH 中的 claude
-    claude_in_path = shutil.which("claude")
-    if claude_in_path:
-        return claude_in_path
-
-    # 嘗試常見的 NVM 安裝路徑
-    home = os.path.expanduser("~")
-    nvm_paths = [
-        f"{home}/.nvm/versions/node/v24.11.1/bin/claude",
-        f"{home}/.nvm/versions/node/v22.11.0/bin/claude",
-        f"{home}/.nvm/versions/node/v20.18.0/bin/claude",
-    ]
-
-    for path in nvm_paths:
-        if os.path.exists(path):
-            return path
-
-    # 找不到就用預設
-    return "claude"
-
-
-# Claude CLI 路徑
-CLAUDE_PATH = _find_claude_path()
-
-# 模型對應表（前端名稱 → CLI 模型名稱）
+# 模型對應表
 MODEL_MAP = {
     "claude-opus": "opus",
     "claude-sonnet": "sonnet",
@@ -98,28 +60,84 @@ MODEL_MAP = {
 }
 
 
+# ============================================================
+# 資料類別（保持不變）
+# ============================================================
+
 @dataclass
 class ToolCall:
     """工具調用記錄"""
-
-    id: str  # tool_use_id
-    name: str  # 工具名稱
-    input: dict  # 輸入參數
-    output: Optional[str] = None  # 輸出結果
+    id: str
+    name: str
+    input: dict
+    output: Optional[str] = None
 
 
 @dataclass
 class ClaudeResponse:
     """Claude CLI 回應"""
-
     success: bool
     message: str
     error: Optional[str] = None
     tool_calls: list[ToolCall] = field(default_factory=list)
     input_tokens: Optional[int] = None
     output_tokens: Optional[int] = None
-    tool_timings: list[dict] = field(default_factory=list)  # [{name, duration_ms}]
+    tool_timings: list[dict] = field(default_factory=list)
 
+
+# ============================================================
+# MCP Server 設定載入
+# ============================================================
+
+def _load_mcp_servers_from_file(path: str) -> list:
+    """從 .mcp.json 載入 MCP server 設定，轉為 ACP McpServerStdio 格式"""
+    if not os.path.exists(path):
+        return []
+
+    try:
+        from acp.schema import McpServerStdio, EnvVariable
+    except ImportError:
+        logger.warning("acp.schema not available, skipping MCP server loading")
+        return []
+
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        logger.warning(f"Failed to read MCP config {path}: {e}")
+        return []
+
+    servers = []
+    for name, config in data.get("mcpServers", {}).items():
+        server_type = config.get("type", "stdio")
+        if server_type == "stdio":
+            env_vars = []
+            for k, v in config.get("env", {}).items():
+                env_vars.append(EnvVariable(name=k, value=v))
+            servers.append(McpServerStdio(
+                name=name,
+                command=config.get("command", ""),
+                args=config.get("args", []),
+                env=env_vars if env_vars else None,
+            ))
+    return servers
+
+
+def _build_mcp_servers() -> list:
+    """從 WORKING_DIR 的 .mcp.json 載入 MCP servers"""
+    mcp_json_path = os.path.join(WORKING_DIR, ".mcp.json")
+
+    # 如果工作目錄沒有 .mcp.json，從專案根目錄複製
+    project_mcp = os.path.join(settings.project_root, ".mcp.json")
+    if not os.path.exists(mcp_json_path) and os.path.exists(project_mcp):
+        shutil.copy2(project_mcp, mcp_json_path)
+
+    return _load_mcp_servers_from_file(mcp_json_path)
+
+
+# ============================================================
+# Prompt 組合（保持不變）
+# ============================================================
 
 async def get_prompt_content(prompt_name: str) -> str | None:
     """從資料庫取得 prompt 內容"""
@@ -132,20 +150,8 @@ async def get_prompt_content(prompt_name: str) -> str | None:
 def compose_prompt_with_history(
     history: list[dict], new_message: str, max_messages: int = 40
 ) -> str:
-    """組合對話歷史和新訊息成完整 prompt
-
-    Args:
-        history: 對話歷史 [{"role": "user/assistant", "content": "..."}]
-        new_message: 新的使用者訊息
-        max_messages: 最多保留的歷史訊息數量
-
-    Returns:
-        組合後的完整 prompt
-    """
-    # 截斷舊訊息（保留最近的）
+    """組合對話歷史和新訊息成完整 prompt（保持不變）"""
     recent_history = history[-max_messages:] if len(history) > max_messages else history
-
-    # 組合歷史
     parts = []
 
     if recent_history:
@@ -154,275 +160,36 @@ def compose_prompt_with_history(
         for msg in recent_history:
             role = msg.get("role", "user")
             content = msg.get("content", "")
-            sender = msg.get("sender")  # 發送者名稱（群組對話用）
-            # 跳過摘要訊息（它會在 system prompt 中處理）
+            sender = msg.get("sender")
             if msg.get("is_summary"):
                 continue
-            # 格式：user[發送者]: 內容 或 user: 內容（無發送者時）
             if sender:
                 parts.append(f"{role}[{sender}]: {content}")
             else:
                 parts.append(f"{role}: {content}")
         parts.append("")
 
-    # 加入新訊息（sender 資訊已包含在 new_message 參數中，由呼叫端處理）
     parts.append(new_message)
-
     return "\n".join(parts)
 
 
-@dataclass
-class ToolTiming:
-    """Tool 執行時間記錄"""
-    name: str
-    started_at: float
-    finished_at: float | None = None
-
-    @property
-    def duration_ms(self) -> int | None:
-        if self.finished_at:
-            return int((self.finished_at - self.started_at) * 1000)
-        return None
-
-
-@dataclass
-class ParseResult:
-    """stream-json 解析結果"""
-    text: str
-    tool_calls: list[ToolCall]
-    input_tokens: int | None
-    output_tokens: int | None
-    tool_timings: list[ToolTiming]
-    pending_tools: dict[str, ToolTiming]  # 尚未完成的 tools
-
-
 def _clean_overgenerated_response(text: str) -> str:
-    """清理 AI 過度生成的對話預測
-
-    Claude 模型在對話格式下，有時會繼續預測後續的用戶訊息，
-    導致回應中混入虛構的對話內容，例如：
-
-        AI 的正常回應...
-        user: 用戶名: 虛構的訊息
-        user: [回覆...] 更多虛構內容
-
-    這個函數會截斷這些多餘的內容。
-
-    Args:
-        text: AI 的原始回應文字
-
-    Returns:
-        清理後的回應文字
-    """
+    """清理 AI 過度生成的對話預測（保持不變）"""
     if not text:
         return text
-
-    # 按行分割
     lines = text.split("\n")
     cleaned_lines = []
-
     for line in lines:
-        # 檢測 AI 過度生成的對話行
-        # 這些行通常以 "user:" 或 "user[" 開頭（可能有前導空白）
         stripped = line.strip()
         if stripped.startswith("user:") or stripped.startswith("user["):
-            # 發現過度生成，停止收集
             break
         cleaned_lines.append(line)
-
-    # 重新組合，移除尾端多餘的空行
-    result = "\n".join(cleaned_lines).rstrip()
-    return result
+    return "\n".join(cleaned_lines).rstrip()
 
 
-async def _process_stream_event(
-    line: str,
-    timestamp: float,
-    on_tool_start: ToolNotifyCallback | None,
-    on_tool_end: ToolNotifyCallback | None,
-    active_tools: dict[str, tuple[str, float]],
-) -> None:
-    """即時解析單行 stream-json 事件並觸發 callback
-
-    Args:
-        line: 一行 JSON 文字
-        timestamp: 該行的讀取時間戳
-        on_tool_start: tool 開始時的回調
-        on_tool_end: tool 結束時的回調
-        active_tools: 追蹤中的 tool（tool_use_id → (name, started_at)），由呼叫端維護
-    """
-    if not (on_tool_start or on_tool_end):
-        return
-
-    stripped = line.strip()
-    if not stripped:
-        return
-
-    try:
-        event = json.loads(stripped)
-    except json.JSONDecodeError:
-        return
-
-    event_type = event.get("type")
-
-    if event_type == "assistant" and on_tool_start:
-        message = event.get("message", {})
-        for content in message.get("content", []):
-            if content.get("type") == "tool_use":
-                tool_id = content.get("id", "")
-                tool_name = content.get("name", "")
-                tool_input = content.get("input", {})
-                active_tools[tool_id] = (tool_name, timestamp)
-                try:
-                    await on_tool_start(tool_name, tool_input)
-                except Exception as e:
-                    logger.warning(f"on_tool_start callback 失敗: {e}")
-
-    elif event_type == "user" and on_tool_end:
-        message = event.get("message", {})
-        for content in message.get("content", []):
-            if content.get("type") == "tool_result":
-                tool_id = content.get("tool_use_id", "")
-                tool_info = active_tools.pop(tool_id, None)
-                if tool_info:
-                    tool_name, started_at = tool_info
-                    duration_ms = int((timestamp - started_at) * 1000)
-                else:
-                    tool_name = ""
-                    duration_ms = None
-                try:
-                    await on_tool_end(tool_name, {
-                        "duration_ms": duration_ms,
-                        "output": content.get("content", ""),
-                    })
-                except Exception as e:
-                    logger.warning(f"on_tool_end callback 失敗: {e}")
-
-
-def _parse_stream_json_with_timing(
-    lines_with_time: list[tuple[float, str]]
-) -> ParseResult:
-    """解析 stream-json 輸出（含時間戳記）
-
-    Args:
-        lines_with_time: [(timestamp, line), ...] 每行附帶讀取時間
-
-    Returns:
-        ParseResult: 包含解析結果和 tool 時間統計
-    """
-    result_text = ""
-    tool_calls: list[ToolCall] = []
-    input_tokens: int | None = None
-    output_tokens: int | None = None
-
-    # 暫存 tool_use，等待配對 tool_result
-    pending_tools: dict[str, ToolCall] = {}
-    # tool 時間記錄
-    tool_timings: dict[str, ToolTiming] = {}
-
-    for timestamp, line in lines_with_time:
-        if not line.strip():
-            continue
-
-        try:
-            event = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-
-        event_type = event.get("type")
-
-        if event_type == "assistant":
-            # 解析 assistant 訊息中的 content
-            message = event.get("message", {})
-            contents = message.get("content", [])
-            for content in contents:
-                content_type = content.get("type")
-                if content_type == "tool_use":
-                    # 記錄工具調用開始
-                    tool_id = content.get("id", "")
-                    tool_name = content.get("name", "")
-                    tool_call = ToolCall(
-                        id=tool_id,
-                        name=tool_name,
-                        input=content.get("input", {}),
-                    )
-                    pending_tools[tool_id] = tool_call
-                    tool_timings[tool_id] = ToolTiming(
-                        name=tool_name,
-                        started_at=timestamp,
-                    )
-                elif content_type == "text":
-                    # 累積文字回應（可能有多段）
-                    text = content.get("text", "")
-                    if text:
-                        if result_text:
-                            result_text += "\n"
-                        result_text += text
-
-        elif event_type == "user":
-            # 解析 user 訊息中的 tool_result
-            message = event.get("message", {})
-            contents = message.get("content", [])
-            for content in contents:
-                if content.get("type") == "tool_result":
-                    tool_id = content.get("tool_use_id", "")
-                    if tool_id in pending_tools:
-                        # 配對工具輸出，記錄完成時間
-                        pending_tools[tool_id].output = content.get("content", "")
-                        tool_calls.append(pending_tools.pop(tool_id))
-                        if tool_id in tool_timings:
-                            tool_timings[tool_id].finished_at = timestamp
-
-        elif event_type == "result":
-            # 最終結果，包含 usage 統計
-            if not result_text and event.get("result"):
-                result_text = event.get("result", "")
-
-            # 計算 token 統計（包含 cache tokens）
-            usage = event.get("usage", {})
-            base_input = usage.get("input_tokens") or 0
-            cache_creation = usage.get("cache_creation_input_tokens") or 0
-            cache_read = usage.get("cache_read_input_tokens") or 0
-            input_tokens = base_input + cache_creation + cache_read
-            output_tokens = usage.get("output_tokens")
-
-    # 將未配對的 tool_use 也加入（可能沒有 result）
-    for tool in pending_tools.values():
-        tool_calls.append(tool)
-
-    # 分離已完成和未完成的 tool timings
-    completed_timings = [t for t in tool_timings.values() if t.finished_at]
-    pending_timings = {k: v for k, v in tool_timings.items() if not v.finished_at}
-
-    # 清理 AI 過度生成的對話預測
-    # AI 有時會在回應中繼續預測後續的 user 訊息
-    # 這會導致 raw_response 中混入虛構的對話內容
-    result_text = _clean_overgenerated_response(result_text)
-
-    return ParseResult(
-        text=result_text,
-        tool_calls=tool_calls,
-        input_tokens=input_tokens,
-        output_tokens=output_tokens,
-        tool_timings=completed_timings,
-        pending_tools=pending_timings,
-    )
-
-
-def _parse_stream_json(stdout: str) -> tuple[str, list[ToolCall], int | None, int | None]:
-    """解析 stream-json 輸出（相容舊版介面）
-
-    Args:
-        stdout: Claude CLI 的 stream-json 輸出（多行 JSON）
-
-    Returns:
-        tuple: (最終回應文字, 工具調用列表, input_tokens, output_tokens)
-    """
-    # 轉換為帶時間戳的格式（用 0 作為時間戳）
-    lines_with_time = [(0.0, line) for line in stdout.strip().split("\n")]
-    result = _parse_stream_json_with_timing(lines_with_time)
-    return result.text, result.tool_calls, result.input_tokens, result.output_tokens
-
+# ============================================================
+# 核心 AI 呼叫
+# ============================================================
 
 async def call_claude(
     prompt: str,
@@ -434,7 +201,9 @@ async def call_claude(
     on_tool_start: ToolNotifyCallback | None = None,
     on_tool_end: ToolNotifyCallback | None = None,
 ) -> ClaudeResponse:
-    """非同步呼叫 Claude CLI（自己管理對話歷史）
+    """非同步呼叫 Claude（透過 ClaudeClient in-process）
+
+    介面與舊版完全相同，linebot_ai.py 不需修改。
 
     Args:
         prompt: 使用者訊息
@@ -442,12 +211,13 @@ async def call_claude(
         history: 對話歷史（可選）
         system_prompt: System prompt 內容（可選）
         timeout: 超時秒數
-        tools: 允許使用的工具列表（可選，如 ["WebSearch", "WebFetch"]）
+        tools: 允許使用的工具列表（可選）
+        on_tool_start: 工具開始回調
+        on_tool_end: 工具結束回調
 
     Returns:
         ClaudeResponse: 包含成功狀態、回應訊息、工具調用記錄和 token 統計
     """
-    # 轉換模型名稱
     cli_model = MODEL_MAP.get(model, model)
 
     # 組合完整 prompt（包含歷史）
@@ -456,189 +226,152 @@ async def call_claude(
     else:
         full_prompt = prompt
 
-    # 建立 Claude CLI 命令（不使用 session）
-    # 使用 stream-json 格式以獲取工具調用詳情和 token 統計
-    cmd = [
-        CLAUDE_PATH, "-p",
-        "--model", cli_model,
-        "--output-format", "stream-json",
-        "--verbose",
-    ]
+    # 決定是否需要 MCP servers
+    # 如果 tools 為空，不載入 MCP（避免不必要的啟動開銷）
+    mcp_servers = _build_mcp_servers() if tools else []
 
-    # 加入 system prompt
-    if system_prompt:
-        cmd.extend(["--system-prompt", system_prompt])
+    # 收集回應資料
+    tool_calls: list[ToolCall] = []
+    tool_timings: list[dict] = []
+    _active_tools: dict[str, tuple[str, float, dict]] = {}  # tool_call_id -> (name, start_time, input)
 
-    # 加入工具（需要 --permission-mode bypassPermissions 來跳過互動確認）
-    if tools:
-        tools_str = ",".join(tools)
-        cmd.extend([
-            "--tools", tools_str,
-            "--allowedTools", tools_str,
-            "--permission-mode", "bypassPermissions"
-        ])
-
-    # prompt 放在最後（作為位置參數）
-    cmd.append(full_prompt)
-
-    # 根據是否需要工具來選擇工作目錄
-    # 不需要工具時使用乾淨的目錄，避免 Claude 自動載入 MCP tools 造成循環呼叫
-    work_dir = WORKING_DIR if tools else WORKING_DIR_PURE
-
-    logger.debug(f"claude_agent cmd: {' '.join(cmd[:5])}... (truncated)")
-    logger.debug(f"claude_agent cwd: {work_dir}, tools: {tools}")
-
-    proc = None
-    stdout_lines_with_time: list[tuple[float, str]] = []
     start_time = time.time()
 
+    # 建立 ClaudeClient（in-process，不走 subprocess）
+    client = ClaudeClient(
+        cwd=WORKING_DIR,
+        mcp_servers=mcp_servers,
+        system_prompt=system_prompt,
+    )
+
+    @client.on_tool_start
+    async def handle_tool_start(tool_id: str, title: str, raw_input: dict):
+        _active_tools[tool_id] = (title, time.time(), raw_input)
+        if on_tool_start:
+            try:
+                await on_tool_start(title, raw_input)
+            except (TypeError, ValueError, RuntimeError) as e:
+                logger.warning(f"on_tool_start callback 失敗: {e}")
+
+    @client.on_tool_end
+    async def handle_tool_end(tool_id: str, status: str, raw_output: Any):
+        tool_info = _active_tools.pop(tool_id, None)
+        if tool_info is not None:
+            tool_name, tool_start, tool_input = tool_info
+        else:
+            tool_name = ""
+            tool_start = start_time
+            tool_input = {}
+        duration_ms = int((time.time() - tool_start) * 1000)
+
+        output_str = str(raw_output) if raw_output else ""
+        tool_calls.append(ToolCall(
+            id=tool_id,
+            name=tool_name,
+            input=tool_input,
+            output=output_str,
+        ))
+        tool_timings.append({"name": tool_name, "duration_ms": duration_ms})
+
+        if on_tool_end:
+            try:
+                await on_tool_end(tool_name, {
+                    "duration_ms": duration_ms,
+                    "output": output_str,
+                })
+            except (TypeError, ValueError, RuntimeError) as e:
+                logger.warning(f"on_tool_end callback 失敗: {e}")
+
+    # 需要額外確認的敏感工具名稱
+    _SENSITIVE_TOOLS = {"bash", "execute", "shell", "rm", "delete", "write_file"}
+
+    @client.on_permission
+    async def handle_permission(name: str, raw_input: dict) -> bool:
+        # bypassPermissions 模式下仍對敏感工具做基本守護
+        if name in _SENSITIVE_TOOLS:
+            logger.warning(f"Permission denied for sensitive tool: {name}")
+            return False
+        return True
+
     try:
-        # 建立非同步子程序（使用獨立工作目錄，避免讀取專案的 CLAUDE.md）
-        # 設定較大的 buffer limit（默認 64KB 可能不夠長的 JSON 行）
-        # 重要：stdin=DEVNULL 確保子進程不會繼承父進程的 stdin
-        # 這對於 MCP Server 環境很重要，因為 MCP Server 的 stdin 被用於 JSON-RPC 通訊
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdin=asyncio.subprocess.DEVNULL,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            cwd=work_dir,
-            limit=10 * 1024 * 1024,  # 10MB limit per line
-        )
+        # 啟動 session
+        await client.start_session()
 
-        logger.debug(f"claude_agent 子進程已啟動，pid={proc.pid}")
+        # 設定模型
+        if cli_model and cli_model != "sonnet":
+            try:
+                await client.set_model(cli_model)
+            except (ValueError, RuntimeError) as e:
+                logger.warning(f"設定模型失敗: {e}")
 
-        # 即時事件追蹤（用於 callback）
-        _active_tools: dict[str, tuple[str, float]] = {}
+        # 設定 bypassPermissions
+        await client.set_mode("bypassPermissions")
 
-        # Streaming 讀取 stdout（邊讀邊收集，記錄時間戳）
-        async def read_stdout():
-            line_count = 0
-            while True:
-                line = await proc.stdout.readline()
-                if not line:
-                    break
-                line_count += 1
-                ts = time.time()
-                decoded = line.decode("utf-8")
-                stdout_lines_with_time.append((ts, decoded))
-                # 即時解析並觸發 callback
-                await _process_stream_event(
-                    decoded, ts, on_tool_start, on_tool_end, _active_tools
-                )
-                if line_count <= 3 or line_count % 10 == 0:
-                    logger.debug(f"claude_agent stdout: 已讀取 {line_count} 行")
-            logger.debug(f"claude_agent stdout: 讀取完成，共 {line_count} 行")
-
-        async def read_stderr():
-            return await proc.stderr.read()
-
-        # 等待完成（含超時）
+        # 送出 prompt（帶超時）
         try:
-            stderr_bytes = await asyncio.wait_for(
-                asyncio.gather(read_stdout(), read_stderr()),
+            text_response = await asyncio.wait_for(
+                client.query(full_prompt),
                 timeout=timeout,
             )
-            stderr = stderr_bytes[1].decode("utf-8").strip() if stderr_bytes[1] else ""
         except asyncio.TimeoutError:
-            # 超時：終止程序，但保留已讀取的 stdout
-            logger.warning(f"claude_agent TIMEOUT! 已讀取 {len(stdout_lines_with_time)} 行 stdout")
-            if proc:
-                logger.debug(f"claude_agent 終止進程 pid={proc.pid}")
-                proc.terminate()
-                try:
-                    await asyncio.wait_for(proc.wait(), timeout=5)
-                except asyncio.TimeoutError:
-                    logger.warning("claude_agent terminate 超時，強制 kill")
-                    proc.kill()
+            logger.warning(f"call_claude TIMEOUT after {timeout}s, collected {len(tool_calls)} tool calls")
 
-            # 解析已讀取的部分（含時間統計）
-            parse_result = _parse_stream_json_with_timing(stdout_lines_with_time)
+            # NOTE: _text_buffer is a private attribute of ClaudeClient with no
+            # public equivalent as of v0.4.x. Guarded with AttributeError so
+            # library upgrades won't crash.
+            try:
+                text_buffer = _clean_overgenerated_response(client._text_buffer)
+            except AttributeError:
+                logger.debug("ClaudeClient._text_buffer not available; partial response lost")
+                text_buffer = ""
 
-            # 輸出診斷資訊
-            elapsed = time.time() - start_time
-            logger.debug(f"claude_agent 超時後解析結果: text_len={len(parse_result.text)}, tools={len(parse_result.tool_calls)}")
-            print(f"[claude_agent] TIMEOUT after {elapsed:.1f}s")
-            print(f"[claude_agent] 已完成的 tools ({len(parse_result.tool_calls)}):")
-            for timing in parse_result.tool_timings:
-                print(f"  - {timing.name}: {timing.duration_ms}ms")
-            if parse_result.pending_tools:
-                print(f"[claude_agent] 執行中的 tools (timeout 時仍在執行):")
-                for tool_id, timing in parse_result.pending_tools.items():
-                    running_time = int((time.time() - timing.started_at) * 1000)
-                    print(f"  - {timing.name}: 已執行 {running_time}ms (未完成)")
-
-            # 組合錯誤訊息
             error_msg = f"請求超時（{timeout} 秒）"
-            if parse_result.pending_tools:
-                pending_names = [t.name for t in parse_result.pending_tools.values()]
+            if _active_tools:
+                pending_names = [name for name, _, _ in _active_tools.values()]
                 error_msg += f"，執行中的工具：{', '.join(pending_names)}"
 
-            # 轉換 timing 為 dict 格式
-            timings_dict = [
-                {"name": t.name, "duration_ms": t.duration_ms}
-                for t in parse_result.tool_timings
-            ]
-
             return ClaudeResponse(
                 success=False,
-                message=parse_result.text,
+                message=text_buffer,
                 error=error_msg,
-                tool_calls=parse_result.tool_calls,  # 返回已完成的 tool_calls
-                input_tokens=parse_result.input_tokens,
-                output_tokens=parse_result.output_tokens,
-                tool_timings=timings_dict,
+                tool_calls=tool_calls,
+                input_tokens=client.input_tokens,
+                output_tokens=client.output_tokens,
+                tool_timings=tool_timings,
             )
 
-        await proc.wait()
+        # 清理 text
+        text_response = _clean_overgenerated_response(text_response)
 
-        # 解析 stream-json 輸出（含時間統計）
-        parse_result = _parse_stream_json_with_timing(stdout_lines_with_time)
-
-        # 輸出 tool 執行時間（debug 用）
-        if parse_result.tool_timings:
+        if tool_timings:
             print(f"[claude_agent] Tool 執行時間:")
-            for timing in parse_result.tool_timings:
-                print(f"  - {timing.name}: {timing.duration_ms}ms")
-
-        # 檢查執行結果
-        if proc.returncode != 0:
-            error_msg = stderr or f"Claude CLI 執行失敗 (code: {proc.returncode})"
-            return ClaudeResponse(
-                success=False,
-                message="",
-                error=error_msg,
-            )
-
-        # 轉換 timing 為 dict 格式
-        timings_dict = [
-            {"name": t.name, "duration_ms": t.duration_ms}
-            for t in parse_result.tool_timings
-        ]
+            for t in tool_timings:
+                print(f"  - {t['name']}: {t['duration_ms']}ms")
 
         return ClaudeResponse(
             success=True,
-            message=parse_result.text,
-            tool_calls=parse_result.tool_calls,
-            input_tokens=parse_result.input_tokens,
-            output_tokens=parse_result.output_tokens,
-            tool_timings=timings_dict,
+            message=text_response,
+            tool_calls=tool_calls,
+            input_tokens=client.input_tokens,
+            output_tokens=client.output_tokens,
+            tool_timings=tool_timings,
         )
 
-    except FileNotFoundError:
-        # Claude CLI 未安裝
+    except (ConnectionError, OSError, RuntimeError, asyncio.CancelledError) as e:
+        logger.error(f"call_claude 錯誤: {e}", exc_info=True)
+        # NOTE: _text_buffer is a private attribute with no public equivalent
+        # as of v0.4.x. Guarded for forward-compatibility.
+        try:
+            fallback_message = client._text_buffer if hasattr(client, '_text_buffer') else ""
+        except AttributeError:
+            logger.debug("ClaudeClient._text_buffer not available; partial response lost")
+            fallback_message = ""
         return ClaudeResponse(
             success=False,
-            message="",
-            error="找不到 Claude CLI，請確認已安裝",
-        )
-
-    except Exception as e:
-        # 其他錯誤
-        return ClaudeResponse(
-            success=False,
-            message="",
-            error=f"呼叫 Claude CLI 時發生錯誤: {str(e)}",
+            message=fallback_message,
+            error=f"呼叫 Claude 時發生錯誤: {str(e)}",
+            tool_calls=tool_calls,
+            tool_timings=tool_timings,
         )
 
 
@@ -646,16 +379,7 @@ async def call_claude_for_summary(
     messages_to_compress: list[dict],
     timeout: int = DEFAULT_TIMEOUT,
 ) -> ClaudeResponse:
-    """呼叫 Claude 壓縮對話歷史
-
-    Args:
-        messages_to_compress: 需要壓縮的訊息列表
-        timeout: 超時秒數
-
-    Returns:
-        ClaudeResponse: 包含壓縮後的摘要
-    """
-    # 從資料庫讀取 summarizer prompt
+    """呼叫 Claude 壓縮對話歷史（保持不變）"""
     summarizer_prompt = await get_prompt_content("summarizer")
     if not summarizer_prompt:
         return ClaudeResponse(
@@ -664,7 +388,6 @@ async def call_claude_for_summary(
             error="找不到 summarizer prompt",
         )
 
-    # 組合需要壓縮的對話
     conversation_parts = []
     for msg in messages_to_compress:
         role = msg.get("role", "user")
@@ -673,7 +396,6 @@ async def call_claude_for_summary(
 
     conversation_text = "\n".join(conversation_parts)
 
-    # 建立完整 prompt
     full_prompt = f"""請將以下對話歷史壓縮成摘要：
 
 ---
@@ -684,7 +406,7 @@ async def call_claude_for_summary(
 
     return await call_claude(
         prompt=full_prompt,
-        model="haiku",  # 使用較快的模型壓縮
+        model="haiku",
         system_prompt=summarizer_prompt,
         timeout=timeout,
     )
