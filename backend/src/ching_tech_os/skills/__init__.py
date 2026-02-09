@@ -170,6 +170,11 @@ class SkillManager:
         self._loaded = False
         self._load_lock = asyncio.Lock()
 
+    @property
+    def skills_dir(self) -> Path:
+        """Skills 目錄路徑"""
+        return self._skills_dir
+
     async def load_skills(self) -> None:
         """掃描 skills 目錄，載入所有 skill 定義（async-safe）"""
         async with self._load_lock:

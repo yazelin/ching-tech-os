@@ -40,7 +40,7 @@ async def run_skill_script(skill: str, script: str, input: str = "") -> str:
         return json.dumps({"success": False, "error": f"Script not found: {skill}/{script}"}, ensure_ascii=False)
 
     # 執行
-    runner = ScriptRunner(sm._skills_dir)
+    runner = ScriptRunner(sm.skills_dir)
     result = await runner.execute(skill, script, input_str=input)
 
     logger.info(
