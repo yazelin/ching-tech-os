@@ -1320,12 +1320,9 @@ const AgentSettingsApp = (function() {
               <div class="skill-detail-header-bar">
                 <h2>${escapeHtml(slug)}</h2>
               </div>
+              <div class="skill-preview-meta"></div>
               <div class="skill-detail-field">
-                <span class="skill-detail-label">說明</span>
-                <span class="skill-detail-value">${escapeHtml(desc) || '—'}</span>
-              </div>
-              <div class="skill-detail-field">
-                <span class="skill-detail-label">SKILL.md 預覽</span>
+                <span class="skill-detail-label">SKILL.md</span>
               </div>
               <pre class="skill-preview-content" style="display:block;">載入中...</pre>
             </div>`;
@@ -1344,6 +1341,19 @@ const AgentSettingsApp = (function() {
               throw new Error(errorDetail || resp.statusText);
             }
             const result = await resp.json();
+
+            // 顯示 metadata
+            const metaEl = main.querySelector('.skill-preview-meta');
+            if (metaEl && result.metadata) {
+              const m = result.metadata;
+              const fields = [];
+              if (m.owner) fields.push(`<div class="skill-detail-field"><span class="skill-detail-label">作者</span><span class="skill-detail-value">${escapeHtml(m.owner)}</span></div>`);
+              if (m.latest) fields.push(`<div class="skill-detail-field"><span class="skill-detail-label">最新版本</span><span class="skill-detail-value">${escapeHtml(m.latest)}</span></div>`);
+              if (m.summary) fields.push(`<div class="skill-detail-field"><span class="skill-detail-label">說明</span><span class="skill-detail-value">${escapeHtml(m.summary)}</span></div>`);
+              if (m.updated) fields.push(`<div class="skill-detail-field"><span class="skill-detail-label">更新時間</span><span class="skill-detail-value">${escapeHtml(m.updated)}</span></div>`);
+              metaEl.innerHTML = fields.join('');
+            }
+
             const previewEl = main.querySelector('.skill-preview-content');
             if (previewEl) previewEl.textContent = result.content || '（空白）';
           } catch (err) {

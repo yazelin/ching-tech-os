@@ -230,13 +230,33 @@ async def hub_inspect(
     if path_too_long or invalid_start or invalid_components or invalid_chars:
         raise HTTPException(status_code=400, detail="檔案名稱無效")
 
-    code, stdout, stderr = await _run_clawhub(
-        "inspect", data.slug, "--file", data.file,
+    # 並行取得 metadata 和檔案內容
+    meta_task = _run_clawhub("inspect", data.slug)
+    file_task = _run_clawhub("inspect", data.slug, "--file", data.file)
+    (meta_code, meta_stdout, meta_stderr), (file_code, file_stdout, file_stderr) = await asyncio.gather(
+        meta_task, file_task
     )
-    if code != 0:
-        raise HTTPException(status_code=502, detail=f"ClawHub inspect 失敗: {stderr}")
 
-    return {"slug": data.slug, "file": data.file, "content": stdout}
+    if file_code != 0:
+        raise HTTPException(status_code=502, detail=f"ClawHub inspect 失敗: {file_stderr}")
+
+    # 解析 metadata（Owner, Created, Updated, Latest 等）
+    metadata = {}
+    if meta_code == 0:
+        for line in meta_stdout.strip().splitlines():
+            line = line.strip()
+            if line.startswith("Owner:"):
+                metadata["owner"] = line[len("Owner:"):].strip()
+            elif line.startswith("Created:"):
+                metadata["created"] = line[len("Created:"):].strip()
+            elif line.startswith("Updated:"):
+                metadata["updated"] = line[len("Updated:"):].strip()
+            elif line.startswith("Latest:"):
+                metadata["latest"] = line[len("Latest:"):].strip()
+            elif line.startswith("Summary:"):
+                metadata["summary"] = line[len("Summary:"):].strip()
+
+    return {"slug": data.slug, "file": data.file, "content": file_stdout, "metadata": metadata}
 
 
 @router.post("/hub/install")
