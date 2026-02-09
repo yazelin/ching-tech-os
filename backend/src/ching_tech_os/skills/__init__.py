@@ -105,14 +105,18 @@ def _extract_ctos_metadata(config: dict) -> tuple[Optional[str], list[str]]:
     return requires_app, mcp_servers
 
 
-_VALID_NAME_RE = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
+_VALID_NAME_RE = re.compile(r"^[a-z0-9]([a-z0-9_-]*[a-z0-9])?$")
 
 
 def _validate_skill_name(name: str) -> str:
-    """驗證 skill 名稱（防止路徑穿越，符合 Agent Skills 標準命名規則）。"""
+    """驗證 skill 名稱（防止路徑穿越）。
+
+    接受 Agent Skills 標準的 hyphen 格式和 CTOS 慣用的 underscore 格式。
+    禁止路徑分隔符、.. 等危險字元。
+    """
     if not name or len(name) > 64:
         raise ValueError(f"Skill name 長度無效: {name!r}")
-    if "--" in name or not _VALID_NAME_RE.match(name):
+    if not _VALID_NAME_RE.match(name):
         raise ValueError(f"Skill name 格式無效: {name!r}")
     return name
 
