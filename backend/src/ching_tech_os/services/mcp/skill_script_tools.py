@@ -93,6 +93,6 @@ async def run_skill_script(
         )
         await create_log(log_data)
     except Exception:
-        logger.debug("Failed to create ai_log for script execution", exc_info=True)
+        logger.warning("Failed to create ai_log for script execution", exc_info=True)
 
     return json.dumps(result, ensure_ascii=False)
