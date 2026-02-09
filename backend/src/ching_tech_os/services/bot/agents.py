@@ -416,3 +416,113 @@ def generate_usage_tips_prompt(
         return ""
 
     return "使用工具的流程：\n" + "\n".join(tips)
+
+
+# ============================================================
+# 硬編碼工具白名單（fallback 用）
+# ============================================================
+
+_FALLBACK_TOOLS: dict[str | None, list[str]] = {
+    # requires_app=None（base，所有人都有）
+    None: ["Read"],
+    # 各 app 對應的外部 MCP 工具
+    "ai-assistant": [
+        "mcp__nanobanana__generate_image",
+        "mcp__nanobanana__edit_image",
+        "mcp__nanobanana__restore_image",
+    ],
+    "printer": [
+        "mcp__printer__print_file",
+        "mcp__printer__list_printers",
+        "mcp__printer__printer_status",
+        "mcp__printer__cancel_job",
+        "mcp__printer__print_test_page",
+    ],
+    "inventory-management": [
+        "mcp__erpnext__list_documents",
+        "mcp__erpnext__get_document",
+        "mcp__erpnext__create_document",
+        "mcp__erpnext__update_document",
+        "mcp__erpnext__delete_document",
+        "mcp__erpnext__submit_document",
+        "mcp__erpnext__cancel_document",
+        "mcp__erpnext__run_report",
+        "mcp__erpnext__get_count",
+        "mcp__erpnext__get_list_with_summary",
+        "mcp__erpnext__run_method",
+        "mcp__erpnext__search_link",
+        "mcp__erpnext__list_doctypes",
+        "mcp__erpnext__get_doctype_meta",
+        "mcp__erpnext__get_stock_balance",
+        "mcp__erpnext__get_stock_ledger",
+        "mcp__erpnext__get_item_price",
+        "mcp__erpnext__make_mapped_doc",
+        "mcp__erpnext__get_party_balance",
+        "mcp__erpnext__get_supplier_details",
+        "mcp__erpnext__get_customer_details",
+        "mcp__erpnext__upload_file",
+        "mcp__erpnext__upload_file_from_url",
+        "mcp__erpnext__list_files",
+        "mcp__erpnext__download_file",
+        "mcp__erpnext__get_file_url",
+    ],
+    "project-management": [
+        "mcp__erpnext__list_documents",
+        "mcp__erpnext__get_document",
+        "mcp__erpnext__create_document",
+        "mcp__erpnext__update_document",
+        "mcp__erpnext__delete_document",
+        "mcp__erpnext__submit_document",
+        "mcp__erpnext__cancel_document",
+        "mcp__erpnext__run_report",
+        "mcp__erpnext__get_count",
+        "mcp__erpnext__get_list_with_summary",
+        "mcp__erpnext__run_method",
+        "mcp__erpnext__search_link",
+        "mcp__erpnext__list_doctypes",
+        "mcp__erpnext__get_doctype_meta",
+        "mcp__erpnext__make_mapped_doc",
+        "mcp__erpnext__upload_file",
+        "mcp__erpnext__upload_file_from_url",
+        "mcp__erpnext__list_files",
+        "mcp__erpnext__download_file",
+        "mcp__erpnext__get_file_url",
+    ],
+}
+
+
+async def get_tools_for_user(
+    app_permissions: dict[str, bool],
+) -> list[str]:
+    """根據使用者權限動態產生外部 MCP 工具白名單
+
+    優先從 SkillManager 載入，失敗時 fallback 到硬編碼列表。
+    回傳的是「外部 MCP 工具」（如 nanobanana、printer、erpnext）和
+    特殊工具（如 Read），不包含 ching-tech-os 內建 MCP 工具。
+
+    Args:
+        app_permissions: 使用者的 App 權限設定（app_id -> bool）
+
+    Returns:
+        去重後的工具名稱列表
+    """
+    # 優先使用 SkillManager
+    if _HAS_SKILL_MANAGER:
+        try:
+            sm = get_skill_manager()
+            tools = await sm.get_tool_names(app_permissions)
+            if tools:
+                # 去重（多個 skill 可能有重複工具）
+                return list(dict.fromkeys(tools))
+        except (OSError, ValueError, RuntimeError) as e:
+            logger.warning(f"SkillManager 取得工具列表失敗，使用 fallback: {e}")
+
+    # Fallback: 硬編碼工具列表
+    tools: list[str] = []
+    # base 工具（所有人都有）
+    tools.extend(_FALLBACK_TOOLS.get(None, []))
+    for app_id, app_tools in _FALLBACK_TOOLS.items():
+        if app_id is not None and app_permissions.get(app_id, False):
+            tools.extend(app_tools)
+    # 去重
+    return list(dict.fromkeys(tools))
