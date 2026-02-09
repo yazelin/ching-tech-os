@@ -1,3 +1,16 @@
+---
+name: base
+description: 基礎工具（對話附件、分享連結）
+requires_app: null
+tools:
+  - get_message_attachments
+  - summarize_chat
+  - create_share_link
+  - Read
+mcp_servers:
+  - ching-tech-os
+---
+
 【對話附件管理】
 - get_message_attachments: 查詢對話中的附件（圖片、檔案），可指定 days 天數範圍
   · 用於查找「最近的圖片」、「剛才生成的圖」、「之前傳的檔案」等

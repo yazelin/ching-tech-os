@@ -1,10 +1,11 @@
 """Skills 管理器
 
-動態載入和管理 AI Skills，取代 bot/agents.py 的硬編碼 prompt。
+動態載入和管理 AI Skills，支援 SKILL.md（OpenClaw 相容）和舊版 skill.yaml + prompt.md 格式。
 """
 
 import asyncio
 import logging
+import re
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -17,6 +18,23 @@ logger = logging.getLogger(__name__)
 # Skills 目錄
 SKILLS_DIR = Path(__file__).parent
 
+# YAML frontmatter 解析
+_FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n?(.*)", re.DOTALL)
+
+
+def _parse_skill_md(text: str) -> tuple[dict, str]:
+    """解析 SKILL.md：YAML frontmatter + Markdown body。
+
+    Returns:
+        (frontmatter_dict, body_str)
+    """
+    m = _FRONTMATTER_RE.match(text)
+    if not m:
+        return {}, text
+    fm = yaml.safe_load(m.group(1)) or {}
+    body = m.group(2).strip()
+    return fm, body
+
 
 @dataclass
 class Skill:
@@ -27,6 +45,8 @@ class Skill:
     tools: list[str] = field(default_factory=list)
     mcp_servers: list[str] = field(default_factory=list)
     prompt: str = ""
+    references: list[str] = field(default_factory=list)  # references/ 下的檔案路徑
+    source: str = "native"  # native | openclaw | claude-code
 
 
 class SkillManager:
@@ -45,6 +65,63 @@ class SkillManager:
                 return
             await asyncio.to_thread(self._load_skills_sync)
 
+    def _load_skill_from_skill_md(self, skill_dir: Path) -> Skill | None:
+        """從 SKILL.md 載入（OpenClaw 相容格式）"""
+        skill_md = skill_dir / "SKILL.md"
+        if not skill_md.exists():
+            return None
+
+        text = skill_md.read_text(encoding="utf-8")
+        config, body = _parse_skill_md(text)
+        if not config:
+            logger.warning(f"SKILL.md 無 frontmatter: {skill_dir}")
+            return None
+
+        # 掃描 references/ 目錄
+        refs = []
+        refs_dir = skill_dir / "references"
+        if refs_dir.is_dir():
+            refs = sorted(
+                str(f.relative_to(skill_dir))
+                for f in refs_dir.rglob("*")
+                if f.is_file()
+            )
+
+        return Skill(
+            name=config.get("name", skill_dir.name),
+            description=config.get("description", ""),
+            requires_app=config.get("requires_app"),
+            tools=config.get("tools", []),
+            mcp_servers=config.get("mcp_servers", []),
+            prompt=body,
+            references=refs,
+            source=config.get("source", "native"),
+        )
+
+    def _load_skill_from_yaml(self, skill_dir: Path) -> Skill | None:
+        """從舊版 skill.yaml + prompt.md 載入（向下相容）"""
+        skill_yaml = skill_dir / "skill.yaml"
+        if not skill_yaml.exists():
+            return None
+
+        with open(skill_yaml, encoding="utf-8") as f:
+            config = yaml.safe_load(f)
+
+        prompt = ""
+        prompt_md = skill_dir / "prompt.md"
+        if prompt_md.exists():
+            prompt = prompt_md.read_text(encoding="utf-8")
+
+        return Skill(
+            name=config.get("name", skill_dir.name),
+            description=config.get("description", ""),
+            requires_app=config.get("requires_app"),
+            tools=config.get("tools", []),
+            mcp_servers=config.get("mcp_servers", []),
+            prompt=prompt,
+            source="native",
+        )
+
     def _load_skills_sync(self) -> None:
         """同步載入 skills（在 thread pool 中執行，避免 blocking event loop）"""
         if not self._skills_dir.exists():
@@ -56,36 +133,84 @@ class SkillManager:
             if not skill_dir.is_dir() or skill_dir.name.startswith("_"):
                 continue
 
-            skill_yaml = skill_dir / "skill.yaml"
-            prompt_md = skill_dir / "prompt.md"
-
-            if not skill_yaml.exists():
-                continue
-
             try:
-                with open(skill_yaml, encoding="utf-8") as f:
-                    config = yaml.safe_load(f)
+                # 優先讀 SKILL.md，否則回退到 skill.yaml + prompt.md
+                skill = self._load_skill_from_skill_md(skill_dir)
+                if skill is None:
+                    skill = self._load_skill_from_yaml(skill_dir)
+                if skill is None:
+                    continue
 
-                prompt = ""
-                if prompt_md.exists():
-                    prompt = prompt_md.read_text(encoding="utf-8")
-
-                skill = Skill(
-                    name=config.get("name", skill_dir.name),
-                    description=config.get("description", ""),
-                    requires_app=config.get("requires_app"),
-                    tools=config.get("tools", []),
-                    mcp_servers=config.get("mcp_servers", []),
-                    prompt=prompt,
-                )
                 self._skills[skill.name] = skill
-                logger.debug(f"載入 skill: {skill.name} ({len(skill.tools)} tools)")
+                refs_info = f", {len(skill.references)} refs" if skill.references else ""
+                logger.debug(
+                    f"載入 skill: {skill.name} ({len(skill.tools)} tools{refs_info})"
+                )
 
             except (yaml.YAMLError, OSError) as e:
                 logger.error(f"載入 skill 失敗 {skill_dir}: {e}")
 
         self._loaded = True
         logger.info(f"共載入 {len(self._skills)} 個 skills")
+
+    def import_openclaw_skill(self, skill_path: Path) -> Path:
+        """從 OpenClaw SKILL.md 匯入，建立 CTOS 相容的 skill 目錄。
+
+        OpenClaw 的 SKILL.md 只有 name + description，沒有 tools/mcp_servers/requires_app。
+        匯入後管理員需手動設定權限和工具白名單。
+
+        Args:
+            skill_path: OpenClaw skill 目錄（含 SKILL.md）
+
+        Returns:
+            匯入後的 skill 目錄路徑
+        """
+        src_skill_md = skill_path / "SKILL.md"
+        if not src_skill_md.exists():
+            raise FileNotFoundError(f"找不到 SKILL.md: {skill_path}")
+
+        text = src_skill_md.read_text(encoding="utf-8")
+        config, body = _parse_skill_md(text)
+
+        name = config.get("name", skill_path.name)
+        dest_dir = self._skills_dir / name
+        dest_dir.mkdir(parents=True, exist_ok=True)
+
+        # 補上 CTOS 擴充欄位
+        if "requires_app" not in config:
+            config["requires_app"] = None
+        if "tools" not in config:
+            config["tools"] = []
+        if "mcp_servers" not in config:
+            config["mcp_servers"] = []
+        # 標記來源為 OpenClaw
+        config["source"] = "openclaw"
+
+        # 寫出 SKILL.md
+        fm_text = yaml.dump(config, allow_unicode=True, default_flow_style=False).strip()
+        dest_skill_md = dest_dir / "SKILL.md"
+        dest_skill_md.write_text(
+            f"---\n{fm_text}\n---\n\n{body}\n",
+            encoding="utf-8",
+        )
+
+        # 複製 references/ scripts/ assets/（如果有）
+        import shutil
+        for subdir_name in ("references", "scripts", "assets"):
+            src_sub = skill_path / subdir_name
+            if src_sub.is_dir():
+                dest_sub = dest_dir / subdir_name
+                if dest_sub.exists():
+                    shutil.rmtree(dest_sub)
+                shutil.copytree(src_sub, dest_sub)
+
+        logger.info(f"匯入 OpenClaw skill: {name} → {dest_dir}")
+
+        # 重設載入狀態，下次存取時重新掃描
+        self._loaded = False
+        self._skills.clear()
+
+        return dest_dir
 
     async def get_skill(self, name: str) -> Skill | None:
         """根據名稱取得 skill"""
@@ -142,6 +267,22 @@ class SkillManager:
         for skill in skills:
             servers.update(skill.mcp_servers)
         return servers
+
+    async def get_skill_reference(self, name: str, ref_path: str) -> str | None:
+        """讀取 skill 的 reference 檔案內容"""
+        await self.load_skills()
+        skill = self._skills.get(name)
+        if not skill:
+            return None
+        full_path = self._skills_dir / name / ref_path
+        if not full_path.is_file():
+            return None
+        # 安全檢查：不允許路徑穿越
+        try:
+            full_path.resolve().relative_to((self._skills_dir / name).resolve())
+        except ValueError:
+            return None
+        return full_path.read_text(encoding="utf-8")
 
 
 @lru_cache(maxsize=1)

@@ -1,3 +1,16 @@
+---
+name: file_manager
+description: NAS 共用檔案搜尋、PDF 轉圖片
+requires_app: file-manager
+tools:
+  - search_nas_files
+  - get_nas_file_info
+  - prepare_file_message
+  - convert_pdf_to_images
+mcp_servers:
+  - ching-tech-os
+---
+
 【NAS 共用檔案】
 - search_nas_files: 搜尋 NAS 共享檔案（搜尋範圍包含：專案資料、線路圖）
   · keywords: 多個關鍵字用逗號分隔（AND 匹配，大小寫不敏感）

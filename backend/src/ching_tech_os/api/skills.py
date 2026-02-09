@@ -22,6 +22,8 @@ async def list_skills(session: SessionData = Depends(require_admin)):
                 "requires_app": skill.requires_app,
                 "tools_count": len(skill.tools),
                 "has_prompt": bool(skill.prompt),
+                "references": skill.references,
+                "source": skill.source,
             }
             for skill in all_skills
         ]
@@ -44,4 +46,20 @@ async def get_skill(name: str, session: SessionData = Depends(require_admin)):
         "mcp_servers": skill.mcp_servers,
         "has_prompt": bool(skill.prompt),
         "prompt": skill.prompt,
+        "references": skill.references,
+        "source": skill.source,
     }
+
+
+@router.get("/{name}/references/{ref_path:path}")
+async def get_skill_reference(
+    name: str,
+    ref_path: str,
+    session: SessionData = Depends(require_admin),
+):
+    """讀取 skill 的 reference 檔案"""
+    sm = get_skill_manager()
+    content = await sm.get_skill_reference(name, ref_path)
+    if content is None:
+        raise HTTPException(status_code=404, detail="Reference not found")
+    return {"path": ref_path, "content": content}
