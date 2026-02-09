@@ -666,6 +666,7 @@ const AILogApp = (function() {
 
   /**
    * 渲染 Tools 標籤
+   * 預設只顯示 used_tools，點擊 +N 展開全部 allowed_tools
    * @param {string[]|null} allowedTools - 允許使用的工具
    * @param {string[]|null} usedTools - 實際使用的工具
    */
@@ -675,13 +676,48 @@ const AILogApp = (function() {
     }
 
     const usedSet = new Set(usedTools || []);
+    const usedList = allowedTools.filter(t => usedSet.has(t));
+    const unusedList = allowedTools.filter(t => !usedSet.has(t));
 
-    return allowedTools.map(tool => {
-      const isUsed = usedSet.has(tool);
-      const className = isUsed ? 'ai-log-tool-badge used' : 'ai-log-tool-badge';
-      return `<span class="${className}" title="${tool}">${tool}</span>`;
-    }).join('');
+    // 已使用的工具（永遠顯示）
+    let html = usedList.map(tool =>
+      `<span class="ai-log-tool-badge used" title="${tool}">${tool}</span>`
+    ).join('');
+
+    // 未使用的工具（預設隱藏，點擊展開）
+    if (unusedList.length > 0) {
+      html += `<button class="ai-log-tools-expand-btn" onclick="window._toggleToolsExpand(this)" title="展開全部 ${allowedTools.length} 個工具">+${unusedList.length}</button>`;
+      html += `<span class="ai-log-tools-hidden">`;
+      html += unusedList.map(tool =>
+        `<span class="ai-log-tool-badge unused" title="${tool}">${tool}</span>`
+      ).join('');
+      html += `</span>`;
+    }
+
+    // 無使用任何工具時顯示數量提示
+    if (usedList.length === 0 && unusedList.length > 0) {
+      html = `<span class="ai-log-no-tools-used">未使用工具</span>` + html;
+    }
+
+    return html;
   }
+
+  // 全域展開/收合函式
+  window._toggleToolsExpand = function(btn) {
+    const hidden = btn.nextElementSibling;
+    if (!hidden) return;
+    const isExpanded = hidden.classList.contains('expanded');
+    if (isExpanded) {
+      hidden.classList.remove('expanded');
+      const total = hidden.querySelectorAll('.ai-log-tool-badge').length;
+      btn.textContent = `+${total}`;
+      btn.title = `展開全部工具`;
+    } else {
+      hidden.classList.add('expanded');
+      btn.textContent = '收合';
+      btn.title = '收合未使用的工具';
+    }
+  };
 
   /**
    * 複製文字到剪貼簿

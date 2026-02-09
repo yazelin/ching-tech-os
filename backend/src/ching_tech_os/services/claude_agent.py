@@ -132,10 +132,32 @@ def _load_mcp_servers_from_file(path: str) -> list:
     return servers
 
 
-def _build_mcp_servers(session_dir: str) -> list:
-    """從 session 工作目錄的 .mcp.json 載入 MCP servers"""
+def _build_mcp_servers(
+    session_dir: str,
+    required_servers: set[str] | None = None,
+) -> list:
+    """從 session 工作目錄的 .mcp.json 載入 MCP servers
+
+    Args:
+        session_dir: session 工作目錄路徑
+        required_servers: 需要載入的 server 名稱集合。
+            None 表示載入全部，非 None 時只載入指定的 server。
+            ching-tech-os 永遠會被包含。
+    """
     mcp_json_path = os.path.join(session_dir, ".mcp.json")
-    return _load_mcp_servers_from_file(mcp_json_path)
+    all_servers = _load_mcp_servers_from_file(mcp_json_path)
+
+    if required_servers is None:
+        return all_servers
+
+    # ching-tech-os 永遠被包含（保底邏輯）
+    required = required_servers | {"ching-tech-os"}
+    filtered = [s for s in all_servers if s.name in required]
+    logger.info(
+        f"MCP servers: 載入 {len(filtered)}/{len(all_servers)} "
+        f"({', '.join(s.name for s in filtered)})"
+    )
+    return filtered
 
 
 # ============================================================
@@ -205,10 +227,9 @@ async def call_claude(
     tools: list[str] | None = None,
     on_tool_start: ToolNotifyCallback | None = None,
     on_tool_end: ToolNotifyCallback | None = None,
+    required_mcp_servers: set[str] | None = None,
 ) -> ClaudeResponse:
     """非同步呼叫 Claude（透過 ClaudeClient in-process）
-
-    介面與舊版完全相同，linebot_ai.py 不需修改。
 
     Args:
         prompt: 使用者訊息
@@ -219,6 +240,7 @@ async def call_claude(
         tools: 允許使用的工具列表（可選）
         on_tool_start: 工具開始回調
         on_tool_end: 工具結束回調
+        required_mcp_servers: 需要載入的 MCP server 名稱集合（可選，None=全部）
 
     Returns:
         ClaudeResponse: 包含成功狀態、回應訊息、工具調用記錄和 token 統計
@@ -236,7 +258,7 @@ async def call_claude(
 
     # 決定是否需要 MCP servers
     # 如果 tools 為空，不載入 MCP（避免不必要的啟動開銷）
-    mcp_servers = _build_mcp_servers(session_dir) if tools else []
+    mcp_servers = _build_mcp_servers(session_dir, required_mcp_servers) if tools else []
 
     # 收集回應資料
     tool_calls: list[ToolCall] = []
@@ -300,6 +322,28 @@ async def call_claude(
             return False
         return True
 
+    # Token 統計攔截：patch agent._handle_message 以擷取 ResultMessage.usage
+    _usage_data: dict[str, Any] = {}
+    _original_handle_message = client.agent._handle_message
+
+    async def _patched_handle_message(session_id, message):
+        from claude_agent_sdk import ResultMessage
+        if isinstance(message, ResultMessage) and message.usage:
+            usage = message.usage
+            # 計算完整的 input tokens（含快取）
+            total_input = (
+                usage.get("input_tokens", 0)
+                + usage.get("cache_creation_input_tokens", 0)
+                + usage.get("cache_read_input_tokens", 0)
+            )
+            _usage_data["input_tokens"] = total_input
+            _usage_data["output_tokens"] = usage.get("output_tokens", 0)
+            _usage_data["raw_usage"] = usage
+            logger.info(f"Token 統計: input={total_input}, output={usage.get('output_tokens', 0)}")
+        return await _original_handle_message(session_id, message)
+
+    client.agent._handle_message = _patched_handle_message
+
     try:
         # 啟動 session
         await client.start_session()
@@ -341,8 +385,8 @@ async def call_claude(
                 message=text_buffer,
                 error=error_msg,
                 tool_calls=tool_calls,
-                input_tokens=getattr(client, "input_tokens", None),
-                output_tokens=getattr(client, "output_tokens", None),
+                input_tokens=_usage_data.get("input_tokens"),
+                output_tokens=_usage_data.get("output_tokens"),
                 tool_timings=tool_timings,
             )
 
@@ -358,8 +402,8 @@ async def call_claude(
             success=True,
             message=text_response,
             tool_calls=tool_calls,
-            input_tokens=getattr(client, "input_tokens", None),
-            output_tokens=getattr(client, "output_tokens", None),
+            input_tokens=_usage_data.get("input_tokens"),
+            output_tokens=_usage_data.get("output_tokens"),
             tool_timings=tool_timings,
         )
 
