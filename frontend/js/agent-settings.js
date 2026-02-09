@@ -1091,10 +1091,9 @@ const AgentSettingsApp = (function() {
             </div>
           </div>
           <div class="skill-hub-result-actions">
-            <button class="btn btn-sm" data-action="preview-skill" data-skill-slug="${escapeHtml(r.name)}">預覽</button>
+            <button class="btn btn-sm" data-action="preview-skill" data-skill-slug="${escapeHtml(r.name)}" data-skill-desc="${escapeHtml(r.description || '')}">預覽</button>
             <button class="btn btn-sm btn-primary" data-action="install-skill" data-skill-name="${escapeHtml(r.name)}" data-skill-version="${escapeHtml(r.version || '')}">安裝</button>
           </div>
-          <pre class="skill-preview-content" style="display:none;"></pre>
         </div>
       `).join('');
     } catch (e) {
@@ -1293,44 +1292,45 @@ const AgentSettingsApp = (function() {
           saveSkillFromModal();
           break;
         case 'preview-skill': {
-          const previewEl = actionEl.closest('.skill-hub-result-item')?.querySelector('.skill-preview-content');
-          if (!previewEl) break;
+          const slug = actionEl.dataset.skillSlug;
+          const desc = actionEl.dataset.skillDesc || '';
+          const main = document.querySelector(`#${windowId} .skill-main`);
+          if (!main) break;
 
-          const isVisible = previewEl.style.display !== 'none';
+          main.innerHTML = `
+            <div class="agent-form skill-detail">
+              <div class="skill-detail-header-bar">
+                <h2>${escapeHtml(slug)}</h2>
+              </div>
+              <div class="skill-detail-field">
+                <span class="skill-detail-label">說明</span>
+                <span class="skill-detail-value">${escapeHtml(desc) || '—'}</span>
+              </div>
+              <div class="skill-detail-field">
+                <span class="skill-detail-label">SKILL.md 預覽</span>
+              </div>
+              <pre class="skill-preview-content" style="display:block;">載入中...</pre>
+            </div>`;
 
-          if (isVisible) {
-            previewEl.style.display = 'none';
-            actionEl.textContent = '預覽';
-            break;
-          }
-
-          previewEl.style.display = 'block';
-          actionEl.textContent = '收合';
-
-          // Only load content the first time it's shown
-          if (!previewEl.dataset.loaded) {
-            previewEl.dataset.loaded = 'true';
-            previewEl.textContent = '載入中...';
-            try {
-              const resp = await fetch('/api/skills/hub/inspect', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-                body: JSON.stringify({ slug: actionEl.dataset.skillSlug }),
-              });
-              if (!resp.ok) {
-                let errorDetail;
-                try {
-                  errorDetail = (await resp.json()).detail;
-                } catch (e) { /* non-JSON response */ }
-                throw new Error(errorDetail || resp.statusText);
-              }
-              const result = await resp.json();
-              previewEl.textContent = result.content || '（空白）';
-            } catch (err) {
-              previewEl.textContent = `預覽失敗: ${err.message}`;
-              delete previewEl.dataset.loaded;
-              actionEl.textContent = '預覽';
+          try {
+            const resp = await fetch('/api/skills/hub/inspect', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+              body: JSON.stringify({ slug }),
+            });
+            if (!resp.ok) {
+              let errorDetail;
+              try {
+                errorDetail = (await resp.json()).detail;
+              } catch (e) { /* non-JSON response */ }
+              throw new Error(errorDetail || resp.statusText);
             }
+            const result = await resp.json();
+            const previewEl = main.querySelector('.skill-preview-content');
+            if (previewEl) previewEl.textContent = result.content || '（空白）';
+          } catch (err) {
+            const previewEl = main.querySelector('.skill-preview-content');
+            if (previewEl) previewEl.textContent = `預覽失敗: ${err.message}`;
           }
           break;
         }
