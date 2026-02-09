@@ -1,3 +1,5 @@
+## ADDED Requirements
+
 ### Requirement: ClawHub CLI 部署
 
 install.sh SHALL 包含 ClawHub CLI 的安裝步驟。

@@ -1,3 +1,5 @@
+## ADDED Requirements
+
 ### Requirement: Skills 管理（管理員）
 
 Skills 管理 SHALL 支援完整的 CRUD 操作和 ClawHub marketplace 整合。

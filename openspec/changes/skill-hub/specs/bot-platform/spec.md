@@ -1,3 +1,5 @@
+## ADDED Requirements
+
 ### Requirement: SkillManager 動態管理
 
 SkillManager SHALL 支援運行時動態管理 skills，不需重啟服務。
