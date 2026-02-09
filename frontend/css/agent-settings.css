@@ -1001,3 +1001,27 @@
     display: none;
   }
 }
+
+/* Skill 預覽 */
+.skill-preview-content {
+  margin-top: 8px;
+  padding: 12px;
+  background: var(--bg-secondary, #f5f5f5);
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  max-height: 400px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+[data-theme="dark"] .skill-preview-content {
+  background: var(--bg-tertiary, #2a2a2a);
+}
+
+.skill-hub-result-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}

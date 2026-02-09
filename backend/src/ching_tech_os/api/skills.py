@@ -31,6 +31,11 @@ class HubSearchRequest(BaseModel):
     query: str
 
 
+class HubInspectRequest(BaseModel):
+    slug: str
+    file: str = "SKILL.md"
+
+
 class HubInstallRequest(BaseModel):
     name: str
     version: str | None = None
@@ -203,6 +208,35 @@ async def hub_search(
             })
 
     return {"query": data.query, "results": results}
+
+
+@router.post("/hub/inspect")
+async def hub_inspect(
+    data: HubInspectRequest,
+    session: SessionData = Depends(require_admin),
+):
+    """預覽 ClawHub skill 的檔案內容"""
+    if not re.match(r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$", data.slug) or len(data.slug) > 100:
+        raise HTTPException(status_code=400, detail="Slug 格式無效")
+
+    path_components = data.file.split("/")
+
+    # Security: path traversal and injection prevention
+    path_too_long = len(data.file) > 200
+    invalid_start = data.file.startswith(("/", "-"))
+    invalid_components = ".." in path_components or "." in path_components or "" in path_components
+    invalid_chars = not re.match(r"^[\w.\-]+(/[\w.\-]+)*$", data.file)
+
+    if path_too_long or invalid_start or invalid_components or invalid_chars:
+        raise HTTPException(status_code=400, detail="檔案名稱無效")
+
+    code, stdout, stderr = await _run_clawhub(
+        "inspect", data.slug, "--file", data.file,
+    )
+    if code != 0:
+        raise HTTPException(status_code=502, detail=f"ClawHub inspect 失敗: {stderr}")
+
+    return {"slug": data.slug, "file": data.file, "content": stdout}
 
 
 @router.post("/hub/install")
