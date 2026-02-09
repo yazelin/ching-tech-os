@@ -14,7 +14,9 @@ const AgentSettingsApp = (function() {
   let currentAgentId = null;
   let currentSkillName = null;
   let currentTab = 'agents'; // 'agents' | 'skills'
+  let currentSkillsSubTab = 'installed'; // 'installed' | 'hub'
   let isDirty = false;
+  let highlightSkillName = null;
 
   /**
    * 取得認證 headers
@@ -234,10 +236,27 @@ const AgentSettingsApp = (function() {
         <div class="agent-settings skill-settings agent-settings-tab-content" data-tab-content="skills">
           <aside class="agent-sidebar skill-sidebar">
             <div class="agent-sidebar-header">
-              <div style="padding: 4px 0; color: var(--text-muted); font-size: 13px;">已載入的 Skills</div>
+              <div class="skill-sub-tabs">
+                <button class="skill-sub-tab active" data-skill-tab="installed">已安裝</button>
+                <button class="skill-sub-tab" data-skill-tab="hub">ClawHub</button>
+              </div>
             </div>
-            <div class="skill-list">
-              <!-- Skill list will be rendered here -->
+            <div class="skill-sub-content" data-skill-tab-content="installed">
+              <div class="skill-list-toolbar">
+                <button class="btn btn-sm skill-reload-btn" data-action="reload-skills" title="重新載入">
+                  <span class="icon">${getIcon('refresh')}</span>
+                </button>
+              </div>
+              <div class="skill-list">
+                <!-- Skill list will be rendered here -->
+              </div>
+            </div>
+            <div class="skill-sub-content" data-skill-tab-content="hub" style="display:none;">
+              <div class="skill-hub-search">
+                <input type="text" class="agent-form-input skill-hub-search-input" placeholder="搜尋 ClawHub..." data-action="hub-search-input">
+                <button class="btn btn-sm btn-primary skill-hub-search-btn" data-action="hub-search">搜尋</button>
+              </div>
+              <div class="skill-hub-results"></div>
             </div>
           </aside>
           <main class="agent-main skill-main">
@@ -247,6 +266,20 @@ const AgentSettingsApp = (function() {
               <p>從左側選擇一個 Skill 查看詳情</p>
             </div>
           </main>
+        </div>
+        <!-- Skill Edit Modal -->
+        <div class="skill-edit-modal-overlay" style="display:none;">
+          <div class="skill-edit-modal">
+            <div class="skill-edit-modal-header">
+              <span class="skill-edit-modal-title">編輯 Skill</span>
+              <button class="skill-edit-modal-close" data-action="close-skill-modal">&times;</button>
+            </div>
+            <div class="skill-edit-modal-body"></div>
+            <div class="skill-edit-modal-footer">
+              <button class="btn btn-secondary" data-action="close-skill-modal">取消</button>
+              <button class="btn btn-primary" data-action="save-skill">儲存</button>
+            </div>
+          </div>
         </div>
       </div>
     `;
@@ -709,23 +742,46 @@ const AgentSettingsApp = (function() {
 
     container.innerHTML = skills.map(s => {
       const toolCount = s.tools_count || 0;
+      const source = s.source || 'unknown';
+      const sourceBadgeClass = source === 'native' ? 'skill-source-native' : source === 'openclaw' ? 'skill-source-openclaw' : 'skill-source-other';
+      const isHighlighted = s.name === highlightSkillName;
       return `
-        <div class="agent-list-item skill-list-item ${s.name === currentSkillName ? 'active' : ''}"
-             data-skill-name="${s.name}">
+        <div class="agent-list-item skill-list-item ${s.name === currentSkillName ? 'active' : ''} ${isHighlighted ? 'skill-highlight' : ''}"
+             data-skill-name="${escapeHtml(s.name)}">
           <div class="agent-list-item-info">
-            <div class="agent-list-item-name">${s.name}</div>
-            <div class="agent-list-item-model">${s.description || '—'}</div>
+            <div class="agent-list-item-name">
+              ${escapeHtml(s.name)}
+              <span class="skill-source-badge ${sourceBadgeClass}">${escapeHtml(source)}</span>
+            </div>
+            <div class="agent-list-item-model">${escapeHtml(s.description || '—')}</div>
             <div class="skill-list-item-meta">
-              <span class="skill-badge">${s.requires_app || '基礎'}</span>
+              <span class="skill-badge">${escapeHtml(s.requires_app || '基礎')}</span>
               ${toolCount > 0 ? `<span class="skill-badge skill-badge-tool">${toolCount} 工具</span>` : ''}
             </div>
+          </div>
+          <div class="skill-list-item-actions">
+            <button class="btn btn-sm skill-edit-btn" data-action="edit-skill" data-skill-name="${escapeHtml(s.name)}" title="編輯">
+              <span class="icon">${getIcon('pencil')}</span>
+            </button>
+            ${source !== 'native' ? `
+              <button class="btn btn-sm btn-danger skill-remove-btn" data-action="remove-skill" data-skill-name="${escapeHtml(s.name)}" title="移除">
+                <span class="icon">${getIcon('delete')}</span>
+              </button>
+            ` : ''}
           </div>
         </div>
       `;
     }).join('');
 
+    // Clear highlight after render
+    if (highlightSkillName) {
+      setTimeout(() => { highlightSkillName = null; }, 3000);
+    }
+
     container.querySelectorAll('.skill-list-item').forEach(item => {
-      item.addEventListener('click', () => {
+      item.addEventListener('click', (e) => {
+        // Don't navigate if clicking action buttons
+        if (e.target.closest('[data-action]')) return;
         showSkillDetail(item.dataset.skillName);
       });
     });
@@ -752,21 +808,36 @@ const AgentSettingsApp = (function() {
       const tools = skill.tools || [];
       const mcpServers = skill.mcp_servers || [];
 
+      const source = skill.source || 'unknown';
+      const sourceBadgeClass = source === 'native' ? 'skill-source-native' : source === 'openclaw' ? 'skill-source-openclaw' : 'skill-source-other';
+
+      // Collect browsable files
+      const browseFiles = [];
+      ['references', 'scripts', 'assets'].forEach(dir => {
+        const files = skill[dir] || [];
+        files.forEach(f => browseFiles.push({ dir, path: f }));
+      });
+
       main.innerHTML = `
         <div class="agent-form skill-detail">
+          <div class="skill-detail-header-bar">
+            <div class="agent-form-section-title" style="margin-bottom:0;">基本資訊</div>
+            <button class="btn btn-sm skill-reload-btn" data-action="reload-skills-detail" title="重新載入所有 Skills">
+              <span class="icon">${getIcon('refresh')}</span> 重載
+            </button>
+          </div>
           <div class="agent-form-section">
-            <div class="agent-form-section-title">基本資訊</div>
             <div class="skill-detail-field">
               <span class="agent-form-label">名稱</span>
-              <span class="skill-detail-value">${skill.name}</span>
+              <span class="skill-detail-value">${escapeHtml(skill.name)} <span class="skill-source-badge ${sourceBadgeClass}">${escapeHtml(source)}</span></span>
             </div>
             <div class="skill-detail-field">
               <span class="agent-form-label">說明</span>
-              <span class="skill-detail-value">${skill.description || '—'}</span>
+              <span class="skill-detail-value">${escapeHtml(skill.description || '—')}</span>
             </div>
             <div class="skill-detail-field">
               <span class="agent-form-label">需要的 App 權限</span>
-              <span class="skill-badge">${skill.requires_app || '基礎'}</span>
+              <span class="skill-badge">${escapeHtml(skill.requires_app || '基礎')}</span>
             </div>
           </div>
 
@@ -774,7 +845,7 @@ const AgentSettingsApp = (function() {
             <div class="agent-form-section">
               <div class="agent-form-section-title">工具 (${tools.length})</div>
               <div class="skill-chips">
-                ${tools.map(t => `<span class="skill-chip">${typeof t === 'string' ? t : t.name || t}</span>`).join('')}
+                ${tools.map(t => `<span class="skill-chip">${escapeHtml(typeof t === 'string' ? t : t.name || String(t))}</span>`).join('')}
               </div>
             </div>
           ` : ''}
@@ -783,7 +854,22 @@ const AgentSettingsApp = (function() {
             <div class="agent-form-section">
               <div class="agent-form-section-title">MCP Servers</div>
               <div class="skill-chips">
-                ${mcpServers.map(s => `<span class="skill-chip">${typeof s === 'string' ? s : s.name || JSON.stringify(s)}</span>`).join('')}
+                ${mcpServers.map(s => `<span class="skill-chip">${escapeHtml(typeof s === 'string' ? s : s.name || JSON.stringify(s))}</span>`).join('')}
+              </div>
+            </div>
+          ` : ''}
+
+          ${browseFiles.length > 0 ? `
+            <div class="agent-form-section">
+              <div class="agent-form-section-title">檔案</div>
+              <div class="skill-file-list">
+                ${browseFiles.map(f => `
+                  <div class="skill-file-item" data-action="browse-file" data-skill-name="${escapeHtml(skillName)}" data-file-dir="${escapeHtml(f.dir)}" data-file-path="${escapeHtml(f.path)}">
+                    <span class="icon">${getIcon('file-document-outline')}</span>
+                    <span>${escapeHtml(f.dir)}/${escapeHtml(f.path)}</span>
+                  </div>
+                  <pre class="skill-file-content" style="display:none;"></pre>
+                `).join('')}
               </div>
             </div>
           ` : ''}
@@ -805,6 +891,271 @@ const AgentSettingsApp = (function() {
     } catch (e) {
       main.innerHTML = `<div class="agent-empty-state"><p>載入失敗: ${e.message}</p></div>`;
     }
+  }
+
+  // ========== Skill Actions ==========
+
+  /**
+   * Reload all skills
+   */
+  async function reloadSkills() {
+    try {
+      await fetch('/api/skills/reload', {
+        method: 'POST',
+        headers: getAuthHeaders()
+      });
+      await loadSkills();
+      renderSkillList();
+      showToast('Skills 已重載', 'check');
+    } catch (e) {
+      showToast('重載失敗: ' + e.message, 'error');
+    }
+  }
+
+  /**
+   * Open skill edit modal
+   */
+  async function openSkillEditModal(skillName) {
+    try {
+      const response = await fetch(`/api/skills/${encodeURIComponent(skillName)}`, {
+        headers: getAuthHeaders()
+      });
+      if (!response.ok) throw new Error('Failed to load skill');
+      const skill = await response.json();
+
+      const overlay = document.querySelector(`#${windowId} .skill-edit-modal-overlay`);
+      if (!overlay) return;
+
+      const body = overlay.querySelector('.skill-edit-modal-body');
+      const allowedTools = skill.allowed_tools || skill.tools || [];
+      const mcpServers = skill.mcp_servers || [];
+
+      body.innerHTML = `
+        <div class="skill-edit-form" data-skill-name="${escapeHtml(skillName)}">
+          <div class="agent-form-group" style="margin-bottom:16px;">
+            <label class="agent-form-label">requires_app</label>
+            <input type="text" class="agent-form-input" name="requires_app" value="${escapeHtml(skill.requires_app || '')}" placeholder="留空為基礎">
+          </div>
+          <div class="agent-form-group" style="margin-bottom:16px;">
+            <label class="agent-form-label">allowed_tools</label>
+            <div class="skill-chip-editor" data-field="allowed_tools">
+              <div class="skill-chips-editable">
+                ${allowedTools.map(t => {
+                  const name = typeof t === 'string' ? t : t.name || String(t);
+                  return `<span class="skill-chip skill-chip-removable">${escapeHtml(name)}<button class="skill-chip-remove" data-action="remove-chip">&times;</button></span>`;
+                }).join('')}
+              </div>
+              <input type="text" class="agent-form-input skill-chip-input" placeholder="輸入後按 Enter 新增" data-action="add-chip-input">
+            </div>
+          </div>
+          <div class="agent-form-group" style="margin-bottom:16px;">
+            <label class="agent-form-label">mcp_servers</label>
+            <div class="skill-chip-editor" data-field="mcp_servers">
+              <div class="skill-chips-editable">
+                ${mcpServers.map(s => {
+                  const name = typeof s === 'string' ? s : s.name || JSON.stringify(s);
+                  return `<span class="skill-chip skill-chip-removable">${escapeHtml(name)}<button class="skill-chip-remove" data-action="remove-chip">&times;</button></span>`;
+                }).join('')}
+              </div>
+              <input type="text" class="agent-form-input skill-chip-input" placeholder="輸入後按 Enter 新增" data-action="add-chip-input">
+            </div>
+          </div>
+        </div>
+      `;
+
+      overlay.style.display = 'flex';
+    } catch (e) {
+      showToast('載入失敗: ' + e.message, 'error');
+    }
+  }
+
+  /**
+   * Save skill from modal
+   */
+  async function saveSkillFromModal() {
+    const form = document.querySelector(`#${windowId} .skill-edit-form`);
+    if (!form) return;
+
+    const skillName = form.dataset.skillName;
+    const requiresApp = form.querySelector('[name="requires_app"]').value || null;
+
+    const getAllChips = (field) => {
+      const container = form.querySelector(`.skill-chip-editor[data-field="${field}"] .skill-chips-editable`);
+      if (!container) return [];
+      return Array.from(container.querySelectorAll('.skill-chip-removable')).map(chip => {
+        // Get text without the × button text
+        return chip.firstChild.textContent.trim();
+      });
+    };
+
+    const data = {
+      requires_app: requiresApp,
+      allowed_tools: getAllChips('allowed_tools'),
+      mcp_servers: getAllChips('mcp_servers')
+    };
+
+    try {
+      const response = await fetch(`/api/skills/${encodeURIComponent(skillName)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify(data)
+      });
+      if (!response.ok) throw new Error('Failed to save');
+
+      closeSkillEditModal();
+      showToast('儲存成功', 'check');
+      await loadSkills();
+      renderSkillList();
+      if (currentSkillName === skillName) {
+        showSkillDetail(skillName);
+      }
+    } catch (e) {
+      showToast('儲存失敗: ' + e.message, 'error');
+    }
+  }
+
+  /**
+   * Close skill edit modal
+   */
+  function closeSkillEditModal() {
+    const overlay = document.querySelector(`#${windowId} .skill-edit-modal-overlay`);
+    if (overlay) overlay.style.display = 'none';
+  }
+
+  /**
+   * Remove a skill
+   */
+  async function removeSkill(skillName) {
+    if (!confirm(`確定要移除 "${skillName}" 嗎？`)) return;
+
+    try {
+      const response = await fetch(`/api/skills/${encodeURIComponent(skillName)}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders()
+      });
+      if (!response.ok) throw new Error('Failed to delete');
+
+      showToast('已移除 ' + skillName, 'check');
+      if (currentSkillName === skillName) currentSkillName = null;
+      await loadSkills();
+      renderSkillList();
+    } catch (e) {
+      showToast('移除失敗: ' + e.message, 'error');
+    }
+  }
+
+  /**
+   * Search ClawHub
+   */
+  async function searchHub(query) {
+    const resultsContainer = document.querySelector(`#${windowId} .skill-hub-results`);
+    if (!resultsContainer) return;
+
+    if (!query.trim()) {
+      resultsContainer.innerHTML = '<div class="agent-list-empty"><p>輸入關鍵字搜尋</p></div>';
+      return;
+    }
+
+    resultsContainer.innerHTML = '<div class="agent-list-empty"><p>搜尋中...</p></div>';
+
+    try {
+      const response = await fetch('/api/skills/hub/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ query })
+      });
+      if (!response.ok) throw new Error('Search failed');
+      const data = await response.json();
+      const results = data.results || [];
+
+      if (results.length === 0) {
+        resultsContainer.innerHTML = '<div class="agent-list-empty"><p>無搜尋結果</p></div>';
+        return;
+      }
+
+      resultsContainer.innerHTML = results.map(r => `
+        <div class="skill-hub-result-item">
+          <div class="agent-list-item-info">
+            <div class="agent-list-item-name">${escapeHtml(r.name)}</div>
+            <div class="agent-list-item-model">${escapeHtml(r.description || '')}</div>
+            <div class="skill-list-item-meta">
+              ${r.version ? `<span class="skill-badge">${escapeHtml(r.version)}</span>` : ''}
+              ${r.score != null ? `<span class="skill-badge">⭐ ${r.score}</span>` : ''}
+            </div>
+          </div>
+          <button class="btn btn-sm btn-primary" data-action="install-skill" data-skill-name="${escapeHtml(r.name)}" data-skill-version="${escapeHtml(r.version || '')}">安裝</button>
+        </div>
+      `).join('');
+    } catch (e) {
+      resultsContainer.innerHTML = `<div class="agent-list-empty"><p>搜尋失敗: ${escapeHtml(e.message)}</p></div>`;
+    }
+  }
+
+  /**
+   * Install skill from ClawHub
+   */
+  async function installSkill(name, version) {
+    try {
+      const body = { name };
+      if (version) body.version = version;
+
+      const response = await fetch('/api/skills/hub/install', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify(body)
+      });
+      if (!response.ok) throw new Error('Install failed');
+
+      showToast(`已安裝 ${name}`, 'check');
+
+      // Reload and switch to installed tab, highlight new skill
+      await loadSkills();
+      highlightSkillName = name;
+      switchSkillSubTab('installed');
+      renderSkillList();
+    } catch (e) {
+      showToast('安裝失敗: ' + e.message, 'error');
+    }
+  }
+
+  /**
+   * Browse skill file
+   */
+  async function browseSkillFile(skillName, filePath, contentEl) {
+    if (contentEl.style.display !== 'none') {
+      contentEl.style.display = 'none';
+      return;
+    }
+
+    contentEl.textContent = '載入中...';
+    contentEl.style.display = 'block';
+
+    try {
+      const response = await fetch(`/api/skills/${encodeURIComponent(skillName)}/files/${encodeURIComponent(filePath)}`, {
+        headers: getAuthHeaders()
+      });
+      if (!response.ok) throw new Error('Failed to load file');
+      const text = await response.text();
+      contentEl.textContent = text;
+    } catch (e) {
+      contentEl.textContent = '載入失敗: ' + e.message;
+    }
+  }
+
+  /**
+   * Switch skill sub-tab (installed / hub)
+   */
+  function switchSkillSubTab(tab) {
+    currentSkillsSubTab = tab;
+    const wrapper = document.querySelector(`#${windowId} .skill-sidebar`);
+    if (!wrapper) return;
+
+    wrapper.querySelectorAll('.skill-sub-tab').forEach(t => {
+      t.classList.toggle('active', t.dataset.skillTab === tab);
+    });
+    wrapper.querySelectorAll('.skill-sub-content').forEach(c => {
+      c.style.display = c.dataset.skillTabContent === tab ? '' : 'none';
+    });
   }
 
   /**
@@ -859,15 +1210,100 @@ const AgentSettingsApp = (function() {
    * 綁定事件
    */
   function bindEvents() {
+    const root = document.getElementById(windowId);
+    if (!root) return;
+
     // 新增按鈕
-    const newBtn = document.querySelector(`#${windowId} .agent-new-btn`);
+    const newBtn = root.querySelector('.agent-new-btn');
     if (newBtn) {
       newBtn.addEventListener('click', createNewAgent);
     }
 
     // Tab 切換
-    document.querySelectorAll(`#${windowId} .agent-settings-tab`).forEach(tab => {
+    root.querySelectorAll('.agent-settings-tab').forEach(tab => {
       tab.addEventListener('click', () => switchTab(tab.dataset.tab));
+    });
+
+    // Skill sub-tab 切換
+    root.querySelectorAll('.skill-sub-tab').forEach(tab => {
+      tab.addEventListener('click', () => switchSkillSubTab(tab.dataset.skillTab));
+    });
+
+    // Hub search
+    const hubSearchBtn = root.querySelector('[data-action="hub-search"]');
+    if (hubSearchBtn) {
+      hubSearchBtn.addEventListener('click', () => {
+        const input = root.querySelector('.skill-hub-search-input');
+        if (input) searchHub(input.value);
+      });
+    }
+    const hubSearchInput = root.querySelector('.skill-hub-search-input');
+    if (hubSearchInput) {
+      hubSearchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') searchHub(hubSearchInput.value);
+      });
+    }
+
+    // Delegated click handler for data-action
+    root.addEventListener('click', (e) => {
+      const actionEl = e.target.closest('[data-action]');
+      if (!actionEl) return;
+
+      const action = actionEl.dataset.action;
+
+      switch (action) {
+        case 'edit-skill':
+          e.stopPropagation();
+          openSkillEditModal(actionEl.dataset.skillName);
+          break;
+        case 'remove-skill':
+          e.stopPropagation();
+          removeSkill(actionEl.dataset.skillName);
+          break;
+        case 'reload-skills':
+        case 'reload-skills-detail':
+          reloadSkills();
+          break;
+        case 'close-skill-modal':
+          closeSkillEditModal();
+          break;
+        case 'save-skill':
+          saveSkillFromModal();
+          break;
+        case 'install-skill':
+          installSkill(actionEl.dataset.skillName, actionEl.dataset.skillVersion || null);
+          break;
+        case 'remove-chip':
+          actionEl.closest('.skill-chip-removable')?.remove();
+          break;
+        case 'browse-file': {
+          const contentEl = actionEl.nextElementSibling;
+          if (contentEl && contentEl.classList.contains('skill-file-content')) {
+            const dir = actionEl.dataset.fileDir;
+            const filePath = actionEl.dataset.filePath;
+            const fullPath = dir + '/' + filePath;
+            browseSkillFile(actionEl.dataset.skillName, fullPath, contentEl);
+          }
+          break;
+        }
+      }
+    });
+
+    // Chip input Enter handler (delegated)
+    root.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && e.target.classList.contains('skill-chip-input')) {
+        e.preventDefault();
+        const val = e.target.value.trim();
+        if (!val) return;
+        const chipsContainer = e.target.closest('.skill-chip-editor')?.querySelector('.skill-chips-editable');
+        if (chipsContainer) {
+          const chip = document.createElement('span');
+          chip.className = 'skill-chip skill-chip-removable';
+          chip.innerHTML = `${escapeHtml(val)}<button class="skill-chip-remove" data-action="remove-chip">&times;</button>`;
+          chipsContainer.appendChild(chip);
+          e.target.value = '';
+        }
+      }
     });
   }
 
