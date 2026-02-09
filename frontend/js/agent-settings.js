@@ -1297,10 +1297,18 @@ const AgentSettingsApp = (function() {
           if (!previewEl) break;
 
           const isVisible = previewEl.style.display !== 'none';
-          previewEl.style.display = isVisible ? 'none' : 'block';
+
+          if (isVisible) {
+            previewEl.style.display = 'none';
+            actionEl.textContent = '預覽';
+            break;
+          }
+
+          previewEl.style.display = 'block';
+          actionEl.textContent = '收合';
 
           // Only load content the first time it's shown
-          if (!isVisible && !previewEl.dataset.loaded) {
+          if (!previewEl.dataset.loaded) {
             previewEl.dataset.loaded = 'true';
             previewEl.textContent = '載入中...';
             try {
@@ -1320,7 +1328,8 @@ const AgentSettingsApp = (function() {
               previewEl.textContent = result.content || '（空白）';
             } catch (err) {
               previewEl.textContent = `預覽失敗: ${err.message}`;
-              delete previewEl.dataset.loaded; // Allow retry on error
+              delete previewEl.dataset.loaded;
+              actionEl.textContent = '預覽';
             }
           }
           break;

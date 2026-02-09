@@ -216,19 +216,18 @@ async def hub_inspect(
     session: SessionData = Depends(require_admin),
 ):
     """預覽 ClawHub skill 的檔案內容"""
-    if not re.match(r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$", data.slug) or "--" in data.slug or len(data.slug) > 100:
+    if not re.match(r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$", data.slug) or len(data.slug) > 100:
         raise HTTPException(status_code=400, detail="Slug 格式無效")
 
     path_components = data.file.split("/")
-    if (
-        not re.match(r"^[\w.\-]+(/[\w.\-]+)*$", data.file)
-        or ".." in path_components
-        or "." in path_components
-        or any(not comp for comp in path_components)
-        or data.file.startswith("/")
-        or data.file.startswith("-")
-        or len(data.file) > 200
-    ):
+
+    # Security: path traversal and injection prevention
+    path_too_long = len(data.file) > 200
+    invalid_start = data.file.startswith(("/", "-"))
+    invalid_components = ".." in path_components or "." in path_components or "" in path_components
+    invalid_chars = not re.match(r"^[\w.\-]+(/[\w.\-]+)*$", data.file)
+
+    if path_too_long or invalid_start or invalid_components or invalid_chars:
         raise HTTPException(status_code=400, detail="檔案名稱無效")
 
     code, stdout, stderr = await _run_clawhub(
