@@ -78,6 +78,8 @@ class Skill:
     # === 內部欄位 ===
     prompt: str = ""
     references: list[str] = field(default_factory=list)
+    scripts: list[str] = field(default_factory=list)
+    assets: list[str] = field(default_factory=list)
     source: str = "native"  # native | openclaw | claude-code
 
 
@@ -128,13 +130,14 @@ def _build_skill(config: dict, body: str, skill_dir: Path, source: str = "native
 
     requires_app, mcp_servers = _extract_ctos_metadata(config)
 
-    # 掃描 references/ 目錄
-    refs = []
-    refs_dir = skill_dir / "references"
-    if refs_dir.is_dir():
-        refs = sorted(
+    # 掃描 references/ scripts/ assets/ 目錄
+    def _scan_subdir(subdir_name: str) -> list[str]:
+        subdir = skill_dir / subdir_name
+        if not subdir.is_dir():
+            return []
+        return sorted(
             str(f.relative_to(skill_dir))
-            for f in refs_dir.rglob("*")
+            for f in subdir.rglob("*")
             if f.is_file()
         )
 
@@ -148,7 +151,9 @@ def _build_skill(config: dict, body: str, skill_dir: Path, source: str = "native
         requires_app=requires_app,
         mcp_servers=mcp_servers,
         prompt=body,
-        references=refs,
+        references=_scan_subdir("references"),
+        scripts=_scan_subdir("scripts"),
+        assets=_scan_subdir("assets"),
         source=config.get("source", source),
     )
 
@@ -350,21 +355,35 @@ class SkillManager:
             servers.update(skill.mcp_servers)
         return servers
 
-    async def get_skill_reference(self, name: str, ref_path: str) -> str | None:
-        """讀取 skill 的 reference 檔案內容"""
+    async def get_skill_file(self, name: str, file_path: str) -> str | None:
+        """讀取 skill 的檔案內容（references/ scripts/ assets/ 下）。"""
         await self.load_skills()
         skill = self._skills.get(name)
         if not skill:
             return None
-        full_path = self._skills_dir / name / ref_path
+
+        # 只允許存取 references/ scripts/ assets/ 下的檔案
+        allowed_prefixes = ("references/", "scripts/", "assets/")
+        if not any(file_path.startswith(p) for p in allowed_prefixes):
+            return None
+
+        full_path = self._skills_dir / name / file_path
         if not full_path.is_file():
             return None
+
         # 安全檢查：不允許路徑穿越
         try:
             full_path.resolve().relative_to((self._skills_dir / name).resolve())
         except ValueError:
             return None
         return full_path.read_text(encoding="utf-8")
+
+    # 向下相容別名
+    async def get_skill_reference(self, name: str, ref_path: str) -> str | None:
+        """讀取 skill 的 reference 檔案（向下相容）。"""
+        if not ref_path.startswith("references/"):
+            ref_path = f"references/{ref_path}"
+        return await self.get_skill_file(name, ref_path)
 
 
 @lru_cache(maxsize=1)

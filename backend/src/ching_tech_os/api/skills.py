@@ -23,6 +23,8 @@ async def list_skills(session: SessionData = Depends(require_admin)):
                 "tools_count": len(skill.allowed_tools),
                 "has_prompt": bool(skill.prompt),
                 "references": skill.references,
+                "scripts": skill.scripts,
+                "assets": skill.assets,
                 "source": skill.source,
                 "license": skill.license,
                 "compatibility": skill.compatibility,
@@ -49,6 +51,8 @@ async def get_skill(name: str, session: SessionData = Depends(require_admin)):
         "has_prompt": bool(skill.prompt),
         "prompt": skill.prompt,
         "references": skill.references,
+        "scripts": skill.scripts,
+        "assets": skill.assets,
         "source": skill.source,
         "license": skill.license,
         "compatibility": skill.compatibility,
@@ -56,13 +60,28 @@ async def get_skill(name: str, session: SessionData = Depends(require_admin)):
     }
 
 
+@router.get("/{name}/files/{file_path:path}")
+async def get_skill_file(
+    name: str,
+    file_path: str,
+    session: SessionData = Depends(require_admin),
+):
+    """讀取 skill 的檔案（references/ scripts/ assets/ 下）"""
+    sm = get_skill_manager()
+    content = await sm.get_skill_file(name, file_path)
+    if content is None:
+        raise HTTPException(status_code=404, detail="File not found")
+    return {"path": file_path, "content": content}
+
+
+# 向下相容舊端點
 @router.get("/{name}/references/{ref_path:path}")
 async def get_skill_reference(
     name: str,
     ref_path: str,
     session: SessionData = Depends(require_admin),
 ):
-    """讀取 skill 的 reference 檔案"""
+    """讀取 skill 的 reference 檔案（向下相容）"""
     sm = get_skill_manager()
     content = await sm.get_skill_reference(name, ref_path)
     if content is None:
