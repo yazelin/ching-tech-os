@@ -352,6 +352,9 @@ async def generate_tools_prompt(
         except (OSError, ValueError, RuntimeError) as e:
             logger.warning(f"SkillManager 載入失敗，使用 fallback: {e}")
 
+    # 嘗試注入 Script Tools prompt
+    script_prompt = await _generate_script_tools_prompt(app_permissions)
+
     # Fallback: 硬編碼 prompt
     sections: list[str] = []
 
@@ -363,7 +366,54 @@ async def generate_tools_prompt(
         if app_permissions.get(app_id, False):
             sections.append(prompt_section)
 
-    return "\n\n".join(sections)
+    result = "\n\n".join(sections)
+
+    # 附加 Script Tools prompt
+    if script_prompt:
+        result += "\n\n" + script_prompt
+
+    return result
+
+
+async def _generate_script_tools_prompt(
+    app_permissions: dict[str, bool],
+) -> str:
+    """根據使用者權限生成 Script Tools prompt"""
+    if not _HAS_SKILL_MANAGER:
+        return ""
+
+    try:
+        sm = get_skill_manager()
+        skills = await sm.get_skills_for_user(app_permissions)
+
+        lines = []
+        for skill in skills:
+            if not skill.scripts:
+                continue
+            scripts_info = await sm.get_scripts_info(skill.name)
+            if not scripts_info:
+                continue
+
+            lines.append(f"\n{skill.name}:")
+            for s in scripts_info:
+                desc = s["description"] or f"執行 {skill.name} 的腳本 {s['name']}"
+                lines.append(f"  - {s['name']}: {desc}")
+            lines.append(
+                f'  用法：run_skill_script(skill="{skill.name}", '
+                f'script="<script_name>", input="...")'
+            )
+
+        if not lines:
+            return ""
+
+        return (
+            "【Script Tools】\n"
+            "以下 skill 提供可執行的 script，使用 run_skill_script 工具呼叫："
+            + "\n".join(lines)
+        )
+    except (OSError, ValueError, RuntimeError) as e:
+        logger.warning(f"生成 Script Tools prompt 失敗: {e}")
+        return ""
 
 
 def generate_usage_tips_prompt(

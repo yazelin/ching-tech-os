@@ -7,6 +7,7 @@ CTOS 擴充欄位放在 metadata.ctos 下。
 
 import asyncio
 import logging
+import os
 import re
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -169,6 +170,11 @@ class SkillManager:
         self._skills: dict[str, Skill] = {}
         self._loaded = False
         self._load_lock = asyncio.Lock()
+
+    @property
+    def skills_dir(self) -> Path:
+        """Skills 目錄路徑"""
+        return self._skills_dir
 
     async def load_skills(self) -> None:
         """掃描 skills 目錄，載入所有 skill 定義（async-safe）"""
@@ -489,6 +495,101 @@ class SkillManager:
         except ValueError:
             return None
         return full_path.read_text(encoding="utf-8")
+
+    # === Script Runner 相關方法 ===
+
+    async def has_scripts(self, skill_name: str) -> bool:
+        """檢查 skill 是否有 scripts/ 目錄"""
+        await self.load_skills()
+        skill = self._skills.get(skill_name)
+        if not skill:
+            return False
+        return bool(skill.scripts)
+
+    async def get_script_path(self, skill_name: str, script_name: str) -> Path | None:
+        """取得 script 的完整路徑（含路徑穿越驗證）"""
+        await self.load_skills()
+        if skill_name not in self._skills:
+            return None
+
+        # 驗證 script_name 格式（跨平台路徑分隔符檢查）
+        if not script_name or any(p in script_name for p in ("..", os.path.sep, os.path.altsep) if p):
+            return None
+
+        scripts_dir = self._skills_dir / skill_name / "scripts"
+        if not scripts_dir.is_dir():
+            return None
+
+        for ext in (".py", ".sh"):
+            path = scripts_dir / f"{script_name}{ext}"
+            if path.is_file():
+                try:
+                    path.resolve().relative_to(scripts_dir.resolve())
+                except ValueError:
+                    return None
+                return path
+        return None
+
+    async def get_scripts_info(self, skill_name: str) -> list[dict]:
+        """取得 skill 的所有 script 資訊（name, description）"""
+        await self.load_skills()
+        if skill_name not in self._skills:
+            return []
+
+        from .script_runner import ScriptRunner
+        runner = ScriptRunner(self._skills_dir)
+        return runner.list_scripts(skill_name)
+
+    async def get_all_script_skills(self) -> list[str]:
+        """取得所有有 scripts/ 的 skill 名稱"""
+        await self.load_skills()
+        return [
+            name for name, skill in self._skills.items()
+            if skill.scripts
+        ]
+
+    # 禁止 skill 存取的敏感環境變數
+    _ENV_BLOCKLIST = frozenset({
+        "DATABASE_URL", "DB_PASSWORD", "DB_HOST", "DB_USER",
+        "SECRET_KEY", "BOT_SECRET_KEY", "JWT_SECRET",
+        "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        "NAS_PASSWORD", "NAS_USER",
+        "LINE_CHANNEL_SECRET", "LINE_CHANNEL_ACCESS_TOKEN",
+        "TELEGRAM_BOT_TOKEN",
+    })
+
+    def get_skill_env_overrides(self, skill: "Skill") -> dict[str, str]:
+        """從 SKILL.md metadata.openclaw.requires.env 取得需要繼承的 .env 變數
+
+        有 blocklist 防止 skill 存取敏感變數。
+        """
+        env = {}
+        metadata = skill.metadata or {}
+        openclaw_meta = metadata.get("openclaw") or {}
+        requires = openclaw_meta.get("requires") or {}
+        env_keys = requires.get("env") or []
+
+        def _process_key(key: str, is_primary: bool = False) -> None:
+            log_source = f"primaryEnv '{key}'" if is_primary else f"環境變數 '{key}'"
+            if key.upper() in self._ENV_BLOCKLIST:
+                logger.warning(f"Skill '{skill.name}' 請求的 {log_source} 被封鎖，已拒絕")
+                return
+            val = os.environ.get(key)
+            if val:
+                env[key] = val
+            else:
+                logger.warning(f"Skill '{skill.name}' 需要的 {log_source} 未設定")
+
+        for key in env_keys:
+            _process_key(key)
+
+        # primaryEnv 也繼承（同樣受 blocklist 限制）
+        primary = openclaw_meta.get("primaryEnv")
+        if primary and primary not in env:
+            _process_key(primary, is_primary=True)
+
+        return env
 
     # 向下相容別名
     async def get_skill_reference(self, name: str, ref_path: str) -> str | None:
