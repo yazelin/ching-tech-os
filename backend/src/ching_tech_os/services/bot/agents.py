@@ -519,10 +519,9 @@ async def get_tools_for_user(
 
     # Fallback: 硬編碼工具列表
     tools: list[str] = []
-    # base 工具（所有人都有）
-    tools.extend(_FALLBACK_TOOLS.get(None, []))
     for app_id, app_tools in _FALLBACK_TOOLS.items():
-        if app_id is not None and app_permissions.get(app_id, False):
+        # 基底工具 (app_id=None) 任何人都有，其他工具則需對應權限
+        if app_id is None or app_permissions.get(app_id, False):
             tools.extend(app_tools)
     # 去重
     return list(dict.fromkeys(tools))
