@@ -47,10 +47,10 @@ def ensure_directories():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """應用程式生命週期管理"""
+    import logging as _logging  # 避免與模組層級 logging 衝突
     # 啟動時
     if not settings.bot_secret_key:
-        import logging
-        logging.getLogger(__name__).warning(
+        _logging.getLogger(__name__).warning(
             "BOT_SECRET_KEY 未設定，Bot 憑證加密將使用預設金鑰（不安全）。"
             "請在 .env 中設定 BOT_SECRET_KEY。"
         )
@@ -60,7 +60,7 @@ async def lifespan(app: FastAPI):
         from .skills import get_skill_manager
         await get_skill_manager().load_skills()
     except Exception as e:
-        logging.getLogger(__name__).warning(f"Skills 預載入失敗: {e}")
+        _logging.getLogger(__name__).warning("Skills 預載入失敗: %s", e)
     await init_db_pool()
     await ensure_default_linebot_agents()  # 確保 Line Bot Agent 存在
     await session_manager.start_cleanup_task()
