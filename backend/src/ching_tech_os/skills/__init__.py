@@ -90,12 +90,12 @@ def _extract_ctos_metadata(config: dict) -> tuple[Optional[str], list[str]]:
     ctos = (config.get("metadata") or {}).get("ctos", {})
 
     # requires_app
-    requires_app = ctos.get("requires_app") if ctos else None
+    requires_app = ctos.get("requires_app")
     if requires_app is None:
         requires_app = config.get("requires_app")
 
     # mcp_servers
-    mcp_servers_raw = ctos.get("mcp_servers") if ctos else None
+    mcp_servers_raw = ctos.get("mcp_servers")
     if mcp_servers_raw is None:
         mcp_servers_raw = config.get("mcp_servers")
     mcp_servers = _parse_mcp_servers(mcp_servers_raw)
@@ -103,8 +103,24 @@ def _extract_ctos_metadata(config: dict) -> tuple[Optional[str], list[str]]:
     return requires_app, mcp_servers
 
 
+_VALID_NAME_RE = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
+
+
+def _validate_skill_name(name: str) -> str:
+    """驗證 skill 名稱（防止路徑穿越，符合 Agent Skills 標準命名規則）。"""
+    if not name or len(name) > 64:
+        raise ValueError(f"Skill name 長度無效: {name!r}")
+    if "--" in name or not _VALID_NAME_RE.match(name):
+        raise ValueError(f"Skill name 格式無效: {name!r}")
+    return name
+
+
 def _build_skill(config: dict, body: str, skill_dir: Path, source: str = "native") -> Skill:
     """從 frontmatter + body 建立 Skill 物件。"""
+    # 驗證名稱（防止路徑穿越）
+    name = config.get("name", skill_dir.name)
+    _validate_skill_name(name)
+
     # allowed-tools（標準）或 tools（舊版）
     allowed_tools = _parse_allowed_tools(
         config.get("allowed-tools") or config.get("tools")
@@ -123,7 +139,7 @@ def _build_skill(config: dict, body: str, skill_dir: Path, source: str = "native
         )
 
     return Skill(
-        name=config.get("name", skill_dir.name),
+        name=name,
         description=config.get("description", ""),
         license=config.get("license", ""),
         compatibility=config.get("compatibility", ""),
@@ -234,13 +250,14 @@ class SkillManager:
         config, body = _parse_skill_md(text)
 
         name = config.get("name", skill_path.name)
+        _validate_skill_name(name)
         dest_dir = self._skills_dir / name
         dest_dir.mkdir(parents=True, exist_ok=True)
 
-        # 確保 metadata.ctos 存在
-        if "metadata" not in config:
+        # 確保 metadata.ctos 存在（防禦 metadata: null）
+        if not isinstance(config.get("metadata"), dict):
             config["metadata"] = {}
-        if "ctos" not in config["metadata"]:
+        if not isinstance(config["metadata"].get("ctos"), dict):
             config["metadata"]["ctos"] = {
                 "requires_app": None,
                 "mcp_servers": "",
