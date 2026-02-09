@@ -687,7 +687,7 @@ const AILogApp = (function() {
 
     // 未使用的工具（預設隱藏，點擊展開）
     if (unusedList.length > 0) {
-      html += `<button class="ai-log-tools-expand-btn" data-action="toggle-tools" title="展開全部 ${allowedTools.length} 個工具">+${unusedList.length}</button>`;
+      html += `<button class="ai-log-tools-expand-btn" data-action="toggle-tools" title="展開 ${unusedList.length} 個未使用的工具">+${unusedList.length}</button>`;
       html += `<span class="ai-log-tools-hidden">`;
       html += unusedList.map(tool => {
         const escaped = escapeHtml(tool);
@@ -713,7 +713,7 @@ const AILogApp = (function() {
       hidden.classList.remove('expanded');
       const total = hidden.querySelectorAll('.ai-log-tool-badge').length;
       btn.textContent = `+${total}`;
-      btn.title = `展開全部工具`;
+      btn.title = `展開 ${total} 個未使用的工具`;
     } else {
       hidden.classList.add('expanded');
       btn.textContent = '收合';
