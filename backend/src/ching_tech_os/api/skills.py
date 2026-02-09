@@ -219,7 +219,15 @@ async def hub_inspect(
     if not re.match(r"^[a-z0-9][a-z0-9-]*[a-z0-9]$", data.slug) or len(data.slug) > 100:
         raise HTTPException(status_code=400, detail="Slug 格式無效")
 
-    if not re.match(r"^[\w.\-]+(/[\w.\-]+)*$", data.file) or ".." in data.file or data.file.startswith("/") or len(data.file) > 200:
+    path_components = data.file.split("/")
+    if (
+        not re.match(r"^[\w.\-]+(/[\w.\-]+)*$", data.file)
+        or ".." in path_components
+        or "." in path_components
+        or any(not comp for comp in path_components)
+        or data.file.startswith("/")
+        or len(data.file) > 200
+    ):
         raise HTTPException(status_code=400, detail="檔案名稱無效")
 
     code, stdout, stderr = await _run_clawhub(
