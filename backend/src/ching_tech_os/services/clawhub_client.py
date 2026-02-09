@@ -7,9 +7,9 @@
 import io
 import json
 import logging
+import re
 import zipfile
 from datetime import datetime, timezone
-from functools import lru_cache
 from pathlib import Path
 
 import httpx
@@ -18,6 +18,18 @@ logger = logging.getLogger(__name__)
 
 # ZIP 檔案大小限制：10MB
 _MAX_ZIP_SIZE = 10 * 1024 * 1024
+# 解壓後總大小上限：50MB
+_MAX_EXTRACTED_SIZE = 50 * 1024 * 1024
+# 解壓後檔案數量上限
+_MAX_EXTRACTED_FILES = 200
+
+# 共用的 slug 驗證 regex
+VALID_SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")
+
+
+def validate_slug(slug: str) -> bool:
+    """驗證 slug 格式（共用）"""
+    return bool(VALID_SLUG_RE.match(slug)) and len(slug) <= 100
 
 
 class ClawHubError(Exception):
@@ -32,9 +44,9 @@ class ClawHubClient:
 
     BASE_URL = "https://clawhub.ai/api/v1"
 
-    def __init__(self, base_url: str | None = None):
+    def __init__(self):
         self._client = httpx.AsyncClient(
-            base_url=base_url or self.BASE_URL,
+            base_url=self.BASE_URL,
             timeout=httpx.Timeout(connect=5, read=30, pool=5),
             follow_redirects=False,  # SSRF 防護
         )
@@ -56,7 +68,7 @@ class ClawHubClient:
         try:
             resp = await self._client.get(
                 "/search",
-                params={"q": query, "limit": limit},
+                params={"q": query.strip(), "limit": limit},
             )
             resp.raise_for_status()
             data = resp.json()
@@ -66,7 +78,7 @@ class ClawHubClient:
                 f"搜尋失敗: HTTP {e.response.status_code}",
                 status_code=e.response.status_code,
             )
-        except httpx.HTTPError as e:
+        except (httpx.HTTPError, json.JSONDecodeError, KeyError) as e:
             raise ClawHubError(f"搜尋失敗: {e}")
 
     async def get_skill(self, slug: str) -> dict:
@@ -92,7 +104,7 @@ class ClawHubClient:
                 f"取得 skill 詳情失敗: HTTP {e.response.status_code}",
                 status_code=e.response.status_code,
             )
-        except httpx.HTTPError as e:
+        except (httpx.HTTPError, json.JSONDecodeError, KeyError) as e:
             raise ClawHubError(f"取得 skill 詳情失敗: {e}")
 
     async def download_zip(self, slug: str, version: str) -> bytes:
@@ -151,18 +163,30 @@ class ClawHubClient:
         """
         data = await self.download_zip(slug, version)
 
-        # 解壓並防護 zip slip
+        # 解壓並防護 zip slip + ZIP bomb
         dest_dir.mkdir(parents=True, exist_ok=True)
         resolved_dest = dest_dir.resolve()
 
         with zipfile.ZipFile(io.BytesIO(data)) as zf:
+            # ZIP bomb 防護：先檢查解壓後總大小和檔案數
+            total_size = sum(info.file_size for info in zf.infolist() if not info.is_dir())
+            file_count = sum(1 for info in zf.infolist() if not info.is_dir())
+            if total_size > _MAX_EXTRACTED_SIZE:
+                raise ClawHubError(
+                    f"ZIP 解壓後過大: {total_size} bytes（上限 {_MAX_EXTRACTED_SIZE} bytes）"
+                )
+            if file_count > _MAX_EXTRACTED_FILES:
+                raise ClawHubError(
+                    f"ZIP 檔案數量過多: {file_count}（上限 {_MAX_EXTRACTED_FILES}）"
+                )
+
             for info in zf.infolist():
                 if info.is_dir():
                     continue
 
                 # Zip slip 防護：確保解壓路徑在目標目錄內
                 target_path = (dest_dir / info.filename).resolve()
-                if not str(target_path).startswith(str(resolved_dest)):
+                if not target_path.is_relative_to(resolved_dest):
                     raise ClawHubError(
                         f"Zip slip 攻擊偵測: {info.filename}"
                     )
@@ -178,6 +202,7 @@ class ClawHubClient:
 
     async def extract_file_from_zip(
         self, slug: str, version: str, filename: str,
+        *, zip_data: bytes | None = None,
     ) -> str | None:
         """從 ZIP 中提取單一檔案內容（不解壓到磁碟）
 
@@ -185,11 +210,12 @@ class ClawHubClient:
             slug: skill slug
             version: 版本號
             filename: 要提取的檔案名稱（如 "SKILL.md"）
+            zip_data: 已下載的 ZIP bytes（避免重複下載）
 
         Returns:
             檔案內容字串，或 None（檔案不存在）
         """
-        data = await self.download_zip(slug, version)
+        data = zip_data or await self.download_zip(slug, version)
 
         with zipfile.ZipFile(io.BytesIO(data)) as zf:
             for info in zf.infolist():
@@ -250,7 +276,20 @@ class ClawHubClient:
             return None
 
 
-@lru_cache(maxsize=1)
+_client: ClawHubClient | None = None
+
+
 def get_clawhub_client() -> ClawHubClient:
     """取得全域 ClawHubClient singleton"""
-    return ClawHubClient()
+    global _client
+    if _client is None:
+        _client = ClawHubClient()
+    return _client
+
+
+async def close_clawhub_client() -> None:
+    """關閉全域 ClawHubClient（在 app shutdown 時呼叫）"""
+    global _client
+    if _client is not None:
+        await _client.close()
+        _client = None

@@ -2,7 +2,6 @@
 
 import json
 import logging
-import re
 import shutil
 from pathlib import Path
 
@@ -12,7 +11,7 @@ from pydantic import BaseModel
 from ..models.auth import SessionData
 from .auth import require_admin
 from ..skills import get_skill_manager
-from ..services.clawhub_client import ClawHubClient, ClawHubError, get_clawhub_client
+from ..services.clawhub_client import ClawHubClient, ClawHubError, get_clawhub_client, validate_slug
 
 logger = logging.getLogger(__name__)
 
@@ -169,19 +168,20 @@ async def hub_search(
     session: SessionData = Depends(require_admin),
 ):
     """搜尋 ClawHub marketplace（使用 REST API）"""
-    if not data.query or len(data.query) > 100:
+    query = (data.query or "").strip()
+    if not query or len(query) > 100:
         raise HTTPException(status_code=400, detail="搜尋關鍵字無效")
 
     client = get_clawhub_client()
     try:
-        results = await client.search(data.query)
+        results = await client.search(query)
     except ClawHubError as e:
         raise HTTPException(
             status_code=e.status_code or 502,
             detail=f"ClawHub 搜尋失敗: {e}",
         )
 
-    return {"query": data.query, "results": results}
+    return {"query": query, "results": results}
 
 
 @router.post("/hub/inspect")
@@ -190,7 +190,7 @@ async def hub_inspect(
     session: SessionData = Depends(require_admin),
 ):
     """預覽 ClawHub skill（使用 REST API）"""
-    if not re.match(r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$", data.slug) or len(data.slug) > 100:
+    if not validate_slug(data.slug):
         raise HTTPException(status_code=400, detail="Slug 格式無效")
 
     client = get_clawhub_client()
@@ -198,15 +198,16 @@ async def hub_inspect(
         # 取得 skill 詳情（含 owner、stats、latestVersion）
         detail = await client.get_skill(data.slug)
 
-        # 從 ZIP 取得 SKILL.md 內容
+        # 從 ZIP 取得 SKILL.md 內容（下載一次，傳入 zip_data 避免重複下載）
         skill_info = detail.get("skill", {})
         latest = detail.get("latestVersion", {})
         version = latest.get("version", "")
 
         content = ""
         if version:
+            zip_data = await client.download_zip(data.slug, version)
             content = await client.extract_file_from_zip(
-                data.slug, version, "SKILL.md"
+                data.slug, version, "SKILL.md", zip_data=zip_data
             ) or ""
 
     except ClawHubError as e:
@@ -231,7 +232,7 @@ async def hub_install(
 ):
     """從 ClawHub 安裝 skill（使用 REST API）"""
     # 驗證名稱
-    if not re.match(r"^[a-z0-9][a-z0-9-]*[a-z0-9]$", data.name):
+    if not validate_slug(data.name):
         raise HTTPException(status_code=400, detail="Skill 名稱格式無效")
 
     sm = get_skill_manager()
@@ -245,6 +246,8 @@ async def hub_install(
         )
 
     client = get_clawhub_client()
+    dest = sm.skills_dir / data.name
+    tmp_dest = sm.skills_dir / f".{data.name}.installing"
     try:
         # 取得 skill 詳情以獲得版本號和 owner
         detail = await client.get_skill(data.name)
@@ -256,18 +259,34 @@ async def hub_install(
         if not version:
             raise ClawHubError("找不到可用版本")
 
-        # 下載並解壓到 skills 目錄
-        dest = sm.skills_dir / data.name
-        await client.download_and_extract(data.name, version, dest)
+        # 清理可能殘留的臨時目錄
+        if tmp_dest.exists():
+            shutil.rmtree(tmp_dest)
+
+        # 下載並解壓到臨時目錄（避免並發衝突）
+        await client.download_and_extract(data.name, version, tmp_dest)
 
         # 寫入 _meta.json
-        ClawHubClient.write_meta(dest, data.name, version, owner_handle)
+        ClawHubClient.write_meta(tmp_dest, data.name, version, owner_handle)
+
+        # 原子移動到最終目錄
+        if dest.exists():
+            shutil.rmtree(dest)
+        tmp_dest.rename(dest)
 
     except ClawHubError as e:
+        # 清理臨時目錄
+        if tmp_dest.exists():
+            shutil.rmtree(tmp_dest)
         raise HTTPException(
             status_code=e.status_code or 502,
             detail=f"安裝失敗: {e}",
         )
+    except Exception:
+        # 清理臨時目錄
+        if tmp_dest.exists():
+            shutil.rmtree(tmp_dest)
+        raise
 
     # 重載
     await sm.reload_skills()

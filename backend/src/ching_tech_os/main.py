@@ -83,6 +83,12 @@ async def lifespan(app: FastAPI):
     await session_manager.stop_cleanup_task()
     from .services.workers import shutdown_pools
     shutdown_pools()
+    # 關閉 ClawHub client
+    try:
+        from .services.clawhub_client import close_clawhub_client
+        await close_clawhub_client()
+    except Exception as e:
+        _logging.getLogger(__name__).warning(f"關閉 ClawHub client 失敗: {e}")
     # 清理 Claude agent 工作目錄基底
     try:
         from .services.claude_agent import _WORKING_DIR_BASE
