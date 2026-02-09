@@ -4,6 +4,7 @@ import asyncio
 import logging
 import re
 import shutil
+import tempfile
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -143,13 +144,16 @@ async def reload_skills(session: SessionData = Depends(require_admin)):
 
 # === ClawHub 整合 ===
 
-async def _run_clawhub(*args: str, timeout: int = 30) -> tuple[int, str, str]:
+async def _run_clawhub(
+    *args: str, timeout: int = 30, cwd: str | Path | None = None,
+) -> tuple[int, str, str]:
     """執行 clawhub CLI 命令。"""
     try:
         proc = await asyncio.create_subprocess_exec(
             "clawhub", *args,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            cwd=cwd,
         )
         stdout, stderr = await asyncio.wait_for(
             proc.communicate(), timeout=timeout
@@ -217,40 +221,19 @@ async def hub_install(
         )
 
     # 下載到暫存目錄
-    import tempfile
     with tempfile.TemporaryDirectory() as tmpdir:
         args = ["install", data.name, "--force"]
         if data.version:
             args.extend(["--version", data.version])
 
-        # clawhub install 會裝到 cwd 的 skills/ 或指定目錄
-        # 需要設定工作目錄讓它裝到 tmpdir
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                "clawhub", *args,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=tmpdir,
-            )
-            stdout, stderr = await asyncio.wait_for(
-                proc.communicate(), timeout=60
-            )
-        except FileNotFoundError:
-            raise HTTPException(
-                status_code=503,
-                detail="clawhub CLI 未安裝。請執行 npm install -g clawhub",
-            )
-        except asyncio.TimeoutError:
-            raise HTTPException(status_code=504, detail="安裝逾時")
-
-        if proc.returncode != 0:
+        code, downloaded, stderr = await _run_clawhub(
+            *args, timeout=60, cwd=tmpdir,
+        )
+        if code != 0:
             raise HTTPException(
                 status_code=502,
-                detail=f"安裝失敗: {stderr.decode('utf-8', errors='replace')}",
+                detail=f"安裝失敗: {stderr}",
             )
-
-        # 找到下載的 skill 目錄
-        downloaded = stdout.decode("utf-8", errors="replace")
         logger.info(f"ClawHub install output: {downloaded}")
 
         # clawhub 會安裝到 skills/<name> 或直接 <name>
