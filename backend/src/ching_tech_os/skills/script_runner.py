@@ -119,12 +119,16 @@ class ScriptRunner:
                 "duration_ms": 0,
             }
 
-        # 注入環境變數
+        # 最小化環境變數（不繼承主進程的敏感變數）
         skill_dir = self._skills_dir / skill_name
-        env = os.environ.copy()
-        env["SKILL_NAME"] = skill_name
-        env["SKILL_DIR"] = str(skill_dir)
-        env["SKILL_ASSETS_DIR"] = str(skill_dir / "assets")
+        env = {
+            "PATH": os.environ.get("PATH", ""),
+            "HOME": os.environ.get("HOME", ""),
+            "LANG": os.environ.get("LANG", "C.UTF-8"),
+            "SKILL_NAME": skill_name,
+            "SKILL_DIR": str(skill_dir),
+            "SKILL_ASSETS_DIR": str(skill_dir / "assets"),
+        }
         if env_overrides:
             env.update(env_overrides)
 

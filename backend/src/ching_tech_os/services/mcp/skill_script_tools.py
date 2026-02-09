@@ -25,6 +25,12 @@ async def run_skill_script(skill: str, script: str, input_str: str = "") -> str:
 
     sm = get_skill_manager()
 
+    # 權限說明：MCP tool 層無法取得 user context，權限控制依賴：
+    # 1. Tool 白名單：只有擁有 script skill 的使用者才有 run_skill_script
+    # 2. Prompt 注入：只注入使用者有權限的 skill 的 script 說明
+    # 3. Skill name 驗證：防止路徑穿越
+    # 未來若 MCP 支援 user context，應在此加入 requires_app 檢查
+
     # 驗證 skill 存在
     skill_obj = await sm.get_skill(skill)
     if not skill_obj:

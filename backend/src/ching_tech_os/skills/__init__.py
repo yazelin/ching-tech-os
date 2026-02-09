@@ -589,6 +589,8 @@ class SkillManager:
                 val = os.environ.get(primary)
                 if val:
                     env[primary] = val
+                else:
+                    logger.warning(f"Skill '{skill.name}' 的 primaryEnv {primary} 未設定")
 
         return env
 

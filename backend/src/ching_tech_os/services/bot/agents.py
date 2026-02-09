@@ -411,7 +411,7 @@ async def _generate_script_tools_prompt(
             "以下 skill 提供可執行的 script，使用 run_skill_script 工具呼叫："
             + "\n".join(lines)
         )
-    except Exception as e:
+    except (OSError, ValueError, RuntimeError) as e:
         logger.warning(f"生成 Script Tools prompt 失敗: {e}")
         return ""
 
