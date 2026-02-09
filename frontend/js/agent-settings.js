@@ -1267,7 +1267,7 @@ const AgentSettingsApp = (function() {
     }
 
     // Delegated click handler for data-action
-    root.addEventListener('click', (e) => {
+    root.addEventListener('click', async (e) => {
       const actionEl = e.target.closest('[data-action]');
       if (!actionEl) return;
 
