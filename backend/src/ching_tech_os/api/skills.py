@@ -20,10 +20,12 @@ async def list_skills(session: SessionData = Depends(require_admin)):
                 "name": skill.name,
                 "description": skill.description,
                 "requires_app": skill.requires_app,
-                "tools_count": len(skill.tools),
+                "tools_count": len(skill.allowed_tools),
                 "has_prompt": bool(skill.prompt),
                 "references": skill.references,
                 "source": skill.source,
+                "license": skill.license,
+                "compatibility": skill.compatibility,
             }
             for skill in all_skills
         ]
@@ -41,13 +43,16 @@ async def get_skill(name: str, session: SessionData = Depends(require_admin)):
         "name": skill.name,
         "description": skill.description,
         "requires_app": skill.requires_app,
-        "tools_count": len(skill.tools),
-        "tools": skill.tools,
+        "tools_count": len(skill.allowed_tools),
+        "allowed_tools": skill.allowed_tools,
         "mcp_servers": skill.mcp_servers,
         "has_prompt": bool(skill.prompt),
         "prompt": skill.prompt,
         "references": skill.references,
         "source": skill.source,
+        "license": skill.license,
+        "compatibility": skill.compatibility,
+        "metadata": skill.metadata,
     }
 
 

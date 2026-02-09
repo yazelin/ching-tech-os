@@ -1,14 +1,11 @@
 ---
 name: file_manager
 description: NAS 共用檔案搜尋、PDF 轉圖片
-requires_app: file-manager
-tools:
-  - search_nas_files
-  - get_nas_file_info
-  - prepare_file_message
-  - convert_pdf_to_images
-mcp_servers:
-  - ching-tech-os
+allowed-tools: search_nas_files get_nas_file_info prepare_file_message convert_pdf_to_images
+metadata:
+  ctos:
+    requires_app: file-manager
+    mcp_servers: ching-tech-os
 ---
 
 【NAS 共用檔案】

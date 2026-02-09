@@ -1,17 +1,12 @@
 ---
 name: printer
 description: 列印功能
-requires_app: printer
-tools:
-  - prepare_print_file
-  - mcp__printer__print_file
-  - mcp__printer__list_printers
-  - mcp__printer__printer_status
-  - mcp__printer__cancel_job
-  - mcp__printer__print_test_page
-mcp_servers:
-  - printer
-  - ching-tech-os
+allowed-tools: prepare_print_file mcp__printer__print_file mcp__printer__list_printers
+  mcp__printer__printer_status mcp__printer__cancel_job mcp__printer__print_test_page
+metadata:
+  ctos:
+    requires_app: printer
+    mcp_servers: printer ching-tech-os
 ---
 
 【列印功能】
