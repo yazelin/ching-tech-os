@@ -26,6 +26,7 @@ from ..bot_line import (
     save_file_record,
     verify_binding_code,
 )
+from ..linebot_agents import get_tools_for_user
 from ..mcp import get_mcp_tool_names
 from ..permissions import get_mcp_tools_for_user, get_user_app_permissions_sync
 from ..user import get_user_role_and_permissions
@@ -715,50 +716,12 @@ async def _handle_text_with_ai(
     )
 
     # 3. 組裝工具列表（根據用戶權限過濾）
+    # 內建 MCP 工具（ching-tech-os server）
     mcp_tools = await get_mcp_tool_names(exclude_group_only=not is_group)
     mcp_tools = get_mcp_tools_for_user(user_role, user_permissions, mcp_tools)
-    nanobanana_tools = [
-        "mcp__nanobanana__generate_image",
-        "mcp__nanobanana__edit_image",
-    ]
-    # 加入 printer-mcp 列印工具（搭配 prepare_print_file 使用）
-    printer_tools = [
-        "mcp__printer__print_file",
-        "mcp__printer__list_printers",
-        "mcp__printer__printer_status",
-        "mcp__printer__cancel_job",
-        "mcp__printer__print_test_page",
-    ]
-    # 加入 ERPNext MCP 工具（廠商/客戶/庫存/專案管理）
-    erpnext_tools = [
-        "mcp__erpnext__list_documents",
-        "mcp__erpnext__get_document",
-        "mcp__erpnext__create_document",
-        "mcp__erpnext__update_document",
-        "mcp__erpnext__delete_document",
-        "mcp__erpnext__submit_document",
-        "mcp__erpnext__cancel_document",
-        "mcp__erpnext__run_report",
-        "mcp__erpnext__get_count",
-        "mcp__erpnext__get_list_with_summary",
-        "mcp__erpnext__run_method",
-        "mcp__erpnext__search_link",
-        "mcp__erpnext__list_doctypes",
-        "mcp__erpnext__get_doctype_meta",
-        "mcp__erpnext__get_stock_balance",
-        "mcp__erpnext__get_stock_ledger",
-        "mcp__erpnext__get_item_price",
-        "mcp__erpnext__make_mapped_doc",
-        "mcp__erpnext__get_party_balance",
-        "mcp__erpnext__get_supplier_details",  # 支援別名搜尋
-        "mcp__erpnext__get_customer_details",  # 支援別名搜尋
-        "mcp__erpnext__upload_file",
-        "mcp__erpnext__upload_file_from_url",
-        "mcp__erpnext__list_files",
-        "mcp__erpnext__download_file",
-        "mcp__erpnext__get_file_url",
-    ]
-    all_tools = builtin_tools + mcp_tools + nanobanana_tools + printer_tools + erpnext_tools + ["Read"]
+    # 外部 MCP 工具（由 SkillManager 動態產生，含 fallback）
+    skill_tools = await get_tools_for_user(app_permissions)
+    all_tools = builtin_tools + mcp_tools + skill_tools
 
     # 4. 建立進度通知 callback（含節流避免 Telegram API 限流）
     progress_message_id: str | None = None

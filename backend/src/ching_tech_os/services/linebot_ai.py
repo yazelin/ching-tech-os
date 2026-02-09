@@ -491,58 +491,16 @@ async def process_message_with_ai(
                 quoted_text = quoted_text[:2000] + "..."
             user_message = f"[回覆 {sender} 的訊息：「{quoted_text}」]\n{user_message}"
 
-        # MCP 工具列表（動態取得）
+        # 內建 MCP 工具（ching-tech-os server）
         from .mcp import get_mcp_tool_names
         mcp_tools = await get_mcp_tool_names(exclude_group_only=not is_group)
-
-        # 過濾 MCP 工具（根據使用者權限，使用前面已取得的 user_role 和 user_permissions）
         mcp_tools = get_mcp_tools_for_user(user_role, user_permissions, mcp_tools)
         logger.info(f"使用者權限過濾後的 MCP 工具數量: {len(mcp_tools)}, role={user_role}")
 
-        # 合併內建工具（從 Agent 設定）、MCP 工具和 Read（用於讀取圖片）
-        # 加入 nanobanana 圖片生成/編輯工具
-        nanobanana_tools = [
-            "mcp__nanobanana__generate_image",
-            "mcp__nanobanana__edit_image",
-        ]
-        # 加入 printer-mcp 列印工具（搭配 prepare_print_file 使用）
-        printer_tools = [
-            "mcp__printer__print_file",
-            "mcp__printer__list_printers",
-            "mcp__printer__printer_status",
-            "mcp__printer__cancel_job",
-            "mcp__printer__print_test_page",
-        ]
-        # 加入 ERPNext MCP 工具（廠商/客戶/庫存/專案管理）
-        erpnext_tools = [
-            "mcp__erpnext__list_documents",
-            "mcp__erpnext__get_document",
-            "mcp__erpnext__create_document",
-            "mcp__erpnext__update_document",
-            "mcp__erpnext__delete_document",
-            "mcp__erpnext__submit_document",
-            "mcp__erpnext__cancel_document",
-            "mcp__erpnext__run_report",
-            "mcp__erpnext__get_count",
-            "mcp__erpnext__get_list_with_summary",
-            "mcp__erpnext__run_method",
-            "mcp__erpnext__search_link",
-            "mcp__erpnext__list_doctypes",
-            "mcp__erpnext__get_doctype_meta",
-            "mcp__erpnext__get_stock_balance",
-            "mcp__erpnext__get_stock_ledger",
-            "mcp__erpnext__get_item_price",
-            "mcp__erpnext__make_mapped_doc",
-            "mcp__erpnext__get_party_balance",
-            "mcp__erpnext__get_supplier_details",  # 支援別名搜尋
-            "mcp__erpnext__get_customer_details",  # 支援別名搜尋
-            "mcp__erpnext__upload_file",
-            "mcp__erpnext__upload_file_from_url",
-            "mcp__erpnext__list_files",
-            "mcp__erpnext__download_file",
-            "mcp__erpnext__get_file_url",
-        ]
-        all_tools = agent_tools + mcp_tools + nanobanana_tools + printer_tools + erpnext_tools + ["Read"]
+        # 外部 MCP 工具（由 SkillManager 動態產生，含 fallback）
+        from .linebot_agents import get_tools_for_user
+        skill_tools = await get_tools_for_user(app_permissions)
+        all_tools = agent_tools + mcp_tools + skill_tools
 
         # 計時開始
         start_time = time.time()

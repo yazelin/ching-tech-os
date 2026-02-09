@@ -127,7 +127,7 @@ def _load_mcp_servers_from_file(path: str) -> list:
                 name=name,
                 command=config.get("command", ""),
                 args=config.get("args", []),
-                env=env_vars if env_vars else None,
+                env=env_vars,
             ))
     return servers
 

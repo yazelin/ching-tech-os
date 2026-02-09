@@ -20,6 +20,7 @@ from .bot.agents import (  # noqa: F401
     APP_PROMPT_MAPPING,
     generate_tools_prompt,
     generate_usage_tips_prompt,
+    get_tools_for_user,
 )
 
 logger = logging.getLogger("linebot_agents")
