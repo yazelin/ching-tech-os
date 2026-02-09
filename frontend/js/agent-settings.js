@@ -1078,7 +1078,7 @@ const AgentSettingsApp = (function() {
             <div class="agent-list-item-model">${escapeHtml(r.description || '')}</div>
             <div class="skill-list-item-meta">
               ${r.version ? `<span class="skill-badge">${escapeHtml(r.version)}</span>` : ''}
-              ${r.score != null ? `<span class="skill-badge">⭐ ${r.score}</span>` : ''}
+              ${r.score != null ? `<span class="skill-badge">相關度 ${Math.round(r.score * 100)}%</span>` : ''}
             </div>
           </div>
           <button class="btn btn-sm btn-primary" data-action="install-skill" data-skill-name="${escapeHtml(r.name)}" data-skill-version="${escapeHtml(r.version || '')}">安裝</button>
