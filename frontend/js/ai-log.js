@@ -680,17 +680,19 @@ const AILogApp = (function() {
     const unusedList = allowedTools.filter(t => !usedSet.has(t));
 
     // 已使用的工具（永遠顯示）
-    let html = usedList.map(tool =>
-      `<span class="ai-log-tool-badge used" title="${tool}">${tool}</span>`
-    ).join('');
+    let html = usedList.map(tool => {
+      const escaped = escapeHtml(tool);
+      return `<span class="ai-log-tool-badge used" title="${escaped}">${escaped}</span>`;
+    }).join('');
 
     // 未使用的工具（預設隱藏，點擊展開）
     if (unusedList.length > 0) {
-      html += `<button class="ai-log-tools-expand-btn" onclick="window._toggleToolsExpand(this)" title="展開全部 ${allowedTools.length} 個工具">+${unusedList.length}</button>`;
+      html += `<button class="ai-log-tools-expand-btn" data-action="toggle-tools" title="展開全部 ${allowedTools.length} 個工具">+${unusedList.length}</button>`;
       html += `<span class="ai-log-tools-hidden">`;
-      html += unusedList.map(tool =>
-        `<span class="ai-log-tool-badge unused" title="${tool}">${tool}</span>`
-      ).join('');
+      html += unusedList.map(tool => {
+        const escaped = escapeHtml(tool);
+        return `<span class="ai-log-tool-badge unused" title="${escaped}">${escaped}</span>`;
+      }).join('');
       html += `</span>`;
     }
 
@@ -702,8 +704,8 @@ const AILogApp = (function() {
     return html;
   }
 
-  // 全域展開/收合函式
-  window._toggleToolsExpand = function(btn) {
+  // 展開/收合工具列表（透過事件委派呼叫）
+  function toggleToolsExpand(btn) {
     const hidden = btn.nextElementSibling;
     if (!hidden) return;
     const isExpanded = hidden.classList.contains('expanded');
@@ -717,7 +719,7 @@ const AILogApp = (function() {
       btn.textContent = '收合';
       btn.title = '收合未使用的工具';
     }
-  };
+  }
 
   /**
    * 複製文字到剪貼簿
@@ -950,6 +952,18 @@ const AILogApp = (function() {
         refresh();
       });
     });
+
+    // 工具展開/收合（事件委派）
+    const contentEl = document.querySelector(`#${windowId} .ai-log-content`);
+    if (contentEl) {
+      contentEl.addEventListener('click', (event) => {
+        const btn = event.target.closest('[data-action="toggle-tools"]');
+        if (btn) {
+          event.stopPropagation();
+          toggleToolsExpand(btn);
+        }
+      });
+    }
 
     // 重新整理按鈕
     const refreshBtn = document.querySelector(`#${windowId} .ai-log-refresh-btn`);
