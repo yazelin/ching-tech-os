@@ -13,16 +13,18 @@ logger = logging.getLogger("mcp_server")
 
 @mcp.tool()
 async def run_skill_script(
-    skill: str, script: str, input_str: str = "", ctos_user_id: int | None = None,
+    skill: str, script: str, input: str = "", ctos_user_id: int | None = None,
 ) -> str:
     """執行 skill 的 script。
 
     Args:
         skill: skill 名稱（例如 "weather"）
         script: script 檔名不含副檔名（例如 "get_forecast"）
-        input_str: 傳給 script 的輸入字串（透過 stdin 傳入）
-        ctos_user_id: CTOS 用戶 ID（用於權限檢查）
+        input: 傳給 script 的輸入字串（透過 stdin 傳入）
+        ctos_user_id: CTOS 用戶 ID（由 bot framework 注入，非 LLM 控制）
     """
+    # NOTE: ctos_user_id 由 bot framework 在呼叫時注入（見 agents.py），
+    # LLM 無法控制此參數。MCP tool 簽名包含它是因為 framework 需要傳入。
     from ...skills import get_skill_manager
     from ...skills.script_runner import ScriptRunner
 
@@ -63,7 +65,7 @@ async def run_skill_script(
 
     # 執行（傳入已驗證的 script_path，避免重複解析）
     runner = ScriptRunner(sm.skills_dir)
-    result = await runner.execute_path(script_path, skill, input_str=input_str, env_overrides=env_overrides)
+    result = await runner.execute_path(script_path, skill, input=input, env_overrides=env_overrides)
 
     logger.info(
         f"run_skill_script: {skill}/{script} "

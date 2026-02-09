@@ -102,7 +102,7 @@ class ScriptRunner:
         self,
         script_path: Path,
         skill_name: str,
-        input_str: str = "",
+        input: str = "",
         env_overrides: dict[str, str] | None = None,
         timeout: int = _DEFAULT_TIMEOUT,
     ) -> dict:
@@ -146,7 +146,7 @@ class ScriptRunner:
                 )
                 stdout, stderr = await asyncio.wait_for(
                     proc.communicate(
-                        input=input_str.encode("utf-8") if input_str else None
+                        input=input.encode("utf-8") if input else None
                     ),
                     timeout=timeout,
                 )
