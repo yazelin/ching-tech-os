@@ -1,0 +1,7 @@
+id: skill-script-runner
+title: Skill Script Runner — 讓 CTOS 支援 scripts/ 和 assets/ 執行
+status: proposed
+created: 2026-02-09
+specs:
+  - ai-management
+  - bot-platform
