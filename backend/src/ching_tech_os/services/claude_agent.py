@@ -322,39 +322,27 @@ async def call_claude(
             return False
         return True
 
-    # Token 統計攔截：patch agent._handle_message 以擷取 ResultMessage.usage
+    # Token 統計：透過 on_result callback 擷取 usage（claude-code-acp >= 0.4.2）
     _usage_data: dict[str, Any] = {}
-    _original_handle_message = client.agent._handle_message
 
-    async def _patched_handle_message(session_id, message):
-        from claude_agent_sdk import ResultMessage
-        if isinstance(message, ResultMessage) and message.usage:
-            usage = message.usage
-            # 計算完整的 input tokens（含快取）
-            total_input = (
-                usage.get("input_tokens", 0)
-                + usage.get("cache_creation_input_tokens", 0)
-                + usage.get("cache_read_input_tokens", 0)
-            )
-            _usage_data["input_tokens"] = total_input
-            _usage_data["output_tokens"] = usage.get("output_tokens", 0)
-            _usage_data["raw_usage"] = usage
-            logger.info(f"Token 統計: input={total_input}, output={usage.get('output_tokens', 0)}")
-        return await _original_handle_message(session_id, message)
-
-    client.agent._handle_message = _patched_handle_message
+    @client.on_result
+    async def handle_result(info: dict):
+        # input_tokens 已含 cache tokens（claude-code-acp 計算）
+        _usage_data["input_tokens"] = info.get("input_tokens", 0)
+        _usage_data["output_tokens"] = info.get("output_tokens", 0)
+        logger.info(
+            f"Token 統計: input={_usage_data['input_tokens']}, "
+            f"output={_usage_data['output_tokens']}"
+        )
 
     try:
         # 啟動 session
         await client.start_session()
 
-        # 設定模型（透過 session，避免環境變數並發污染）
+        # 設定模型
         if cli_model and cli_model != "sonnet":
             try:
-                await client.agent.set_session_model(
-                    model_id=cli_model,
-                    session_id=client.session_id,
-                )
+                await client.set_model(cli_model)
                 logger.info(f"設定模型: {cli_model}")
             except (ValueError, RuntimeError, AttributeError) as e:
                 logger.warning(f"設定模型失敗: {e}")
