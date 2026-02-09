@@ -1,0 +1,8 @@
+id: skill-hub
+title: Skills Hub — ClawHub 整合 + 管理員 Skill 管理
+status: proposed
+created: 2026-02-09
+specs:
+  - ai-management
+  - bot-platform
+  - infrastructure
