@@ -35,6 +35,7 @@ from . import share_tools  # noqa: F401
 from . import memory_tools  # noqa: F401
 from . import media_tools  # noqa: F401
 from . import presentation_tools  # noqa: F401
+from . import skill_script_tools  # noqa: F401
 
 __all__ = [
     # FastMCP 實例
