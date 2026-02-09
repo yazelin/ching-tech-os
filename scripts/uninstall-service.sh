@@ -135,6 +135,15 @@ if [ -d "${NAS_MOUNT_BASE}" ] && [ -z "$(ls -A ${NAS_MOUNT_BASE} 2>/dev/null)" ]
     rmdir ${NAS_MOUNT_BASE} 2>/dev/null || true
 fi
 
+# ===================
+# 移除 ClawHub CLI
+# ===================
+if command -v clawhub &>/dev/null; then
+    echo "移除 clawhub CLI..."
+    npm uninstall -g clawhub 2>/dev/null || true
+    echo "clawhub 已移除"
+fi
+
 # 重新載入 systemd
 echo "重新載入 systemd..."
 systemctl daemon-reload
