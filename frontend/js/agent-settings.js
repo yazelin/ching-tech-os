@@ -239,14 +239,12 @@ const AgentSettingsApp = (function() {
               <div class="skill-sub-tabs">
                 <button class="skill-sub-tab active" data-skill-tab="installed">已安裝</button>
                 <button class="skill-sub-tab" data-skill-tab="hub">ClawHub</button>
-              </div>
-            </div>
-            <div class="skill-sub-content" data-skill-tab-content="installed">
-              <div class="skill-list-toolbar">
-                <button class="btn btn-sm skill-reload-btn" data-action="reload-skills" title="重新載入">
+                <button class="btn btn-icon skill-reload-btn-inline" data-action="reload-skills" title="重新載入">
                   <span class="icon">${getIcon('refresh')}</span>
                 </button>
               </div>
+            </div>
+            <div class="skill-sub-content" data-skill-tab-content="installed">
               <div class="skill-list">
                 <!-- Skill list will be rendered here -->
               </div>

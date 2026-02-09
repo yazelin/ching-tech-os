@@ -559,17 +559,24 @@
   border-bottom-color: var(--color-accent, #6c9fff);
 }
 
+.skill-reload-btn-inline {
+  margin-left: auto;
+  padding: 4px 6px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0.5;
+  transition: opacity 0.15s;
+}
+.skill-reload-btn-inline:hover { opacity: 1; }
+.skill-reload-btn-inline .icon svg { width: 14px; height: 14px; }
+
 .skill-sub-content {
   display: flex;
   flex-direction: column;
   flex: 1;
   overflow: hidden;
-}
-
-.skill-list-toolbar {
-  display: flex;
-  justify-content: flex-end;
-  padding: 4px 8px;
 }
 
 /* Source badges */
