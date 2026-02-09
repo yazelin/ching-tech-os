@@ -1,6 +1,8 @@
 """Skills 管理器
 
-動態載入和管理 AI Skills，支援 SKILL.md（OpenClaw 相容）和舊版 skill.yaml + prompt.md 格式。
+動態載入和管理 AI Skills。
+支援 Agent Skills 開放標準（agentskills.io）格式，
+CTOS 擴充欄位放在 metadata.ctos 下。
 """
 
 import asyncio
@@ -36,17 +38,119 @@ def _parse_skill_md(text: str) -> tuple[dict, str]:
     return fm, body
 
 
+def _parse_allowed_tools(value: str | list | None) -> list[str]:
+    """解析 allowed-tools 欄位（標準：空格分隔字串）或 tools（舊版：list）。"""
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str):
+        return value.split()
+    return []
+
+
+def _parse_mcp_servers(value: str | list | None) -> list[str]:
+    """解析 mcp_servers（支援空格分隔字串或 list）。"""
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str):
+        return value.split()
+    return []
+
+
 @dataclass
 class Skill:
-    """一個 AI Skill 的完整定義"""
+    """一個 AI Skill 的完整定義（Agent Skills 標準 + CTOS 擴充）"""
+    # === 標準欄位 ===
     name: str
     description: str
-    requires_app: Optional[str]  # None = 不需權限（base skill）
-    tools: list[str] = field(default_factory=list)
+    license: str = ""
+    compatibility: str = ""
+    allowed_tools: list[str] = field(default_factory=list)
+    metadata: dict = field(default_factory=dict)
+
+    # === CTOS 擴充（從 metadata.ctos 讀取）===
+    requires_app: Optional[str] = None
     mcp_servers: list[str] = field(default_factory=list)
+
+    # === 內部欄位 ===
     prompt: str = ""
-    references: list[str] = field(default_factory=list)  # references/ 下的檔案路徑
+    references: list[str] = field(default_factory=list)
     source: str = "native"  # native | openclaw | claude-code
+
+
+def _extract_ctos_metadata(config: dict) -> tuple[Optional[str], list[str]]:
+    """從 frontmatter 提取 CTOS 擴充欄位。
+
+    優先從 metadata.ctos 讀取（標準相容），
+    回退到頂層 requires_app / mcp_servers（舊版相容）。
+    """
+    ctos = (config.get("metadata") or {}).get("ctos", {})
+
+    # requires_app
+    requires_app = ctos.get("requires_app")
+    if requires_app is None:
+        requires_app = config.get("requires_app")
+
+    # mcp_servers
+    mcp_servers_raw = ctos.get("mcp_servers")
+    if mcp_servers_raw is None:
+        mcp_servers_raw = config.get("mcp_servers")
+    mcp_servers = _parse_mcp_servers(mcp_servers_raw)
+
+    return requires_app, mcp_servers
+
+
+_VALID_NAME_RE = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
+
+
+def _validate_skill_name(name: str) -> str:
+    """驗證 skill 名稱（防止路徑穿越，符合 Agent Skills 標準命名規則）。"""
+    if not name or len(name) > 64:
+        raise ValueError(f"Skill name 長度無效: {name!r}")
+    if "--" in name or not _VALID_NAME_RE.match(name):
+        raise ValueError(f"Skill name 格式無效: {name!r}")
+    return name
+
+
+def _build_skill(config: dict, body: str, skill_dir: Path, source: str = "native") -> Skill:
+    """從 frontmatter + body 建立 Skill 物件。"""
+    # 驗證名稱（防止路徑穿越）
+    name = config.get("name", skill_dir.name)
+    _validate_skill_name(name)
+
+    # allowed-tools（標準）或 tools（舊版）
+    allowed_tools = _parse_allowed_tools(
+        config.get("allowed-tools") or config.get("tools")
+    )
+
+    requires_app, mcp_servers = _extract_ctos_metadata(config)
+
+    # 掃描 references/ 目錄
+    refs = []
+    refs_dir = skill_dir / "references"
+    if refs_dir.is_dir():
+        refs = sorted(
+            str(f.relative_to(skill_dir))
+            for f in refs_dir.rglob("*")
+            if f.is_file()
+        )
+
+    return Skill(
+        name=name,
+        description=config.get("description", ""),
+        license=config.get("license", ""),
+        compatibility=config.get("compatibility", ""),
+        allowed_tools=allowed_tools,
+        metadata=config.get("metadata") or {},
+        requires_app=requires_app,
+        mcp_servers=mcp_servers,
+        prompt=body,
+        references=refs,
+        source=config.get("source", source),
+    )
 
 
 class SkillManager:
@@ -66,7 +170,7 @@ class SkillManager:
             await asyncio.to_thread(self._load_skills_sync)
 
     def _load_skill_from_skill_md(self, skill_dir: Path) -> Skill | None:
-        """從 SKILL.md 載入（OpenClaw 相容格式）"""
+        """從 SKILL.md 載入（Agent Skills 標準格式）"""
         skill_md = skill_dir / "SKILL.md"
         if not skill_md.exists():
             return None
@@ -77,26 +181,7 @@ class SkillManager:
             logger.warning(f"SKILL.md 無 frontmatter: {skill_dir}")
             return None
 
-        # 掃描 references/ 目錄
-        refs = []
-        refs_dir = skill_dir / "references"
-        if refs_dir.is_dir():
-            refs = sorted(
-                str(f.relative_to(skill_dir))
-                for f in refs_dir.rglob("*")
-                if f.is_file()
-            )
-
-        return Skill(
-            name=config.get("name", skill_dir.name),
-            description=config.get("description", ""),
-            requires_app=config.get("requires_app"),
-            tools=config.get("tools", []),
-            mcp_servers=config.get("mcp_servers", []),
-            prompt=body,
-            references=refs,
-            source=config.get("source", "native"),
-        )
+        return _build_skill(config, body, skill_dir)
 
     def _load_skill_from_yaml(self, skill_dir: Path) -> Skill | None:
         """從舊版 skill.yaml + prompt.md 載入（向下相容）"""
@@ -112,15 +197,7 @@ class SkillManager:
         if prompt_md.exists():
             prompt = prompt_md.read_text(encoding="utf-8")
 
-        return Skill(
-            name=config.get("name", skill_dir.name),
-            description=config.get("description", ""),
-            requires_app=config.get("requires_app"),
-            tools=config.get("tools", []),
-            mcp_servers=config.get("mcp_servers", []),
-            prompt=prompt,
-            source="native",
-        )
+        return _build_skill(config, prompt, skill_dir)
 
     def _load_skills_sync(self) -> None:
         """同步載入 skills（在 thread pool 中執行，避免 blocking event loop）"""
@@ -144,7 +221,8 @@ class SkillManager:
                 self._skills[skill.name] = skill
                 refs_info = f", {len(skill.references)} refs" if skill.references else ""
                 logger.debug(
-                    f"載入 skill: {skill.name} ({len(skill.tools)} tools{refs_info})"
+                    f"載入 skill: {skill.name} "
+                    f"({len(skill.allowed_tools)} tools{refs_info})"
                 )
 
             except (yaml.YAMLError, OSError) as e:
@@ -154,13 +232,12 @@ class SkillManager:
         logger.info(f"共載入 {len(self._skills)} 個 skills")
 
     def import_openclaw_skill(self, skill_path: Path) -> Path:
-        """從 OpenClaw SKILL.md 匯入，建立 CTOS 相容的 skill 目錄。
+        """從 OpenClaw / Agent Skills 標準 SKILL.md 匯入。
 
-        OpenClaw 的 SKILL.md 只有 name + description，沒有 tools/mcp_servers/requires_app。
-        匯入後管理員需手動設定權限和工具白名單。
+        匯入後管理員需手動設定 metadata.ctos 的權限和 MCP servers。
 
         Args:
-            skill_path: OpenClaw skill 目錄（含 SKILL.md）
+            skill_path: Skill 目錄（含 SKILL.md）
 
         Returns:
             匯入後的 skill 目錄路徑
@@ -173,21 +250,26 @@ class SkillManager:
         config, body = _parse_skill_md(text)
 
         name = config.get("name", skill_path.name)
+        _validate_skill_name(name)
         dest_dir = self._skills_dir / name
         dest_dir.mkdir(parents=True, exist_ok=True)
 
-        # 補上 CTOS 擴充欄位
-        if "requires_app" not in config:
-            config["requires_app"] = None
-        if "tools" not in config:
-            config["tools"] = []
-        if "mcp_servers" not in config:
-            config["mcp_servers"] = []
-        # 標記來源為 OpenClaw
+        # 確保 metadata.ctos 存在（防禦 metadata: null）
+        if not isinstance(config.get("metadata"), dict):
+            config["metadata"] = {}
+        if not isinstance(config["metadata"].get("ctos"), dict):
+            config["metadata"]["ctos"] = {
+                "requires_app": None,
+                "mcp_servers": "",
+            }
+
+        # 標記來源
         config["source"] = "openclaw"
 
         # 寫出 SKILL.md
-        fm_text = yaml.dump(config, allow_unicode=True, default_flow_style=False).strip()
+        fm_text = yaml.dump(
+            config, allow_unicode=True, default_flow_style=False
+        ).strip()
         dest_skill_md = dest_dir / "SKILL.md"
         dest_skill_md.write_text(
             f"---\n{fm_text}\n---\n\n{body}\n",
@@ -206,7 +288,7 @@ class SkillManager:
 
         logger.info(f"匯入 OpenClaw skill: {name} → {dest_dir}")
 
-        # 重設載入狀態，下次存取時重新掃描
+        # 重設載入狀態
         self._loaded = False
         self._skills.clear()
 
@@ -254,7 +336,7 @@ class SkillManager:
         skills = await self.get_skills_for_user(app_permissions)
         tools = []
         for skill in skills:
-            tools.extend(skill.tools)
+            tools.extend(skill.allowed_tools)
         return tools
 
     async def get_required_mcp_servers(

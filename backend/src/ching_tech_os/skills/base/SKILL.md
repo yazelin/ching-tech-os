@@ -1,14 +1,10 @@
 ---
 name: base
 description: 基礎工具（對話附件、分享連結）
-requires_app: null
-tools:
-  - get_message_attachments
-  - summarize_chat
-  - create_share_link
-  - Read
-mcp_servers:
-  - ching-tech-os
+allowed-tools: get_message_attachments summarize_chat create_share_link Read
+metadata:
+  ctos:
+    mcp_servers: ching-tech-os
 ---
 
 【對話附件管理】

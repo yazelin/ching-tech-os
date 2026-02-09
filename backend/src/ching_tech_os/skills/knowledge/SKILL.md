@@ -1,20 +1,13 @@
 ---
 name: knowledge
 description: 知識庫搜尋、新增、修改、附件管理
-requires_app: knowledge-base
-tools:
-  - search_knowledge
-  - get_knowledge_item
-  - update_knowledge_item
-  - delete_knowledge_item
-  - add_note
-  - add_note_with_attachments
-  - add_attachments_to_knowledge
-  - get_knowledge_attachments
-  - read_knowledge_attachment
-  - update_knowledge_attachment
-mcp_servers:
-  - ching-tech-os
+allowed-tools: search_knowledge get_knowledge_item update_knowledge_item delete_knowledge_item
+  add_note add_note_with_attachments add_attachments_to_knowledge get_knowledge_attachments
+  read_knowledge_attachment update_knowledge_attachment
+metadata:
+  ctos:
+    requires_app: knowledge-base
+    mcp_servers: ching-tech-os
 ---
 
 【知識庫】
