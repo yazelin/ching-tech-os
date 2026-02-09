@@ -4,14 +4,24 @@
 TBD - created by archiving change add-backend-nas-auth. Update Purpose after archive.
 ## Requirements
 ### Requirement: NAS 認證登入
-系統 SHALL 透過區網 NAS 的 SMB 認證來驗證使用者身份。
+系統 SHALL 透過區網 NAS 的 SMB 認證來驗證使用者身份，不需要提供租戶代碼。
 
 #### Scenario: 使用正確的 NAS 帳密登入
-- Given 使用者在登入頁面
-- When 輸入正確的 NAS 帳號和密碼並送出
-- Then 系統回傳成功並提供 session token
-- And 系統在 users 表建立或更新該使用者記錄
-- And 使用者被導向桌面頁面
+- **WHEN** 使用者在登入頁面
+- **AND** 輸入正確的 NAS 帳號和密碼並送出
+- **THEN** 系統回傳成功並提供 session token
+- **AND** 系統在 users 表建立或更新該使用者記錄
+- **AND** 使用者被導向桌面頁面
+
+#### Scenario: 登入 API 請求格式
+- **WHEN** 客戶端呼叫 `POST /api/auth/login`
+- **THEN** 請求 body 僅需 `username` 和 `password` 欄位
+- **AND** 不需要 `tenant_code` 欄位
+
+#### Scenario: 登入 API 回應格式
+- **WHEN** 登入成功
+- **THEN** 回應包含 `token`、`username`、`role`
+- **AND** 不包含 `tenant` 物件
 
 #### Scenario: 首次登入建立使用者記錄
 - Given 使用者從未登入過此系統
@@ -39,12 +49,17 @@ TBD - created by archiving change add-backend-nas-auth. Update Purpose after arc
 ---
 
 ### Requirement: Session 管理
-系統 SHALL 使用 token 管理使用者登入狀態，憑證 MUST 儲存於 server 記憶體。
+系統 SHALL 使用 token 管理使用者登入狀態，Session 資料不包含租戶資訊。
+
+#### Scenario: Session 資料結構
+- **WHEN** 系統建立 session
+- **THEN** session 包含 `username`、`password`、`user_id`、`role`、`app_permissions`
+- **AND** 不包含 `tenant_id` 欄位
 
 #### Scenario: 使用有效 token 存取 API
-- Given 使用者已登入並持有有效 token
-- When 使用該 token 呼叫需認證的 API
-- Then API 正常回應
+- **WHEN** 使用者已登入並持有有效 token
+- **AND** 使用該 token 呼叫需認證的 API
+- **THEN** API 正常回應
 
 #### Scenario: 使用無效 token 存取 API
 - Given 使用者持有無效或過期的 token
@@ -95,13 +110,14 @@ TBD - created by archiving change add-backend-nas-auth. Update Purpose after arc
 ---
 
 ### Requirement: 使用者資訊 API
-系統 SHALL 提供 API 讓登入後的使用者查看和更新個人資訊。
+系統 SHALL 提供 API 讓登入後的使用者查看個人資訊。
 
 #### Scenario: 取得目前使用者資訊
-- Given 使用者已登入
-- When 呼叫 GET /api/user/me
-- Then 系統回傳該使用者的資訊
-- And 包含 username、display_name、created_at、last_login_at
+- **WHEN** 使用者已登入
+- **AND** 呼叫 `GET /api/user/me`
+- **THEN** 系統回傳該使用者的資訊
+- **AND** 包含 username、display_name、role、permissions、created_at、last_login_at
+- **AND** 不包含 tenant 相關欄位
 
 #### Scenario: 更新顯示名稱
 - Given 使用者已登入
@@ -188,25 +204,23 @@ TBD - created by archiving change add-backend-nas-auth. Update Purpose after arc
 
 ### Requirement: 管理員識別
 
-系統 SHALL 使用資料庫中的 `users.role` 欄位識別管理員身份。
+系統 SHALL 使用資料庫中的 `users.role` 欄位識別管理員身份，僅支援 `admin` 和 `user` 兩種角色。
 
 #### Scenario: 判斷管理員身份
-- Given 使用者在 `users` 表中的 `role` 欄位為 `platform_admin`
-- When 該使用者登入系統
-- Then 系統識別該使用者為平台管理員
-- And `GET /api/user/me` 回應 `role: "platform_admin"`
+- **WHEN** 使用者在 `users` 表中的 `role` 欄位為 `admin`
+- **THEN** 系統識別該使用者為管理員
+- **AND** `GET /api/user/me` 回應 `role: "admin"`
 
-#### Scenario: 平台管理員擁有所有權限
-- Given 使用者為平台管理員（role = 'platform_admin'）
-- When 取得該使用者權限
-- Then 所有應用程式權限均為 `true`
-- And 所有知識庫權限均為 `true`
+#### Scenario: 管理員擁有所有權限
+- **WHEN** 使用者為管理員（role = 'admin'）
+- **THEN** 所有應用程式權限均為 `true`
+- **AND** 所有知識庫權限均為 `true`
+- **AND** 可存取使用者管理功能
 
-#### Scenario: 租戶管理員擁有租戶內完整權限
-- Given 使用者為租戶管理員（role = 'tenant_admin'）
-- When 取得該使用者權限
-- Then 租戶範圍內的權限均為 `true`
-- And 平台管理功能權限為 `false`
+#### Scenario: 一般使用者依權限設定
+- **WHEN** 使用者為一般使用者（role = 'user'）
+- **THEN** 權限依據 `users.preferences.permissions` 設定
+- **AND** 無法存取使用者管理功能
 
 ---
 
@@ -215,28 +229,26 @@ TBD - created by archiving change add-backend-nas-auth. Update Purpose after arc
 系統 SHALL 提供 API 讓管理員管理使用者權限。
 
 #### Scenario: 取得使用者列表
-- Given 管理員已登入
-- When 呼叫 `GET /api/admin/users`
-- Then 系統回傳所有使用者列表
-- And 每個使用者包含 id、username、display_name、is_admin、permissions、last_login_at
+- **WHEN** 管理員已登入
+- **AND** 呼叫 `GET /api/admin/users`
+- **THEN** 系統回傳所有使用者列表
+- **AND** 每個使用者包含 id、username、display_name、role、permissions、last_login_at
 
 #### Scenario: 非管理員存取使用者列表
-- Given 非管理員使用者已登入
-- When 呼叫 `GET /api/admin/users`
-- Then 系統回傳 403 權限錯誤
+- **WHEN** 非管理員使用者已登入
+- **AND** 呼叫 `GET /api/admin/users`
+- **THEN** 系統回傳 403 權限錯誤
 
 #### Scenario: 更新使用者權限
-- Given 管理員已登入
-- When 呼叫 `PATCH /api/admin/users/{user_id}/permissions`
-- And 提供要修改的權限設定
-- Then 系統更新該使用者的 `preferences.permissions`
-- And 只更新請求中指定的欄位
+- **WHEN** 管理員已登入
+- **AND** 呼叫 `PATCH /api/admin/users/{user_id}/permissions`
+- **THEN** 系統更新該使用者的權限設定
 
-#### Scenario: 無法修改管理員權限
-- Given 管理員已登入
-- When 嘗試修改另一個管理員的權限
-- Then 系統回傳 400 錯誤
-- And 顯示「無法修改管理員權限」訊息
+#### Scenario: 更新使用者角色
+- **WHEN** 管理員已登入
+- **AND** 呼叫 `PATCH /api/admin/users/{user_id}/role`
+- **AND** 提供 `role` 參數（`admin` 或 `user`）
+- **THEN** 系統更新該使用者的角色
 
 #### Scenario: 取得預設權限設定
 - Given 管理員已登入
@@ -277,36 +289,6 @@ TBD - created by archiving change add-backend-nas-auth. Update Purpose after arc
 
 ### Requirement: 使用者 App 權限控制
 系統 SHALL 支援為每個使用者設定獨立的 App 權限，權限限制適用於 Web UI、後端 API 和 Line Bot AI。
-
-#### Scenario: 平台管理員設定租戶管理員權限
-- Given 平台管理員已登入
-- When 修改某租戶管理員的 permissions.apps 設定
-- Then 系統儲存該設定到 users 表
-- And 該租戶管理員的可用功能立即受限
-
-#### Scenario: 租戶管理員只能看到有權限的 App
-- Given 租戶管理員已登入
-- And 其 permissions.apps 中 "inventory" 為 false
-- When 租戶管理員查看桌面
-- Then 不顯示「庫存管理」App
-- And 直接存取該 App URL 時顯示無權限錯誤
-
-#### Scenario: 租戶管理員無法修改自己的權限
-- Given 租戶管理員已登入
-- When 嘗試修改自己的 permissions.apps
-- Then 系統回傳 403 權限錯誤
-- And 顯示「無法修改自己的權限」訊息
-
-#### Scenario: 租戶管理員只能修改一般使用者權限
-- Given 租戶管理員已登入
-- When 嘗試修改另一個租戶管理員的權限
-- Then 系統回傳 403 權限錯誤
-
-#### Scenario: 新建租戶管理員自動初始化權限
-- Given 平台管理員建立新的租戶管理員
-- When 使用者建立成功
-- Then 系統自動設定預設的 App 權限
-- And 預設開啟大部分功能（除了 platform-admin、terminal、code-editor）
 
 ---
 
@@ -366,35 +348,16 @@ TBD - created by archiving change add-backend-nas-auth. Update Purpose after arc
 - And 不是基於群組設定
 
 ### Requirement: User Role Determination Service
-系統 SHALL 提供獨立的 `get_user_role()` 服務函數，用於判斷用戶角色。
+系統 SHALL 提供 `get_user_role()` 服務函數，用於判斷用戶角色，僅支援 `admin` 和 `user` 兩種角色。
 
-#### Scenario: 判斷平台管理員
-- **WHEN** 用戶名稱在 `PLATFORM_ADMINS` 清單中
-- **THEN** 回傳角色 `platform_admin`
+#### Scenario: 判斷管理員
+- **WHEN** 用戶名稱在 `ADMINS` 環境變數清單中
+- **THEN** 回傳角色 `admin`
 
-#### Scenario: 判斷租戶管理員
-- **WHEN** 用戶在 `tenant_admins` 表中有對應記錄
-- **THEN** 回傳角色 `tenant_admin`
+#### Scenario: 判斷資料庫中的管理員
+- **WHEN** 用戶在 `users` 表的 `role` 欄位為 `admin`
+- **THEN** 回傳角色 `admin`
 
 #### Scenario: 判斷一般用戶
-- **WHEN** 用戶不是平台管理員也不是租戶管理員
+- **WHEN** 用戶不符合管理員條件
 - **THEN** 回傳角色 `user`
-
-### Requirement: Tenant Deletion with CASCADE
-系統 SHALL 在刪除租戶時利用資料庫 CASCADE 機制自動刪除關聯資料，僅對無法設定外鍵的分割資料表執行手動刪除。
-
-#### Scenario: 刪除租戶時自動清理關聯資料
-- **WHEN** 刪除一個租戶
-- **THEN** 透過 CASCADE 自動刪除 users, projects, vendors 等有外鍵關聯的資料
-
-#### Scenario: 手動清理分割資料表
-- **WHEN** 刪除一個租戶
-- **THEN** 手動刪除 ai_logs, messages 等分割資料表的資料
-
-### Requirement: Migration Validation
-資料庫 Migration SHALL 在設定 NOT NULL 約束前進行明確的驗證，並提供清晰的錯誤訊息。
-
-#### Scenario: 發現未遷移資料
-- **WHEN** 執行 migration 且有資料表的 tenant_id 為 NULL
-- **THEN** 拋出例外並說明哪個資料表有問題、有多少筆未遷移資料
-

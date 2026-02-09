@@ -192,8 +192,16 @@ AI 管理系統 SHALL 提供統一的 AI 調用服務。
 #### Scenario: Log 列表顯示 Tools
 - **WHEN** 使用者查看 Log 列表
 - **THEN** 列表在「類型」後、「耗時」前顯示 Tools 欄位
-- **AND** 可用且有使用的工具顯示為實心背景 + 白字
-- **AND** 可用但未使用的工具顯示為色框 + 色字
+- **AND** 預設只顯示實際使用的工具（used_tools），以實心背景 + 白字呈現
+- **AND** 若有未使用的允許工具，顯示 `+N` 展開按鈕（N = allowed_tools 數量 - used_tools 數量）
+- **AND** 若無任何工具使用，顯示 `-`
+
+#### Scenario: 展開顯示 allowed tools
+- **WHEN** 使用者點擊 `+N` 展開按鈕
+- **THEN** 展開顯示完整的 allowed_tools 列表
+- **AND** 已使用的工具保持實心背景 + 白字
+- **AND** 未使用的工具顯示為淡色邊框樣式
+- **AND** 再次點擊可收合回只顯示 used tools
 
 #### Scenario: Tool Calls 預設折疊
 - **WHEN** 使用者點擊 Log 查看詳情

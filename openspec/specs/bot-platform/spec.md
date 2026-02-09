@@ -39,11 +39,12 @@
 - **AND** 平台 Adapter 將 `BotResponse` 轉換為平台特定格式發送
 
 ### Requirement: BotContext 對話情境
-系統 SHALL 使用統一的 BotContext 管理對話情境。
+系統 SHALL 使用統一的 BotContext 管理對話情境，不包含租戶資訊。
 
 #### Scenario: 建構對話情境
 - **WHEN** 收到訊息觸發 AI 處理
-- **THEN** 系統建構 `BotContext` 包含 `platform_type`、`tenant_id`、`user_id`、`group_id`、`conversation_type`
+- **THEN** 系統建構 `BotContext` 包含 `platform_type`、`user_id`、`group_id`、`conversation_type`
+- **AND** 不包含 `tenant_id` 欄位
 - **AND** 平台 Adapter 負責從平台事件填充 context
 
 #### Scenario: 依情境選擇 Agent
@@ -52,17 +53,17 @@
 - **AND** Agent 選擇邏輯與平台無關
 
 ### Requirement: 平台無關的 AI 處理核心
-系統 SHALL 將 AI 處理邏輯抽離為平台無關的共用模組。
+系統 SHALL 將 AI 處理邏輯抽離為平台無關的共用模組，不處理租戶邏輯。
 
 #### Scenario: 統一的 AI 處理流程
 - **WHEN** 任何平台觸發 AI 處理
 - **THEN** 共用核心負責：Agent 選擇、system prompt 建構、對話歷史組合、Claude CLI 呼叫、回應解析
-- **AND** 平台特定的發送邏輯由各平台 Adapter 處理
+- **AND** 不處理租戶相關邏輯
 
 #### Scenario: system prompt 建構
 - **WHEN** 系統建構 AI system prompt
 - **THEN** 核心邏輯組合：Agent 基礎 prompt + 使用者權限 + 對話情境 + 自訂記憶
-- **AND** 平台特定資訊（如群組綁定專案）透過 BotContext 傳入
+- **AND** 不包含租戶資訊
 
 #### Scenario: 回應解析
 - **WHEN** Claude CLI 回傳 AI 回應
@@ -70,39 +71,44 @@
 - **AND** 產生平台無關的 `BotResponse`
 
 ### Requirement: 多平台資料儲存
-系統 SHALL 使用統一的資料表結構儲存多平台資料。
+系統 SHALL 使用統一的資料表結構儲存多平台資料，不包含租戶欄位。
 
 #### Scenario: bot_groups 資料表
 - **WHEN** 系統儲存群組
 - **THEN** 群組資料存於 `bot_groups` 資料表
 - **AND** 包含 `platform_type` 欄位（'line'、'telegram' 等）
 - **AND** 包含 `platform_group_id` 欄位（平台原生群組 ID）
-- **AND** 其餘欄位與原 `line_groups` 相同
+- **AND** 不包含 `tenant_id` 欄位
 
 #### Scenario: bot_users 資料表
 - **WHEN** 系統儲存使用者
 - **THEN** 使用者資料存於 `bot_users` 資料表
 - **AND** 包含 `platform_type` 欄位
 - **AND** 包含 `platform_user_id` 欄位（平台原生用戶 ID）
+- **AND** 不包含 `tenant_id` 欄位
 
 #### Scenario: bot_messages 資料表
 - **WHEN** 系統儲存訊息
 - **THEN** 訊息資料存於 `bot_messages` 資料表
 - **AND** 關聯到 `bot_groups` 和 `bot_users`
+- **AND** 不包含 `tenant_id` 欄位
 
 #### Scenario: bot_files 資料表
 - **WHEN** 系統儲存檔案
 - **THEN** 檔案資料存於 `bot_files` 資料表
 - **AND** 關聯到 `bot_messages`
+- **AND** 不包含 `tenant_id` 欄位
 
 #### Scenario: bot_binding_codes 資料表
 - **WHEN** 系統產生綁定驗證碼
 - **THEN** 驗證碼資料存於 `bot_binding_codes` 資料表
+- **AND** 不包含 `tenant_id` 欄位
 
 #### Scenario: bot_group_memories 和 bot_user_memories 資料表
 - **WHEN** 系統儲存自訂記憶
 - **THEN** 記憶資料存於 `bot_group_memories` 和 `bot_user_memories` 資料表
 - **AND** 分別關聯到 `bot_groups` 和 `bot_users`
+- **AND** 不包含 `tenant_id` 欄位
 
 ### Requirement: Agent 管理通用化
 系統 SHALL 將 Agent 管理邏輯從 Line 專屬改為平台通用。
@@ -148,4 +154,3 @@ Telegram Bot MUST 使用 polling（`getUpdates`）模式主動向 Telegram API �
 #### Scenario: 網路錯誤自動重試
 - **WHEN** polling 過程中發生網路錯誤
 - **THEN** 系統以指數退避方式自動重試，不丟失訊息（透過 offset 機制）
-
