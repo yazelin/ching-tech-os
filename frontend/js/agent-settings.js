@@ -1295,23 +1295,33 @@ const AgentSettingsApp = (function() {
         case 'preview-skill': {
           const previewEl = actionEl.closest('.skill-hub-result-item')?.querySelector('.skill-preview-content');
           if (!previewEl) break;
-          if (previewEl.style.display !== 'none') {
-            previewEl.style.display = 'none';
-            break;
-          }
-          previewEl.style.display = 'block';
-          previewEl.textContent = '載入中...';
-          try {
-            const resp = await fetch('/api/skills/hub/inspect', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-              body: JSON.stringify({ slug: actionEl.dataset.skillSlug }),
-            });
-            if (!resp.ok) throw new Error((await resp.json()).detail || resp.statusText);
-            const result = await resp.json();
-            previewEl.textContent = result.content || '（空白）';
-          } catch (err) {
-            previewEl.textContent = `預覽失敗: ${err.message}`;
+
+          const isVisible = previewEl.style.display !== 'none';
+          previewEl.style.display = isVisible ? 'none' : 'block';
+
+          // Only load content the first time it's shown
+          if (!isVisible && !previewEl.dataset.loaded) {
+            previewEl.dataset.loaded = 'true';
+            previewEl.textContent = '載入中...';
+            try {
+              const resp = await fetch('/api/skills/hub/inspect', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+                body: JSON.stringify({ slug: actionEl.dataset.skillSlug }),
+              });
+              if (!resp.ok) {
+                let errorDetail;
+                try {
+                  errorDetail = (await resp.json()).detail;
+                } catch (e) { /* non-JSON response */ }
+                throw new Error(errorDetail || resp.statusText);
+              }
+              const result = await resp.json();
+              previewEl.textContent = result.content || '（空白）';
+            } catch (err) {
+              previewEl.textContent = `預覽失敗: ${err.message}`;
+              delete previewEl.dataset.loaded; // Allow retry on error
+            }
           }
           break;
         }
