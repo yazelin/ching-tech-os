@@ -728,9 +728,12 @@
   display: flex;
   gap: 6px;
   padding: 8px;
+  flex-shrink: 0;
 }
 
-.skill-hub-search-input { flex: 1; }
+.skill-hub-search-input { flex: 1; min-width: 0; }
+
+.skill-hub-search-btn { flex-shrink: 0; white-space: nowrap; }
 
 .skill-hub-results {
   flex: 1;
@@ -796,8 +799,17 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border-subtle);
+}
+
+.skill-detail-header-bar .skill-reload-btn {
+  font-size: 12px;
+  padding: 4px 10px;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.skill-detail-header-bar .skill-reload-btn:hover {
+  opacity: 1;
 }
 
 /* ==========================================================================

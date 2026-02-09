@@ -13,19 +13,19 @@
 - [x] 研究 clawhub CLI output 格式（search、install）
 - [x] `POST /api/skills/hub/search` — 呼叫 `clawhub search`，解析結果回傳 JSON
 - [x] `POST /api/skills/hub/install` — 呼叫 `clawhub install`，再呼叫 `import_openclaw_skill()`
-- [ ] install.sh 加入 clawhub 安裝步驟（`npm i -g clawhub` 或等效）
+- [x] install.sh 加入 clawhub 安裝步驟（`npm i -g clawhub` 或等效）
 - [x] 錯誤處理：clawhub 未安裝(503)、逾時(504)、名稱衝突(409)、安裝失敗(502)
 
 ### Phase 3: 前端 UI
-- [ ] 已安裝 tab 加「編輯」按鈕 → 打開 modal
-- [ ] 編輯 modal：requires_app 下拉、allowed-tools chip 編輯、mcp_servers chip 編輯
-- [ ] 已安裝 tab 加「移除」按鈕 → 確認 dialog
-- [ ] 新增「ClawHub 搜尋」tab
-- [ ] 搜尋結果列表 + 「安裝」按鈕
-- [ ] 安裝後自動切回已安裝 tab，打開新 skill 詳情
-- [ ] 來源標記（native badge / openclaw badge）
-- [ ] 檔案瀏覽：點擊 references/scripts/assets 列表展開內容
-- [ ] 重載按鈕（右上角）
+- [x] 已安裝 tab 加「編輯」按鈕 → 打開 modal
+- [x] 編輯 modal：requires_app 輸入、allowed-tools chip 編輯、mcp_servers chip 編輯
+- [x] 已安裝 tab 加「移除」按鈕 → 確認 dialog（僅非 native）
+- [x] 新增「ClawHub 搜尋」tab
+- [x] 搜尋結果列表 + 「安裝」按鈕
+- [x] 安裝後自動切回已安裝 tab，highlight 新 skill
+- [x] 來源標記（native 藍 / openclaw 綠 / 其他灰）
+- [x] 檔案瀏覽：點擊 references/scripts/assets 列表展開內容
+- [x] 重載按鈕（列表上方 + 詳情頁右上角）
 
 ### Phase 4: 進階（未來）
 - [ ] Skill 版本追蹤（記錄安裝版本，比對 ClawHub 最新版）
