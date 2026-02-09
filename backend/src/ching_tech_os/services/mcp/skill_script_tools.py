@@ -12,13 +12,13 @@ logger = logging.getLogger("mcp_server")
 
 
 @mcp.tool()
-async def run_skill_script(skill: str, script: str, input: str = "") -> str:
+async def run_skill_script(skill: str, script: str, input_str: str = "") -> str:
     """執行 skill 的 script。
 
     Args:
         skill: skill 名稱（例如 "weather"）
         script: script 檔名不含副檔名（例如 "get_forecast"）
-        input: 傳給 script 的輸入字串（透過 stdin 傳入）
+        input_str: 傳給 script 的輸入字串（透過 stdin 傳入）
     """
     from ...skills import get_skill_manager
     from ...skills.script_runner import ScriptRunner
@@ -34,14 +34,17 @@ async def run_skill_script(skill: str, script: str, input: str = "") -> str:
     if not await sm.has_scripts(skill):
         return json.dumps({"success": False, "error": f"Skill '{skill}' has no scripts"}, ensure_ascii=False)
 
-    # 驗證 script 存在
+    # 驗證 script 存在（路徑穿越驗證在此）
     script_path = await sm.get_script_path(skill, script)
     if not script_path:
         return json.dumps({"success": False, "error": f"Script not found: {skill}/{script}"}, ensure_ascii=False)
 
-    # 執行
+    # 取得環境變數覆寫（從 SKILL.md metadata.openclaw.requires.env）
+    env_overrides = sm.get_skill_env_overrides(skill_obj)
+
+    # 執行（傳入已驗證的 script_path，避免重複解析）
     runner = ScriptRunner(sm.skills_dir)
-    result = await runner.execute(skill, script, input_str=input)
+    result = await runner.execute_path(script_path, skill, input_str=input_str, env_overrides=env_overrides)
 
     logger.info(
         f"run_skill_script: {skill}/{script} "

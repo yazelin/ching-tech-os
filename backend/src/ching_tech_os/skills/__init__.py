@@ -7,6 +7,7 @@ CTOS 擴充欄位放在 metadata.ctos 下。
 
 import asyncio
 import logging
+import os
 import re
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -546,6 +547,30 @@ class SkillManager:
             name for name, skill in self._skills.items()
             if skill.scripts
         ]
+
+    def get_skill_env_overrides(self, skill: "Skill") -> dict[str, str]:
+        """從 SKILL.md metadata.openclaw.requires.env 取得需要繼承的 .env 變數"""
+        env = {}
+        metadata = skill.metadata or {}
+        openclaw_meta = metadata.get("openclaw") or {}
+        requires = openclaw_meta.get("requires") or {}
+        env_keys = requires.get("env") or []
+
+        for key in env_keys:
+            val = os.environ.get(key)
+            if val:
+                env[key] = val
+            else:
+                logger.warning(f"Skill '{skill.name}' 需要環境變數 {key} 但未設定")
+
+        # primaryEnv 也繼承
+        primary = openclaw_meta.get("primaryEnv")
+        if primary and primary not in env:
+            val = os.environ.get(primary)
+            if val:
+                env[primary] = val
+
+        return env
 
     # 向下相容別名
     async def get_skill_reference(self, name: str, ref_path: str) -> str | None:
