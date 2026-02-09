@@ -74,28 +74,18 @@ class ScriptRunner:
         for f in sorted(scripts_dir.iterdir()):
             if not f.is_file() or f.suffix not in (".py", ".sh"):
                 continue
+            # symlink 驗證：確保檔案在 scripts/ 目錄內
+            try:
+                f.resolve().relative_to(scripts_dir.resolve())
+            except ValueError:
+                logger.warning(f"Potential path traversal detected, skipping: {f}")
+                continue
             results.append({
                 "name": f.stem,
                 "path": str(f.relative_to(self._skills_dir)),
                 "description": self._parse_docstring(f),
             })
         return results
-
-    def get_script_info(self, skill_name: str, script_name: str) -> dict | None:
-        """取得單一 script 資訊（路徑解析委託給 SkillManager）"""
-        scripts_dir = self._skills_dir / skill_name / "scripts"
-        if not scripts_dir.is_dir():
-            return None
-
-        for ext in (".py", ".sh"):
-            path = scripts_dir / f"{script_name}{ext}"
-            if path.is_file():
-                return {
-                    "name": script_name,
-                    "path": str(path.relative_to(self._skills_dir)),
-                    "description": self._parse_docstring(path),
-                }
-        return None
 
     @staticmethod
     def _build_command(script_path: Path) -> list[str] | None:

@@ -512,8 +512,8 @@ class SkillManager:
         if skill_name not in self._skills:
             return None
 
-        # 驗證 script_name 格式
-        if not script_name or ".." in script_name or "/" in script_name or "\\" in script_name:
+        # 驗證 script_name 格式（跨平台路徑分隔符檢查）
+        if not script_name or ".." in script_name or os.path.sep in script_name or (os.path.altsep and os.path.altsep in script_name):
             return None
 
         scripts_dir = self._skills_dir / skill_name / "scripts"
@@ -548,8 +548,22 @@ class SkillManager:
             if skill.scripts
         ]
 
+    # 禁止 skill 存取的敏感環境變數
+    _ENV_BLOCKLIST = frozenset({
+        "DATABASE_URL", "DB_PASSWORD", "DB_HOST", "DB_USER",
+        "SECRET_KEY", "BOT_SECRET_KEY", "JWT_SECRET",
+        "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        "NAS_PASSWORD", "NAS_USER",
+        "LINE_CHANNEL_SECRET", "LINE_CHANNEL_ACCESS_TOKEN",
+        "TELEGRAM_BOT_TOKEN",
+    })
+
     def get_skill_env_overrides(self, skill: "Skill") -> dict[str, str]:
-        """從 SKILL.md metadata.openclaw.requires.env 取得需要繼承的 .env 變數"""
+        """從 SKILL.md metadata.openclaw.requires.env 取得需要繼承的 .env 變數
+
+        有 blocklist 防止 skill 存取敏感變數。
+        """
         env = {}
         metadata = skill.metadata or {}
         openclaw_meta = metadata.get("openclaw") or {}
@@ -557,18 +571,24 @@ class SkillManager:
         env_keys = requires.get("env") or []
 
         for key in env_keys:
+            if key.upper() in self._ENV_BLOCKLIST:
+                logger.warning(f"Skill '{skill.name}' 請求被封鎖的環境變數 {key}，已拒絕")
+                continue
             val = os.environ.get(key)
             if val:
                 env[key] = val
             else:
                 logger.warning(f"Skill '{skill.name}' 需要環境變數 {key} 但未設定")
 
-        # primaryEnv 也繼承
+        # primaryEnv 也繼承（同樣受 blocklist 限制）
         primary = openclaw_meta.get("primaryEnv")
         if primary and primary not in env:
-            val = os.environ.get(primary)
-            if val:
-                env[primary] = val
+            if primary.upper() in self._ENV_BLOCKLIST:
+                logger.warning(f"Skill '{skill.name}' 的 primaryEnv {primary} 被封鎖")
+            else:
+                val = os.environ.get(primary)
+                if val:
+                    env[primary] = val
 
         return env
 
