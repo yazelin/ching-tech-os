@@ -1,5 +1,5 @@
 ---
-name: file_manager
+name: file-manager
 description: NAS 共用檔案搜尋、PDF 轉圖片
 allowed-tools: search_nas_files get_nas_file_info prepare_file_message convert_pdf_to_images
 metadata:

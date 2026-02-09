@@ -1,5 +1,5 @@
 ---
-name: ai_assistant
+name: ai-assistant
 description: AI 圖片生成、文件/簡報生成
 allowed-tools: mcp__nanobanana__generate_image mcp__nanobanana__edit_image mcp__nanobanana__restore_image
   generate_md2ppt generate_md2doc download_web_image
