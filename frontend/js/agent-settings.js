@@ -857,6 +857,15 @@ const AgentSettingsApp = (function() {
             </div>
           ` : ''}
 
+          ${(skill.script_tools || []).length > 0 ? `
+            <div class="agent-form-section">
+              <div class="agent-form-section-title">Script Tools (${skill.script_tools.length})</div>
+              <div class="skill-chips">
+                ${skill.script_tools.map(st => `<span class="skill-chip" title="${escapeHtml(st.description || '')}">${escapeHtml(st.name)}${st.description ? ` — ${escapeHtml(st.description)}` : ''}</span>`).join('')}
+              </div>
+            </div>
+          ` : ''}
+
           ${browseFiles.length > 0 ? `
             <div class="agent-form-section">
               <div class="agent-form-section-title">檔案</div>
@@ -1103,14 +1112,25 @@ const AgentSettingsApp = (function() {
         body: JSON.stringify(body)
       });
       if (!response.ok) throw new Error('Install failed');
+      const result = await response.json();
 
-      showToast(`已安裝 ${name}`, 'check');
+      const scriptsCount = result.scripts_count || 0;
+      if (scriptsCount > 0) {
+        showToast(`已安裝 ${escapeHtml(name)}，包含 ${scriptsCount} 個 script tools`, 'check');
+      } else {
+        showToast(`已安裝 ${escapeHtml(name)}`, 'check');
+      }
 
       // Reload and switch to installed tab, highlight new skill
       await loadSkills();
       highlightSkillName = name;
       switchSkillSubTab('installed');
       renderSkillList();
+
+      // 如果有 scripts，自動跳到詳情頁
+      if (scriptsCount > 0) {
+        showSkillDetail(name);
+      }
     } catch (e) {
       showToast('安裝失敗: ' + e.message, 'error');
     }

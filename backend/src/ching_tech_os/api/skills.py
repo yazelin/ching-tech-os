@@ -59,6 +59,7 @@ async def list_skills(session: SessionData = Depends(require_admin)):
                 "has_prompt": bool(skill.prompt),
                 "references": skill.references,
                 "scripts": skill.scripts,
+                "scripts_count": len(skill.scripts) if skill.scripts else 0,
                 "assets": skill.assets,
                 "source": skill.source,
                 "license": skill.license,
@@ -76,6 +77,9 @@ async def get_skill(name: str, session: SessionData = Depends(require_admin)):
     skill = await sm.get_skill(name)
     if not skill:
         raise HTTPException(status_code=404, detail=f"Skill '{name}' not found")
+    # 取得 script tools 資訊
+    script_tools = await sm.get_scripts_info(name)
+
     return {
         "name": skill.name,
         "description": skill.description,
@@ -87,6 +91,7 @@ async def get_skill(name: str, session: SessionData = Depends(require_admin)):
         "prompt": skill.prompt,
         "references": skill.references,
         "scripts": skill.scripts,
+        "script_tools": script_tools,
         "assets": skill.assets,
         "source": skill.source,
         "license": skill.license,
@@ -273,6 +278,7 @@ async def hub_install(
         "installed": data.name,
         "path": str(dest),
         "description": skill.description if skill else "",
+        "scripts_count": len(skill.scripts) if skill and skill.scripts else 0,
     }
 
 

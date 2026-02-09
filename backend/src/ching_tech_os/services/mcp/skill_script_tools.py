@@ -72,4 +72,27 @@ async def run_skill_script(
         f"success={result['success']} duration={result['duration_ms']}ms"
     )
 
+    # 記錄 ai_log
+    try:
+        from ...models.ai import AiLogCreate
+        from ...services.ai_manager import create_log
+
+        log_data = AiLogCreate(
+            model="script",
+            input_prompt=f"{skill}/{script}: {input}",
+            raw_response=result.get("output"),
+            error_message=result.get("error") if not result.get("success") else None,
+            duration_ms=result.get("duration_ms"),
+            success=result.get("success", False),
+            context_type="script",
+            agent_id=None,
+            prompt_id=None,
+            context_id=None,
+            input_tokens=0,
+            output_tokens=0,
+        )
+        await create_log(log_data)
+    except Exception:
+        logger.debug("Failed to create ai_log for script execution", exc_info=True)
+
     return json.dumps(result, ensure_ascii=False)
