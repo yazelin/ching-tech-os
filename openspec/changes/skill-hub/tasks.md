@@ -1,20 +1,20 @@
 ## Tasks
 
 ### Phase 1: 後端 CRUD + 重載
-- [ ] `SkillManager.update_skill_metadata(name, requires_app, allowed_tools, mcp_servers)` — 寫回 SKILL.md frontmatter
-- [ ] `SkillManager.remove_skill(name)` — 刪除 skill 目錄
-- [ ] `SkillManager.reload_skills()` — 公開方法，清除 `_loaded` 重新掃描
-- [ ] `PUT /api/skills/{name}` — 接收 JSON body `{requires_app, allowed_tools, mcp_servers}`
-- [ ] `DELETE /api/skills/{name}` — 移除 skill
-- [ ] `POST /api/skills/reload` — 觸發重載
-- [ ] 單元測試：update、remove、reload
+- [x] `SkillManager.update_skill_metadata(name, requires_app, allowed_tools, mcp_servers)` — 寫回 SKILL.md frontmatter
+- [x] `SkillManager.remove_skill(name)` — 刪除 skill 目錄
+- [x] `SkillManager.reload_skills()` — 公開方法，清除 `_loaded` 重新掃描
+- [x] `PUT /api/skills/{name}` — 接收 JSON body `{requires_app, allowed_tools, mcp_servers}`
+- [x] `DELETE /api/skills/{name}` — 移除 skill
+- [x] `POST /api/skills/reload` — 觸發重載
+- [x] 本地驗證：update（寫回+重載）、reload 通過
 
 ### Phase 2: ClawHub 整合
-- [ ] 研究 clawhub CLI output 格式（search、install）
-- [ ] `POST /api/skills/hub/search` — 呼叫 `clawhub search`，解析結果回傳 JSON
-- [ ] `POST /api/skills/hub/install` — 呼叫 `clawhub install`，再呼叫 `import_openclaw_skill()`
+- [x] 研究 clawhub CLI output 格式（search、install）
+- [x] `POST /api/skills/hub/search` — 呼叫 `clawhub search`，解析結果回傳 JSON
+- [x] `POST /api/skills/hub/install` — 呼叫 `clawhub install`，再呼叫 `import_openclaw_skill()`
 - [ ] install.sh 加入 clawhub 安裝步驟（`npm i -g clawhub` 或等效）
-- [ ] 錯誤處理：clawhub 未安裝、網路問題、skill 名稱衝突
+- [x] 錯誤處理：clawhub 未安裝(503)、逾時(504)、名稱衝突(409)、安裝失敗(502)
 
 ### Phase 3: 前端 UI
 - [ ] 已安裝 tab 加「編輯」按鈕 → 打開 modal

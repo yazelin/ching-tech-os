@@ -358,6 +358,115 @@ class SkillManager:
             servers.update(skill.mcp_servers)
         return servers
 
+    async def reload_skills(self) -> int:
+        """重新載入所有 skills（不需重啟服務）。
+
+        Returns:
+            載入的 skill 數量
+        """
+        async with self._load_lock:
+            self._loaded = False
+            self._skills.clear()
+        await self.load_skills()
+        return len(self._skills)
+
+    async def update_skill_metadata(
+        self,
+        name: str,
+        *,
+        requires_app: str | None = ...,
+        allowed_tools: list[str] | None = ...,
+        mcp_servers: list[str] | None = ...,
+    ) -> bool:
+        """更新 skill 的 CTOS 擴充欄位，寫回 SKILL.md frontmatter。
+
+        只更新 frontmatter，保留 Markdown body 不動。
+        使用 ... (Ellipsis) 區分「未傳」和「傳 null」。
+        更新後自動觸發重載。
+
+        Returns:
+            True if successful
+        """
+        await self.load_skills()
+        if name not in self._skills:
+            return False
+
+        skill_dir = self._skills_dir / name
+        skill_md_path = skill_dir / "SKILL.md"
+        if not skill_md_path.exists():
+            return False
+
+        # 安全檢查：確保在 skills 目錄下（防止 symlink 攻擊）
+        try:
+            skill_md_path.resolve().relative_to(self._skills_dir.resolve())
+        except ValueError:
+            return False
+
+        text = skill_md_path.read_text(encoding="utf-8")
+        config, body = _parse_skill_md(text)
+        if not config:
+            return False
+
+        # 更新 allowed-tools
+        if allowed_tools is not ...:
+            if allowed_tools is None:
+                config.pop("allowed-tools", None)
+            else:
+                config["allowed-tools"] = " ".join(allowed_tools)
+
+        # 更新 metadata.ctos
+        if not isinstance(config.get("metadata"), dict):
+            config["metadata"] = {}
+        if not isinstance(config["metadata"].get("ctos"), dict):
+            config["metadata"]["ctos"] = {}
+
+        if requires_app is not ...:
+            config["metadata"]["ctos"]["requires_app"] = requires_app
+        if mcp_servers is not ...:
+            if mcp_servers is None:
+                config["metadata"]["ctos"].pop("mcp_servers", None)
+            else:
+                config["metadata"]["ctos"]["mcp_servers"] = " ".join(mcp_servers)
+
+        # 寫回 SKILL.md
+        fm_text = yaml.dump(
+            config, allow_unicode=True, default_flow_style=False, sort_keys=False
+        ).strip()
+        skill_md_path.write_text(
+            f"---\n{fm_text}\n---\n\n{body}\n",
+            encoding="utf-8",
+        )
+
+        logger.info(f"更新 skill metadata: {name}")
+        await self.reload_skills()
+        return True
+
+    async def remove_skill(self, name: str) -> bool:
+        """移除 skill 目錄。
+
+        Returns:
+            True if removed
+        """
+        await self.load_skills()
+        if name not in self._skills:
+            return False
+
+        import shutil
+        skill_dir = self._skills_dir / name
+        if not skill_dir.is_dir():
+            return False
+
+        # 安全檢查：確保在 skills 目錄下
+        try:
+            skill_dir.resolve().relative_to(self._skills_dir.resolve())
+        except ValueError:
+            return False
+
+        shutil.rmtree(skill_dir)
+        logger.info(f"移除 skill: {name}")
+        await self.reload_skills()
+        return True
+
     async def get_skill_file(self, name: str, file_path: str) -> str | None:
         """讀取 skill 的檔案內容（references/ scripts/ assets/ 下）。"""
         await self.load_skills()

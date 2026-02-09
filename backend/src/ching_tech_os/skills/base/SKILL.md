@@ -5,6 +5,7 @@ allowed-tools: get_message_attachments summarize_chat create_share_link Read
 metadata:
   ctos:
     mcp_servers: ching-tech-os
+    requires_app: null
 ---
 
 【對話附件管理】
