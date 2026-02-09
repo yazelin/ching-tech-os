@@ -375,12 +375,13 @@ class SkillManager:
         name: str,
         *,
         requires_app: str | None = ...,
-        allowed_tools: list[str] | None = None,
-        mcp_servers: list[str] | None = None,
+        allowed_tools: list[str] | None = ...,
+        mcp_servers: list[str] | None = ...,
     ) -> bool:
         """更新 skill 的 CTOS 擴充欄位，寫回 SKILL.md frontmatter。
 
         只更新 frontmatter，保留 Markdown body 不動。
+        使用 ... (Ellipsis) 區分「未傳」和「傳 null」。
         更新後自動觸發重載。
 
         Returns:
@@ -390,8 +391,15 @@ class SkillManager:
         if name not in self._skills:
             return False
 
-        skill_md_path = self._skills_dir / name / "SKILL.md"
+        skill_dir = self._skills_dir / name
+        skill_md_path = skill_dir / "SKILL.md"
         if not skill_md_path.exists():
+            return False
+
+        # 安全檢查：確保在 skills 目錄下（防止 symlink 攻擊）
+        try:
+            skill_md_path.resolve().relative_to(self._skills_dir.resolve())
+        except ValueError:
             return False
 
         text = skill_md_path.read_text(encoding="utf-8")
@@ -400,8 +408,11 @@ class SkillManager:
             return False
 
         # 更新 allowed-tools
-        if allowed_tools is not None:
-            config["allowed-tools"] = " ".join(allowed_tools)
+        if allowed_tools is not ...:
+            if allowed_tools is None:
+                config.pop("allowed-tools", None)
+            else:
+                config["allowed-tools"] = " ".join(allowed_tools)
 
         # 更新 metadata.ctos
         if not isinstance(config.get("metadata"), dict):
@@ -411,8 +422,11 @@ class SkillManager:
 
         if requires_app is not ...:
             config["metadata"]["ctos"]["requires_app"] = requires_app
-        if mcp_servers is not None:
-            config["metadata"]["ctos"]["mcp_servers"] = " ".join(mcp_servers)
+        if mcp_servers is not ...:
+            if mcp_servers is None:
+                config["metadata"]["ctos"].pop("mcp_servers", None)
+            else:
+                config["metadata"]["ctos"]["mcp_servers"] = " ".join(mcp_servers)
 
         # 寫回 SKILL.md
         fm_text = yaml.dump(

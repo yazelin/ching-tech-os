@@ -103,14 +103,8 @@ async def update_skill(
     """編輯 skill 的權限和工具白名單"""
     sm = get_skill_manager()
 
-    # 用 sentinel 區分「未傳」和「傳 null」
-    kwargs = {}
-    if data.requires_app is not None or "requires_app" in (data.model_fields_set or set()):
-        kwargs["requires_app"] = data.requires_app
-    if data.allowed_tools is not None:
-        kwargs["allowed_tools"] = data.allowed_tools
-    if data.mcp_servers is not None:
-        kwargs["mcp_servers"] = data.mcp_servers
+    # 只包含使用者明確設定的欄位
+    kwargs = data.model_dump(exclude_unset=True)
 
     if not kwargs:
         raise HTTPException(status_code=400, detail="No fields to update")
