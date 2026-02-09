@@ -95,7 +95,7 @@ class SkillManager:
             mcp_servers=config.get("mcp_servers", []),
             prompt=body,
             references=refs,
-            source="native",
+            source=config.get("source", "native"),
         )
 
     def _load_skill_from_yaml(self, skill_dir: Path) -> Skill | None:
@@ -183,6 +183,8 @@ class SkillManager:
             config["tools"] = []
         if "mcp_servers" not in config:
             config["mcp_servers"] = []
+        # 標記來源為 OpenClaw
+        config["source"] = "openclaw"
 
         # 寫出 SKILL.md
         fm_text = yaml.dump(config, allow_unicode=True, default_flow_style=False).strip()
