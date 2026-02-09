@@ -1000,6 +1000,86 @@
   .agent-empty-state {
     display: none;
   }
+
+  /* 隱藏 resizer */
+  .skill-sidebar-resizer {
+    display: none;
+  }
+
+  /* Skill list item actions 在 mobile 直接顯示 */
+  .skill-list-item-actions {
+    opacity: 1;
+  }
+
+  /* Skill mobile 返回按鈕 */
+  .skill-mobile-back-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--bg-surface-dark);
+    border: none;
+    border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-primary);
+    font-size: var(--font-size-base);
+    cursor: pointer;
+    min-height: 44px;
+    width: 100%;
+  }
+
+  .skill-mobile-back-btn:active {
+    background: var(--hover-bg);
+  }
+
+  .skill-mobile-back-btn .icon svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  /* Hub 搜尋結果全寬 */
+  .skill-hub-result-item {
+    padding: var(--spacing-sm) var(--spacing-md);
+    min-height: 56px;
+  }
+
+  .skill-hub-result-actions {
+    flex-direction: column;
+  }
+}
+
+/* ==========================================================================
+   Sidebar Resizer（左右拖拉）
+   ========================================================================== */
+
+.skill-sidebar-resizer {
+  width: 6px;
+  cursor: ew-resize;
+  background: var(--border-subtle);
+  border-left: 1px solid var(--border-light);
+  border-right: 1px solid var(--border-light);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.skill-sidebar-resizer::after {
+  content: '';
+  width: 3px;
+  height: 40px;
+  background: var(--text-muted);
+  border-radius: 2px;
+  opacity: 0.4;
+}
+
+.skill-sidebar-resizer:hover {
+  background: var(--hover-bg);
+}
+
+.skill-sidebar-resizer:hover::after {
+  opacity: 1;
+  background: var(--color-accent);
 }
 
 /* Skill 預覽 */

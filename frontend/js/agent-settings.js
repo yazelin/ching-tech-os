@@ -225,6 +225,7 @@ const AgentSettingsApp = (function() {
               <!-- Agent list will be rendered here -->
             </div>
           </aside>
+          <div class="skill-sidebar-resizer"></div>
           <main class="agent-main">
             <div class="agent-empty-state">
               <span class="icon">${getIcon('robot-outline')}</span>
@@ -257,6 +258,7 @@ const AgentSettingsApp = (function() {
               <div class="skill-hub-results"></div>
             </div>
           </aside>
+          <div class="skill-sidebar-resizer"></div>
           <main class="agent-main skill-main">
             <div class="agent-empty-state">
               <span class="icon">${getIcon('puzzle-outline')}</span>
@@ -817,6 +819,10 @@ const AgentSettingsApp = (function() {
       });
 
       main.innerHTML = `
+        <button class="skill-mobile-back-btn" style="display:none;" data-action="skill-mobile-back">
+          <span class="icon">${getIcon('chevron-left')}</span>
+          <span>返回列表</span>
+        </button>
         <div class="agent-form skill-detail">
           <div class="skill-detail-header-bar">
             <div class="agent-form-section-title" style="margin-bottom:0;">基本資訊</div>
@@ -894,6 +900,8 @@ const AgentSettingsApp = (function() {
       if (isMobileView()) {
         const settings = document.querySelector(`#${windowId} .skill-settings`);
         if (settings) settings.classList.add('showing-editor');
+        const backBtn = main.querySelector('.skill-mobile-back-btn');
+        if (backBtn) backBtn.style.display = 'flex';
       }
     } catch (e) {
       main.innerHTML = `<div class="agent-empty-state"><p>載入失敗: ${e.message}</p></div>`;
@@ -1297,7 +1305,17 @@ const AgentSettingsApp = (function() {
           const main = document.querySelector(`#${windowId} .skill-main`);
           if (!main) break;
 
+          // Mobile: slide in
+          if (isMobileView()) {
+            const settings = document.querySelector(`#${windowId} .skill-settings`);
+            if (settings) settings.classList.add('showing-editor');
+          }
+
           main.innerHTML = `
+            <button class="skill-mobile-back-btn" style="${isMobileView() ? 'display:flex;' : 'display:none;'}" data-action="skill-mobile-back">
+              <span class="icon">${getIcon('chevron-left')}</span>
+              <span>返回列表</span>
+            </button>
             <div class="agent-form skill-detail">
               <div class="skill-detail-header-bar">
                 <h2>${escapeHtml(slug)}</h2>
@@ -1340,6 +1358,12 @@ const AgentSettingsApp = (function() {
         case 'remove-chip':
           actionEl.closest('.skill-chip-removable')?.remove();
           break;
+        case 'skill-mobile-back': {
+          const skillSettings = document.querySelector(`#${windowId} .skill-settings`);
+          if (skillSettings) skillSettings.classList.remove('showing-editor');
+          currentSkillName = null;
+          break;
+        }
         case 'browse-file': {
           const contentEl = actionEl.nextElementSibling;
           if (contentEl && contentEl.classList.contains('skill-file-content')) {
@@ -1352,6 +1376,9 @@ const AgentSettingsApp = (function() {
         }
       }
     });
+
+    // 初始化 sidebar resizer
+    initSidebarResizers(root);
 
     // Chip input Enter handler (delegated)
     root.addEventListener('keydown', (e) => {
@@ -1368,6 +1395,44 @@ const AgentSettingsApp = (function() {
           e.target.value = '';
         }
       }
+    });
+  }
+
+  /**
+   * 初始化所有 sidebar resizer（左右拖拉）
+   */
+  function initSidebarResizers(root) {
+    root.querySelectorAll('.skill-sidebar-resizer').forEach(resizer => {
+      let isResizing = false;
+      let startX = 0;
+      let startWidth = 0;
+      let sidebar = null;
+
+      resizer.addEventListener('mousedown', (e) => {
+        sidebar = resizer.previousElementSibling;
+        if (!sidebar || !sidebar.classList.contains('agent-sidebar')) return;
+        isResizing = true;
+        startX = e.clientX;
+        startWidth = sidebar.offsetWidth;
+        document.body.style.cursor = 'ew-resize';
+        document.body.style.userSelect = 'none';
+        e.preventDefault();
+      });
+
+      document.addEventListener('mousemove', (e) => {
+        if (!isResizing || !sidebar) return;
+        const delta = e.clientX - startX;
+        const newWidth = Math.min(400, Math.max(180, startWidth + delta));
+        sidebar.style.width = newWidth + 'px';
+      });
+
+      document.addEventListener('mouseup', () => {
+        if (!isResizing) return;
+        isResizing = false;
+        sidebar = null;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      });
     });
   }
 
