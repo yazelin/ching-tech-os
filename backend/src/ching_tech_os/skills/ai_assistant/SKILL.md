@@ -1,3 +1,19 @@
+---
+name: ai_assistant
+description: AI 圖片生成、文件/簡報生成
+requires_app: ai-assistant
+tools:
+  - mcp__nanobanana__generate_image
+  - mcp__nanobanana__edit_image
+  - mcp__nanobanana__restore_image
+  - generate_md2ppt
+  - generate_md2doc
+  - download_web_image
+mcp_servers:
+  - nanobanana
+  - ching-tech-os
+---
+
 【AI 圖片生成】
 - mcp__nanobanana__generate_image: 根據文字描述生成圖片
   · prompt: 圖片描述（必填，使用英文描述效果較好）
