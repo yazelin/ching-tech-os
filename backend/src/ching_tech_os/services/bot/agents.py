@@ -396,7 +396,7 @@ async def _generate_script_tools_prompt(
 
             lines.append(f"\n{skill.name}:")
             for s in scripts_info:
-                desc = s["description"] or f"Execute {s['name']} from {skill.name}"
+                desc = s["description"] or f"執行 {skill.name} 的腳本 {s['name']}"
                 lines.append(f"  - {s['name']}: {desc}")
             lines.append(
                 f'  用法：run_skill_script(skill="{skill.name}", '
