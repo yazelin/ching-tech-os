@@ -525,3 +525,27 @@ async def get_tools_for_user(
             tools.extend(app_tools)
     # 去重
     return list(dict.fromkeys(tools))
+
+
+async def get_mcp_servers_for_user(
+    app_permissions: dict[str, bool],
+) -> set[str] | None:
+    """根據使用者權限取得需要載入的 MCP server 集合
+
+    優先從 SkillManager 載入，失敗時回傳 None（載入全部）。
+
+    Args:
+        app_permissions: 使用者的 App 權限設定（app_id -> bool）
+
+    Returns:
+        需要載入的 MCP server 名稱集合，None 表示載入全部（fallback）
+    """
+    if _HAS_SKILL_MANAGER:
+        try:
+            sm = get_skill_manager()
+            servers = await sm.get_required_mcp_servers(app_permissions)
+            if servers:
+                return servers
+        except (OSError, ValueError, RuntimeError) as e:
+            logger.warning(f"SkillManager 取得 MCP servers 失敗，將載入全部: {e}")
+    return None

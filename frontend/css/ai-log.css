@@ -589,6 +589,55 @@
   border-color: var(--color-accent);
 }
 
+.ai-log-tool-badge.unused {
+  /* 未使用（展開後）：淡色邊框 + 淡色字 */
+  border: 1px solid var(--border-light);
+  color: var(--text-muted);
+  background: transparent;
+  opacity: 0.6;
+}
+
+/* 展開/收合按鈕 */
+.ai-log-tools-expand-btn {
+  display: inline-block;
+  padding: 2px 8px;
+  margin: 1px 2px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-family: 'JetBrains Mono', monospace;
+  white-space: nowrap;
+  vertical-align: middle;
+  border: 1px dashed var(--text-muted);
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ai-log-tools-expand-btn:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+/* 隱藏的工具區塊 */
+.ai-log-tools-hidden {
+  display: none;
+}
+
+.ai-log-tools-hidden.expanded {
+  display: inline;
+}
+
+/* 無使用工具提示 */
+.ai-log-no-tools-used {
+  display: inline-block;
+  padding: 2px 6px;
+  margin: 1px 2px;
+  font-size: 10px;
+  color: var(--text-muted);
+  vertical-align: middle;
+}
+
 /* 複製完整請求按鈕 */
 .ai-log-copy-full-btn {
   display: inline-flex;

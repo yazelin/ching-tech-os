@@ -26,7 +26,7 @@ from ..bot_line import (
     save_file_record,
     verify_binding_code,
 )
-from ..linebot_agents import get_tools_for_user
+from ..linebot_agents import get_mcp_servers_for_user, get_tools_for_user
 from ..mcp import get_mcp_tool_names
 from ..permissions import get_mcp_tools_for_user, get_user_app_permissions_sync
 from ..user import get_user_role_and_permissions
@@ -723,6 +723,9 @@ async def _handle_text_with_ai(
     skill_tools = await get_tools_for_user(app_permissions)
     all_tools = builtin_tools + mcp_tools + skill_tools
 
+    # 取得需要的 MCP server 集合（按需載入）
+    required_mcp_servers = await get_mcp_servers_for_user(app_permissions)
+
     # 4. 建立進度通知 callback（含節流避免 Telegram API 限流）
     progress_message_id: str | None = None
     tool_status_lines: list[dict] = []
@@ -796,6 +799,7 @@ async def _handle_text_with_ai(
         tools=all_tools,
         on_tool_start=_on_tool_start,
         on_tool_end=_on_tool_end,
+        required_mcp_servers=required_mcp_servers,
     )
     duration_ms = int((time.time() - start_time) * 1000)
 

@@ -498,9 +498,12 @@ async def process_message_with_ai(
         logger.info(f"使用者權限過濾後的 MCP 工具數量: {len(mcp_tools)}, role={user_role}")
 
         # 外部 MCP 工具（由 SkillManager 動態產生，含 fallback）
-        from .linebot_agents import get_tools_for_user
+        from .linebot_agents import get_tools_for_user, get_mcp_servers_for_user
         skill_tools = await get_tools_for_user(app_permissions)
         all_tools = agent_tools + mcp_tools + skill_tools
+
+        # 取得需要的 MCP server 集合（按需載入）
+        required_mcp_servers = await get_mcp_servers_for_user(app_permissions)
 
         # 計時開始
         start_time = time.time()
@@ -516,6 +519,7 @@ async def process_message_with_ai(
             system_prompt=system_prompt,
             timeout=480,  # 8 分鐘，支援複雜任務
             tools=all_tools,
+            required_mcp_servers=required_mcp_servers,
         )
 
         # 計算耗時
