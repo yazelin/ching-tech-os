@@ -10,11 +10,11 @@
 - [x] 本地驗證：update（寫回+重載）、reload 通過
 
 ### Phase 2: ClawHub 整合
-- [ ] 研究 clawhub CLI output 格式（search、install）
-- [ ] `POST /api/skills/hub/search` — 呼叫 `clawhub search`，解析結果回傳 JSON
-- [ ] `POST /api/skills/hub/install` — 呼叫 `clawhub install`，再呼叫 `import_openclaw_skill()`
+- [x] 研究 clawhub CLI output 格式（search、install）
+- [x] `POST /api/skills/hub/search` — 呼叫 `clawhub search`，解析結果回傳 JSON
+- [x] `POST /api/skills/hub/install` — 呼叫 `clawhub install`，再呼叫 `import_openclaw_skill()`
 - [ ] install.sh 加入 clawhub 安裝步驟（`npm i -g clawhub` 或等效）
-- [ ] 錯誤處理：clawhub 未安裝、網路問題、skill 名稱衝突
+- [x] 錯誤處理：clawhub 未安裝(503)、逾時(504)、名稱衝突(409)、安裝失敗(502)
 
 ### Phase 3: 前端 UI
 - [ ] 已安裝 tab 加「編輯」按鈕 → 打開 modal
