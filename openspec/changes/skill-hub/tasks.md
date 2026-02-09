@@ -1,13 +1,13 @@
 ## Tasks
 
 ### Phase 1: 後端 CRUD + 重載
-- [ ] `SkillManager.update_skill_metadata(name, requires_app, allowed_tools, mcp_servers)` — 寫回 SKILL.md frontmatter
-- [ ] `SkillManager.remove_skill(name)` — 刪除 skill 目錄
-- [ ] `SkillManager.reload_skills()` — 公開方法，清除 `_loaded` 重新掃描
-- [ ] `PUT /api/skills/{name}` — 接收 JSON body `{requires_app, allowed_tools, mcp_servers}`
-- [ ] `DELETE /api/skills/{name}` — 移除 skill
-- [ ] `POST /api/skills/reload` — 觸發重載
-- [ ] 單元測試：update、remove、reload
+- [x] `SkillManager.update_skill_metadata(name, requires_app, allowed_tools, mcp_servers)` — 寫回 SKILL.md frontmatter
+- [x] `SkillManager.remove_skill(name)` — 刪除 skill 目錄
+- [x] `SkillManager.reload_skills()` — 公開方法，清除 `_loaded` 重新掃描
+- [x] `PUT /api/skills/{name}` — 接收 JSON body `{requires_app, allowed_tools, mcp_servers}`
+- [x] `DELETE /api/skills/{name}` — 移除 skill
+- [x] `POST /api/skills/reload` — 觸發重載
+- [x] 本地驗證：update（寫回+重載）、reload 通過
 
 ### Phase 2: ClawHub 整合
 - [ ] 研究 clawhub CLI output 格式（search、install）
