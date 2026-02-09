@@ -513,7 +513,7 @@ class SkillManager:
             return None
 
         # 驗證 script_name 格式（跨平台路徑分隔符檢查）
-        if not script_name or ".." in script_name or os.path.sep in script_name or (os.path.altsep and os.path.altsep in script_name):
+        if not script_name or any(p in script_name for p in ("..", os.path.sep, os.path.altsep) if p):
             return None
 
         scripts_dir = self._skills_dir / skill_name / "scripts"

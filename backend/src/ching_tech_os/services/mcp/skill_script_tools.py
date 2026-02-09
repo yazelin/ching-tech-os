@@ -12,29 +12,36 @@ logger = logging.getLogger("mcp_server")
 
 
 @mcp.tool()
-async def run_skill_script(skill: str, script: str, input_str: str = "") -> str:
+async def run_skill_script(
+    skill: str, script: str, input_str: str = "", ctos_user_id: int | None = None,
+) -> str:
     """執行 skill 的 script。
 
     Args:
         skill: skill 名稱（例如 "weather"）
         script: script 檔名不含副檔名（例如 "get_forecast"）
         input_str: 傳給 script 的輸入字串（透過 stdin 傳入）
+        ctos_user_id: CTOS 用戶 ID（用於權限檢查）
     """
     from ...skills import get_skill_manager
     from ...skills.script_runner import ScriptRunner
 
     sm = get_skill_manager()
 
-    # 權限說明：MCP tool 層無法取得 user context，權限控制依賴：
-    # 1. Tool 白名單：只有擁有 script skill 的使用者才有 run_skill_script
-    # 2. Prompt 注入：只注入使用者有權限的 skill 的 script 說明
-    # 3. Skill name 驗證：防止路徑穿越
-    # 未來若 MCP 支援 user context，應在此加入 requires_app 檢查
-
     # 驗證 skill 存在
     skill_obj = await sm.get_skill(skill)
     if not skill_obj:
         return json.dumps({"success": False, "error": f"Skill not found: {skill}"}, ensure_ascii=False)
+
+    # 權限檢查：驗證使用者有此 skill 的 requires_app 權限
+    if skill_obj.requires_app and ctos_user_id:
+        from ..permissions import get_user_app_permissions
+        user_apps = await get_user_app_permissions(ctos_user_id)
+        if not user_apps.get(skill_obj.requires_app, False):
+            return json.dumps({
+                "success": False,
+                "error": f"無權限使用 skill '{skill}'（需要 {skill_obj.requires_app} 權限）",
+            }, ensure_ascii=False)
 
     # 驗證 skill 有 scripts
     if not await sm.has_scripts(skill):

@@ -100,3 +100,9 @@ CTOS 已完成 Agent Skills 標準相容和 ClawHub 搜尋/安裝（Skill Hub Ph
 - Skill 詳情頁顯示 script tools 列表
 - Script 執行記錄（整合到 AI Logs）
 - 安裝 ClawHub skill 後自動顯示可用的 script tools
+
+---
+
+> **設計演進說明**：此提案最初描述的是每個 script 一個 tool 的架構（方案 B），
+> 經討論後改為「路 3」通用 tool 設計（單一 `run_skill_script`）。
+> 最終設計請參考 `design.md`。

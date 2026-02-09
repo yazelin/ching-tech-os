@@ -43,7 +43,7 @@ Tool 內部檢查：使用者有沒有此 skill 的權限（requires_app → use
 | `services/mcp/skill_script_tools.py` | **新增** `run_skill_script` MCP tool |
 | `skills/__init__.py` | SkillManager 新增 `has_scripts()`, `get_script_path()`, `get_scripts_info()` |
 | `services/linebot_agents.py` | prompt 注入 script skill 使用說明 |
-| `api/skills.py` | Skill 詳情 API 加入 `script_tools` 欄位 |
+| `api/skills.py` | Skill 詳情 API 已有 `scripts` 欄位（Phase 3 可擴充） |
 
 ## MCP Tool 定義
 
