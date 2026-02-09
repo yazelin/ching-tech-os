@@ -1060,6 +1060,26 @@ const AgentSettingsApp = (function() {
   }
 
   /**
+   * 計算相對時間（如「3 天前」）
+   */
+  function relativeTime(dateStr) {
+    if (!dateStr) return '';
+    const now = Date.now();
+    const then = new Date(dateStr).getTime();
+    const diff = now - then;
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return '剛剛';
+    if (mins < 60) return `${mins} 分鐘前`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours} 小時前`;
+    const days = Math.floor(hours / 24);
+    if (days < 30) return `${days} 天前`;
+    const months = Math.floor(days / 30);
+    if (months < 12) return `${months} 個月前`;
+    return `${Math.floor(months / 12)} 年前`;
+  }
+
+  /**
    * Search ClawHub
    */
   async function searchHub(query) {
@@ -1088,22 +1108,33 @@ const AgentSettingsApp = (function() {
         return;
       }
 
-      resultsContainer.innerHTML = results.map(r => `
-        <div class="skill-hub-result-item">
-          <div class="agent-list-item-info">
-            <div class="agent-list-item-name">${escapeHtml(r.name)}</div>
-            <div class="agent-list-item-model">${escapeHtml(r.description || '')}</div>
-            <div class="skill-list-item-meta">
-              ${r.version ? `<span class="skill-badge">${escapeHtml(r.version)}</span>` : ''}
-              ${r.score != null ? `<span class="skill-badge">相關度 ${Math.round(r.score * 100)}%</span>` : ''}
+      resultsContainer.innerHTML = results.map(r => {
+        const displayName = r.displayName || r.slug || r.name || '';
+        const slug = r.slug || r.name || '';
+        const summary = r.summary || r.description || '';
+        const version = r.version || '';
+        const score = r.score != null ? Math.round(r.score * 100) : null;
+        const updated = relativeTime(r.updatedAt);
+
+        return `
+          <div class="skill-hub-result-item">
+            <div class="agent-list-item-info">
+              <div class="agent-list-item-name">${escapeHtml(displayName)}</div>
+              <div class="skill-hub-author">by ${escapeHtml(slug.split('/')[0] || '未知作者')}</div>
+              <div class="skill-hub-summary">${escapeHtml(summary)}</div>
+              <div class="skill-list-item-meta">
+                ${version ? `<span class="skill-badge">${escapeHtml(version)}</span>` : ''}
+                ${score != null ? `<span class="skill-badge">相關度 ${score}%</span>` : ''}
+                ${updated ? `<span class="skill-badge">${escapeHtml(updated)}</span>` : ''}
+              </div>
+            </div>
+            <div class="skill-hub-result-actions">
+              <button class="btn btn-sm" data-action="preview-skill" data-skill-slug="${escapeHtml(slug)}">預覽</button>
+              <button class="btn btn-sm btn-primary" data-action="install-skill" data-skill-name="${escapeHtml(slug)}" data-skill-version="${escapeHtml(version)}">安裝</button>
             </div>
           </div>
-          <div class="skill-hub-result-actions">
-            <button class="btn btn-sm" data-action="preview-skill" data-skill-slug="${escapeHtml(r.name)}" data-skill-desc="${escapeHtml(r.description || '')}">預覽</button>
-            <button class="btn btn-sm btn-primary" data-action="install-skill" data-skill-name="${escapeHtml(r.name)}" data-skill-version="${escapeHtml(r.version || '')}">安裝</button>
-          </div>
-        </div>
-      `).join('');
+        `;
+      }).join('');
     } catch (e) {
       resultsContainer.innerHTML = `<div class="agent-list-empty"><p>搜尋失敗: ${escapeHtml(e.message)}</p></div>`;
     }
@@ -1301,7 +1332,6 @@ const AgentSettingsApp = (function() {
           break;
         case 'preview-skill': {
           const slug = actionEl.dataset.skillSlug;
-          const desc = actionEl.dataset.skillDesc || '';
           const main = document.querySelector(`#${windowId} .skill-main`);
           if (!main) break;
 
@@ -1342,15 +1372,46 @@ const AgentSettingsApp = (function() {
             }
             const result = await resp.json();
 
-            // 顯示 metadata
+            // 顯示 metadata（使用新 REST API 回傳格式）
             const metaEl = main.querySelector('.skill-preview-meta');
-            if (metaEl && result.metadata) {
-              const m = result.metadata;
+            if (metaEl) {
+              const skill = result.skill || {};
+              const owner = result.owner || {};
+              const latest = result.latestVersion || {};
               const fields = [];
-              if (m.owner) fields.push(`<div class="skill-detail-field"><span class="skill-detail-label">作者</span><span class="skill-detail-value">${escapeHtml(m.owner)}</span></div>`);
-              if (m.latest) fields.push(`<div class="skill-detail-field"><span class="skill-detail-label">最新版本</span><span class="skill-detail-value">${escapeHtml(m.latest)}</span></div>`);
-              if (m.summary) fields.push(`<div class="skill-detail-field"><span class="skill-detail-label">說明</span><span class="skill-detail-value">${escapeHtml(m.summary)}</span></div>`);
-              if (m.updated) fields.push(`<div class="skill-detail-field"><span class="skill-detail-label">更新時間</span><span class="skill-detail-value">${escapeHtml(m.updated)}</span></div>`);
+
+              // 作者資訊（含 avatar）
+              if (owner.handle) {
+                const avatarHtml = owner.image
+                  ? `<img class="skill-hub-avatar-sm" src="${escapeHtml(owner.image)}" alt="">`
+                  : '';
+                fields.push(`<div class="skill-detail-field"><span class="skill-detail-label">作者</span><span class="skill-detail-value">${avatarHtml}${escapeHtml(owner.displayName || owner.handle)}</span></div>`);
+              }
+              if (latest.version) {
+                fields.push(`<div class="skill-detail-field"><span class="skill-detail-label">最新版本</span><span class="skill-detail-value">${escapeHtml(latest.version)}</span></div>`);
+              }
+              if (skill.summary) {
+                fields.push(`<div class="skill-detail-field"><span class="skill-detail-label">說明</span><span class="skill-detail-value">${escapeHtml(skill.summary)}</span></div>`);
+              }
+              if (latest.changelog) {
+                fields.push(`<div class="skill-detail-field"><span class="skill-detail-label">更新日誌</span><span class="skill-detail-value">${escapeHtml(latest.changelog)}</span></div>`);
+              }
+              if (skill.updatedAt) {
+                fields.push(`<div class="skill-detail-field"><span class="skill-detail-label">更新時間</span><span class="skill-detail-value">${escapeHtml(relativeTime(skill.updatedAt))}</span></div>`);
+              }
+              if (skill.tags && skill.tags.length > 0) {
+                const tagsHtml = skill.tags.map(t => `<span class="skill-badge">${escapeHtml(t)}</span>`).join(' ');
+                fields.push(`<div class="skill-detail-field"><span class="skill-detail-label">標籤</span><span class="skill-detail-value">${tagsHtml}</span></div>`);
+              }
+              if (skill.stats) {
+                const stats = skill.stats;
+                const statsItems = [];
+                if (stats.installs != null) statsItems.push(`${stats.installs} 安裝`);
+                if (stats.stars != null) statsItems.push(`⭐ ${stats.stars}`);
+                if (statsItems.length > 0) {
+                  fields.push(`<div class="skill-detail-field"><span class="skill-detail-label">統計</span><span class="skill-detail-value">${escapeHtml(statsItems.join(' · '))}</span></div>`);
+                }
+              }
               metaEl.innerHTML = fields.join('');
             }
 

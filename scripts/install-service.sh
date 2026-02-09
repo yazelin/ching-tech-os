@@ -175,20 +175,20 @@ else
 fi
 
 # ===================
-# ClawHub CLI 安裝
+# ClawHub CLI 安裝（已改用 REST API，保留備用）
 # ===================
-echo "檢查 ClawHub CLI..."
-if command -v clawhub &>/dev/null; then
-    echo "clawhub 已安裝: $(clawhub --version 2>/dev/null || echo 'unknown')"
-else
-    echo "安裝 clawhub CLI..."
-    if command -v npm &>/dev/null; then
-        npm install -g clawhub
-        echo "clawhub 安裝完成"
-    else
-        echo "警告：npm 未安裝，跳過 clawhub。Skills Hub 搜尋/安裝功能將無法使用。"
-    fi
-fi
+# echo "檢查 ClawHub CLI..."
+# if command -v clawhub &>/dev/null; then
+#     echo "clawhub 已安裝: $(clawhub --version 2>/dev/null || echo 'unknown')"
+# else
+#     echo "安裝 clawhub CLI..."
+#     if command -v npm &>/dev/null; then
+#         npm install -g clawhub
+#         echo "clawhub 安裝完成"
+#     else
+#         echo "警告：npm 未安裝，跳過 clawhub。Skills Hub 搜尋/安裝功能將無法使用。"
+#     fi
+# fi
 
 # ===================
 # 應用程式服務設定
