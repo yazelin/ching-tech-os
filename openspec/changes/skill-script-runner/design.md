@@ -1,49 +1,95 @@
 # Design — Skill Script Runner
 
+## 設計決策
+
+**路 3（通用 tool）**：一個 `run_skill_script` tool 搞定所有 script，不為每個 script 註冊獨立 tool。
+
+理由：
+- 實作量最小（一個 MCP tool + 一個 runner 類別）
+- 跟 OpenClaw 的 `{baseDir}/scripts/` 模式相容
+- 權限控制在 tool 內部做二次檢查（skill → app → user）
+
 ## 架構
 
 ```
-SkillManager
-  ├─ load_skills()           # 現有：掃描 SKILL.md
-  ├─ _scan_scripts(skill)    # 新增：掃描 scripts/，產生 ScriptTool 列表
-  └─ get_tool_names()        # 修改：合併 MCP tools + script tools
+MCP Tool: run_skill_script(skill, script, input)
+  │
+  ├─ 1. 權限檢查（user 有沒有此 skill）
+  ├─ 2. 路徑驗證（script 存在、在 skill 目錄下）
+  ├─ 3. ScriptRunner.execute()
+  │     ├─ 組裝 command（python3/bash/uv run）
+  │     ├─ 注入環境變數
+  │     └─ subprocess 執行 + timeout + capture
+  └─ 4. 回傳結果
+```
 
-ScriptToolRunner（新增）
-  ├─ register(skill, scripts)  # 註冊 script tools
-  ├─ execute(tool_name, args)  # 執行 script
-  ├─ get_tool_schema(tool)     # 產生 JSON schema
-  └─ _parse_description(path)  # 從 docstring 提取描述
+## 權限模型
 
-linebot_ai.py
-  └─ _handle_tool_call()     # 修改：skill__ 前綴 → ScriptToolRunner
-                             #        mcp__ 前綴 → MCP client（不變）
+```
+Tool 白名單層：run_skill_script（有任何 script skill 就加入）
+        ↓
+Tool 內部檢查：使用者有沒有此 skill 的權限（requires_app → user apps）
+        ↓
+路徑檢查：script 存在且在 skill/scripts/ 下
+        ↓
+執行
 ```
 
 ## 檔案變更
 
 | 檔案 | 變更 |
 |------|------|
-| `skills/__init__.py` | SkillManager 新增 `_scan_scripts()`、`script_tools` 屬性 |
-| `skills/script_runner.py` | **新增** ScriptToolRunner 類別 |
-| `services/linebot_ai.py` | `_handle_tool_call()` 加入 `skill__` 路由 |
-| `services/linebot_agents.py` | `generate_tools_prompt()` 加入 script tool 說明 |
+| `skills/script_runner.py` | **新增** ScriptRunner 類別（execute, list_scripts） |
+| `services/mcp/skill_script_tools.py` | **新增** `run_skill_script` MCP tool |
+| `skills/__init__.py` | SkillManager 新增 `has_scripts()`, `get_script_path()`, `get_scripts_info()` |
+| `services/linebot_agents.py` | prompt 注入 script skill 使用說明 |
 | `api/skills.py` | Skill 詳情 API 加入 `script_tools` 欄位 |
 
-## Tool 命名規則
+## MCP Tool 定義
+
+```python
+@mcp_tool
+def run_skill_script(skill: str, script: str, input: str = "") -> str:
+    """
+    執行 skill 的 script。
+    
+    Args:
+        skill: skill 名稱（例如 "weather"）
+        script: script 檔名不含副檔名（例如 "get_forecast"）
+        input: 傳給 script 的輸入（字串，script 自行解析）
+    """
+```
+
+## Script 執行方式
+
+根據副檔名決定執行器：
+- `.py` → `uv run {script_path}` 或 `python3 {script_path}`（優先 uv）
+- `.sh` → `bash {script_path}`
+- 其他 → 不支援，回傳錯誤
+
+參數傳遞：`input` 字串透過 stdin 傳入 script。
+
+## Prompt 注入
+
+有 script 的 skill，在 prompt 中加入說明：
 
 ```
-skill__{skill_name}__{script_stem}
+【Script Tools】
+以下 skill 提供可執行的 script，使用 run_skill_script 工具呼叫：
 
-範例：
-  scripts/get_forecast.py  →  skill__weather__get_forecast
-  scripts/generate_ppt.py  →  skill__ai-ppt-generator__generate_ppt
+weather:
+  - get_forecast: 取得天氣預報
+  用法：run_skill_script(skill="weather", script="get_forecast", input="Taipei")
+
+ai-ppt-generator:
+  - generate_ppt: 用百度 API 生成 PPT
+  用法：run_skill_script(skill="ai-ppt-generator", script="generate_ppt", input="經濟報告")
 ```
 
-## Script 參數傳遞
-
-優先順序：
-1. SKILL.md frontmatter 的 `scripts.{name}.args` 定義 → CLI args（`--city Taipei`）
-2. 無定義時 → stdin JSON（`{"city": "Taipei"}`）
+描述來源（優先順序）：
+1. SKILL.md body 中的說明（{baseDir} 替換為 skill 路徑）
+2. Script 檔頭的 docstring
+3. 預設：`Execute {script} from {skill}`
 
 ## 執行環境
 
@@ -51,16 +97,20 @@ skill__{skill_name}__{script_stem}
 # 工作目錄
 /tmp/skill-runner/{session_id}/
 
-# 環境變數
+# 環境變數（自動注入）
 SKILL_NAME=weather
 SKILL_DIR=/path/to/skills/weather
 SKILL_ASSETS_DIR=/path/to/skills/weather/assets
-# + SKILL.md 宣告的 .env 變數
+
+# 從 .env 繼承（需 SKILL.md metadata.openclaw.requires.env 宣告）
+WEATHER_API_KEY=xxx
 ```
 
 ## 安全邊界
 
-- subprocess 執行，不共享記憶體
-- timeout 預設 30 秒
+- subprocess 執行，不共享主進程記憶體
+- timeout 預設 30 秒，可由 SKILL.md 覆蓋
 - 工作目錄在 /tmp，不能寫回 skill 目錄
 - 只繼承明確宣告的環境變數
+- skill name + script name 都做路徑穿越驗證
+- 二次權限檢查：tool 白名單 + skill 權限

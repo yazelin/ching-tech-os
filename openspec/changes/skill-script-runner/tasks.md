@@ -1,33 +1,34 @@
 ## Tasks
 
-### Phase 1: Script Runner 核心
-- [ ] 新增 `skills/script_runner.py` — ScriptToolRunner 類別
-  - [ ] `register(skill_name, script_path, description, args, timeout)` 
-  - [ ] `execute(tool_name, args_dict)` — subprocess 執行 + timeout + capture
-  - [ ] `get_tool_schema(tool_name)` — 產生 JSON schema
-  - [ ] `list_tools(skill_name)` — 列出某 skill 的所有 script tools
-- [ ] SkillManager 整合
-  - [ ] `_scan_scripts(skill)` — 掃描 scripts/ 產生 tool 列表
-  - [ ] `_parse_script_description(path)` — 從 SKILL.md 或 docstring 提取描述
-  - [ ] 載入時自動註冊 script tools
-  - [ ] `get_tool_names()` 合併 MCP tools + script tools
-- [ ] 單元測試：建立測試用 skill，驗證掃描、註冊、執行流程
+### Phase 1: ScriptRunner 核心 + MCP Tool
+- [ ] 新增 `skills/script_runner.py` — ScriptRunner 類別
+  - [ ] `execute(skill_name, script_name, input_str, env_overrides)` — subprocess 執行
+  - [ ] `list_scripts(skill_name)` — 列出 skill 的所有 scripts
+  - [ ] `get_script_info(skill_name, script_name)` — 取得描述（docstring 提取）
+  - [ ] 執行器選擇：.py → uv run / python3、.sh → bash
+  - [ ] timeout 控制（預設 30 秒）
+  - [ ] 環境變數注入（SKILL_NAME, SKILL_DIR, SKILL_ASSETS_DIR）
+- [ ] 新增 `services/mcp/skill_script_tools.py` — MCP tool
+  - [ ] `run_skill_script(skill, script, input)` tool 定義
+  - [ ] 二次權限檢查：驗證 user 有此 skill 的 requires_app 權限
+  - [ ] 路徑穿越驗證（skill name + script name）
+- [ ] SkillManager 擴充
+  - [ ] `has_scripts(skill_name)` — 檢查 skill 是否有 scripts/
+  - [ ] `get_script_path(skill_name, script_name)` — 取得 script 絕對路徑（含驗證）
+  - [ ] `get_scripts_info(skill_name)` — 列出所有 script 的名稱和描述
+- [ ] `run_skill_script` 加入 ching-tech-os MCP server 的 tool 列表
+- [ ] 白名單邏輯：使用者有任何帶 scripts/ 的 skill → 自動加入 run_skill_script
 
-### Phase 2: 環境與 Assets
-- [ ] 環境變數注入（SKILL_NAME, SKILL_DIR, SKILL_ASSETS_DIR）
-- [ ] `.env` 變數繼承（根據 SKILL.md requires.env 宣告）
+### Phase 2: Prompt 注入 + 環境
+- [ ] `linebot_agents.py` — 有 script 的 skill，prompt 加入使用說明
+  - [ ] 列出 script 名稱、描述、用法範例
+  - [ ] {baseDir} 替換為 skill 實際路徑
+- [ ] `.env` 變數繼承（根據 SKILL.md metadata.openclaw.requires.env）
 - [ ] primaryEnv 缺少時的警告 log
-- [ ] 獨立工作目錄（/tmp/skill-runner/{session_id}/）
-- [ ] 工作目錄自動清理
+- [ ] 獨立工作目錄（/tmp/skill-runner/）+ 自動清理
 
-### Phase 3: AI 整合
-- [ ] `linebot_ai.py` — tool call 路由：`skill__` → ScriptToolRunner
-- [ ] `linebot_agents.py` — prompt 注入 script tool 使用說明
-- [ ] `ai_logs` 記錄 script 執行結果
-- [ ] allowed_tools 自動包含 script tools
-- [ ] 端到端測試：Line Bot / Telegram 對話 → script 執行 → 結果回傳
-
-### Phase 4: 前端 UI
-- [ ] Skill 詳情頁顯示 script tools 列表（名稱、描述、參數）
-- [ ] Script tool 的執行記錄整合到 AI Logs
-- [ ] 安裝 ClawHub skill 後顯示自動產生的 tools
+### Phase 3: 前端 + 記錄
+- [ ] `api/skills.py` — Skill 詳情加入 `script_tools` 欄位
+- [ ] 前端 Skill 詳情頁顯示 script tools 列表
+- [ ] script 執行結果記錄到 ai_logs（model 欄位填 "script"）
+- [ ] 安裝 ClawHub skill 後，UI 自動顯示可用的 scripts

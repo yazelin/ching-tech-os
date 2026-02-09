@@ -1,57 +1,40 @@
 # Bot Platform — Script Tool 整合
 
 ## Purpose
-讓 Claude Code 的 tool calling 支援 script 類 tool，實現從 AI 對話到 script 執行的完整流程。
+讓 Claude Code 的 AI 對話支援 skill script 呼叫，prompt 自動注入使用說明。
 
 ## ADDED Requirements
 
-### Tool 白名單整合
-
-WHEN SkillManager 產生使用者的 allowed_tools
-AND 使用者有權限使用某個 skill
-AND 該 skill 有 script tools
-THEN script tools 加入 allowed_tools 列表
-
 ### Prompt 注入
 
-WHEN 產生 AI 的 system prompt
-AND 使用者的 skill 包含 script tools
-THEN 在 prompt 中加入 script tools 的使用說明
-AND 格式與現有 MCP tool 說明一致
+WHEN 產生 AI system prompt
+AND user 有權限使用帶 scripts/ 的 skill
+THEN 在 prompt 中加入「Script Tools」區塊
+AND 列出每個 skill 的 scripts 名稱、描述、用法範例
 
 ### Tool Call 路由
 
-WHEN AI 回傳一個 tool call
-AND tool name 以 `skill__` 開頭
-THEN 路由到 ScriptToolRunner 執行
-AND 不送到 MCP server
+WHEN AI 回傳 tool call `run_skill_script`
+THEN 路由到 ScriptRunner 執行
+AND 將結果回傳給 AI 繼續對話
 
-WHEN tool name 以 `mcp__` 開頭
-THEN 維持現有行為，路由到 MCP server
+### 執行記錄
 
-### 執行結果記錄
-
-WHEN script tool 執行完成
+WHEN script 執行完成
 THEN 記錄到 ai_logs 表
-AND model 欄位填入 `script`
-AND input_prompt 記錄 script 名稱和參數
+AND model 欄位填入 "script"
+AND input_prompt 記錄 skill + script + input
 AND raw_response 記錄 stdout
 AND error_message 記錄 stderr（如有）
 AND duration_ms 記錄執行時間
 
 ## Scenarios
 
-### 使用者透過 Line Bot 呼叫 script tool
-GIVEN 使用者有 weather skill 權限
-AND weather skill 有 `skill__weather__get_forecast` tool
-WHEN 使用者問「台北天氣如何？」
-THEN AI 決定呼叫 `skill__weather__get_forecast`
-AND ScriptToolRunner 執行 `scripts/get_forecast.py --city Taipei`
-AND 回傳結果給 AI
-AND AI 整理後回覆使用者
-
-### MCP tool 和 Script tool 並存
-GIVEN 使用者有 ai-assistant skill（MCP tools）和 weather skill（script tools）
-WHEN 產生 allowed_tools
-THEN 同時包含 `mcp__nanobanana__generate_image` 和 `skill__weather__get_forecast`
-AND AI 可以在同一次對話中使用兩種 tool
+### 完整對話流程
+GIVEN user 有 weather skill 權限
+WHEN user 說「台北天氣如何」
+THEN AI 在 prompt 中看到 weather skill 的 get_forecast script
+AND AI 決定呼叫 run_skill_script(skill="weather", script="get_forecast", input="Taipei")
+AND ScriptRunner 執行 → 回傳天氣資訊
+AND AI 整理後回覆 user
+AND ai_logs 記錄此次 script 執行
