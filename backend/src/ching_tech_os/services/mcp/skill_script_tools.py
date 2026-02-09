@@ -34,10 +34,16 @@ async def run_skill_script(
         return json.dumps({"success": False, "error": f"Skill not found: {skill}"}, ensure_ascii=False)
 
     # 權限檢查：驗證使用者有此 skill 的 requires_app 權限
-    if skill_obj.requires_app and ctos_user_id:
-        from ..permissions import get_user_app_permissions
-        user_apps = await get_user_app_permissions(ctos_user_id)
-        if not user_apps.get(skill_obj.requires_app, False):
+    if skill_obj.requires_app:
+        from ..permissions import get_user_app_permissions, DEFAULT_APP_PERMISSIONS
+        if ctos_user_id:
+            user_apps = await get_user_app_permissions(ctos_user_id)
+            allowed = user_apps.get(skill_obj.requires_app, False)
+        else:
+            # 未提供使用者 ID，使用預設權限
+            allowed = DEFAULT_APP_PERMISSIONS.get(skill_obj.requires_app, False)
+
+        if not allowed:
             return json.dumps({
                 "success": False,
                 "error": f"無權限使用 skill '{skill}'（需要 {skill_obj.requires_app} 權限）",

@@ -27,6 +27,7 @@ AND input_prompt 記錄 skill + script + input
 AND raw_response 記錄 stdout
 AND error_message 記錄 stderr（如有）
 AND duration_ms 記錄執行時間
+> **Note**: ai_logs 記錄為 Phase 3 功能，Phase 1 僅用 logger.info 記錄。
 
 ## Scenarios
 

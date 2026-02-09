@@ -570,27 +570,24 @@ class SkillManager:
         requires = openclaw_meta.get("requires") or {}
         env_keys = requires.get("env") or []
 
-        for key in env_keys:
+        def _process_key(key: str, is_primary: bool = False) -> None:
+            log_source = f"primaryEnv '{key}'" if is_primary else f"環境變數 '{key}'"
             if key.upper() in self._ENV_BLOCKLIST:
-                logger.warning(f"Skill '{skill.name}' 請求被封鎖的環境變數 {key}，已拒絕")
-                continue
+                logger.warning(f"Skill '{skill.name}' 請求的 {log_source} 被封鎖，已拒絕")
+                return
             val = os.environ.get(key)
             if val:
                 env[key] = val
             else:
-                logger.warning(f"Skill '{skill.name}' 需要環境變數 {key} 但未設定")
+                logger.warning(f"Skill '{skill.name}' 需要的 {log_source} 未設定")
+
+        for key in env_keys:
+            _process_key(key)
 
         # primaryEnv 也繼承（同樣受 blocklist 限制）
         primary = openclaw_meta.get("primaryEnv")
         if primary and primary not in env:
-            if primary.upper() in self._ENV_BLOCKLIST:
-                logger.warning(f"Skill '{skill.name}' 的 primaryEnv {primary} 被封鎖")
-            else:
-                val = os.environ.get(primary)
-                if val:
-                    env[primary] = val
-                else:
-                    logger.warning(f"Skill '{skill.name}' 的 primaryEnv {primary} 未設定")
+            _process_key(primary, is_primary=True)
 
         return env
 
