@@ -128,15 +128,13 @@ class ClawHubClient:
             ) as resp:
                 resp.raise_for_status()
                 data = b""
-                async for chunk in resp.aiter_bytes(8192):
+                async for chunk in resp.aiter_bytes():
                     data += chunk
                     if len(data) > _MAX_ZIP_SIZE:
                         raise ClawHubError(
-                            f"ZIP 檔案過大（上限 {_MAX_ZIP_SIZE} bytes）",
-                            status_code=413,
+                            f"ZIP 檔案過大: {len(data)} bytes（上限 {_MAX_ZIP_SIZE} bytes）"
                         )
-
-            return data
+                return data
         except httpx.HTTPStatusError as e:
             raise ClawHubError(
                 f"下載失敗: HTTP {e.response.status_code}",
@@ -226,7 +224,7 @@ class ClawHubClient:
                 basename = name.rsplit("/", 1)[-1] if "/" in name else name
                 if basename == filename or name == filename:
                     if info.file_size > 10 * 1024 * 1024:  # 10MB limit
-                        raise ClawHubError("File too large in ZIP")
+                        raise ClawHubError(f"檔案過大: {info.file_size} bytes")
                     return zf.read(info).decode("utf-8", errors="replace")
 
         return None
