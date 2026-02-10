@@ -106,15 +106,46 @@ const ThemeManager = (function () {
   }
 
   /**
+   * 偵測系統 prefers-color-scheme 並回傳對應主題
+   * @returns {string} 'dark' 或 'light'
+   */
+  function getSystemTheme() {
+    try {
+      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+        return 'light';
+      }
+    } catch (e) { /* matchMedia 不支援時忽略 */ }
+    return 'dark';
+  }
+
+  /**
+   * 監聽系統主題變更，若使用者未手動設定則自動跟隨
+   */
+  function listenSystemThemeChange() {
+    try {
+      const mql = window.matchMedia('(prefers-color-scheme: dark)');
+      mql.addEventListener('change', (e) => {
+        // 僅在使用者未手動儲存主題時跟隨系統
+        if (!localStorage.getItem(STORAGE_KEY)) {
+          applyTheme(e.matches ? 'dark' : 'light', true);
+        }
+      });
+    } catch (e) { /* 不支援 matchMedia 時靜默忽略 */ }
+  }
+
+  /**
    * 初始化主題系統
-   * 從 localStorage 讀取並套用主題
+   * 優先使用 localStorage；若無儲存值則偵測系統 prefers-color-scheme
    */
   function init() {
     if (isInitialized) return;
 
-    // 立即套用儲存的主題（避免閃爍）
-    const storedTheme = getStoredTheme();
-    applyTheme(storedTheme);
+    const stored = localStorage.getItem(STORAGE_KEY);
+    const theme = stored || getSystemTheme();
+    applyTheme(theme);
+
+    // 啟動系統主題變更監聽
+    listenSystemThemeChange();
 
     isInitialized = true;
   }
