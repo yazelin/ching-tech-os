@@ -43,5 +43,6 @@ document.addEventListener('DOMContentLoaded', async function () {
   WindowModule.init();
   HeaderModule.init();
   DesktopModule.init();
+  TaskbarModule.init();
   SocketClient.connect();
 });
