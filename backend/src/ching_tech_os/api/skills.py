@@ -275,18 +275,14 @@ async def hub_install(
         tmp_dest.rename(dest)
 
     except ClawHubError as e:
-        # 清理臨時目錄
-        if tmp_dest.exists():
-            shutil.rmtree(tmp_dest)
         raise HTTPException(
             status_code=e.status_code or 502,
             detail=f"安裝失敗: {e}",
         )
-    except Exception:
+    finally:
         # 清理臨時目錄
         if tmp_dest.exists():
             shutil.rmtree(tmp_dest)
-        raise
 
     # 重載
     await sm.reload_skills()

@@ -1379,29 +1379,27 @@ const AgentSettingsApp = (function() {
               const owner = result.owner || {};
               const latest = result.latestVersion || {};
               const fields = [];
+              const addField = (label, value, isHtml = false) => {
+                if (value) {
+                  const val = isHtml ? value : escapeHtml(String(value));
+                  fields.push(`<div class="skill-detail-field"><span class="skill-detail-label">${label}</span><span class="skill-detail-value">${val}</span></div>`);
+                }
+              };
 
               // 作者資訊（含 avatar）
               if (owner.handle) {
                 const avatarHtml = owner.image
                   ? `<img class="skill-hub-avatar-sm" src="${escapeHtml(owner.image)}" alt="">`
                   : '';
-                fields.push(`<div class="skill-detail-field"><span class="skill-detail-label">作者</span><span class="skill-detail-value">${avatarHtml}${escapeHtml(owner.displayName || owner.handle)}</span></div>`);
+                addField('作者', `${avatarHtml}${escapeHtml(owner.displayName || owner.handle)}`, true);
               }
-              if (latest.version) {
-                fields.push(`<div class="skill-detail-field"><span class="skill-detail-label">最新版本</span><span class="skill-detail-value">${escapeHtml(latest.version)}</span></div>`);
-              }
-              if (skill.summary) {
-                fields.push(`<div class="skill-detail-field"><span class="skill-detail-label">說明</span><span class="skill-detail-value">${escapeHtml(skill.summary)}</span></div>`);
-              }
-              if (latest.changelog) {
-                fields.push(`<div class="skill-detail-field"><span class="skill-detail-label">更新日誌</span><span class="skill-detail-value">${escapeHtml(latest.changelog)}</span></div>`);
-              }
-              if (skill.updatedAt) {
-                fields.push(`<div class="skill-detail-field"><span class="skill-detail-label">更新時間</span><span class="skill-detail-value">${escapeHtml(relativeTime(skill.updatedAt))}</span></div>`);
-              }
+              addField('最新版本', latest.version);
+              addField('說明', skill.summary);
+              addField('更新日誌', latest.changelog);
+              addField('更新時間', skill.updatedAt ? relativeTime(skill.updatedAt) : '');
               if (skill.tags && skill.tags.length > 0) {
                 const tagsHtml = skill.tags.map(t => `<span class="skill-badge">${escapeHtml(t)}</span>`).join(' ');
-                fields.push(`<div class="skill-detail-field"><span class="skill-detail-label">標籤</span><span class="skill-detail-value">${tagsHtml}</span></div>`);
+                addField('標籤', tagsHtml, true);
               }
               if (skill.stats) {
                 const stats = skill.stats;
@@ -1409,7 +1407,7 @@ const AgentSettingsApp = (function() {
                 if (stats.installs != null) statsItems.push(`${stats.installs} 安裝`);
                 if (stats.stars != null) statsItems.push(`⭐ ${stats.stars}`);
                 if (statsItems.length > 0) {
-                  fields.push(`<div class="skill-detail-field"><span class="skill-detail-label">統計</span><span class="skill-detail-value">${escapeHtml(statsItems.join(' · '))}</span></div>`);
+                  addField('統計', statsItems.join(' · '));
                 }
               }
               metaEl.innerHTML = fields.join('');
