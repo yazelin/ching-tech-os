@@ -283,6 +283,14 @@ async def hub_install(
                     # 下載並解壓到臨時目錄
                     await client.download_and_extract(data.name, version, tmp_dest)
 
+                    # 標記 source 為 clawhub（讓前端顯示移除按鈕）
+                    skill_md = tmp_dest / "SKILL.md"
+                    if skill_md.exists():
+                        content = skill_md.read_text(encoding="utf-8")
+                        if "source:" not in content:
+                            content = content.replace("---\n\n", "source: clawhub\n---\n\n", 1)
+                            skill_md.write_text(content, encoding="utf-8")
+
                     # 寫入 _meta.json
                     ClawHubClient.write_meta(tmp_dest, data.name, version, owner_handle)
 
