@@ -47,29 +47,16 @@ const ExternalAppModule = (function() {
       height,
       content: `
         <div class="external-app-container">
-          <!-- [Sprint6] 保留原 loading 容器供 iframe 載入週期控制 -->
-          <div class="external-app-loading">
-            <div class="ui-state ui-state--loading" role="status" aria-live="polite">
-              <span class="ui-state-icon">${typeof getIcon === 'function' ? getIcon('refresh') : ''}</span>
-              <span class="ui-state-text">載入中...</span>
-            </div>
-          </div>
+          <!-- [Sprint7] 原始: inline ui-state--loading HTML (Sprint6); 現改用 UIHelpers API -->
+          <div class="external-app-loading"></div>
           <iframe
             class="external-app-iframe"
             src="${url}"
             allow="clipboard-read; clipboard-write; fullscreen; autoplay; camera; microphone; display-capture; window-management"
             sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-forms allow-modals allow-downloads"
           ></iframe>
-          <div class="external-app-error" style="display: none;">
-            <div class="ui-state ui-state--error" role="alert" aria-live="assertive">
-              <span class="ui-state-icon">${typeof getIcon === 'function' ? getIcon('alert-circle') : ''}</span>
-              <span class="ui-state-text">無法載入外部服務</span>
-            </div>
-            <a href="${url}" target="_blank" class="external-app-open-link">
-              <span class="icon">${typeof getIcon === 'function' ? getIcon('mdi-open-in-new') : ''}</span>
-              在新視窗開啟
-            </a>
-          </div>
+          <!-- [Sprint7] 原始: inline ui-state--error HTML + open-link (Sprint6) -->
+          <div class="external-app-error" style="display: none;" data-url="${url}"></div>
         </div>
       `,
       onClose: () => handleClose(appId),
@@ -116,6 +103,19 @@ const ExternalAppModule = (function() {
     const iframe = windowEl.querySelector('.external-app-iframe');
     const loading = windowEl.querySelector('.external-app-loading');
     const error = windowEl.querySelector('.external-app-error');
+
+    // [Sprint7] 使用 UIHelpers API 填充 loading/error 容器
+    if (loading) UIHelpers.showLoading(loading, { text: '載入中…' });
+    if (error) {
+      const errorUrl = error.dataset.url || url;
+      UIHelpers.showError(error, { message: '無法載入外部服務' });
+      const link = document.createElement('a');
+      link.href = errorUrl;
+      link.target = '_blank';
+      link.className = 'external-app-open-link';
+      link.innerHTML = (typeof getIcon === 'function' ? '<span class="icon">' + getIcon('mdi-open-in-new') + '</span>' : '') + ' 在新視窗開啟';
+      error.appendChild(link);
+    }
 
     if (iframe) {
       // 儲存 iframe 參考供 postMessage 使用
