@@ -140,10 +140,7 @@ const SettingsApp = (function () {
 
             <div class="settings-group">
               <div class="users-list-container">
-                <div class="users-loading">
-                  <span class="icon">${getIcon('loading', 'mdi-spin')}</span>
-                  <span>載入中...</span>
-                </div>
+                <!-- [Sprint7] 原始: <div class="users-loading"><span class="icon">${getIcon('loading','mdi-spin')}</span><span>載入中...</span></div> -->
               </div>
             </div>
           </section>
@@ -151,10 +148,7 @@ const SettingsApp = (function () {
           <section class="settings-section" id="section-bot-settings">
             <h2 class="settings-section-title">Bot 設定</h2>
             <div class="bot-settings-container">
-              <div class="users-loading">
-                <span class="icon">${getIcon('loading', 'mdi-spin')}</span>
-                <span>載入中...</span>
-              </div>
+              <!-- [Sprint7] 原始: <div class="users-loading"><span class="icon">${getIcon('loading','mdi-spin')}</span><span>載入中...</span></div> -->
             </div>
           </section>
           ` : ''}
@@ -256,10 +250,15 @@ const SettingsApp = (function () {
 
     // 如果切換到使用者管理，載入使用者列表
     if (sectionId === 'users') {
+      // [Sprint7] 使用 UIHelpers 顯示初始 loading 狀態
+      const usersContainer = windowEl.querySelector('.users-list-container');
+      if (usersContainer) UIHelpers.showLoading(usersContainer, { text: '載入中…' });
       loadUsersList(windowEl);
     }
     // 如果切換到 Bot 設定，載入設定
     if (sectionId === 'bot-settings') {
+      const botContainer = windowEl.querySelector('.bot-settings-container');
+      if (botContainer) UIHelpers.showLoading(botContainer, { text: '載入中…' });
       loadBotSettings(windowEl);
     }
   }
@@ -286,12 +285,8 @@ const SettingsApp = (function () {
       const data = await response.json();
       renderUsersList(container, data.users);
     } catch (error) {
-      container.innerHTML = `
-        <div class="users-error">
-          <span class="icon">${getIcon('alert-circle')}</span>
-          <span>載入使用者列表失敗：${escapeHtml(error.message)}</span>
-        </div>
-      `;
+      // [Sprint7] 原始: container.innerHTML = '<div class="users-error">...<span>載入使用者列表失敗</span></div>'
+      UIHelpers.showError(container, { message: '載入使用者列表失敗', detail: escapeHtml(error.message), onRetry: () => loadUsersList(windowEl) });
     }
   }
 
@@ -561,21 +556,24 @@ const SettingsApp = (function () {
 
         html += renderBotPlatformCard(platform, config, data);
       } catch (error) {
+        // [Sprint7] 原始: html += '<div class="settings-group">...<div class="users-error">載入失敗</div></div>'
         html += `
           <div class="settings-group">
             <h3 class="settings-group-title">
               <span class="icon">${getIcon(config.icon)}</span> ${config.name}
             </h3>
-            <div class="users-error">
-              <span class="icon">${getIcon('alert-circle')}</span>
-              <span>載入失敗：${error.message}</span>
-            </div>
+            <div class="bot-error-placeholder" data-platform="${platform}"></div>
           </div>
         `;
+        // Defer UIHelpers.showError to after innerHTML is set (see below)
       }
     }
 
     container.innerHTML = html;
+    // [Sprint7] 填充延遲的 bot error placeholders
+    container.querySelectorAll('.bot-error-placeholder').forEach(el => {
+      UIHelpers.showError(el, { message: '載入失敗', onRetry: () => loadBotSettings(windowEl) });
+    });
     bindBotSettingsEvents(container, windowEl);
   }
 
