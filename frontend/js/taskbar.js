@@ -1,6 +1,10 @@
 /**
  * ChingTech OS - Taskbar Module
  * 底部 Dock 啟動列：快速啟動、視窗聚焦、運行指示器
+ *
+ * [Sprint8] 此模組為固定應用程式啟動列，應用程式列表為靜態配置，
+ * 不涉及非同步載入或動態內容，因此無需 UIHelpers 狀態回饋。
+ * 若未來加入可配置/動態載入的啟動列項目，應考慮使用 UIHelpers.showLoading。
  */
 
 const TaskbarModule = (function () {
