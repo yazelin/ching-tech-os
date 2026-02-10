@@ -507,3 +507,40 @@
   font-size: var(--font-size-base);
   font-weight: 600;
 }
+
+/* ==========================================================================
+   減少動態效果（無障礙）
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  /* 主題切換按鈕 */
+  .theme-toggle-btn {
+    transition: none;
+  }
+
+  /* 背景漸層過渡 */
+  .login-container::after {
+    transition: none;
+  }
+
+  /* Logo 發光呼吸動畫 */
+  .login-logo-icon,
+  :root[data-theme="light"] .login-logo-icon {
+    animation: none;
+  }
+
+  /* 密碼顯示切換按鈕 */
+  .password-toggle {
+    transition: none;
+  }
+
+  /* Submit loading 旋轉動畫 */
+  .login-btn .ui-state-icon svg,
+  .login-btn .spin {
+    animation: none;
+  }
+
+  /* 變更密碼輸入框 */
+  .change-password-form .form-group .input {
+    transition: none;
+  }
+}
