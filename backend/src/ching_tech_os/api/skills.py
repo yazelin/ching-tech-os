@@ -8,7 +8,11 @@ import tempfile
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from typing import Literal
 from pydantic import BaseModel, Field
+
+# 允許的 Hub 來源
+HubSource = Literal["clawhub", "skillhub"]
 
 from ..models.auth import SessionData
 from .auth import require_admin
@@ -50,7 +54,7 @@ def _get_clients(request: Request) -> list[tuple[str, ClawHubClient | SkillHubCl
 
 
 def _get_client_for_source(
-    request: Request, source: str,
+    request: Request, source: HubSource,
 ) -> ClawHubClient | SkillHubClient:
     """根據來源標籤取得對應的 client"""
     if source == "skillhub":
@@ -74,18 +78,18 @@ class SkillUpdateRequest(BaseModel):
 
 class HubSearchRequest(BaseModel):
     query: str
-    source: str | None = None  # "clawhub" | "skillhub" | None (both)
+    source: HubSource | None = None  # None = both
 
 
 class HubInspectRequest(BaseModel):
     slug: str
-    source: str = "clawhub"  # 必須指定來源
+    source: HubSource = "clawhub"
 
 
 class HubInstallRequest(BaseModel):
     name: str
     version: str | None = Field(None, max_length=50)
-    source: str = "clawhub"  # 必須指定來源
+    source: HubSource = "clawhub"
 
 
 # === Endpoints ===
@@ -266,7 +270,7 @@ async def hub_search(
             for r in results:
                 r["source"] = source
             all_results.extend(results)
-        except _HubError as e:
+        except Exception as e:
             errors.append(f"{_source_label(source)}: {e}")
             logger.warning("搜尋 %s 失敗: %s", source, e)
 
