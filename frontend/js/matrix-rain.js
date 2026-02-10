@@ -129,7 +129,7 @@ const MatrixRain = (function() {
       return;
     }
 
-    // 監聯設定變化（使用者可能在執行期間切換）
+    // 監聽設定變化（使用者可能在執行期間切換）
     window.matchMedia('(prefers-reduced-motion: reduce)')
       .addEventListener('change', (e) => {
         if (e.matches) {

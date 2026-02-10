@@ -294,7 +294,7 @@
 
 /* data-animations="off" 支援 */
 html[data-animations="off"] .header-logo,
-html[data-animations="off"] :root[data-theme="light"] .header-logo {
+html[data-animations="off"][data-theme="light"] .header-logo {
   animation: none;
 }
 
