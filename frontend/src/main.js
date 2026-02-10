@@ -15,10 +15,11 @@ import './js/entry-compat.js';
 
 // ─── 初始化 Header Icons ───
 // 原本位於 index.html 的 inline <script>
-document.getElementById('iconClock').innerHTML = getIcon('clock-outline');
-document.getElementById('iconMessages').innerHTML = getIcon('bell-outline');
-document.getElementById('iconUser').innerHTML = getIcon('account-circle');
-document.getElementById('iconLogout').innerHTML = getIcon('logout');
+// 使用 window.getIcon 確保在 Vite bundle 中可正確存取
+document.getElementById('iconClock').innerHTML = window.getIcon('clock-outline');
+document.getElementById('iconMessages').innerHTML = window.getIcon('bell-outline');
+document.getElementById('iconUser').innerHTML = window.getIcon('account-circle');
+document.getElementById('iconLogout').innerHTML = window.getIcon('logout');
 
 // ─── DOMContentLoaded 初始化 ───
 // 原本位於 index.html 的 inline <script>
