@@ -1392,7 +1392,7 @@ const AgentSettingsApp = (function() {
               if (owner.handle) {
                 const avatarUrl = (owner.image || '').startsWith('http') ? owner.image : null;
                 const avatarHtml = avatarUrl
-                  ? `<img class="skill-hub-avatar-sm" src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(owner.displayName || owner.handle)}">`
+                  ? `<img class="skill-hub-avatar-sm" src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(owner.displayName || owner.handle)}" loading="lazy">`
                   : '';
                 addField('作者', `${avatarHtml}${escapeHtml(owner.displayName || owner.handle)}`, true);
               }

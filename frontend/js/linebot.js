@@ -211,7 +211,7 @@ const LineBotApp = (function () {
                         <div class="linebot-binding-label">已綁定 ${platformName} 帳號</div>
                         <div class="linebot-binding-detail">
                             ${platformStatus.picture_url
-                                ? `<img class="linebot-binding-avatar" src="${platformStatus.picture_url}" alt="">`
+                                ? `<img class="linebot-binding-avatar" src="${platformStatus.picture_url}" alt="" loading="lazy">`
                                 : ''
                             }
                             <span>${platformStatus.display_name || `${platformName} 用戶`}</span>
@@ -476,7 +476,7 @@ const LineBotApp = (function () {
                  data-id="${group.id}">
                 <div class="linebot-group-avatar">
                     ${group.picture_url
-                        ? `<img src="${group.picture_url}" alt="${group.name || '群組'}">`
+                        ? `<img src="${group.picture_url}" alt="${group.name || '群組'}" loading="lazy">`
                         : '👥'
                     }
                 </div>
@@ -549,7 +549,7 @@ const LineBotApp = (function () {
             <div class="linebot-detail-header">
                 <div class="linebot-detail-avatar">
                     ${group.picture_url
-                        ? `<img src="${group.picture_url}" alt="${group.name || '群組'}">`
+                        ? `<img src="${group.picture_url}" alt="${group.name || '群組'}" loading="lazy">`
                         : '👥'
                     }
                 </div>
@@ -639,7 +639,7 @@ const LineBotApp = (function () {
             <div class="linebot-message ${msg.is_from_bot ? 'from-bot' : ''}">
                 <div class="linebot-message-avatar">
                     ${msg.user_picture_url
-                        ? `<img src="${msg.user_picture_url}" alt="">`
+                        ? `<img src="${msg.user_picture_url}" alt="" loading="lazy">`
                         : (msg.is_from_bot ? '🤖' : '👤')
                     }
                 </div>
@@ -680,7 +680,7 @@ const LineBotApp = (function () {
             <div class="linebot-user-card" data-id="${user.id}">
                 <div class="linebot-user-avatar">
                     ${user.picture_url
-                        ? `<img src="${user.picture_url}" alt="${user.display_name || '用戶'}">`
+                        ? `<img src="${user.picture_url}" alt="${user.display_name || '用戶'}" loading="lazy">`
                         : '👤'
                     }
                 </div>
@@ -722,7 +722,7 @@ const LineBotApp = (function () {
             <div class="linebot-message ${msg.is_from_bot ? 'from-bot' : ''}">
                 <div class="linebot-message-avatar">
                     ${msg.user_picture_url
-                        ? `<img src="${msg.user_picture_url}" alt="">`
+                        ? `<img src="${msg.user_picture_url}" alt="" loading="lazy">`
                         : (msg.is_from_bot ? '🤖' : '👤')
                     }
                 </div>
