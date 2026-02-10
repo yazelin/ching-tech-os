@@ -53,11 +53,6 @@
     padding-top: env(safe-area-inset-top);
   }
 
-  /* taskbar 底部安全區域 */
-  .taskbar {
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-
   /* ========================================================================
      4. 捲動行為優化
      ======================================================================== */
@@ -90,11 +85,6 @@
   h1 { font-size: 1.5rem; line-height: 1.3; }
   h2 { font-size: 1.25rem; line-height: 1.35; }
   h3 { font-size: 1.1rem; line-height: 1.4; }
-
-  /* 段落與列表加大行距 */
-  p, li, td, th {
-    line-height: 1.6;
-  }
 
   /* 小字文字（如 caption、label）確保最小可讀性 */
   small, .text-sm, caption, label {
