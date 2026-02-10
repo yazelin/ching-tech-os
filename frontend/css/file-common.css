@@ -124,7 +124,7 @@
   border-radius: 8px;
   border: 1px solid var(--border-subtle);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition-normal);
 }
 
 .file-card:hover {
@@ -176,7 +176,7 @@
   border-radius: 4px;
   cursor: pointer;
   color: var(--text-secondary);
-  transition: all 0.15s;
+  transition: all var(--transition-fast);
 }
 
 .file-icon-btn:hover {

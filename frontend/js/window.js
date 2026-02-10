@@ -106,40 +106,42 @@ const WindowModule = (function() {
     windowEl.className = 'window';
     windowEl.id = windowId;
     windowEl.dataset.appId = appId;
+    windowEl.setAttribute('role', 'dialog');
+    windowEl.setAttribute('aria-label', title);
     windowEl.style.width = `${width}px`;
     windowEl.style.height = `${height}px`;
     windowEl.style.left = `${x}px`;
     windowEl.style.top = `${y}px`;
 
     windowEl.innerHTML = `
-      <div class="window-titlebar">
+      <div class="window-titlebar" role="toolbar" aria-label="視窗控制">
         <div class="window-titlebar-left">
-          <span class="window-icon icon">${getIcon(icon)}</span>
-          <span class="window-title">${title}</span>
+          <span class="window-icon icon" aria-hidden="true">${getIcon(icon)}</span>
+          <span class="window-title" id="${windowId}-title">${title}</span>
         </div>
         <div class="window-titlebar-right">
-          <button class="window-btn window-btn-minimize" title="最小化">
-            <span class="icon">${getIcon('minus')}</span>
+          <button class="window-btn window-btn-minimize" title="最小化" aria-label="最小化視窗">
+            <span class="icon" aria-hidden="true">${getIcon('minus')}</span>
           </button>
-          <button class="window-btn window-btn-maximize" title="最大化">
-            <span class="icon">${getIcon('window-maximize')}</span>
+          <button class="window-btn window-btn-maximize" title="最大化" aria-label="最大化視窗">
+            <span class="icon" aria-hidden="true">${getIcon('window-maximize')}</span>
           </button>
-          <button class="window-btn window-btn-close" title="關閉">
-            <span class="icon">${getIcon('close')}</span>
+          <button class="window-btn window-btn-close" title="關閉" aria-label="關閉視窗">
+            <span class="icon" aria-hidden="true">${getIcon('close')}</span>
           </button>
         </div>
       </div>
       <div class="window-content">
         ${content}
       </div>
-      <div class="window-resize window-resize-n" data-direction="n"></div>
-      <div class="window-resize window-resize-s" data-direction="s"></div>
-      <div class="window-resize window-resize-w" data-direction="w"></div>
-      <div class="window-resize window-resize-e" data-direction="e"></div>
-      <div class="window-resize window-resize-nw" data-direction="nw"></div>
-      <div class="window-resize window-resize-ne" data-direction="ne"></div>
-      <div class="window-resize window-resize-sw" data-direction="sw"></div>
-      <div class="window-resize window-resize-se" data-direction="se"></div>
+      <div class="window-resize window-resize-n" data-direction="n" aria-hidden="true"></div>
+      <div class="window-resize window-resize-s" data-direction="s" aria-hidden="true"></div>
+      <div class="window-resize window-resize-w" data-direction="w" aria-hidden="true"></div>
+      <div class="window-resize window-resize-e" data-direction="e" aria-hidden="true"></div>
+      <div class="window-resize window-resize-nw" data-direction="nw" aria-hidden="true"></div>
+      <div class="window-resize window-resize-ne" data-direction="ne" aria-hidden="true"></div>
+      <div class="window-resize window-resize-sw" data-direction="sw" aria-hidden="true"></div>
+      <div class="window-resize window-resize-se" data-direction="se" aria-hidden="true"></div>
     `;
 
     // Add to DOM
@@ -243,6 +245,38 @@ const WindowModule = (function() {
         startResize(windowId, { clientX: pos.clientX, clientY: pos.clientY, type: 'touchstart' }, handle.dataset.direction);
         e.preventDefault();
       }, { passive: false });
+    });
+
+    // Keyboard: Escape 鍵關閉視窗
+    windowEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        closeWindow(windowId);
+        return;
+      }
+
+      // Focus trap：Tab 鍵循環在視窗內的可聚焦元素
+      if (e.key === 'Tab') {
+        const focusable = windowEl.querySelectorAll(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusable.length === 0) return;
+
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      }
     });
   }
 
@@ -870,6 +904,8 @@ const WindowModule = (function() {
       titleEl.textContent = newTitle;
       windowInfo.title = newTitle;
     }
+    // 同步更新 ARIA 標籤
+    windowInfo.element.setAttribute('aria-label', newTitle);
   }
 
   /**

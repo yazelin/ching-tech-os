@@ -51,13 +51,15 @@ CSS 變數架構 SHALL 支援主題切換功能。
 
 #### Scenario: 主色系使用
 - **WHEN** UI 需要使用主要品牌色
-- **THEN** 必須使用 ChingTech Blue `#1C4FA8`、Deep Industrial Navy `#0F1C2E`、AI Neon Cyan `#21D4FD`
+- **THEN** 必須使用 ChingTech Cyan `#0891b2`、Background `#1a1a1a`、Accent Orange `#ea580c`
 - **AND** 透過 `--color-primary`、`--color-background`、`--color-accent` 變數引用
+- **NOTE** 色碼同步來源：`frontend/css/main.css :root` 與 `design/brand.md`
 
 #### Scenario: 狀態色使用
 - **WHEN** UI 需要表示成功、警告、錯誤狀態
-- **THEN** 必須使用 Action Green `#4CC577`、Warning Amber `#FFC557`、Error Red `#E65050`
+- **THEN** 必須使用 Success Green `#16a34a`、Warning Amber `#d97706`、Error Red `#dc2626`
 - **AND** 透過 `--color-success`、`--color-warning`、`--color-error` 變數引用
+- **NOTE** 色碼同步來源：`frontend/css/main.css :root` 與 `design/brand.md`
 
 ### Requirement: CSS Variable Naming Convention
 The system SHALL use industry-standard CSS variable naming conventions for text colors.

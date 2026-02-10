@@ -166,13 +166,16 @@ const DesktopModule = (function() {
     if (!container) {
       container = document.createElement('div');
       container.className = 'toast-container';
+      container.setAttribute('role', 'status');
+      container.setAttribute('aria-live', 'polite');
       document.body.appendChild(container);
     }
 
     const toast = document.createElement('div');
     toast.className = 'toast';
+    toast.setAttribute('role', 'alert');
     toast.innerHTML = `
-      <span class="icon">${getIcon(icon)}</span>
+      <span class="icon" aria-hidden="true">${getIcon(icon)}</span>
       <span>${message}</span>
     `;
     container.appendChild(toast);
@@ -300,6 +303,8 @@ const DesktopModule = (function() {
 
     const menu = document.createElement('div');
     menu.className = 'touch-context-menu';
+    menu.setAttribute('role', 'menu');
+    menu.setAttribute('aria-label', `${app.name} 選單`);
     menu.style.position = 'fixed';
     menu.style.left = `${x}px`;
     menu.style.top = `${y}px`;
@@ -312,10 +317,10 @@ const DesktopModule = (function() {
     menu.style.minWidth = '140px';
 
     menu.innerHTML = `
-      <div class="ctx-item" data-action="open" style="padding:8px 16px;cursor:pointer;color:var(--text-color,#eee);">
+      <div class="ctx-item" data-action="open" role="menuitem" tabindex="0" style="padding:8px 16px;cursor:pointer;color:var(--text-color,#eee);">
         開啟「${app.name}」
       </div>
-      <div class="ctx-item" data-action="info" style="padding:8px 16px;cursor:pointer;color:var(--text-color,#eee);">
+      <div class="ctx-item" data-action="info" role="menuitem" tabindex="0" style="padding:8px 16px;cursor:pointer;color:var(--text-color,#eee);">
         應用程式資訊
       </div>
     `;
@@ -368,6 +373,10 @@ const DesktopModule = (function() {
   function renderIcons() {
     const desktopArea = document.querySelector('.desktop-area');
     if (!desktopArea) return;
+
+    // 設定桌面區域的無障礙屬性
+    desktopArea.setAttribute('role', 'region');
+    desktopArea.setAttribute('aria-label', '桌面應用程式');
 
     // 插入 skeleton 骨架佔位元素
     const skeletonCount = 8;
