@@ -193,6 +193,88 @@ const DesktopModule = (function() {
   }
 
 
+  // Long-press 觸控狀態（用於模擬右鍵選單）
+  const LONG_PRESS_DELAY = 600; // 毫秒
+  let longPressTimer = null;
+  let longPressTriggered = false;
+
+  /**
+   * Open context menu for an app icon
+   * @param {string} appId
+   * @param {number} x - viewport X position
+   * @param {number} y - viewport Y position
+   */
+  function openContextMenu(appId, x, y) {
+    // 先移除任何已存在的右鍵選單
+    closeContextMenu();
+
+    const app = applications.find(a => a.id === appId);
+    if (!app) return;
+
+    const menu = document.createElement('div');
+    menu.className = 'touch-context-menu';
+    menu.style.position = 'fixed';
+    menu.style.left = `${x}px`;
+    menu.style.top = `${y}px`;
+    menu.style.zIndex = '10000';
+    menu.style.background = 'var(--surface-color, #2d2d2d)';
+    menu.style.border = '1px solid var(--border-color, #555)';
+    menu.style.borderRadius = '6px';
+    menu.style.padding = '4px 0';
+    menu.style.boxShadow = '0 4px 12px rgba(0,0,0,0.4)';
+    menu.style.minWidth = '140px';
+
+    menu.innerHTML = `
+      <div class="ctx-item" data-action="open" style="padding:8px 16px;cursor:pointer;color:var(--text-color,#eee);">
+        開啟「${app.name}」
+      </div>
+      <div class="ctx-item" data-action="info" style="padding:8px 16px;cursor:pointer;color:var(--text-color,#eee);">
+        應用程式資訊
+      </div>
+    `;
+
+    document.body.appendChild(menu);
+
+    // 確保選單不超出視窗
+    const rect = menu.getBoundingClientRect();
+    if (rect.right > window.innerWidth) {
+      menu.style.left = `${window.innerWidth - rect.width - 8}px`;
+    }
+    if (rect.bottom > window.innerHeight) {
+      menu.style.top = `${window.innerHeight - rect.height - 8}px`;
+    }
+
+    // 綁定選單項目點擊
+    menu.querySelectorAll('.ctx-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const action = item.dataset.action;
+        if (action === 'open') {
+          openApp(appId);
+        } else if (action === 'info') {
+          showToast(`${app.name}（${app.id}）`, app.icon);
+        }
+        closeContextMenu();
+      });
+      // hover 效果
+      item.addEventListener('mouseenter', () => { item.style.background = 'rgba(255,255,255,0.1)'; });
+      item.addEventListener('mouseleave', () => { item.style.background = 'transparent'; });
+    });
+
+    // 點擊其他區域關閉選單
+    setTimeout(() => {
+      document.addEventListener('click', closeContextMenu, { once: true });
+      document.addEventListener('touchstart', closeContextMenu, { once: true });
+    }, 50);
+  }
+
+  /**
+   * Close any open context menu
+   */
+  function closeContextMenu() {
+    const existing = document.querySelector('.touch-context-menu');
+    if (existing) existing.remove();
+  }
+
   /**
    * Render all desktop icons
    */
@@ -208,6 +290,40 @@ const DesktopModule = (function() {
     visibleApps.forEach(app => {
       const iconElement = createIconElement(app);
       iconElement.addEventListener('click', handleIconClick);
+
+      // 長按觸控 → 右鍵選單
+      iconElement.addEventListener('touchstart', (e) => {
+        longPressTriggered = false;
+        const touch = e.touches[0];
+        const tx = touch.clientX;
+        const ty = touch.clientY;
+        longPressTimer = setTimeout(() => {
+          longPressTriggered = true;
+          openContextMenu(app.id, tx, ty);
+          // 觸發震動回饋（若瀏覽器支援）
+          if (navigator.vibrate) navigator.vibrate(30);
+        }, LONG_PRESS_DELAY);
+      }, { passive: true });
+
+      iconElement.addEventListener('touchend', () => {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+      });
+
+      iconElement.addEventListener('touchmove', () => {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+      });
+
+      // 長按觸發後阻止後續 click
+      iconElement.addEventListener('click', (e) => {
+        if (longPressTriggered) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          longPressTriggered = false;
+        }
+      }, true);
+
       desktopArea.appendChild(iconElement);
     });
   }
@@ -232,6 +348,8 @@ const DesktopModule = (function() {
     init,
     getApplications,
     showToast,
-    openApp
+    openApp,
+    openContextMenu,
+    closeContextMenu
   };
 })();

@@ -192,16 +192,23 @@ const WindowModule = (function() {
     const minimizeBtn = windowEl.querySelector('.window-btn-minimize');
     const maximizeBtn = windowEl.querySelector('.window-btn-maximize');
 
-    // Focus on click
+    // Focus on click / touch
     windowEl.addEventListener('mousedown', () => {
       focusWindow(windowId);
     });
+    windowEl.addEventListener('touchstart', () => {
+      focusWindow(windowId);
+    }, { passive: true });
 
-    // Drag start
+    // Drag start (mouse + touch)
     titlebar.addEventListener('mousedown', (e) => {
       if (e.target.closest('.window-btn')) return;
       startDrag(windowId, e);
     });
+    titlebar.addEventListener('touchstart', (e) => {
+      if (e.target.closest('.window-btn')) return;
+      startDrag(windowId, e);
+    }, { passive: false });
 
     // Double-click titlebar to toggle maximize
     titlebar.addEventListener('dblclick', (e) => {
@@ -224,30 +231,53 @@ const WindowModule = (function() {
       toggleMaximize(windowId);
     });
 
-    // Resize handles
+    // Resize handles (mouse + touch)
     windowEl.querySelectorAll('.window-resize').forEach(handle => {
       handle.addEventListener('mousedown', (e) => {
         e.stopPropagation();
         startResize(windowId, e, handle.dataset.direction);
       });
+      handle.addEventListener('touchstart', (e) => {
+        e.stopPropagation();
+        const pos = getPointerPos(e);
+        startResize(windowId, { clientX: pos.clientX, clientY: pos.clientY, type: 'touchstart' }, handle.dataset.direction);
+        e.preventDefault();
+      }, { passive: false });
     });
+  }
+
+  /**
+   * 從 MouseEvent 或 TouchEvent 取得統一座標
+   * @param {MouseEvent|TouchEvent} e
+   * @returns {{ clientX: number, clientY: number }}
+   */
+  function getPointerPos(e) {
+    if (e.touches && e.touches.length > 0) {
+      return { clientX: e.touches[0].clientX, clientY: e.touches[0].clientY };
+    }
+    if (e.changedTouches && e.changedTouches.length > 0) {
+      return { clientX: e.changedTouches[0].clientX, clientY: e.changedTouches[0].clientY };
+    }
+    return { clientX: e.clientX, clientY: e.clientY };
   }
 
   /**
    * Start dragging window
    * @param {string} windowId
-   * @param {MouseEvent} e
+   * @param {MouseEvent|TouchEvent} e
    */
   function startDrag(windowId, e) {
-    // 手機上停用拖曳
-    if (isMobile()) return;
+    // 手機上停用拖曳（僅限滑鼠；觸控拖曳另行處理）
+    if (isMobile() && e.type === 'mousedown') return;
 
     const windowInfo = windows[windowId];
     if (!windowInfo) return;
 
+    const pos = getPointerPos(e);
+
     // If snapped, unsnap first and adjust position
     if (windowInfo.snapped) {
-      unsnapWindow(windowId, e);
+      unsnapWindow(windowId, { clientX: pos.clientX, clientY: pos.clientY });
     }
     // If maximized (but not snapped), unmaximize first and adjust position
     else if (windowInfo.maximized) {
@@ -257,11 +287,11 @@ const WindowModule = (function() {
       // Unmaximize
       unmaximizeWindow(windowId);
 
-      // Position window so mouse is centered on titlebar
+      // Position window so pointer is centered on titlebar
       const desktopArea = document.querySelector('.desktop-area');
       const desktopRect = desktopArea.getBoundingClientRect();
-      const newX = Math.max(0, Math.min(e.clientX - oldWidth / 2, desktopRect.width - oldWidth));
-      const newY = e.clientY - desktopRect.top - 20; // 20px from top of titlebar
+      const newX = Math.max(0, Math.min(pos.clientX - oldWidth / 2, desktopRect.width - oldWidth));
+      const newY = pos.clientY - desktopRect.top - 20;
 
       windowEl.style.left = `${newX}px`;
       windowEl.style.top = `${Math.max(0, newY)}px`;
@@ -273,29 +303,39 @@ const WindowModule = (function() {
     dragState = {
       isDragging: true,
       windowId: windowId,
-      startX: e.clientX,
-      startY: e.clientY,
-      offsetX: e.clientX - rect.left,
-      offsetY: e.clientY - rect.top
+      startX: pos.clientX,
+      startY: pos.clientY,
+      offsetX: pos.clientX - rect.left,
+      offsetY: pos.clientY - rect.top
     };
 
     windowEl.classList.add('dragging');
     document.body.style.userSelect = 'none';
+
+    // 觸控事件時阻止捲動
+    if (e.type === 'touchstart') {
+      e.preventDefault();
+    }
   }
 
   /**
-   * Handle mouse move for dragging and resizing
-   * @param {MouseEvent} e
+   * Handle mouse/touch move for dragging and resizing
+   * @param {MouseEvent|TouchEvent} e
    */
   function handleMouseMove(e) {
+    const pos = getPointerPos(e);
+
     // Handle resize
     if (resizeState.isResizing) {
-      handleResizeMove(e);
+      handleResizeMove({ clientX: pos.clientX, clientY: pos.clientY });
+      if (e.type === 'touchmove') e.preventDefault();
       return;
     }
 
     // Handle drag
     if (!dragState.isDragging) return;
+
+    if (e.type === 'touchmove') e.preventDefault();
 
     const windowInfo = windows[dragState.windowId];
     if (!windowInfo) return;
@@ -304,8 +344,8 @@ const WindowModule = (function() {
     const desktopArea = document.querySelector('.desktop-area');
     const desktopRect = desktopArea.getBoundingClientRect();
 
-    let newX = e.clientX - dragState.offsetX;
-    let newY = e.clientY - dragState.offsetY - desktopRect.top;
+    let newX = pos.clientX - dragState.offsetX;
+    let newY = pos.clientY - dragState.offsetY - desktopRect.top;
 
     // Constrain to desktop area
     const windowWidth = windowEl.offsetWidth;
@@ -318,7 +358,7 @@ const WindowModule = (function() {
     windowEl.style.top = `${newY}px`;
 
     // Detect snap zone and show preview
-    const snapZone = detectSnapZone(e.clientX, e.clientY);
+    const snapZone = detectSnapZone(pos.clientX, pos.clientY);
     if (snapZone) {
       showSnapPreview(snapZone);
     } else {
@@ -327,9 +367,10 @@ const WindowModule = (function() {
   }
 
   /**
-   * Handle mouse up to end dragging
+   * Handle mouse/touch up to end dragging
+   * @param {MouseEvent|TouchEvent} [e]
    */
-  function handleMouseUp() {
+  function handleMouseUp(e) {
     // End dragging
     if (dragState.isDragging) {
       const windowId = dragState.windowId;
@@ -366,24 +407,25 @@ const WindowModule = (function() {
   /**
    * Start resizing window
    * @param {string} windowId
-   * @param {MouseEvent} e
+   * @param {MouseEvent|TouchEvent|Object} e
    * @param {string} direction - 'n', 's', 'e', 'w', 'nw', 'ne', 'sw', 'se'
    */
   function startResize(windowId, e, direction) {
-    // 手機上停用調整大小
-    if (isMobile()) return;
+    // 手機上停用調整大小（僅限滑鼠）
+    if (isMobile() && e.type === 'mousedown') return;
 
     const windowInfo = windows[windowId];
     if (!windowInfo) return;
 
     const windowEl = windowInfo.element;
+    const pos = (e.touches || e.changedTouches) ? getPointerPos(e) : { clientX: e.clientX, clientY: e.clientY };
 
     resizeState = {
       isResizing: true,
       windowId: windowId,
       direction: direction,
-      startX: e.clientX,
-      startY: e.clientY,
+      startX: pos.clientX,
+      startY: pos.clientY,
       startWidth: windowEl.offsetWidth,
       startHeight: windowEl.offsetHeight,
       startLeft: windowEl.offsetLeft,
@@ -937,6 +979,11 @@ const WindowModule = (function() {
     // Global mouse events for dragging
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
+
+    // Global touch events for dragging (觸控支援)
+    document.addEventListener('touchmove', handleMouseMove, { passive: false });
+    document.addEventListener('touchend', handleMouseUp);
+    document.addEventListener('touchcancel', handleMouseUp);
 
     // 監聽瀏覽器返回鍵
     window.addEventListener('popstate', handlePopState);
