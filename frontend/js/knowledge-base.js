@@ -139,6 +139,21 @@ const KnowledgeBaseModule = (function() {
     console.log('[KnowledgeBase] handleInit called', { windowEl, wId });
     windowId = wId;
     bindEvents(windowEl);
+
+    // 初始載入狀態使用 UIHelpers API
+    const listSlot = windowEl.querySelector('.kb-list-init-slot');
+    if (listSlot) UIHelpers.showLoading(listSlot, { text: '載入中…' });
+
+    const emptySlot = windowEl.querySelector('#kbContentEmpty');
+    if (emptySlot) {
+      UIHelpers.showEmpty(emptySlot, {
+        icon: 'book-open-page-variant',
+        text: '選擇一個知識來查看內容',
+        subtext: '或點擊「新增」建立新知識',
+        variant: 'fill',
+      });
+    }
+
     loadTags();
     loadKnowledge();
   }
@@ -188,21 +203,14 @@ const KnowledgeBaseModule = (function() {
               <span class="kb-list-count" id="kbListCount">0 筆</span>
             </div>
             <div class="kb-list" id="kbList">
-              <div class="ui-state ui-state--loading" role="status" aria-live="polite">
-                <span class="ui-state-icon">${getIcon('refresh')}</span>
-                <span class="ui-state-text">載入中…</span>
-              </div>
+              <div class="kb-list-init-slot"></div>
             </div>
           </div>
 
           <div class="kb-resizer" id="kbResizer"></div>
 
           <div class="kb-content-panel" id="kbContentPanel">
-            <div class="ui-state ui-state--empty ui-state--fill" id="kbContentEmpty" role="status">
-              <span class="ui-state-icon">${getIcon('book-open-page-variant')}</span>
-              <span class="ui-state-text">選擇一個知識來查看內容</span>
-              <span class="ui-state-text">或點擊「新增」建立新知識</span>
-            </div>
+            <div id="kbContentEmpty"></div>
             <div class="kb-content-view" id="kbContentView" style="display: none;"></div>
             <div class="kb-editor" id="kbEditor" style="display: none;"></div>
           </div>

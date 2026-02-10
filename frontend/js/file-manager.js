@@ -465,18 +465,18 @@ const FileManagerModule = (function() {
               <span class="fm-list-header-size">大小</span>
               <span class="fm-list-header-date">修改日期</span>
             </div>
-            <div class="fm-loading">
-              <span class="icon">${getIcon('folder')}</span>
-              <span>載入中...</span>
+            <div class="ui-state ui-state--loading" role="status" aria-live="polite">
+              <span class="ui-state-icon">${getIcon('folder')}</span>
+              <span class="ui-state-text">載入中…</span>
             </div>
           </div>
           <div class="fm-resizer" id="fmResizer"></div>
           <div class="fm-preview" id="fmPreview" style="width: ${previewWidth}px;">
             <div class="fm-preview-header">預覽</div>
             <div class="fm-preview-content">
-              <div class="fm-preview-empty">
-                <span class="icon">${getIcon('file')}</span>
-                <span>選取檔案以預覽</span>
+              <div class="ui-state ui-state--empty" role="status">
+                <span class="ui-state-icon">${getIcon('file')}</span>
+                <span class="ui-state-text">選取檔案以預覽</span>
               </div>
             </div>
           </div>
@@ -681,18 +681,15 @@ const FileManagerModule = (function() {
     const fileList = windowEl.querySelector('#fmFileList');
     const pathText = windowEl.querySelector('#fmPathText');
 
-    // Show loading
+    // Show loading（UIHelpers 統一元件）
     fileList.innerHTML = `
       <div class="fm-list-header">
         <span class="fm-list-header-name">名稱</span>
         <span class="fm-list-header-size">大小</span>
         <span class="fm-list-header-date">修改日期</span>
       </div>
-      <div class="fm-loading">
-        <span class="icon">${getIcon('folder')}</span>
-        <span>載入中...</span>
-      </div>
-    `;
+      <div class="fm-state-slot"></div>`;
+    UIHelpers.showLoading(fileList.querySelector('.fm-state-slot'), { icon: 'folder', text: '載入中…' });
 
     try {
       if (path === '/') {
@@ -747,11 +744,11 @@ const FileManagerModule = (function() {
           <span class="fm-list-header-size">大小</span>
           <span class="fm-list-header-date">修改日期</span>
         </div>
-        <div class="fm-empty">
-          <span class="icon">${getIcon('information')}</span>
-          <span>${error.message}</span>
-        </div>
-      `;
+<div class="fm-state-slot"></div>`;
+      UIHelpers.showError(fileList.querySelector('.fm-state-slot'), {
+        message: error.message,
+        onRetry: () => loadDirectory(path),
+      });
     }
   }
 
@@ -783,11 +780,8 @@ const FileManagerModule = (function() {
         <span class="fm-list-header-size">路徑</span>
         <span class="fm-list-header-date">類型</span>
       </div>
-      <div class="fm-loading">
-        <span class="icon">${getIcon('search')}</span>
-        <span>搜尋中...</span>
-      </div>
-    `;
+<div class="fm-state-slot"></div>`;
+    UIHelpers.showLoading(fileList.querySelector('.fm-state-slot'), { icon: 'search', text: '搜尋中…' });
 
     try {
       const response = await fetch(
@@ -817,11 +811,11 @@ const FileManagerModule = (function() {
           <span class="fm-list-header-size">路徑</span>
           <span class="fm-list-header-date">類型</span>
         </div>
-        <div class="fm-empty">
-          <span class="icon">${getIcon('information')}</span>
-          <span>${error.message}</span>
-        </div>
-      `;
+<div class="fm-state-slot"></div>`;
+      UIHelpers.showError(fileList.querySelector('.fm-state-slot'), {
+        message: error.message,
+        onRetry: () => searchFiles(query),
+      });
     }
   }
 
@@ -841,11 +835,11 @@ const FileManagerModule = (function() {
           <span class="fm-list-header-size">路徑</span>
           <span class="fm-list-header-date">類型</span>
         </div>
-        <div class="fm-empty">
-          <span class="icon">${getIcon('search')}</span>
-          <span>找不到符合「${searchQuery}」的項目</span>
-        </div>
-      `;
+<div class="fm-state-slot"></div>`;
+      UIHelpers.showEmpty(fileList.querySelector('.fm-state-slot'), {
+        icon: 'search',
+        text: `找不到符合「${searchQuery}」的項目`,
+      });
       return;
     }
 
@@ -940,11 +934,11 @@ const FileManagerModule = (function() {
           <span class="fm-list-header-size">大小</span>
           <span class="fm-list-header-date">修改日期</span>
         </div>
-        <div class="fm-empty">
-          <span class="icon">${getIcon('folder')}</span>
-          <span>資料夾是空的</span>
-        </div>
-      `;
+<div class="fm-state-slot"></div>`;
+      UIHelpers.showEmpty(fileList.querySelector('.fm-state-slot'), {
+        icon: 'folder',
+        text: '資料夾是空的',
+      });
       return;
     }
 

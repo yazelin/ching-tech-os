@@ -317,8 +317,14 @@ const LoginModule = (function() {
    * Handle login form submission
    * @param {Event} event
    */
+  // 防重複提交旗標
+  let _isSubmitting = false;
+
   async function handleLogin(event) {
     event.preventDefault();
+
+    // 防重複提交
+    if (_isSubmitting) return;
 
     const form = event.target;
     const username = form.querySelector('#username').value.trim();
@@ -333,9 +339,13 @@ const LoginModule = (function() {
       return;
     }
 
-    // Disable button during submission
+    // 進入提交狀態（按鈕 disabled + loading 動畫 + aria）
+    _isSubmitting = true;
     submitBtn.disabled = true;
-    submitBtn.innerHTML = '<span class="mdi mdi-loading mdi-spin"></span> 登入中...';
+    submitBtn.setAttribute('aria-busy', 'true');
+    submitBtn.innerHTML = `<span class="ui-state-icon" style="display:inline-flex">${typeof getIcon === 'function' ? getIcon('refresh') : ''}</span> 登入中…`;
+    const _spinSvg = submitBtn.querySelector('.ui-state-icon svg');
+    if (_spinSvg) _spinSvg.classList.add('spin');
     errorDiv.classList.remove('show');
 
     try {
@@ -358,11 +368,7 @@ const LoginModule = (function() {
           createSession(result.username, result.token, result.role);
 
           // 還原按鈕狀態
-          submitBtn.disabled = false;
-          submitBtn.innerHTML = '<span class="icon" id="iconLogin2"></span> 登入';
-          if (document.getElementById('iconLogin2')) {
-            document.getElementById('iconLogin2').innerHTML = typeof getIcon === 'function' ? getIcon('login') : '';
-          }
+          resetSubmitBtn(submitBtn);
 
           // 顯示變更密碼對話框
           const changed = await showChangePasswordDialog(result.token, password);
@@ -388,12 +394,20 @@ const LoginModule = (function() {
       errorDiv.textContent = '登入時發生錯誤，請稍後再試';
       errorDiv.classList.add('show');
     } finally {
-      submitBtn.disabled = false;
-      submitBtn.innerHTML = '<span class="icon" id="iconLoginFinal"></span> 登入';
-      if (document.getElementById('iconLoginFinal')) {
-        document.getElementById('iconLoginFinal').innerHTML = typeof getIcon === 'function' ? getIcon('login') : '';
-      }
+      resetSubmitBtn(submitBtn);
     }
+  }
+
+  /**
+   * 還原登入按鈕狀態
+   */
+  function resetSubmitBtn(submitBtn) {
+    _isSubmitting = false;
+    submitBtn.disabled = false;
+    submitBtn.removeAttribute('aria-busy');
+    submitBtn.innerHTML = '<span class="icon" id="iconLoginReset"></span> 登入';
+    const el = document.getElementById('iconLoginReset');
+    if (el) el.innerHTML = typeof getIcon === 'function' ? getIcon('login') : '';
   }
 
   /**
@@ -420,6 +434,71 @@ const LoginModule = (function() {
     if (loginForm) {
       loginForm.addEventListener('submit', handleLogin);
     }
+
+    // 密碼顯示切換
+    initPasswordToggle();
+
+    // 即時驗證
+    initRealtimeValidation();
+  }
+
+  /**
+   * 密碼欄位顯示 / 隱藏切換
+   */
+  function initPasswordToggle() {
+    const toggleBtn = document.getElementById('passwordToggle');
+    const passwordInput = document.getElementById('password');
+    const toggleIcon = document.getElementById('iconPasswordToggle');
+    if (!toggleBtn || !passwordInput) return;
+
+    toggleBtn.addEventListener('click', () => {
+      const isVisible = passwordInput.type === 'text';
+      passwordInput.type = isVisible ? 'password' : 'text';
+      toggleBtn.setAttribute('aria-pressed', String(!isVisible));
+      toggleBtn.setAttribute('aria-label', isVisible ? '顯示密碼' : '隱藏密碼');
+      if (toggleIcon && typeof getIcon === 'function') {
+        toggleIcon.innerHTML = isVisible ? getIcon('eye-off') : getIcon('eye');
+      }
+    });
+  }
+
+  /**
+   * 即時驗證提示（使用者名稱 & 密碼非空檢查）
+   */
+  function initRealtimeValidation() {
+    const usernameInput = document.getElementById('username');
+    const passwordInput = document.getElementById('password');
+    const hintsArea = document.getElementById('formValidationHints');
+    if (!usernameInput || !passwordInput || !hintsArea) return;
+
+    function validate() {
+      const hints = [];
+      if (usernameInput.value.trim() === '' && usernameInput.dataset.touched === '1') {
+        hints.push('請輸入使用者名稱');
+        usernameInput.classList.add('input--invalid');
+        usernameInput.setAttribute('aria-invalid', 'true');
+      } else {
+        usernameInput.classList.remove('input--invalid');
+        usernameInput.removeAttribute('aria-invalid');
+      }
+      if (passwordInput.value === '' && passwordInput.dataset.touched === '1') {
+        hints.push('請輸入密碼');
+        passwordInput.classList.add('input--invalid');
+        passwordInput.setAttribute('aria-invalid', 'true');
+      } else {
+        passwordInput.classList.remove('input--invalid');
+        passwordInput.removeAttribute('aria-invalid');
+      }
+      hintsArea.textContent = hints.join('\u3000');
+    }
+
+    [usernameInput, passwordInput].forEach(input => {
+      input.addEventListener('blur', () => {
+        input.dataset.touched = '1';
+        validate();
+      });
+      input.addEventListener('input', validate);
+    });
   }
 
   // Public API

@@ -278,14 +278,14 @@ const AILogApp = (function() {
     const cardList = document.querySelector(`#${windowId} #log-card-list`);
     if (!tbody || !cardList) return;
 
-    // 空狀態
+    // 空狀態（UIHelpers 統一元件）
     if (logs.length === 0) {
-      const emptyHtml = `
-        <div class="ai-log-empty">
-          <span class="icon">${getIcon('file-document-outline')}</span>
-          <p>沒有符合條件的日誌</p>
-        </div>
-      `;
+      const emptyWrapper = document.createElement('div');
+      UIHelpers.showEmpty(emptyWrapper, {
+        icon: 'file-document-outline',
+        text: '沒有符合條件的日誌',
+      });
+      const emptyHtml = emptyWrapper.innerHTML;
       tbody.innerHTML = `<tr><td colspan="7">${emptyHtml}</td></tr>`;
       cardList.innerHTML = emptyHtml;
       return;

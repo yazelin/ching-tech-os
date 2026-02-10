@@ -252,7 +252,7 @@ const LineBotApp = (function () {
         const status = state.bindingStatus;
 
         if (!status) {
-            container.innerHTML = '<div class="linebot-loading">載入中...</div>';
+            UIHelpers.showLoading(container, { text: '載入中…', variant: 'compact' });
             return;
         }
 
@@ -615,24 +615,23 @@ const LineBotApp = (function () {
         const container = document.querySelector('.linebot-group-messages-list');
         if (!container) return;
 
-        container.innerHTML = '<div class="linebot-loading">載入中...</div>';
+        UIHelpers.showLoading(container, { text: '載入中…', variant: 'compact' });
 
         try {
             const data = await api(`/messages?group_id=${groupId}&page=1&page_size=20`);
             renderGroupMessages(container, data.items);
         } catch (error) {
-            container.innerHTML = '<div class="linebot-empty"><div class="linebot-empty-text">載入失敗</div></div>';
+            UIHelpers.showError(container, {
+              message: '載入失敗',
+              onRetry: () => loadGroupMessages(groupId),
+            });
         }
     }
 
     // 渲染群組訊息
     function renderGroupMessages(container, messages) {
         if (messages.length === 0) {
-            container.innerHTML = `
-                <div class="linebot-empty">
-                    <div class="linebot-empty-text">暫無訊息</div>
-                </div>
-            `;
+            UIHelpers.showEmpty(container, { text: '暫無訊息', variant: 'compact' });
             return;
         }
 
@@ -848,11 +847,11 @@ const LineBotApp = (function () {
         const container = document.querySelector(selectors[type]);
 
         if (container) {
-            container.innerHTML = '<div class="linebot-loading">載入中...</div>';
+            UIHelpers.showLoading(container, { text: '載入中…', variant: 'compact' });
         }
     }
 
-    // 渲染錯誤
+    // 渲染錯誤（UIHelpers 統一元件）
     function renderError(type, message) {
         const selectors = {
             groups: '.linebot-groups-list',
@@ -863,12 +862,7 @@ const LineBotApp = (function () {
         const container = document.querySelector(selectors[type]);
 
         if (container) {
-            container.innerHTML = `
-                <div class="linebot-empty">
-                    <div class="linebot-empty-icon">⚠️</div>
-                    <div class="linebot-empty-text">${message}</div>
-                </div>
-            `;
+            UIHelpers.showError(container, { message });
         }
     }
 
