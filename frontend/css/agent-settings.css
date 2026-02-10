@@ -428,7 +428,7 @@
 
 .agent-settings-tab.active {
   color: var(--text-primary);
-  border-bottom-color: var(--color-accent, var(--primary, #6c9fff));
+  border-bottom-color: var(--color-accent);
 }
 
 .agent-settings-tab-content {
@@ -468,7 +468,7 @@
 
 .skill-badge-tool {
   background: rgba(108, 159, 255, 0.15);
-  color: var(--color-accent, #6c9fff);
+  color: var(--color-accent);
 }
 
 .skill-detail {
@@ -552,7 +552,7 @@
 .skill-sub-tab:hover { color: var(--text-primary); }
 .skill-sub-tab.active {
   color: var(--text-primary);
-  border-bottom-color: var(--color-accent, #6c9fff);
+  border-bottom-color: var(--color-accent);
 }
 
 /* Skill 區域按鈕預設樣式（深色主題相容） */
@@ -567,7 +567,7 @@
 }
 .skill-settings .btn-primary {
   background-color: var(--color-primary);
-  color: var(--btn-text-on-primary, #fff);
+  color: var(--btn-text-on-primary);
   border-color: transparent;
 }
 .skill-settings .btn-danger {
@@ -664,7 +664,7 @@
 }
 
 .skill-edit-modal {
-  background: var(--bg-secondary, #1e1e1e);
+  background: var(--bg-secondary);
   border: 1px solid var(--border-subtle);
   border-radius: 12px;
   width: 480px;
@@ -743,7 +743,7 @@
   line-height: 1;
 }
 
-.skill-chip-remove:hover { color: var(--color-error, #ff4444); }
+.skill-chip-remove:hover { color: var(--color-error); }
 
 .skill-chip-input {
   font-size: 13px !important;
@@ -1082,7 +1082,7 @@
 .skill-preview-content {
   margin-top: 8px;
   padding: 12px;
-  background: var(--bg-secondary, #f5f5f5);
+  background: var(--bg-secondary);
   border-radius: 6px;
   font-size: 13px;
   line-height: 1.5;
@@ -1093,7 +1093,7 @@
 }
 
 [data-theme="dark"] .skill-preview-content {
-  background: var(--bg-tertiary, #2a2a2a);
+  background: var(--bg-tertiary);
 }
 
 /* Hub 搜尋結果：作者 */

@@ -1225,7 +1225,7 @@ input {
   width: 40px;
   height: 40px;
   border: 3px solid var(--border-medium, rgba(255, 255, 255, 0.15));
-  border-top-color: var(--color-primary, #0891b2);
+  border-top-color: var(--color-primary);
   border-radius: 50%;
   animation: skeleton-spin 0.8s linear infinite;
 }
@@ -1236,7 +1236,7 @@ input {
 
 /* 載入文字 */
 .skeleton-label {
-  color: var(--text-secondary, #a0a0a0);
+  color: var(--text-secondary);
   font-size: 14px;
   letter-spacing: 0.5px;
 }
@@ -1255,7 +1255,7 @@ input {
 
   .skeleton::after {
     animation: none !important;
-    background: var(--bg-tertiary, #e0e0e0) !important;
+    background: var(--bg-tertiary) !important;
   }
 
   .spinner {
@@ -1271,7 +1271,7 @@ input {
 .skeleton {
   position: relative;
   overflow: hidden;
-  background: var(--bg-tertiary, #e0e0e0);
+  background: var(--bg-tertiary);
   border-radius: var(--radius-sm, 6px);
   color: transparent !important;
   pointer-events: none;
@@ -1341,8 +1341,8 @@ input {
   display: inline-block;
   width: 24px;
   height: 24px;
-  border: 3px solid var(--border-color, #ccc);
-  border-top-color: var(--accent-primary, #5b7ff5);
+  border: 3px solid var(--border-color);
+  border-top-color: var(--accent-primary);
   border-radius: 50%;
   animation: spinner-rotate 0.8s linear infinite;
 }
@@ -1368,7 +1368,7 @@ input {
   gap: var(--spacing-sm, 8px);
   padding: var(--spacing-lg, 24px);
   text-align: center;
-  color: var(--text-secondary, #a0a0a0);
+  color: var(--text-secondary);
   font-size: var(--font-size-sm, 13px);
   min-height: 120px;
   width: 100%;
@@ -1434,7 +1434,7 @@ input {
 
 /* ── Empty 狀態 ── */
 .ui-state--empty {
-  color: var(--text-muted, #888888);
+  color: var(--text-muted);
 }
 
 .ui-state--empty .ui-state-text {
@@ -1445,17 +1445,17 @@ input {
 /* ── Error 狀態 ── */
 .ui-state--error .ui-state-icon svg {
   opacity: 0.6;
-  color: var(--color-error, #dc2626);
+  color: var(--color-error);
 }
 
 .ui-state--error .ui-state-text {
-  color: var(--color-error, #dc2626);
+  color: var(--color-error);
   opacity: 0.85;
 }
 
 .ui-state--error .ui-state-detail {
   font-size: var(--font-size-xs, 12px);
-  color: var(--text-muted, #888888);
+  color: var(--text-muted);
   max-width: 320px;
   word-break: break-word;
 }
@@ -1467,7 +1467,7 @@ input {
   border: 1px solid var(--border-light, rgba(255, 255, 255, 0.1));
   border-radius: var(--radius-sm, 6px);
   background: var(--bg-surface, rgba(0, 0, 0, 0.1));
-  color: var(--text-secondary, #a0a0a0);
+  color: var(--text-secondary);
   font-size: var(--font-size-xs, 12px);
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
@@ -1476,7 +1476,7 @@ input {
 .ui-state-retry:hover {
   background: var(--hover-bg, rgba(255, 255, 255, 0.1));
   border-color: var(--border-medium, rgba(255, 255, 255, 0.15));
-  color: var(--text-primary, #f0f0f0);
+  color: var(--text-primary);
 }
 
 /* ── Reduced Motion ── */

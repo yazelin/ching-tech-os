@@ -300,7 +300,7 @@
   top: calc(100% + 6px);
   right: 0;
   min-width: 180px;
-  background: var(--bg-elevated, #1e293b);
+  background: var(--bg-elevated);
   border: 1px solid var(--interactive-border, rgba(255,255,255,0.1));
   border-radius: var(--radius-md, 8px);
   padding: var(--spacing-xs, 6px) 0;
@@ -326,7 +326,7 @@
   padding: var(--spacing-sm, 8px) var(--spacing-md, 16px);
   background: none;
   border: none;
-  color: var(--text-secondary, #94a3b8);
+  color: var(--text-secondary);
   font-size: var(--font-size-sm, 14px);
   cursor: pointer;
   transition: all var(--transition-fast, 0.15s);
@@ -335,7 +335,7 @@
 
 .header-user-menu-item:hover {
   background: var(--interactive-hover, rgba(255,255,255,0.06));
-  color: var(--text-primary, #f1f5f9);
+  color: var(--text-primary);
 }
 
 .header-user-menu-item .icon svg {
