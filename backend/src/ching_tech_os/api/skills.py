@@ -1,18 +1,24 @@
 """Skills API（僅限管理員）"""
 
 import asyncio
+import json
 import logging
-import re
 import shutil
 import tempfile
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..models.auth import SessionData
 from .auth import require_admin
 from ..skills import get_skill_manager
+from ..services.clawhub_client import ClawHubClient, ClawHubError, get_clawhub_client_di, validate_slug
+
+# Per-skill 安裝鎖（防止同一 skill 的並發安裝競爭條件）
+# value: (lock, ref_count)
+_install_locks: dict[str, tuple[asyncio.Lock, int]] = {}
+_lock_for_locks = asyncio.Lock()
 
 logger = logging.getLogger(__name__)
 
@@ -33,18 +39,11 @@ class HubSearchRequest(BaseModel):
 
 class HubInspectRequest(BaseModel):
     slug: str
-    file: str = "SKILL.md"
 
 
 class HubInstallRequest(BaseModel):
     name: str
-    version: str | None = None
-
-
-# ClawHub CLI 解析
-_SEARCH_LINE_RE = re.compile(
-    r"^(\S+)\s+v([\d.]+)\s+(.+?)\s+\(([\d.]+)\)$"
-)
+    version: str | None = Field(None, max_length=50)
 
 
 # === Endpoints ===
@@ -85,6 +84,9 @@ async def get_skill(name: str, session: SessionData = Depends(require_admin)):
     # 取得 script tools 資訊
     script_tools = await sm.get_scripts_info(name)
 
+    # 讀取 _meta.json
+    meta = ClawHubClient.read_meta(sm.skills_dir / name)
+
     return {
         "name": skill.name,
         "description": skill.description,
@@ -102,7 +104,20 @@ async def get_skill(name: str, session: SessionData = Depends(require_admin)):
         "license": skill.license,
         "compatibility": skill.compatibility,
         "metadata": skill.metadata,
+        "meta": meta,
     }
+
+
+@router.get("/{name}/meta")
+async def get_skill_meta(name: str, session: SessionData = Depends(require_admin)):
+    """取得 skill 的 _meta.json 資訊"""
+    sm = get_skill_manager()
+    skill = await sm.get_skill(name)
+    if not skill:
+        raise HTTPException(status_code=404, detail=f"Skill '{name}' not found")
+
+    meta = ClawHubClient.read_meta(sm.skills_dir / name)
+    return {"name": name, "meta": meta}
 
 
 @router.put("/{name}")
@@ -152,184 +167,159 @@ async def reload_skills(session: SessionData = Depends(require_admin)):
     return {"reloaded": count}
 
 
-# === ClawHub 整合 ===
-
-async def _run_clawhub(
-    *args: str, timeout: int = 30, cwd: str | Path | None = None,
-) -> tuple[int, str, str]:
-    """執行 clawhub CLI 命令。"""
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            "clawhub", *args,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            cwd=cwd,
-        )
-        stdout, stderr = await asyncio.wait_for(
-            proc.communicate(), timeout=timeout
-        )
-        return (
-            proc.returncode or 0,
-            stdout.decode("utf-8", errors="replace"),
-            stderr.decode("utf-8", errors="replace"),
-        )
-    except FileNotFoundError:
-        raise HTTPException(
-            status_code=503,
-            detail="clawhub CLI 未安裝。請執行 npm install -g clawhub",
-        )
-    except asyncio.TimeoutError:
-        raise HTTPException(status_code=504, detail="ClawHub 操作逾時")
-
+# === ClawHub REST API 整合 ===
 
 @router.post("/hub/search")
 async def hub_search(
     data: HubSearchRequest,
     session: SessionData = Depends(require_admin),
+    client: ClawHubClient = Depends(get_clawhub_client_di),
 ):
-    """搜尋 ClawHub marketplace"""
-    if not data.query or len(data.query) > 100:
+    """搜尋 ClawHub marketplace（使用 REST API）"""
+    query = (data.query or "").strip()
+    if not query or len(query) > 100:
         raise HTTPException(status_code=400, detail="搜尋關鍵字無效")
+    try:
+        results = await client.search(query)
+    except ClawHubError as e:
+        raise HTTPException(
+            status_code=e.status_code or 502,
+            detail=f"ClawHub 搜尋失敗: {e}",
+        )
 
-    code, stdout, stderr = await _run_clawhub("search", data.query)
-    if code != 0:
-        raise HTTPException(status_code=502, detail=f"ClawHub 搜尋失敗: {stderr}")
-
-    results = []
-    for line in stdout.strip().splitlines():
-        line = line.strip()
-        m = _SEARCH_LINE_RE.match(line)
-        if m:
-            results.append({
-                "name": m.group(1),
-                "version": m.group(2),
-                "description": m.group(3).strip(),
-                "score": float(m.group(4)),
-            })
-
-    return {"query": data.query, "results": results}
+    return {"query": query, "results": results}
 
 
 @router.post("/hub/inspect")
 async def hub_inspect(
     data: HubInspectRequest,
     session: SessionData = Depends(require_admin),
+    client: ClawHubClient = Depends(get_clawhub_client_di),
 ):
-    """預覽 ClawHub skill 的檔案內容"""
-    if not re.match(r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$", data.slug) or len(data.slug) > 100:
+    """預覽 ClawHub skill（使用 REST API）"""
+    if not validate_slug(data.slug):
         raise HTTPException(status_code=400, detail="Slug 格式無效")
+    try:
+        # 取得 skill 詳情（含 owner、stats、latestVersion）
+        detail = await client.get_skill(data.slug)
 
-    path_components = data.file.split("/")
+        # 從 ZIP 取得 SKILL.md 內容（每次呼叫獨立下載，未來可加快取優化）
+        skill_info = detail.get("skill", {})
+        latest = detail.get("latestVersion", {})
+        version = latest.get("version", "")
 
-    # Security: path traversal and injection prevention
-    path_too_long = len(data.file) > 200
-    invalid_start = data.file.startswith(("/", "-"))
-    invalid_components = ".." in path_components or "." in path_components or "" in path_components
-    invalid_chars = not re.match(r"^[\w.\-]+(/[\w.\-]+)*$", data.file)
+        content = ""
+        if version:
+            content = await client.extract_file_from_zip(
+                data.slug, version, "SKILL.md"
+            ) or ""
 
-    if path_too_long or invalid_start or invalid_components or invalid_chars:
-        raise HTTPException(status_code=400, detail="檔案名稱無效")
+    except ClawHubError as e:
+        raise HTTPException(
+            status_code=e.status_code or 502,
+            detail=f"ClawHub inspect 失敗: {e}",
+        )
 
-    # 並行取得 metadata 和檔案內容
-    meta_task = _run_clawhub("inspect", data.slug)
-    file_task = _run_clawhub("inspect", data.slug, "--file", data.file)
-    (meta_code, meta_stdout, meta_stderr), (file_code, file_stdout, file_stderr) = await asyncio.gather(
-        meta_task, file_task
-    )
-
-    if file_code != 0:
-        raise HTTPException(status_code=502, detail=f"ClawHub inspect 失敗: {file_stderr}")
-
-    # 解析 metadata（Owner, Created, Updated, Latest 等）
-    metadata = {}
-    if meta_code == 0:
-        for line in meta_stdout.strip().splitlines():
-            line = line.strip()
-            if line.startswith("Owner:"):
-                metadata["owner"] = line[len("Owner:"):].strip()
-            elif line.startswith("Created:"):
-                metadata["created"] = line[len("Created:"):].strip()
-            elif line.startswith("Updated:"):
-                metadata["updated"] = line[len("Updated:"):].strip()
-            elif line.startswith("Latest:"):
-                metadata["latest"] = line[len("Latest:"):].strip()
-            elif line.startswith("Summary:"):
-                metadata["summary"] = line[len("Summary:"):].strip()
-
-    return {"slug": data.slug, "file": data.file, "content": file_stdout, "metadata": metadata}
+    return {
+        "slug": data.slug,
+        "content": content,
+        "skill": skill_info,
+        "owner": detail.get("owner", {}),
+        "latestVersion": latest,
+    }
 
 
 @router.post("/hub/install")
 async def hub_install(
     data: HubInstallRequest,
     session: SessionData = Depends(require_admin),
+    client: ClawHubClient = Depends(get_clawhub_client_di),
 ):
-    """從 ClawHub 安裝 skill"""
+    """從 ClawHub 安裝 skill（使用 REST API）"""
     # 驗證名稱
-    if not re.match(r"^[a-z0-9][a-z0-9-]*[a-z0-9]$", data.name):
+    if not validate_slug(data.name):
         raise HTTPException(status_code=400, detail="Skill 名稱格式無效")
 
-    sm = get_skill_manager()
+    # 取得 per-skill 鎖，確保同一 skill 的安裝操作序列化
+    async with _lock_for_locks:
+        entry = _install_locks.get(data.name)
+        if entry is None:
+            lock = asyncio.Lock()
+            _install_locks[data.name] = (lock, 1)
+            install_lock = lock
+        else:
+            lock, count = entry
+            _install_locks[data.name] = (lock, count + 1)
+            install_lock = lock
 
-    # 檢查是否已安裝
-    existing = await sm.get_skill(data.name)
-    if existing:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Skill '{data.name}' 已安裝。如需更新請先移除。",
-        )
+    version = ""
+    try:
+        async with install_lock:
+            sm = get_skill_manager()
 
-    # 下載到暫存目錄
-    with tempfile.TemporaryDirectory() as tmpdir:
-        args = ["install", data.name, "--force"]
-        if data.version:
-            args.extend(["--version", data.version])
+            # 檢查是否已安裝（在鎖內檢查，避免 TOCTOU）
+            existing = await sm.get_skill(data.name)
+            if existing:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Skill '{data.name}' 已安裝。如需更新請先移除。",
+                )
 
-        code, downloaded, stderr = await _run_clawhub(
-            *args, timeout=60, cwd=tmpdir,
-        )
-        if code != 0:
-            raise HTTPException(
-                status_code=502,
-                detail=f"安裝失敗: {stderr}",
-            )
-        logger.info(f"ClawHub install output: {downloaded}")
+            dest = sm.skills_dir / data.name
+            try:
+                with tempfile.TemporaryDirectory(dir=sm.skills_dir, prefix=f".{data.name}.installing-") as tmp_dir_path:
+                    tmp_dest = Path(tmp_dir_path)
 
-        # clawhub 會安裝到 skills/<name> 或直接 <name>
-        skill_path = None
-        for candidate in [
-            Path(tmpdir) / data.name,
-            Path(tmpdir) / "skills" / data.name,
-        ]:
-            if (candidate / "SKILL.md").exists():
-                skill_path = candidate
-                break
+                    # 取得 skill 詳情以獲得版本號和 owner
+                    detail = await client.get_skill(data.name)
+                    latest = detail.get("latestVersion", {})
+                    version = data.version or latest.get("version", "")
+                    owner = detail.get("owner", {})
+                    owner_handle = owner.get("handle", "")
 
-        # 也嘗試從 output 解析路徑
-        if skill_path is None:
-            for line in downloaded.splitlines():
-                if "->" in line:
-                    path_str = line.split("->")[-1].strip()
-                    p = Path(path_str)
-                    if (p / "SKILL.md").exists():
-                        skill_path = p
-                        break
+                    if not version:
+                        raise ClawHubError("找不到可用版本")
 
-        if skill_path is None:
-            raise HTTPException(
-                status_code=502,
-                detail="安裝完成但找不到 SKILL.md",
-            )
+                    # 下載並解壓到臨時目錄
+                    await client.download_and_extract(data.name, version, tmp_dest)
 
-        # 匯入到 CTOS skills 目錄
-        dest = sm.import_openclaw_skill(skill_path)
+                    # 寫入 _meta.json
+                    ClawHubClient.write_meta(tmp_dest, data.name, version, owner_handle)
 
-    # 重載
-    await sm.reload_skills()
-    skill = await sm.get_skill(data.name)
+                    # 原子移動到最終目錄
+                    if dest.exists():
+                        shutil.rmtree(dest)
+                    tmp_dest.rename(dest)
+
+            except ClawHubError as e:
+                raise HTTPException(
+                    status_code=e.status_code or 502,
+                    detail=f"安裝失敗: {e}",
+                )
+            except OSError as e:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"安裝失敗（檔案系統錯誤）: {e}",
+                )
+
+            # 重載
+            await sm.reload_skills()
+            skill = await sm.get_skill(data.name)
+    finally:
+        # 釋放鎖引用，避免 _install_locks 長時間成長
+        async with _lock_for_locks:
+            entry = _install_locks.get(data.name)
+            if entry and entry[0] is install_lock:
+                lock, count = entry
+                count -= 1
+                if count <= 0:
+                    _install_locks.pop(data.name, None)
+                else:
+                    _install_locks[data.name] = (lock, count)
 
     return {
         "installed": data.name,
+        "version": version,
         "path": str(dest),
         "description": skill.description if skill else "",
         "scripts_count": len(skill.scripts) if skill and skill.scripts else 0,
