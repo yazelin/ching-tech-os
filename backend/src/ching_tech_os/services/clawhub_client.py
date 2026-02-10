@@ -9,6 +9,7 @@ import json
 import logging
 import re
 import shutil
+import tempfile
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -109,40 +110,52 @@ class ClawHubClient:
         except (httpx.HTTPError, json.JSONDecodeError, KeyError) as e:
             raise ClawHubError(f"取得 skill 詳情失敗: {e}")
 
-    async def download_zip(self, slug: str, version: str) -> bytes:
-        """下載 skill ZIP 檔案
+    async def download_zip(self, slug: str, version: str) -> Path:
+        """下載 skill ZIP 檔案到暫存檔
 
         Args:
             slug: skill slug
             version: 版本號
 
         Returns:
-            ZIP 檔案的 bytes
+            暫存 ZIP 檔案路徑
 
         Raises:
             ClawHubError: 下載失敗或檔案過大
         """
+        tmp_path: Path | None = None
         try:
-            async with self._client.stream(
-                "GET", "/download",
-                params={"slug": slug, "version": version},
-                timeout=httpx.Timeout(connect=5, read=60, pool=5),
-            ) as resp:
-                resp.raise_for_status()
-                data = bytearray()
-                async for chunk in resp.aiter_bytes():
-                    data.extend(chunk)
-                    if len(data) > _MAX_ZIP_SIZE:
-                        raise ClawHubError(
-                            f"ZIP 檔案過大: {len(data)} bytes（上限 {_MAX_ZIP_SIZE} bytes）"
-                        )
-                return bytes(data)
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp_file:
+                tmp_path = Path(tmp_file.name)
+                size = 0
+                async with self._client.stream(
+                    "GET", "/download",
+                    params={"slug": slug, "version": version},
+                    timeout=httpx.Timeout(connect=5, read=60, pool=5),
+                ) as resp:
+                    resp.raise_for_status()
+                    async for chunk in resp.aiter_bytes():
+                        tmp_file.write(chunk)
+                        size += len(chunk)
+                        if size > _MAX_ZIP_SIZE:
+                            raise ClawHubError(
+                                f"ZIP 檔案過大: {size} bytes（上限 {_MAX_ZIP_SIZE} bytes）"
+                            )
+            return tmp_path
         except httpx.HTTPStatusError as e:
+            if tmp_path and tmp_path.exists():
+                tmp_path.unlink()
             raise ClawHubError(
                 f"下載失敗: HTTP {e.response.status_code}",
                 status_code=e.response.status_code,
             )
+        except ClawHubError:
+            if tmp_path and tmp_path.exists():
+                tmp_path.unlink()
+            raise
         except httpx.HTTPError as e:
+            if tmp_path and tmp_path.exists():
+                tmp_path.unlink()
             raise ClawHubError(f"下載失敗: {e}")
 
     async def download_and_extract(
@@ -163,41 +176,45 @@ class ClawHubClient:
         Returns:
             包含 slug, version, path 的字典
         """
-        data = await self.download_zip(slug, version)
+        zip_path = await self.download_zip(slug, version)
 
         # 解壓並防護 zip slip + ZIP bomb
         dest_dir.mkdir(parents=True, exist_ok=True)
         resolved_dest = dest_dir.resolve()
 
-        with zipfile.ZipFile(io.BytesIO(data)) as zf:
-            # ZIP bomb 防護：先檢查解壓後總大小和檔案數
-            total_size = sum(info.file_size for info in zf.infolist() if not info.is_dir())
-            file_count = sum(1 for info in zf.infolist() if not info.is_dir())
-            if total_size > _MAX_EXTRACTED_SIZE:
-                raise ClawHubError(
-                    f"ZIP 解壓後過大: {total_size} bytes（上限 {_MAX_EXTRACTED_SIZE} bytes）"
-                )
-            if file_count > _MAX_EXTRACTED_FILES:
-                raise ClawHubError(
-                    f"ZIP 檔案數量過多: {file_count}（上限 {_MAX_EXTRACTED_FILES}）"
-                )
-
-            for info in zf.infolist():
-                if info.is_dir():
-                    continue
-
-                # Zip slip 防護：確保解壓路徑在目標目錄內
-                target_path = (dest_dir / info.filename).resolve()
-                if not target_path.is_relative_to(resolved_dest):
+        try:
+            with zipfile.ZipFile(zip_path) as zf:
+                # ZIP bomb 防護：先檢查解壓後總大小和檔案數
+                total_size = sum(info.file_size for info in zf.infolist() if not info.is_dir())
+                file_count = sum(1 for info in zf.infolist() if not info.is_dir())
+                if total_size > _MAX_EXTRACTED_SIZE:
                     raise ClawHubError(
-                        f"Zip slip 攻擊偵測: {info.filename}"
+                        f"ZIP 解壓後過大: {total_size} bytes（上限 {_MAX_EXTRACTED_SIZE} bytes）"
+                    )
+                if file_count > _MAX_EXTRACTED_FILES:
+                    raise ClawHubError(
+                        f"ZIP 檔案數量過多: {file_count}（上限 {_MAX_EXTRACTED_FILES}）"
                     )
 
-                # 建立父目錄
-                target_path.parent.mkdir(parents=True, exist_ok=True)
-                # 解壓檔案
-                with zf.open(info) as src, open(target_path, "wb") as dst:
-                    shutil.copyfileobj(src, dst)
+                for info in zf.infolist():
+                    if info.is_dir():
+                        continue
+
+                    # Zip slip 防護：確保解壓路徑在目標目錄內
+                    target_path = (dest_dir / info.filename).resolve()
+                    if not target_path.is_relative_to(resolved_dest):
+                        raise ClawHubError(
+                            f"Zip slip 攻擊偵測: {info.filename}"
+                        )
+
+                    # 建立父目錄
+                    target_path.parent.mkdir(parents=True, exist_ok=True)
+                    # 解壓檔案
+                    with zf.open(info) as src, open(target_path, "wb") as dst:
+                        shutil.copyfileobj(src, dst)
+        finally:
+            if zip_path.exists():
+                zip_path.unlink()
 
         logger.info(f"已解壓 skill: {slug}@{version} → {dest_dir}")
         return {"slug": slug, "version": version, "path": str(dest_dir)}
@@ -217,26 +234,36 @@ class ClawHubClient:
         Returns:
             檔案內容字串，或 None（檔案不存在）
         """
-        data = zip_data or await self.download_zip(slug, version)
-
-        with zipfile.ZipFile(io.BytesIO(data)) as zf:
-            # 優先尋找根目錄下的檔案
-            if filename in zf.namelist():
-                info = zf.getinfo(filename)
+        zip_path: Path | None = None
+        try:
+            if zip_data is not None:
+                zf_source = io.BytesIO(zip_data)
+                zf = zipfile.ZipFile(zf_source)
             else:
-                # 若根目錄找不到，再搜尋 basename 匹配（支援有前綴目錄的 ZIP）
-                info = next(
-                    (i for i in zf.infolist()
-                     if not i.is_dir() and Path(i.filename).name == filename),
-                    None,
-                )
+                zip_path = await self.download_zip(slug, version)
+                zf = zipfile.ZipFile(zip_path)
 
-            if info:
-                if info.file_size > 10 * 1024 * 1024:  # 10MB limit
-                    raise ClawHubError(f"檔案過大: {info.file_size} bytes")
-                return zf.read(info).decode("utf-8", errors="replace")
+            with zf:
+                # 優先尋找根目錄下的檔案
+                if filename in zf.namelist():
+                    info = zf.getinfo(filename)
+                else:
+                    # 若根目錄找不到，再搜尋 basename 匹配（支援有前綴目錄的 ZIP）
+                    info = next(
+                        (i for i in zf.infolist()
+                         if not i.is_dir() and Path(i.filename).name == filename),
+                        None,
+                    )
 
-        return None
+                if info:
+                    if info.file_size > 10 * 1024 * 1024:  # 10MB limit
+                        raise ClawHubError(f"檔案過大: {info.file_size} bytes")
+                    return zf.read(info).decode("utf-8", errors="replace")
+
+            return None
+        finally:
+            if zip_path and zip_path.exists():
+                zip_path.unlink()
 
     @staticmethod
     def write_meta(
@@ -287,40 +314,6 @@ class ClawHubClient:
             return None
 
 
-_client: ClawHubClient | None = None
-
-
-def get_clawhub_client() -> ClawHubClient:
-    """取得全域 ClawHubClient singleton
-
-    Note: 此函式保留向下相容。新程式碼建議使用 FastAPI 依賴注入
-    （透過 Request.app.state.clawhub_client）。
-    """
-    global _client
-    if _client is None:
-        _client = ClawHubClient()
-    return _client
-
-
-def init_clawhub_client(app) -> ClawHubClient:
-    """初始化 ClawHubClient 並存入 app.state（在 lifespan 啟動時呼叫）"""
-    global _client
-    if _client is None:
-        _client = ClawHubClient()
-    app.state.clawhub_client = _client
-    return _client
-
-
 def get_clawhub_client_di(request: Request) -> ClawHubClient:
     """FastAPI 依賴注入：從 app.state 取得 ClawHubClient"""
     return request.app.state.clawhub_client
-
-
-async def close_clawhub_client(app=None) -> None:
-    """關閉全域 ClawHubClient（在 app shutdown 時呼叫）"""
-    global _client
-    if app is not None and hasattr(app.state, "clawhub_client"):
-        del app.state.clawhub_client
-    if _client is not None:
-        await _client.close()
-        _client = None

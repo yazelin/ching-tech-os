@@ -7,7 +7,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ..models.auth import SessionData
@@ -16,7 +16,8 @@ from ..skills import get_skill_manager
 from ..services.clawhub_client import ClawHubClient, ClawHubError, get_clawhub_client_di, validate_slug
 
 # Per-skill 安裝鎖（防止同一 skill 的並發安裝競爭條件）
-_install_locks: dict[str, asyncio.Lock] = {}
+# value: (lock, ref_count)
+_install_locks: dict[str, tuple[asyncio.Lock, int]] = {}
 _lock_for_locks = asyncio.Lock()
 
 logger = logging.getLogger(__name__)
@@ -209,9 +210,8 @@ async def hub_inspect(
 
         content = ""
         if version:
-            zip_data = await client.download_zip(data.slug, version)
             content = await client.extract_file_from_zip(
-                data.slug, version, "SKILL.md", zip_data=zip_data
+                data.slug, version, "SKILL.md"
             ) or ""
 
     except ClawHubError as e:
@@ -242,61 +242,79 @@ async def hub_install(
 
     # 取得 per-skill 鎖，確保同一 skill 的安裝操作序列化
     async with _lock_for_locks:
-        if data.name not in _install_locks:
-            _install_locks[data.name] = asyncio.Lock()
-        install_lock = _install_locks[data.name]
+        entry = _install_locks.get(data.name)
+        if entry is None:
+            lock = asyncio.Lock()
+            _install_locks[data.name] = (lock, 1)
+            install_lock = lock
+        else:
+            lock, count = entry
+            _install_locks[data.name] = (lock, count + 1)
+            install_lock = lock
 
-    async with install_lock:
-        sm = get_skill_manager()
+    try:
+        async with install_lock:
+            sm = get_skill_manager()
 
-        # 檢查是否已安裝（在鎖內檢查，避免 TOCTOU）
-        existing = await sm.get_skill(data.name)
-        if existing:
-            raise HTTPException(
-                status_code=409,
-                detail=f"Skill '{data.name}' 已安裝。如需更新請先移除。",
-            )
+            # 檢查是否已安裝（在鎖內檢查，避免 TOCTOU）
+            existing = await sm.get_skill(data.name)
+            if existing:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Skill '{data.name}' 已安裝。如需更新請先移除。",
+                )
 
-        dest = sm.skills_dir / data.name
-        try:
-            with tempfile.TemporaryDirectory(dir=sm.skills_dir, prefix=f".{data.name}.installing-") as tmp_dir_path:
-                tmp_dest = Path(tmp_dir_path)
+            dest = sm.skills_dir / data.name
+            try:
+                with tempfile.TemporaryDirectory(dir=sm.skills_dir, prefix=f".{data.name}.installing-") as tmp_dir_path:
+                    tmp_dest = Path(tmp_dir_path)
 
-                # 取得 skill 詳情以獲得版本號和 owner
-                detail = await client.get_skill(data.name)
-                latest = detail.get("latestVersion", {})
-                version = data.version or latest.get("version", "")
-                owner = detail.get("owner", {})
-                owner_handle = owner.get("handle", "")
+                    # 取得 skill 詳情以獲得版本號和 owner
+                    detail = await client.get_skill(data.name)
+                    latest = detail.get("latestVersion", {})
+                    version = data.version or latest.get("version", "")
+                    owner = detail.get("owner", {})
+                    owner_handle = owner.get("handle", "")
 
-                if not version:
-                    raise ClawHubError("找不到可用版本")
+                    if not version:
+                        raise ClawHubError("找不到可用版本")
 
-                # 下載並解壓到臨時目錄
-                await client.download_and_extract(data.name, version, tmp_dest)
+                    # 下載並解壓到臨時目錄
+                    await client.download_and_extract(data.name, version, tmp_dest)
 
-                # 寫入 _meta.json
-                ClawHubClient.write_meta(tmp_dest, data.name, version, owner_handle)
+                    # 寫入 _meta.json
+                    ClawHubClient.write_meta(tmp_dest, data.name, version, owner_handle)
 
-                # 原子移動到最終目錄
-                if dest.exists():
-                    shutil.rmtree(dest)
-                tmp_dest.rename(dest)
+                    # 原子移動到最終目錄
+                    if dest.exists():
+                        shutil.rmtree(dest)
+                    tmp_dest.rename(dest)
 
-        except ClawHubError as e:
-            raise HTTPException(
-                status_code=e.status_code or 502,
-                detail=f"安裝失敗: {e}",
-            )
-        except OSError as e:
-            raise HTTPException(
-                status_code=500,
-                detail=f"安裝失敗（檔案系統錯誤）: {e}",
-            )
+            except ClawHubError as e:
+                raise HTTPException(
+                    status_code=e.status_code or 502,
+                    detail=f"安裝失敗: {e}",
+                )
+            except OSError as e:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"安裝失敗（檔案系統錯誤）: {e}",
+                )
 
-        # 重載
-        await sm.reload_skills()
-        skill = await sm.get_skill(data.name)
+            # 重載
+            await sm.reload_skills()
+            skill = await sm.get_skill(data.name)
+    finally:
+        # 釋放鎖引用，避免 _install_locks 長時間成長
+        async with _lock_for_locks:
+            entry = _install_locks.get(data.name)
+            if entry and entry[0] is install_lock:
+                lock, count = entry
+                count -= 1
+                if count <= 0:
+                    _install_locks.pop(data.name, None)
+                else:
+                    _install_locks[data.name] = (lock, count)
 
     return {
         "installed": data.name,
