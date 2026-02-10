@@ -253,6 +253,9 @@ const AgentSettingsApp = (function() {
             <div class="skill-sub-content" data-skill-tab-content="hub" style="display:none;">
               <div class="skill-hub-search">
                 <input type="text" class="agent-form-input skill-hub-search-input" placeholder="搜尋 ClawHub..." data-action="hub-search-input">
+                <select id="hub-source-select" class="agent-form-input skill-hub-source-select" data-action="hub-source-select">
+                  <!-- 由 JS 動態填充選項 -->
+                </select>
                 <button class="btn btn-sm btn-primary skill-hub-search-btn" data-action="hub-search">搜尋</button>
               </div>
               <div class="skill-hub-results"></div>
@@ -733,6 +736,8 @@ const AgentSettingsApp = (function() {
       const toolCount = s.tools_count || 0;
       const source = s.source || 'unknown';
       const sourceBadgeClass = source === 'native' ? 'skill-source-native' : source === 'openclaw' ? 'skill-source-openclaw' : 'skill-source-other';
+      const hubSource = (s.meta && s.meta.source) || s.hub_source || '';
+      const hubBadge = hubSource ? `<span class="badge-source ${hubSource === 'clawhub' ? 'badge-source-clawhub' : 'badge-source-skillhub'}">${escapeHtml(hubSource)}</span>` : '';
       const isHighlighted = s.name === highlightSkillName;
       return `
         <div class="agent-list-item skill-list-item ${s.name === currentSkillName ? 'active' : ''} ${isHighlighted ? 'skill-highlight' : ''}"
@@ -741,6 +746,7 @@ const AgentSettingsApp = (function() {
             <div class="agent-list-item-name">
               ${escapeHtml(s.name)}
               <span class="skill-source-badge ${sourceBadgeClass}">${escapeHtml(source)}</span>
+              ${hubBadge}
             </div>
             <div class="agent-list-item-model">${escapeHtml(s.description || '—')}</div>
             <div class="skill-list-item-meta">
@@ -1111,11 +1117,13 @@ const AgentSettingsApp = (function() {
         const ownerName = (r.owner && (r.owner.displayName || r.owner.handle))
           || (slug.includes('/') ? slug.split('/')[0] : '')
           || '';
+        const hubSource = r.source || '';
+        const hubSourceBadge = hubSource ? `<span class="badge-source ${hubSource === 'clawhub' ? 'badge-source-clawhub' : 'badge-source-skillhub'}">${escapeHtml(hubSource)}</span>` : '';
 
         return `
           <div class="skill-hub-result-item">
             <div class="agent-list-item-info">
-              <div class="agent-list-item-name">${escapeHtml(displayName)}</div>
+              <div class="agent-list-item-name">${escapeHtml(displayName)} ${hubSourceBadge}</div>
               ${ownerName ? `<div class="skill-hub-author">by ${escapeHtml(ownerName)}</div>` : ''}
               <div class="skill-hub-summary">${escapeHtml(summary)}</div>
               <div class="skill-list-item-meta">
