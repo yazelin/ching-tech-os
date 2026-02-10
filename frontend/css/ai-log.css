@@ -48,7 +48,6 @@
 }
 
 .ai-log-filter-select:focus {
-  outline: none;
   border-color: var(--color-accent);
 }
 
@@ -63,7 +62,6 @@
 }
 
 .ai-log-filter-input:focus {
-  outline: none;
   border-color: var(--color-accent);
 }
 

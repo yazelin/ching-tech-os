@@ -214,6 +214,9 @@ const WindowModule = (function() {
     windowEl.dataset.appId = appId;
     windowEl.setAttribute('role', 'dialog');
     windowEl.setAttribute('aria-label', title);
+    windowEl.setAttribute('aria-modal', 'true');
+    windowEl.setAttribute('aria-labelledby', `${windowId}-title`);
+    windowEl.tabIndex = -1;
     windowEl.style.width = `${width}px`;
     windowEl.style.height = `${height}px`;
     windowEl.style.left = `${x}px`;
@@ -276,6 +279,14 @@ const WindowModule = (function() {
     if (onInit) {
       onInit(windowEl, windowId);
     }
+
+    // 無障礙：視窗開啟後將焦點移入，讓鍵盤使用者能直接操作
+    requestAnimationFrame(() => {
+      const firstFocusable = windowEl.querySelector(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      if (firstFocusable) firstFocusable.focus();
+    });
 
     // Notify state change
     notifyStateChange('open', appId);

@@ -184,7 +184,6 @@
 }
 
 .prompt-form-input:focus {
-  outline: none;
   border-color: var(--color-accent);
 }
 
@@ -204,7 +203,6 @@
 }
 
 .prompt-form-select:focus {
-  outline: none;
   border-color: var(--color-accent);
 }
 
@@ -230,7 +228,6 @@
 }
 
 .prompt-content-textarea:focus {
-  outline: none;
   border-color: var(--color-accent);
 }
 

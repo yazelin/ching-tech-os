@@ -204,7 +204,6 @@
 
 .ai-prompt-select:focus,
 .ai-agent-select:focus {
-  outline: none;
   border-color: var(--color-accent);
 }
 
@@ -471,7 +470,6 @@
 }
 
 .ai-input:focus {
-  outline: none;
   border: none;
   background: transparent;
 }

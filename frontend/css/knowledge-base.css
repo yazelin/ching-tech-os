@@ -63,7 +63,6 @@
   padding: var(--spacing-sm);
   font-size: var(--font-size-sm);
   color: var(--text-primary);
-  outline: none;
 }
 
 .kb-search-input::placeholder {
@@ -114,7 +113,6 @@
   color: var(--text-secondary);
   cursor: pointer;
   appearance: none;
-  outline: none;
   transition: all var(--transition-fast);
 }
 
@@ -658,7 +656,6 @@
   font-size: var(--font-size-md);
   font-weight: 600;
   color: var(--text-primary);
-  outline: none;
   transition: border-color var(--transition-fast);
 }
 
@@ -696,7 +693,6 @@
   border-radius: var(--radius-sm);
   font-size: var(--font-size-sm);
   color: var(--text-primary);
-  outline: none;
   appearance: none;
   -webkit-appearance: none;
   cursor: pointer;
@@ -733,7 +729,6 @@
   line-height: 1.6;
   color: var(--text-primary);
   resize: none;
-  outline: none;
 }
 
 .kb-editor-textarea::placeholder {

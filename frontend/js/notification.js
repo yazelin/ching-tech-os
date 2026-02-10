@@ -14,8 +14,9 @@ const NotificationModule = (function () {
 
     container = document.createElement('div');
     container.className = 'notification-container';
-    container.setAttribute('role', 'status');
-    container.setAttribute('aria-live', 'polite');
+    container.setAttribute('role', 'log');
+    container.setAttribute('aria-live', 'assertive');
+    container.setAttribute('aria-atomic', 'false');
     container.setAttribute('aria-label', '通知');
     document.body.appendChild(container);
   }

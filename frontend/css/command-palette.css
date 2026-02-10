@@ -124,7 +124,6 @@
   flex: 1;
   background: transparent;
   border: none;
-  outline: none;
   font-size: var(--font-size-base);
   color: var(--text-primary);
   font-family: inherit;

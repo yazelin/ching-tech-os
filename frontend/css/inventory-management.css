@@ -48,7 +48,6 @@
 }
 
 .inv-search-input:focus {
-  outline: none;
   border-color: var(--color-accent);
 }
 
@@ -794,7 +793,6 @@
 .inv-form-group input:focus,
 .inv-form-group select:focus,
 .inv-form-group textarea:focus {
-  outline: none;
   border-color: var(--color-accent);
 }
 

@@ -87,7 +87,6 @@
   font-size: var(--font-size-sm);
   cursor: pointer;
   appearance: none;
-  outline: none;
   transition: all var(--transition-fast);
 }
 
@@ -96,7 +95,6 @@
 }
 
 .sm-filter-select:focus {
-  outline: none;
   border-color: var(--color-primary);
 }
 

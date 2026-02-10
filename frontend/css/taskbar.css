@@ -45,7 +45,6 @@
   position: relative;
   user-select: none;
   -webkit-user-select: none;
-  outline: none;
   background: transparent;
   border: none;
   padding: 0;
@@ -58,6 +57,11 @@
 
 .taskbar-icon:active {
   transform: translateY(-2px);
+}
+
+.taskbar-icon:focus-visible {
+  outline: var(--focus-ring-width, 2px) solid var(--focus-ring-color, var(--color-primary));
+  outline-offset: var(--focus-ring-offset, 2px);
 }
 
 .taskbar-icon .icon {

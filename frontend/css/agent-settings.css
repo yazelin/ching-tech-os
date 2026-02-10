@@ -161,7 +161,6 @@
 }
 
 .agent-form-input:focus {
-  outline: none;
   border-color: var(--color-accent);
 }
 
@@ -181,7 +180,6 @@
 }
 
 .agent-form-select:focus {
-  outline: none;
   border-color: var(--color-accent);
 }
 
@@ -201,7 +199,6 @@
 }
 
 .agent-form-textarea:focus {
-  outline: none;
   border-color: var(--color-accent);
 }
 
@@ -324,7 +321,6 @@
 }
 
 .agent-test-input:focus {
-  outline: none;
   border-color: var(--color-accent);
 }
 

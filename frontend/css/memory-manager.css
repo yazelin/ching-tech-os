@@ -495,7 +495,6 @@
 
 .mm-input:focus,
 .mm-textarea:focus {
-  outline: none;
   border-color: var(--color-primary);
 }
 
