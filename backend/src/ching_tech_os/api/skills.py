@@ -105,11 +105,11 @@ async def get_skill(name: str, session: SessionData = Depends(require_admin)):
 async def get_skill_meta(name: str, session: SessionData = Depends(require_admin)):
     """取得 skill 的 _meta.json 資訊"""
     sm = get_skill_manager()
-    skill = await sm.get_skill(name)
-    if not skill:
+    skill_dir = sm.skills_dir / name
+    if not skill_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"Skill '{name}' not found")
 
-    meta = ClawHubClient.read_meta(sm.skills_dir / name)
+    meta = ClawHubClient.read_meta(skill_dir)
     return {"name": name, "meta": meta}
 
 
