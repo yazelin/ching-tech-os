@@ -7,6 +7,8 @@ const HeaderModule = (function() {
   'use strict';
 
   let timeInterval = null;
+  let userMenuEl = null;
+  let userMenuOpen = false;
 
   /**
    * Format current time as HH:MM:SS
@@ -94,11 +96,97 @@ const HeaderModule = (function() {
   }
 
   /**
-   * Handle user name click - open profile window
+   * Handle user name click - toggle user menu
    */
-  function handleUserNameClick() {
-    if (typeof UserProfileModule !== 'undefined') {
-      UserProfileModule.open();
+  function handleUserNameClick(e) {
+    e.stopPropagation();
+    if (userMenuOpen) {
+      closeUserMenu();
+    } else {
+      openUserMenu();
+    }
+  }
+
+  /**
+   * 建立使用者下拉選單
+   */
+  function createUserMenu() {
+    if (userMenuEl) return userMenuEl;
+
+    userMenuEl = document.createElement('div');
+    userMenuEl.className = 'header-user-menu';
+    userMenuEl.innerHTML = `
+      <button class="header-user-menu-item" data-action="profile">
+        <span class="icon">${typeof getIcon === 'function' ? getIcon('account-circle') : ''}</span>
+        <span>個人資料</span>
+      </button>
+      <div class="header-user-menu-divider"></div>
+      <button class="header-user-menu-item" data-action="restart-onboarding">
+        <span class="icon">${typeof getIcon === 'function' ? getIcon('refresh') : ''}</span>
+        <span>重新導覽</span>
+      </button>
+    `;
+
+    userMenuEl.addEventListener('click', function (e) {
+      const item = e.target.closest('[data-action]');
+      if (!item) return;
+
+      const action = item.dataset.action;
+      closeUserMenu();
+
+      switch (action) {
+        case 'profile':
+          if (typeof UserProfileModule !== 'undefined') {
+            UserProfileModule.open();
+          }
+          break;
+        case 'restart-onboarding':
+          if (typeof OnboardingModule !== 'undefined') {
+            OnboardingModule.restart();
+          }
+          break;
+      }
+    });
+
+    const userEl = document.querySelector('.header-user');
+    if (userEl) {
+      userEl.appendChild(userMenuEl);
+    }
+
+    return userMenuEl;
+  }
+
+  /**
+   * 開啟使用者選單
+   */
+  function openUserMenu() {
+    createUserMenu();
+    userMenuOpen = true;
+    userMenuEl.classList.add('open');
+
+    setTimeout(() => {
+      document.addEventListener('click', handleOutsideClick);
+    }, 0);
+  }
+
+  /**
+   * 關閉使用者選單
+   */
+  function closeUserMenu() {
+    userMenuOpen = false;
+    if (userMenuEl) {
+      userMenuEl.classList.remove('open');
+    }
+    document.removeEventListener('click', handleOutsideClick);
+  }
+
+  /**
+   * 點擊選單外部時關閉
+   */
+  function handleOutsideClick(e) {
+    const userEl = document.querySelector('.header-user');
+    if (userEl && !userEl.contains(e.target)) {
+      closeUserMenu();
     }
   }
 
@@ -146,6 +234,61 @@ const HeaderModule = (function() {
       });
 
       WindowModule.closeWindow(topWindowId);
+    }
+  }
+
+  // ─── Badge 微互動動畫 ───
+
+  /**
+   * 觸發 badge bump 動畫
+   * 當 badge 數值更新時呼叫此函式，同時搖晃鈴鐺
+   * @param {number} [count] - 新的 badge 數值（可選）
+   */
+  function triggerBadgeBump(count) {
+    const badge = document.getElementById('messagesBadge');
+    const btn = document.getElementById('messagesBtn');
+    if (!badge) return;
+
+    // 更新數值（若有傳入）
+    if (typeof count === 'number') {
+      badge.textContent = count > 99 ? '99+' : String(count);
+
+      if (count > 0) {
+        // 從隱藏到顯示 → 使用 appear 動畫
+        if (badge.classList.contains('hidden')) {
+          badge.classList.remove('hidden');
+          badge.classList.add('badge-appear');
+          badge.addEventListener('animationend', function onEnd() {
+            badge.classList.remove('badge-appear');
+            badge.removeEventListener('animationend', onEnd);
+          });
+          return;
+        }
+      } else {
+        badge.classList.add('hidden');
+        return;
+      }
+    }
+
+    // Bump 動畫（移除再添加以重新觸發）
+    badge.classList.remove('badge-bump');
+    void badge.offsetWidth; // force reflow
+    badge.classList.add('badge-bump');
+
+    badge.addEventListener('animationend', function onEnd() {
+      badge.classList.remove('badge-bump');
+      badge.removeEventListener('animationend', onEnd);
+    });
+
+    // 鈴鐺搖晃
+    if (btn) {
+      btn.classList.remove('bell-ring');
+      void btn.offsetWidth;
+      btn.classList.add('bell-ring');
+      btn.addEventListener('animationend', function onEnd() {
+        btn.classList.remove('bell-ring');
+        btn.removeEventListener('animationend', onEnd);
+      });
     }
   }
 
@@ -205,6 +348,7 @@ const HeaderModule = (function() {
     init,
     destroy,
     formatTime,
-    formatDate
+    formatDate,
+    triggerBadgeBump
   };
 })();

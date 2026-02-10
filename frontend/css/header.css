@@ -230,9 +230,125 @@
   display: none;
 }
 
+/* Badge Bump 微互動動畫 — 當 badge 數值更新時觸發 */
+.header-badge.badge-bump {
+  animation: badgeBump 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+
+@keyframes badgeBump {
+  0%   { transform: scale(1); }
+  30%  { transform: scale(1.35); }
+  50%  { transform: scale(0.9); }
+  70%  { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
+/* Badge 出現時的淡入動畫 */
+.header-badge.badge-appear {
+  animation: badgeAppear 0.35s ease-out;
+}
+
+@keyframes badgeAppear {
+  0% {
+    opacity: 0;
+    transform: scale(0);
+  }
+  60% {
+    transform: scale(1.2);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* 訊息鈴鐺搖擺動畫 — 配合 badge bump */
+.header-messages-btn.bell-ring .icon {
+  animation: bellRing 0.6s ease-in-out;
+}
+
+@keyframes bellRing {
+  0%   { transform: rotate(0); }
+  15%  { transform: rotate(14deg); }
+  30%  { transform: rotate(-12deg); }
+  45%  { transform: rotate(8deg); }
+  60%  { transform: rotate(-6deg); }
+  75%  { transform: rotate(3deg); }
+  100% { transform: rotate(0); }
+}
+
+/* Reduced Motion 支援 */
+@media (prefers-reduced-motion: reduce) {
+  .header-badge.badge-bump,
+  .header-badge.badge-appear,
+  .header-messages-btn.bell-ring .icon {
+    animation: none;
+  }
+}
+
 /* ==========================================================================
    Mobile Styles (手機版樣式)
    ========================================================================== */
+
+/* ── Header User 下拉選單 ── */
+.header-user {
+  position: relative;
+}
+
+.header-user-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 180px;
+  background: var(--bg-elevated, #1e293b);
+  border: 1px solid var(--interactive-border, rgba(255,255,255,0.1));
+  border-radius: var(--radius-md, 8px);
+  padding: var(--spacing-xs, 6px) 0;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+  z-index: 200;
+  opacity: 0;
+  transform: translateY(-4px);
+  pointer-events: none;
+  transition: opacity var(--transition-fast, 0.15s), transform var(--transition-fast, 0.15s);
+}
+
+.header-user-menu.open {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.header-user-menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm, 8px);
+  width: 100%;
+  padding: var(--spacing-sm, 8px) var(--spacing-md, 16px);
+  background: none;
+  border: none;
+  color: var(--text-secondary, #94a3b8);
+  font-size: var(--font-size-sm, 14px);
+  cursor: pointer;
+  transition: all var(--transition-fast, 0.15s);
+  text-align: left;
+}
+
+.header-user-menu-item:hover {
+  background: var(--interactive-hover, rgba(255,255,255,0.06));
+  color: var(--text-primary, #f1f5f9);
+}
+
+.header-user-menu-item .icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.header-user-menu-divider {
+  height: 1px;
+  background: var(--border-light, rgba(255,255,255,0.08));
+  margin: var(--spacing-xs, 6px) 0;
+}
+
 @media (max-width: 768px) {
   .header-bar {
     padding: 0 var(--spacing-sm);

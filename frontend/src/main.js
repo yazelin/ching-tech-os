@@ -46,4 +46,7 @@ document.addEventListener('DOMContentLoaded', async function () {
   DesktopModule.init();
   TaskbarModule.init();
   SocketClient.connect();
+
+  // Onboarding 新手導覽（延遲啟動，等桌面渲染完成）
+  OnboardingModule.init();
 });
