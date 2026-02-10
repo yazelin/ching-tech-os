@@ -133,15 +133,26 @@ const DesktopModule = (function() {
    * @returns {HTMLElement}
    */
   function createIconElement(app) {
-    const icon = document.createElement('div');
+    const icon = document.createElement('button');
+    icon.type = 'button';
     icon.className = 'desktop-icon';
     icon.dataset.appId = app.id;
+    icon.setAttribute('aria-label', `開啟${app.name}`);
     icon.innerHTML = `
       <div class="desktop-icon-image">
         <span class="icon">${getIcon(app.icon)}</span>
       </div>
       <span class="desktop-icon-label">${app.name}</span>
     `;
+
+    // 鍵盤事件：Enter / Space 觸發點擊
+    icon.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        icon.click();
+      }
+    });
+
     return icon;
   }
 
