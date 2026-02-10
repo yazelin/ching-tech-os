@@ -650,8 +650,13 @@ const SettingsApp = (function () {
   function showBotStatus(container, platform, message, isError = false) {
     const el = container.querySelector(`.bot-status-msg[data-platform="${platform}"]`);
     if (el) {
-      el.textContent = message;
-      el.className = `bot-status-msg ${isError ? 'bot-status-error' : 'bot-status-success'}`;
+      // [Sprint8] 原: el.textContent = message; el.className = `bot-status-msg ${isError ? 'bot-status-error' : 'bot-status-success'}`
+      if (isError) {
+        UIHelpers.showError(el, { message, variant: 'compact' });
+      } else {
+        el.textContent = message;
+        el.className = 'bot-status-msg bot-status-success';
+      }
       setTimeout(() => { el.textContent = ''; el.className = 'bot-status-msg'; }, 5000);
     }
   }
