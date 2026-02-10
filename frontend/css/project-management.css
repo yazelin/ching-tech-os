@@ -112,7 +112,7 @@
   color: var(--text-primary);
   font-size: 13px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--transition-fast);
 }
 
 .pm-action-btn:hover {
@@ -181,7 +181,7 @@
   margin-bottom: 4px;
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--transition-fast);
 }
 
 .pm-list-item:hover {
@@ -260,7 +260,7 @@
   width: 4px;
   cursor: col-resize;
   background: transparent;
-  transition: background 0.15s;
+  transition: background var(--transition-fast);
 }
 
 .pm-resizer:hover,
@@ -346,7 +346,7 @@
   font-size: 13px;
   cursor: pointer;
   border-bottom: 2px solid transparent;
-  transition: all 0.15s;
+  transition: all var(--transition-fast);
 }
 
 .pm-tab:hover {
@@ -752,7 +752,7 @@
   border-radius: 8px;
   border: 1px solid var(--border-subtle);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition-normal);
 }
 
 .pm-attachment-card:hover {
@@ -859,7 +859,7 @@
   border-radius: 8px;
   border: 1px solid var(--border-subtle);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--transition-fast);
 }
 
 .pm-link-card:hover {
@@ -928,7 +928,7 @@
   color: var(--text-muted);
   cursor: pointer;
   border-radius: 6px;
-  transition: all 0.15s;
+  transition: all var(--transition-fast);
 }
 
 .pm-icon-btn:hover {
@@ -1100,7 +1100,7 @@
   color: var(--text-primary);
   font-size: 14px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--transition-fast);
 }
 
 .pm-btn:hover {
@@ -1158,7 +1158,7 @@
   border: 2px dashed var(--border-light);
   border-radius: 12px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--transition-fast);
 }
 
 .pm-upload-dropzone:hover,
@@ -1206,7 +1206,7 @@
 .pm-progress-fill {
   height: 100%;
   background: var(--color-accent);
-  transition: width 0.3s;
+  transition: width var(--transition-slow);
 }
 
 /* Loading & Empty */
@@ -1252,7 +1252,7 @@
   background: var(--bg-surface-dark);
   border-radius: 8px;
   border: 1px solid var(--border-subtle);
-  transition: all 0.15s;
+  transition: all var(--transition-fast);
 }
 
 .pm-delivery-card:hover {
@@ -1716,7 +1716,7 @@
     right: 0;
     bottom: 0;
     transform: translateX(100%);
-    transition: transform 0.3s ease;
+    transition: transform var(--transition-slow);
     z-index: 10;
     background-color: var(--color-background);
   }

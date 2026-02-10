@@ -129,7 +129,7 @@
   color: var(--text-primary);
   font-size: 13px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--transition-fast);
 }
 
 .inv-action-btn:hover {
@@ -202,7 +202,7 @@
   margin-bottom: 4px;
   border-radius: 8px;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background var(--transition-fast);
 }
 
 .inv-list-item:hover {
@@ -288,7 +288,7 @@
   width: 4px;
   cursor: col-resize;
   background: transparent;
-  transition: background 0.15s;
+  transition: background var(--transition-fast);
 }
 
 .inv-resizer:hover {
@@ -409,7 +409,7 @@
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--transition-fast);
   margin-bottom: -1px;
 }
 
@@ -618,7 +618,7 @@
   color: var(--text-muted);
   cursor: pointer;
   opacity: 0.5;
-  transition: all 0.15s;
+  transition: all var(--transition-fast);
 }
 
 .inv-tx-delete:hover {
@@ -710,7 +710,7 @@
   color: var(--text-muted);
   cursor: pointer;
   opacity: 0.5;
-  transition: all 0.15s;
+  transition: all var(--transition-fast);
 }
 
 .inv-order-edit:hover {
@@ -844,7 +844,7 @@
   color: var(--text-primary);
   font-size: 14px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--transition-fast);
 }
 
 .inv-btn:hover {
@@ -1017,7 +1017,7 @@
     bottom: 0;
     z-index: 0;
     transform: translateX(100%);
-    transition: transform 0.2s ease;
+    transition: transform var(--transition-normal);
   }
 
   .inv-container.showing-detail .inv-list-panel {

@@ -156,7 +156,7 @@
 
 .ai-log-table tbody tr {
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background var(--transition-fast);
 }
 
 .ai-log-table tbody tr:hover {
@@ -315,7 +315,7 @@
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .ai-log-copy-btn:hover {
@@ -426,7 +426,7 @@
   padding: 10px 12px;
   cursor: pointer;
   user-select: none;
-  transition: background 0.15s ease;
+  transition: background var(--transition-fast);
 }
 
 .ai-log-flow-header:hover {
@@ -495,7 +495,7 @@
   display: flex;
   align-items: center;
   color: var(--text-muted);
-  transition: transform 0.2s ease;
+  transition: transform var(--transition-normal);
 }
 
 .ai-log-flow-item[data-expanded="true"] .ai-log-flow-toggle {
@@ -611,7 +611,7 @@
   color: var(--text-muted);
   background: transparent;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .ai-log-tools-expand-btn:hover {
@@ -650,7 +650,7 @@
   color: var(--text-secondary);
   font-size: 11px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .ai-log-copy-full-btn:hover {
@@ -713,7 +713,7 @@
   }
 
   .ai-log-filter-toggle .icon {
-    transition: transform 0.2s ease;
+    transition: transform var(--transition-normal);
   }
 
   .ai-log-filters.expanded .ai-log-filter-toggle .icon {
@@ -803,7 +803,7 @@
     border: 1px solid var(--border-subtle);
     border-radius: 8px;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: all var(--transition-fast);
   }
 
   .ai-log-card:active {
@@ -928,7 +928,7 @@
     cursor: pointer;
     white-space: nowrap;
     min-width: 80px;
-    transition: all 0.15s ease;
+    transition: all var(--transition-fast);
   }
 
   .ai-log-detail-tab.active {
