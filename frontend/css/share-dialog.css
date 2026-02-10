@@ -15,7 +15,7 @@
   justify-content: center;
   z-index: 10000;
   opacity: 0;
-  transition: opacity 0.2s ease;
+  transition: opacity var(--transition-normal);
 }
 
 .share-dialog-overlay.show {
@@ -31,7 +31,7 @@
   max-width: calc(100vw - 40px);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   transform: scale(0.95);
-  transition: transform 0.2s ease;
+  transition: transform var(--transition-normal);
 }
 
 .share-dialog-overlay.show .share-dialog {
@@ -81,7 +81,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .share-dialog-close:hover {
@@ -147,7 +147,7 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .share-create-btn:hover {
@@ -244,7 +244,7 @@
   align-items: center;
   gap: 6px;
   white-space: nowrap;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .share-copy-btn:hover {
@@ -287,7 +287,7 @@
   border-radius: 6px;
   font-size: 14px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .share-dialog-footer .btn-ghost {
@@ -348,7 +348,7 @@
   border-radius: 6px;
   font-size: 14px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .share-retry-btn:hover {

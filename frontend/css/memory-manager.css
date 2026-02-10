@@ -30,7 +30,7 @@
   border-radius: 6px;
   cursor: pointer;
   font-size: 13px;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .mm-tab:hover {
@@ -86,7 +86,7 @@
   padding: 10px 12px;
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .mm-sidebar-item:hover {
@@ -181,7 +181,7 @@
   border-radius: 6px;
   cursor: pointer;
   font-size: 13px;
-  transition: background 0.15s ease;
+  transition: background var(--transition-fast);
 }
 
 .mm-add-btn:hover {
@@ -204,7 +204,7 @@
   border: 1px solid var(--border-light);
   border-radius: 8px;
   overflow: hidden;
-  transition: border-color 0.15s ease, opacity 0.15s ease;
+  transition: border-color var(--transition-fast), opacity var(--transition-fast);
 }
 
 .mm-memory-card:hover {
@@ -246,7 +246,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .mm-memory-checkbox input:checked + .mm-checkbox-mark {
@@ -290,7 +290,7 @@
   color: var(--text-secondary);
   border-radius: 6px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .mm-memory-btn:hover {
@@ -447,7 +447,7 @@
   color: var(--text-secondary);
   border-radius: 6px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .mm-modal-close:hover {
@@ -490,7 +490,7 @@
   color: var(--text-primary);
   font-size: 13px;
   font-family: inherit;
-  transition: border-color 0.15s ease;
+  transition: border-color var(--transition-fast);
 }
 
 .mm-input:focus,
@@ -528,7 +528,7 @@
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .mm-btn.primary {
@@ -583,7 +583,7 @@
   .mm-sidebar {
     width: 100%;
     border-right: none;
-    transition: opacity 0.3s ease;
+    transition: opacity var(--transition-slow);
   }
 
   /* 主區域：手機版覆蓋滑入 */
@@ -594,7 +594,7 @@
     right: 0;
     bottom: 0;
     transform: translateX(100%);
-    transition: transform 0.3s ease;
+    transition: transform var(--transition-slow);
     z-index: 10;
     background: var(--color-background);
   }

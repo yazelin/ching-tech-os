@@ -37,7 +37,7 @@
   padding: 10px 12px;
   border-radius: 6px;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background var(--transition-fast);
 }
 
 .agent-list-item:hover {
@@ -219,7 +219,7 @@
   background: var(--bg-tertiary);
   border-radius: 12px;
   cursor: pointer;
-  transition: background 0.2s ease;
+  transition: background var(--transition-normal);
 }
 
 .agent-toggle.active {
@@ -235,7 +235,7 @@
   height: 20px;
   background: white;
   border-radius: 50%;
-  transition: transform 0.2s ease;
+  transition: transform var(--transition-normal);
 }
 
 .agent-toggle.active::after {
@@ -262,7 +262,7 @@
   background: var(--bg-tertiary);
   border-radius: 6px;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background var(--transition-fast);
 }
 
 .agent-tool-item:hover {
@@ -423,7 +423,7 @@
   border: none;
   border-bottom: 2px solid transparent;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
 }
 
 .agent-settings-tab:hover {
@@ -550,7 +550,7 @@
   border: none;
   border-bottom: 2px solid transparent;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
 }
 
 .skill-sub-tab:hover { color: var(--text-primary); }
@@ -591,7 +591,7 @@
   color: var(--text-muted);
   cursor: pointer;
   opacity: 0.5;
-  transition: opacity 0.15s;
+  transition: opacity var(--transition-fast);
 }
 .skill-reload-btn-inline:hover { opacity: 1; }
 .skill-reload-btn-inline .icon svg { width: 14px; height: 14px; }
@@ -639,7 +639,7 @@
   gap: 4px;
   flex-shrink: 0;
   opacity: 0;
-  transition: opacity 0.15s;
+  transition: opacity var(--transition-fast);
 }
 
 .skill-list-item:hover .skill-list-item-actions {
@@ -778,7 +778,7 @@
   gap: 10px;
   padding: 10px 12px;
   border-radius: 6px;
-  transition: background 0.15s;
+  transition: background var(--transition-fast);
 }
 
 .skill-hub-result-item:hover { background: var(--hover-bg); }
@@ -801,7 +801,7 @@
   cursor: pointer;
   font-size: 13px;
   color: var(--text-secondary);
-  transition: background 0.15s;
+  transition: background var(--transition-fast);
 }
 
 .skill-file-item:hover { background: var(--hover-bg); }
@@ -836,7 +836,7 @@
   font-size: 12px;
   padding: 4px 10px;
   opacity: 0.7;
-  transition: opacity 0.15s;
+  transition: opacity var(--transition-fast);
 }
 
 .skill-detail-header-bar .skill-reload-btn:hover {
@@ -880,7 +880,7 @@
     bottom: 0;
     background-color: var(--color-background);
     transform: translateX(100%);
-    transition: transform 0.3s ease;
+    transition: transform var(--transition-slow);
     z-index: 10;
   }
 
@@ -1061,7 +1061,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s;
+  transition: background var(--transition-fast);
 }
 
 .skill-sidebar-resizer::after {

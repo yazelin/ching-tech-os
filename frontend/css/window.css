@@ -3,6 +3,31 @@
    ========================================================================== */
 
 /* ==========================================================================
+   Window Open / Close Animations
+   ========================================================================== */
+@keyframes windowOpen {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes windowClose {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.92) translateY(8px);
+  }
+}
+
+/* ==========================================================================
    Window Container
    ========================================================================== */
 .window {
@@ -16,11 +41,17 @@
   overflow: hidden;
   min-width: 300px;
   min-height: 200px;
+  animation: windowOpen 0.2s ease-out both;
+}
+
+.window.closing {
+  animation: windowClose 0.15s ease-in both;
+  pointer-events: none;
 }
 
 .window.focused {
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 1px var(--color-accent), var(--shadow-lg);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 1px var(--color-primary), var(--shadow-lg);
 }
 
 .window.dragging {
@@ -112,6 +143,11 @@
 .window-btn:hover {
   background-color: var(--hover-bg);
   color: var(--text-primary);
+}
+
+.window-btn:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
 }
 
 .window-btn-close:hover {
@@ -219,7 +255,7 @@
   z-index: 50;
   opacity: 0;
   transform: scale(0.98);
-  transition: opacity 0.15s ease-out, transform 0.15s ease-out;
+  transition: opacity var(--transition-fast), transform var(--transition-fast);
 }
 
 .window-snap-preview.visible {
@@ -295,4 +331,17 @@
    ========================================================================== */
 .window-btn-minimize {
   display: none;
+}
+
+/* ==========================================================================
+   Reduced Motion - 尊重使用者偏好
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  .window {
+    animation: none;
+  }
+  .window.closing {
+    animation: none;
+    opacity: 0;
+  }
 }

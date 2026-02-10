@@ -14,6 +14,9 @@ const NotificationModule = (function () {
 
     container = document.createElement('div');
     container.className = 'notification-container';
+    container.setAttribute('role', 'status');
+    container.setAttribute('aria-live', 'polite');
+    container.setAttribute('aria-label', '通知');
     document.body.appendChild(container);
   }
 
@@ -41,10 +44,13 @@ const NotificationModule = (function () {
     // 建立通知元素
     const toast = document.createElement('div');
     toast.className = 'notification-toast';
+    toast.setAttribute('role', 'alert');
+    toast.setAttribute('aria-atomic', 'true');
 
     // 圖示
     const iconEl = document.createElement('div');
     iconEl.className = 'notification-icon';
+    iconEl.setAttribute('aria-hidden', 'true');
     iconEl.innerHTML = typeof getIcon === 'function' ? getIcon(icon) : '';
 
     // 內容
@@ -68,6 +74,7 @@ const NotificationModule = (function () {
     // 關閉按鈕
     const closeBtn = document.createElement('button');
     closeBtn.className = 'notification-close';
+    closeBtn.setAttribute('aria-label', '關閉通知');
     closeBtn.innerHTML = typeof getIcon === 'function' ? getIcon('close') : 'x';
     closeBtn.addEventListener('click', (e) => {
       e.stopPropagation();

@@ -242,6 +242,11 @@
   --transition-fast: 150ms ease;
   --transition-normal: 250ms ease;
   --transition-slow: 350ms ease;
+
+  /* Focus Ring (Accessibility) */
+  --focus-ring-color: var(--color-primary);
+  --focus-ring-offset: 2px;
+  --focus-ring-width: 2px;
 }
 
 /* ==========================================================================
@@ -447,6 +452,19 @@
 }
 
 /* ==========================================================================
+   Global Focus-Visible Styles (無障礙焦點指示器)
+   ========================================================================== */
+:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* 滑鼠操作時不顯示焦點環（僅鍵盤操作才出現） */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ==========================================================================
    Global Scrollbar Styles (全局捲軸樣式)
    ========================================================================== */
 ::-webkit-scrollbar {
@@ -645,9 +663,13 @@ input {
 }
 
 .input:focus {
-  outline: none;
   border-color: var(--color-accent);
   background-color: var(--bg-surface-darker);
+}
+
+.input:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
 }
 
 .input::placeholder {
@@ -1178,7 +1200,7 @@ input {
   justify-content: center;
   background: var(--bg-overlay, rgba(0, 0, 0, 0.6));
   backdrop-filter: blur(4px);
-  transition: opacity 0.2s ease;
+  transition: opacity var(--transition-normal);
 }
 .app-loading-overlay.fade-out {
   opacity: 0;

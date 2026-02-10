@@ -29,7 +29,7 @@
   cursor: pointer;
   transform: translateX(120%);
   opacity: 0;
-  transition: transform 0.3s ease, opacity 0.3s ease;
+  transition: transform var(--transition-slow), opacity var(--transition-slow);
 }
 
 .notification-toast.show {
@@ -72,10 +72,16 @@
   cursor: pointer;
   color: var(--text-secondary, #a0a0a0);
   opacity: 0.6;
-  transition: opacity 0.2s;
+  transition: opacity var(--transition-normal);
   flex-shrink: 0;
 }
 
 .notification-close:hover {
+  opacity: 1;
+}
+
+.notification-close:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
   opacity: 1;
 }
