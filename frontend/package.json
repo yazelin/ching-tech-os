@@ -1,0 +1,14 @@
+{
+  "name": "ching-tech-os-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ChingTech OS — 前端 UI (Vite 建置系統)",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^6.3.5"
+  }
+}

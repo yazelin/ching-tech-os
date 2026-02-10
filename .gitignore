@@ -48,3 +48,7 @@ data/projects/
 node_modules/
 .mcp.json
 nanobanana-output/
+
+# Vite / Frontend build
+frontend/dist/
+frontend/node_modules/

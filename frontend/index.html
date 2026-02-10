@@ -93,77 +93,15 @@
 
   </div>
 
-  <!-- Scripts -->
+  <!-- 外部 CDN 相依（非 module，同步載入以確保全域變數可用） -->
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <!-- xterm.js -->
   <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.min.js"></script>
-  <script src="js/config.js"></script>
-  <script src="js/icons.js"></script>
-  <script src="js/file-utils.js"></script>
-  <script src="js/path-utils.js"></script>
-  <script src="js/login.js"></script>
-  <script src="js/header.js"></script>
-  <script src="js/window.js"></script>
-  <script src="js/notification.js"></script>
-  <script src="js/socket-client.js"></script>
-  <script src="js/api-client.js"></script>
-  <script src="js/theme.js"></script>
-  <script src="js/user-profile.js"></script>
-  <script src="js/ai-assistant.js"></script>
-  <script src="js/image-viewer.js"></script>
-  <script src="js/text-viewer.js"></script>
-  <script src="js/pdf-viewer.js"></script>
-  <script src="js/file-opener.js"></script>
-  <script src="js/file-manager.js"></script>
-  <script src="js/terminal.js"></script>
-  <script src="js/code-editor.js"></script>
-  <script src="js/external-app.js"></script>
-  <script src="js/knowledge-base.js"></script>
-  <script src="js/message-center.js"></script>
-  <script src="js/settings.js"></script>
-  <script src="js/prompt-editor.js"></script>
-  <script src="js/agent-settings.js"></script>
-  <script src="js/ai-log.js"></script>
-  <script src="js/linebot.js"></script>
-  <script src="js/permissions.js"></script>
-  <script src="js/share-dialog.js"></script>
-  <script src="js/share-manager.js"></script>
-  <script src="js/memory-manager.js"></script>
-  <script src="js/desktop.js"></script>
-  <script>
-    // 初始化 Header icons
-    document.getElementById('iconClock').innerHTML = getIcon('clock-outline');
-    document.getElementById('iconMessages').innerHTML = getIcon('bell-outline');
-    document.getElementById('iconUser').innerHTML = getIcon('account-circle');
-    document.getElementById('iconLogout').innerHTML = getIcon('logout');
-  </script>
-  <script>
-    // Initialize desktop when DOM is ready
-    document.addEventListener('DOMContentLoaded', async function() {
-      // 先檢查本地 session
-      if (!LoginModule.isLoggedIn()) {
-        window.location.href = 'login.html';
-        return;
-      }
 
-      // 與後端驗證 session 是否仍有效
-      const isValid = await LoginModule.validateSession();
-      if (!isValid) {
-        window.location.href = 'login.html';
-        return;
-      }
-
-      // 載入使用者資訊（包含權限）
-      await PermissionsModule.init();
-
-      // Initialize all modules
-      WindowModule.init();
-      HeaderModule.init();
-      DesktopModule.init();
-      SocketClient.connect();
-    });
-  </script>
+  <!-- Vite 建置入口：所有本地 JS 已合併至 src/main.js -->
+  <!-- 原始腳本已備份至 _legacy_scripts/ 目錄 -->
+  <script type="module" src="/src/main.js"></script>
 </body>
 </html>
