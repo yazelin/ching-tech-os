@@ -117,6 +117,9 @@ const TextViewerModule = (function() {
    */
   function handleInit(windowEl, wId) {
     windowId = wId;
+    // [Sprint7] 使用 UIHelpers 初始化 loading 狀態
+    const loadingContainer = windowEl.querySelector('.text-viewer-loading-container');
+    if (loadingContainer) UIHelpers.showLoading(loadingContainer, { text: '載入中…' });
     bindToolbarEvents();
     loadFile();
   }
@@ -189,10 +192,8 @@ const TextViewerModule = (function() {
           <span class="txt-error-text" id="txtErrorText"></span>
         </div>
         <div class="viewer-content text-viewer-content" id="txtViewerContent">
-          <div class="text-viewer-loading">
-            <span class="icon">${getIcon('file-document')}</span>
-            <span>載入中...</span>
-          </div>
+          <!-- [Sprint7] 原始: <div class="text-viewer-loading"><span class="icon">...</span><span>載入中...</span></div> -->
+          <div class="text-viewer-loading-container"></div>
         </div>
         <div class="viewer-statusbar">
           <span id="txtStatusInfo">${currentFilename}</span>
@@ -263,12 +264,8 @@ const TextViewerModule = (function() {
       updateStatus();
 
     } catch (error) {
-      contentEl.innerHTML = `
-        <div class="text-viewer-error">
-          <span class="icon">${getIcon('information')}</span>
-          <span>${error.message}</span>
-        </div>
-      `;
+      // [Sprint7] 原始: contentEl.innerHTML = '<div class="text-viewer-error"><span class="icon">...</span><span>${error.message}</span></div>'
+      UIHelpers.showError(contentEl, { message: '載入失敗', detail: error.message });
     }
   }
 
@@ -291,7 +288,10 @@ const TextViewerModule = (function() {
 
     // 處理空白檔案
     if (content === '' || content === null || content === undefined) {
-      html = `<pre class="text-viewer-empty"><span class="text-viewer-empty-hint">（檔案內容為空）</span></pre>`;
+      // [Sprint7] 原始: html = '<pre class="text-viewer-empty"><span class="text-viewer-empty-hint">（檔案內容為空）</span></pre>'
+      // 使用 UIHelpers 顯示空狀態後 return，避免後續 innerHTML 覆蓋
+      UIHelpers.showEmpty(contentEl, { icon: 'file-document-outline', text: '（檔案內容為空）' });
+      return;
     } else {
       switch (displayMode) {
         case 'markdown':
