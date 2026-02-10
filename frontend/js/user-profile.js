@@ -33,7 +33,8 @@ const UserProfileModule = (function() {
   function getWindowContent() {
     return `
       <div class="user-profile-content">
-        <div class="user-profile-loading">載入中...</div>
+        <!-- [Sprint7] 原始: <div class="user-profile-loading">載入中...</div> -->
+        <div class="user-profile-loading-container"></div>
       </div>
     `;
   }
@@ -198,14 +199,14 @@ const UserProfileModule = (function() {
             }
           }
         } else {
-          messageEl.className = 'user-profile-message error';
-          messageEl.textContent = result.error || '操作失敗';
+          // [Sprint7] 原始: messageEl.className = 'user-profile-message error'; messageEl.textContent = result.error || '操作失敗'
+          UIHelpers.showError(messageEl, { message: result.error || '操作失敗', variant: 'compact' });
           confirmBtn.disabled = false;
           confirmBtn.textContent = hasPassword ? '變更密碼' : '設定密碼';
         }
       } catch (error) {
-        messageEl.className = 'user-profile-message error';
-        messageEl.textContent = error.message || '操作失敗';
+        // [Sprint7] 原始: messageEl.className = 'user-profile-message error'; messageEl.textContent = error.message || '操作失敗'
+        UIHelpers.showError(messageEl, { message: error.message || '操作失敗', variant: 'compact' });
         confirmBtn.disabled = false;
         confirmBtn.textContent = hasPassword ? '變更密碼' : '設定密碼';
       }
@@ -349,15 +350,16 @@ const UserProfileModule = (function() {
     const contentEl = windowEl.querySelector('.user-profile-content');
     if (!contentEl) return;
 
+    // [Sprint7] 使用 UIHelpers 初始化 loading 狀態
+    const loadingContainer = contentEl.querySelector('.user-profile-loading-container');
+    if (loadingContainer) UIHelpers.showLoading(loadingContainer, { text: '載入中…' });
+
     try {
       const user = await fetchUserInfo();
       renderUserInfo(contentEl, user);
     } catch (error) {
-      contentEl.innerHTML = `
-        <div class="user-profile-message error" style="margin: var(--spacing-lg);">
-          ${error.message || '無法載入使用者資訊'}
-        </div>
-      `;
+      // [Sprint7] 原始: contentEl.innerHTML = '<div class="user-profile-message error">...${error.message}</div>'
+      UIHelpers.showError(contentEl, { message: '無法載入使用者資訊', detail: error.message });
     }
   }
 
