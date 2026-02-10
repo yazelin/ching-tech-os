@@ -73,6 +73,13 @@ const MatrixRain = (function() {
   }
 
   /**
+   * Sprint 3：偵測 data-animations="off" 屬性
+   */
+  function isAnimationsOff() {
+    return document.documentElement.getAttribute('data-animations') === 'off';
+  }
+
+  /**
    * Sprint 3：Page Visibility API — 頁面隱藏時暫停重繪
    */
   function handleVisibilityChange() {
@@ -111,8 +118,8 @@ const MatrixRain = (function() {
    * 初始化
    */
   function init() {
-    // 尊重使用者的 prefers-reduced-motion 設定
-    if (prefersReducedMotion()) {
+    // 尊重使用者的 prefers-reduced-motion 設定或 data-animations="off"
+    if (prefersReducedMotion() || isAnimationsOff()) {
       return;
     }
 
@@ -122,13 +129,25 @@ const MatrixRain = (function() {
       return;
     }
 
-    // 監聽設定變化（使用者可能在執行期間切換）
+    // 監聯設定變化（使用者可能在執行期間切換）
     window.matchMedia('(prefers-reduced-motion: reduce)')
       .addEventListener('change', (e) => {
         if (e.matches) {
           destroy();
         }
       });
+
+    // Sprint 3：監聽 data-animations 屬性變化
+    new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        if (m.attributeName === 'data-animations' && isAnimationsOff()) {
+          destroy();
+        }
+      }
+    }).observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-animations']
+    });
 
     canvas = document.createElement('canvas');
     canvas.id = 'matrix-rain';

@@ -1489,3 +1489,22 @@ input {
     opacity: 0.5;
   }
 }
+
+/* ==========================================================================
+   Data Attribute 動畫開關：html[data-animations="off"]
+   手動停用所有裝飾性動畫（非 prefers-reduced-motion 的 JS 觸發版本）
+   ========================================================================== */
+html[data-animations="off"] *,
+html[data-animations="off"] *::before,
+html[data-animations="off"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
+/* 保留必要的 loading spinner */
+html[data-animations="off"] .ui-state--loading .ui-state-icon svg,
+html[data-animations="off"] .login-btn .spin {
+  animation: none !important;
+  opacity: 0.5;
+}
