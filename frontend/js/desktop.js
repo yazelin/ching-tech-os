@@ -55,12 +55,11 @@ const DesktopModule = (function() {
     const overlay = document.createElement('div');
     overlay.className = 'app-loading-overlay';
     overlay.dataset.loadingFor = appId;
-    overlay.innerHTML = `
-      <div class="app-loading-skeleton">
-        <div class="skeleton-spinner"></div>
-        <span class="skeleton-label">正在載入模組…</span>
-      </div>
-    `;
+    // [Sprint7] 原始: overlay.innerHTML = '<div class="app-loading-skeleton"><div class="skeleton-spinner"></div><span class="skeleton-label">正在載入模組…</span></div>'
+    const inner = document.createElement('div');
+    inner.className = 'app-loading-skeleton';
+    overlay.appendChild(inner);
+    UIHelpers.showLoading(inner, { text: '正在載入模組…' });
     document.body.appendChild(overlay);
     return overlay;
   }
