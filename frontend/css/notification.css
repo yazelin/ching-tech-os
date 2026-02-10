@@ -65,13 +65,14 @@
 }
 
 .notification-close {
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
-  min-height: 32px;
+  width: 36px;
+  height: 36px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 4px;
   background: none;
   border: none;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   color: var(--text-secondary);
   opacity: 0.6;
