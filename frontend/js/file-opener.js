@@ -1,6 +1,10 @@
 /**
  * ChingTech OS - FileOpener 統一檔案開啟入口
  * 自動判斷檔案類型並路由到對應的 Viewer 模組
+ *
+ * [Sprint8] 此模組為檔案路由模組，錯誤回饋使用 NotificationModule（全域 Toast），
+ * 因本模組不管理視窗容器，故不直接使用 UIHelpers 容器狀態。
+ * Viewer 模組（ImageViewer、TextViewer 等）已各自採用 UIHelpers。
  */
 
 const FileOpener = (function() {
