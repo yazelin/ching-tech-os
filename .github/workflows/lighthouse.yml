@@ -41,7 +41,26 @@ jobs:
           npx -y lighthouse http://127.0.0.1:8000 --output=json --output-path=./lighthouse-report.json --chrome-flags="--headless --no-sandbox --disable-gpu" --only-categories=performance,accessibility,best-practices,seo || true
           npx -y lighthouse http://127.0.0.1:8000 --output=html --output-path=./lighthouse-report.html --chrome-flags="--headless --no-sandbox --disable-gpu" --only-categories=performance,accessibility,best-practices,seo || true
 
+      - name: Check Lighthouse thresholds
+        run: |
+          node -e "
+          const fs = require('fs');
+          const report = JSON.parse(fs.readFileSync('./lighthouse-report.json', 'utf8'));
+          const thresholds = { performance: 0.80, accessibility: 0.95, 'best-practices': 0.80, seo: 0.80 };
+          let failed = false;
+          for (const [key, min] of Object.entries(thresholds)) {
+            const score = report.categories[key]?.score ?? 0;
+            const pct = (score * 100).toFixed(0);
+            const status = score >= min ? '✅' : '❌';
+            if (score < min) failed = true;
+            console.log(status + ' ' + key + ': ' + pct + '% (threshold: ' + (min * 100) + '%)');
+          }
+          if (failed) { console.error('Lighthouse thresholds not met'); process.exit(1); }
+          console.log('All Lighthouse thresholds passed');
+          "
+
       - name: Upload Lighthouse reports
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: lighthouse-reports
