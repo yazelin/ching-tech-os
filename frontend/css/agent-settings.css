@@ -4,7 +4,7 @@
 
 /* 側邊欄 */
 .agent-sidebar {
-  width: 260px;
+  width: 50%;
   display: flex;
   flex-direction: column;
   background: var(--bg-secondary);
