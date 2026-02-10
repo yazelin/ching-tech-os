@@ -1389,7 +1389,7 @@ const AgentSettingsApp = (function() {
               // 作者資訊（含 avatar）
               if (owner.handle) {
                 const avatarHtml = owner.image
-                  ? `<img class="skill-hub-avatar-sm" src="${escapeHtml(owner.image)}" alt="">`
+                  ? `<img class="skill-hub-avatar-sm" src="${escapeHtml(owner.image)}" alt="${escapeHtml(owner.displayName || owner.handle)}">`
                   : '';
                 addField('作者', `${avatarHtml}${escapeHtml(owner.displayName || owner.handle)}`, true);
               }

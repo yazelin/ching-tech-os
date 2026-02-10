@@ -279,6 +279,11 @@ async def hub_install(
             status_code=e.status_code or 502,
             detail=f"安裝失敗: {e}",
         )
+    except OSError as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"安裝失敗（檔案系統錯誤）: {e}",
+        )
     finally:
         # 清理臨時目錄
         if tmp_dest.exists():
