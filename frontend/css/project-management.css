@@ -45,7 +45,6 @@
 }
 
 .pm-search-input:focus {
-  outline: none;
   border-color: var(--color-accent);
 }
 
@@ -1043,7 +1042,6 @@
 .pm-form-group input:focus,
 .pm-form-group select:focus,
 .pm-form-group textarea:focus {
-  outline: none;
   border-color: var(--color-accent);
 }
 

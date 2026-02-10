@@ -103,7 +103,6 @@
   border-radius: var(--radius-sm);
   font-size: var(--font-size-sm);
   color: var(--text-primary);
-  outline: none;
 }
 
 .fm-path-input-wrapper {
@@ -168,7 +167,6 @@
   padding: var(--spacing-xs) var(--spacing-sm);
   font-size: var(--font-size-sm);
   color: var(--text-primary);
-  outline: none;
 }
 
 .fm-search-input::placeholder {
@@ -689,7 +687,6 @@
   border-radius: var(--radius-sm);
   font-size: var(--font-size-sm);
   color: var(--text-primary);
-  outline: none;
   transition: border-color var(--transition-fast);
 }
 
@@ -1124,7 +1121,6 @@
   border-radius: var(--radius-sm);
   font-size: var(--font-size-sm);
   color: var(--text-primary);
-  outline: none;
   transition: border-color var(--transition-fast);
 }
 

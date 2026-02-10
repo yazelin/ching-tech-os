@@ -394,7 +394,6 @@
 }
 
 .change-password-form .form-group .input:focus {
-  outline: none;
   border-color: var(--color-accent);
   background-color: var(--bg-surface-darker);
 }

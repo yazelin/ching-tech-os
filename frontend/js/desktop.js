@@ -347,6 +347,15 @@ const DesktopModule = (function() {
         }
         closeContextMenu();
       });
+      // 鍵盤操作：Enter / Space 觸發、Escape 關閉
+      item.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          item.click();
+        } else if (e.key === 'Escape') {
+          closeContextMenu();
+        }
+      });
       // hover 效果
       item.addEventListener('mouseenter', () => { item.style.background = 'rgba(255,255,255,0.1)'; });
       item.addEventListener('mouseleave', () => { item.style.background = 'transparent'; });

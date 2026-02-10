@@ -48,7 +48,6 @@
 }
 
 .vnd-search-input:focus {
-  outline: none;
   border-color: var(--color-accent);
 }
 
@@ -503,7 +502,6 @@
 .vnd-form-group input:focus,
 .vnd-form-group select:focus,
 .vnd-form-group textarea:focus {
-  outline: none;
   border-color: var(--color-accent);
 }
 

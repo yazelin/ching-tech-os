@@ -62,7 +62,6 @@
   padding: var(--spacing-sm);
   font-size: var(--font-size-sm);
   color: var(--text-primary);
-  outline: none;
 }
 
 .mc-search-input::placeholder {
@@ -84,7 +83,6 @@
   font-size: var(--font-size-xs);
   color: var(--text-primary);
   cursor: pointer;
-  outline: none;
 }
 
 .mc-filter-select:focus {
