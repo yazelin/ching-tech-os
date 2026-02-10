@@ -47,9 +47,12 @@ const ExternalAppModule = (function() {
       height,
       content: `
         <div class="external-app-container">
+          <!-- [Sprint6] 保留原 loading 容器供 iframe 載入週期控制 -->
           <div class="external-app-loading">
-            <span class="icon">${getIcon('mdi-loading')}</span>
-            <span>載入中...</span>
+            <div class="ui-state ui-state--loading" role="status" aria-live="polite">
+              <span class="ui-state-icon">${typeof getIcon === 'function' ? getIcon('refresh') : ''}</span>
+              <span class="ui-state-text">載入中...</span>
+            </div>
           </div>
           <iframe
             class="external-app-iframe"
@@ -58,10 +61,12 @@ const ExternalAppModule = (function() {
             sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-forms allow-modals allow-downloads"
           ></iframe>
           <div class="external-app-error" style="display: none;">
-            <span class="icon">${getIcon('mdi-alert-circle')}</span>
-            <span>無法載入外部服務</span>
+            <div class="ui-state ui-state--error" role="alert" aria-live="assertive">
+              <span class="ui-state-icon">${typeof getIcon === 'function' ? getIcon('alert-circle') : ''}</span>
+              <span class="ui-state-text">無法載入外部服務</span>
+            </div>
             <a href="${url}" target="_blank" class="external-app-open-link">
-              <span class="icon">${getIcon('mdi-open-in-new')}</span>
+              <span class="icon">${typeof getIcon === 'function' ? getIcon('mdi-open-in-new') : ''}</span>
               在新視窗開啟
             </a>
           </div>

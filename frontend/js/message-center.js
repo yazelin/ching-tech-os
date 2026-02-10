@@ -66,12 +66,8 @@ const MessageCenterApp = (function () {
     if (!container) return;
 
     const listEl = container.querySelector('.mc-list');
-    listEl.innerHTML = `
-      <div class="mc-loading">
-        <span class="icon">${getIcon('loading')}</span>
-        載入中...
-      </div>
-    `;
+    /* [Sprint6] 原: <div class="mc-loading">... 載入中... */
+    UIHelpers.showLoading(listEl, { text: '載入中...' });
 
     try {
       const params = new URLSearchParams();
@@ -96,14 +92,8 @@ const MessageCenterApp = (function () {
       renderPagination();
     } catch (error) {
       console.error('Failed to load messages:', error);
-      listEl.innerHTML = `
-        <div class="mc-empty">
-          <div class="mc-empty-icon">
-            <span class="icon">${getIcon('alert-circle')}</span>
-          </div>
-          <div class="mc-empty-text">載入訊息失敗</div>
-        </div>
-      `;
+      /* [Sprint6] 原: <div class="mc-empty">... 載入訊息失敗 */
+      UIHelpers.showError(listEl, { icon: 'alert-circle', message: '載入訊息失敗' });
     }
   }
 
@@ -114,14 +104,8 @@ const MessageCenterApp = (function () {
     const listEl = container.querySelector('.mc-list');
 
     if (messages.length === 0) {
-      listEl.innerHTML = `
-        <div class="mc-empty">
-          <div class="mc-empty-icon">
-            <span class="icon">${getIcon('bell-off')}</span>
-          </div>
-          <div class="mc-empty-text">沒有訊息</div>
-        </div>
-      `;
+      /* [Sprint6] 原: <div class="mc-empty">... 沒有訊息 */
+      UIHelpers.showEmpty(listEl, { icon: 'bell-off', text: '沒有訊息' });
       return;
     }
 

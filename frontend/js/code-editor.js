@@ -74,11 +74,9 @@ const CodeEditorModule = (function() {
 
       iframe.addEventListener('error', () => {
         if (loading) {
-          loading.innerHTML = `
-            <span class="icon">${getIcon('mdi-alert-circle')}</span>
-            <span>無法連線到 code-server</span>
-            <small>請確認服務已啟動 (./scripts/start.sh dev)</small>
-          `;
+          /* [Sprint6] 原: loading.innerHTML = getIcon('mdi-alert-circle') + 無法連線... */
+          loading.innerHTML = '';
+          UIHelpers.showError(loading, { icon: 'alert-circle', message: '無法連線到 code-server', detail: '請確認服務已啟動 (./scripts/start.sh dev)' });
         }
       });
     }

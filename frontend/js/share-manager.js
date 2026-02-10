@@ -136,12 +136,8 @@ const ShareManagerApp = (function() {
     const contentEl = windowEl.querySelector('#smContent');
     if (!contentEl) return;
 
-    contentEl.innerHTML = `
-      <div class="sm-loading">
-        ${icon('loading', 'mdi-spin')}
-        <span>載入中...</span>
-      </div>
-    `;
+    /* [Sprint6] 原: <div class="sm-loading">${icon('loading', 'mdi-spin')}... 載入中... */
+    UIHelpers.showLoading(contentEl, { text: '載入中...' });
 
     try {
       const result = await apiRequest(`?view=${viewMode}`);
@@ -163,18 +159,8 @@ const ShareManagerApp = (function() {
       renderLinks(contentEl);
     } catch (error) {
       console.error('Failed to load share links:', error);
-      contentEl.innerHTML = `
-        <div class="sm-error">
-          ${icon('alert-circle')}
-          <p class="sm-error-message">${error.message}</p>
-          <button class="sm-retry-btn" id="smRetryBtn">重試</button>
-        </div>
-      `;
-
-      const retryBtn = contentEl.querySelector('#smRetryBtn');
-      if (retryBtn) {
-        retryBtn.addEventListener('click', () => loadLinks(windowEl));
-      }
+      /* [Sprint6] 原: <div class="sm-error">${icon('alert-circle')}... + retry btn */
+      UIHelpers.showError(contentEl, { message: error.message, onRetry: () => loadLinks(windowEl) });
     }
   }
 
@@ -189,12 +175,8 @@ const ShareManagerApp = (function() {
     }
 
     if (filteredLinks.length === 0) {
-      contentEl.innerHTML = `
-        <div class="sm-empty">
-          ${icon('link-off')}
-          <p class="sm-empty-text">目前沒有分享連結</p>
-        </div>
-      `;
+      /* [Sprint6] 原: <div class="sm-empty">${icon('link-off')}... 目前沒有分享連結 */
+      UIHelpers.showEmpty(contentEl, { icon: 'link-off', text: '目前沒有分享連結' });
       return;
     }
 

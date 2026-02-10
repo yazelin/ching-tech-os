@@ -123,7 +123,8 @@ const MemoryManagerApp = (function() {
     const listEl = windowEl.querySelector('#mmSidebarList');
     if (!listEl) return;
 
-    listEl.innerHTML = `<div class="mm-loading">${icon('loading', 'mdi-spin')}</div>`;
+    /* [Sprint6] 原: <div class="mm-loading">${icon('loading', 'mdi-spin')}</div> */
+    UIHelpers.showLoading(listEl);
 
     try {
       const result = await apiRequest('/groups?limit=100');
@@ -131,12 +132,8 @@ const MemoryManagerApp = (function() {
       renderGroupList(listEl);
     } catch (error) {
       console.error('Failed to load groups:', error);
-      listEl.innerHTML = `
-        <div class="mm-error">
-          ${icon('alert-circle')}
-          <p>${error.message}</p>
-        </div>
-      `;
+      /* [Sprint6] 原: <div class="mm-error">${icon('alert-circle')}... */
+      UIHelpers.showError(listEl, { message: error.message });
     }
   }
 
@@ -147,7 +144,8 @@ const MemoryManagerApp = (function() {
     const listEl = windowEl.querySelector('#mmSidebarList');
     if (!listEl) return;
 
-    listEl.innerHTML = `<div class="mm-loading">${icon('loading', 'mdi-spin')}</div>`;
+    /* [Sprint6] 原: <div class="mm-loading">${icon('loading', 'mdi-spin')}</div> */
+    UIHelpers.showLoading(listEl);
 
     try {
       const result = await apiRequest('/users-with-binding?limit=100');
@@ -155,12 +153,8 @@ const MemoryManagerApp = (function() {
       renderUserList(listEl);
     } catch (error) {
       console.error('Failed to load users:', error);
-      listEl.innerHTML = `
-        <div class="mm-error">
-          ${icon('alert-circle')}
-          <p>${error.message}</p>
-        </div>
-      `;
+      /* [Sprint6] 原: <div class="mm-error">${icon('alert-circle')}... */
+      UIHelpers.showError(listEl, { message: error.message });
     }
   }
 
@@ -169,12 +163,8 @@ const MemoryManagerApp = (function() {
    */
   function renderGroupList(listEl) {
     if (groups.length === 0) {
-      listEl.innerHTML = `
-        <div class="mm-empty-sidebar">
-          ${icon('account-group-outline')}
-          <p>沒有群組</p>
-        </div>
-      `;
+      /* [Sprint6] 原: <div class="mm-empty-sidebar">${icon('account-group-outline')}... */
+      UIHelpers.showEmpty(listEl, { icon: 'account-group-outline', text: '沒有群組', variant: 'compact' });
       return;
     }
 
@@ -209,12 +199,8 @@ const MemoryManagerApp = (function() {
    */
   function renderUserList(listEl) {
     if (users.length === 0) {
-      listEl.innerHTML = `
-        <div class="mm-empty-sidebar">
-          ${icon('account-outline')}
-          <p>沒有用戶</p>
-        </div>
-      `;
+      /* [Sprint6] 原: <div class="mm-empty-sidebar">${icon('account-outline')}... */
+      UIHelpers.showEmpty(listEl, { icon: 'account-outline', text: '沒有用戶', variant: 'compact' });
       return;
     }
 
@@ -318,7 +304,8 @@ const MemoryManagerApp = (function() {
     const listEl = containerEl.querySelector('#mmMemoryList');
     if (!listEl) return;
 
-    listEl.innerHTML = `<div class="mm-loading">${icon('loading', 'mdi-spin')}</div>`;
+    /* [Sprint6] 原: <div class="mm-loading">${icon('loading', 'mdi-spin')}</div> */
+    UIHelpers.showLoading(listEl);
 
     try {
       const endpoint = type === 'group'
@@ -329,12 +316,8 @@ const MemoryManagerApp = (function() {
       renderMemories(listEl, containerEl);
     } catch (error) {
       console.error('Failed to load memories:', error);
-      listEl.innerHTML = `
-        <div class="mm-error">
-          ${icon('alert-circle')}
-          <p>${error.message}</p>
-        </div>
-      `;
+      /* [Sprint6] 原: <div class="mm-error">${icon('alert-circle')}... */
+      UIHelpers.showError(listEl, { message: error.message });
     }
   }
 
@@ -343,13 +326,8 @@ const MemoryManagerApp = (function() {
    */
   function renderMemories(listEl, containerEl) {
     if (memories.length === 0) {
-      listEl.innerHTML = `
-        <div class="mm-empty">
-          ${icon('brain')}
-          <p>目前沒有設定任何記憶</p>
-          <p class="mm-empty-hint">點擊「新增記憶」來建立第一筆記憶</p>
-        </div>
-      `;
+      /* [Sprint6] 原: <div class="mm-empty">${icon('brain')}... 目前沒有設定任何記憶 */
+      UIHelpers.showEmpty(listEl, { icon: 'brain', text: '目前沒有設定任何記憶', subtext: '點擊「新增記憶」來建立第一筆記憶' });
       return;
     }
 
@@ -645,12 +623,8 @@ const MemoryManagerApp = (function() {
         }
         const memoryListEl = containerEl.querySelector('#mmMemoryList');
         if (memoryListEl) {
-          memoryListEl.innerHTML = `
-            <div class="mm-empty">
-              ${icon('brain')}
-              <p>請從左側選擇${newTab === 'group' ? '群組' : '用戶'}</p>
-            </div>
-          `;
+          /* [Sprint6] 原: <div class="mm-empty">${icon('brain')}... 請從左側選擇... */
+          UIHelpers.showEmpty(memoryListEl, { icon: 'brain', text: `請從左側選擇${newTab === 'group' ? '群組' : '用戶'}` });
         }
 
         // 載入列表
