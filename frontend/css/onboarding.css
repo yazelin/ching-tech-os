@@ -1,0 +1,254 @@
+/* ==========================================================================
+   ChingTech OS - Onboarding / Spotlight 引導樣式
+   Sprint 5 — 3 步驟 spotlight 說明
+   ========================================================================== */
+
+/* ── Overlay 遮罩 ── */
+.onboarding-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  pointer-events: auto;
+  transition: opacity var(--transition-normal, 0.25s) ease;
+  opacity: 0;
+}
+
+.onboarding-overlay.active {
+  opacity: 1;
+}
+
+/* SVG 遮罩層 —— 用於挖洞 spotlight 效果 */
+.onboarding-overlay svg.onboarding-mask-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* ── Spotlight 環形高亮 ── */
+.onboarding-spotlight {
+  position: absolute;
+  border-radius: var(--radius-lg, 12px);
+  box-shadow: 0 0 0 4px rgba(33, 212, 253, 0.55),
+              0 0 24px 4px rgba(33, 212, 253, 0.25);
+  z-index: 10001;
+  pointer-events: none;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: spotlightPulse 2s ease-in-out infinite;
+}
+
+@keyframes spotlightPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 4px rgba(33, 212, 253, 0.55),
+                0 0 24px 4px rgba(33, 212, 253, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(33, 212, 253, 0.75),
+                0 0 36px 8px rgba(33, 212, 253, 0.35);
+  }
+}
+
+/* ── Tooltip 說明卡片 ── */
+.onboarding-tooltip {
+  position: absolute;
+  z-index: 10002;
+  width: 340px;
+  max-width: calc(100vw - 32px);
+  background: var(--bg-elevated, #1e293b);
+  border: 1px solid var(--interactive-border, rgba(255,255,255,0.1));
+  border-radius: var(--radius-lg, 12px);
+  padding: var(--spacing-lg, 20px);
+  color: var(--text-primary, #f1f5f9);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4),
+              0 0 1px rgba(255, 255, 255, 0.1);
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.35s ease, transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: auto;
+}
+
+.onboarding-tooltip.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* 箭頭指示器 */
+.onboarding-tooltip::before {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: var(--bg-elevated, #1e293b);
+  border-top: 1px solid var(--interactive-border, rgba(255,255,255,0.1));
+  border-left: 1px solid var(--interactive-border, rgba(255,255,255,0.1));
+  transform: rotate(45deg);
+}
+
+/* 箭頭位置：上方 */
+.onboarding-tooltip[data-arrow="top"]::before {
+  top: -7px;
+  left: 50%;
+  margin-left: -6px;
+}
+
+/* 箭頭位置：下方 */
+.onboarding-tooltip[data-arrow="bottom"]::before {
+  bottom: -7px;
+  left: 50%;
+  margin-left: -6px;
+  transform: rotate(225deg);
+}
+
+/* Tooltip 內部排版 */
+.onboarding-tooltip-step {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs, 6px);
+  margin-bottom: var(--spacing-sm, 8px);
+  font-size: 12px;
+  color: var(--color-primary, #21d4fd);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.onboarding-tooltip-step .onboarding-step-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-primary, #21d4fd);
+  display: inline-block;
+}
+
+.onboarding-tooltip-title {
+  font-size: var(--font-size-lg, 18px);
+  font-weight: 700;
+  margin-bottom: var(--spacing-sm, 8px);
+  color: var(--text-primary, #f1f5f9);
+  line-height: 1.3;
+}
+
+.onboarding-tooltip-body {
+  font-size: var(--font-size-sm, 14px);
+  color: var(--text-secondary, #94a3b8);
+  line-height: 1.6;
+  margin-bottom: var(--spacing-md, 16px);
+}
+
+/* ── 步驟指示點 ── */
+.onboarding-dots {
+  display: flex;
+  gap: 6px;
+  margin-bottom: var(--spacing-md, 16px);
+}
+
+.onboarding-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border-light, rgba(255,255,255,0.15));
+  transition: all var(--transition-fast, 0.15s);
+}
+
+.onboarding-dot.active {
+  background: var(--color-primary, #21d4fd);
+  width: 20px;
+  border-radius: 4px;
+}
+
+.onboarding-dot.completed {
+  background: var(--color-primary, #21d4fd);
+  opacity: 0.5;
+}
+
+/* ── 按鈕列 ── */
+.onboarding-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm, 8px);
+}
+
+.onboarding-btn {
+  padding: var(--spacing-xs, 6px) var(--spacing-md, 16px);
+  border-radius: var(--radius-md, 8px);
+  font-size: var(--font-size-sm, 14px);
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast, 0.15s);
+  line-height: 1.5;
+}
+
+.onboarding-btn:focus-visible {
+  outline: 2px solid var(--color-primary, #21d4fd);
+  outline-offset: 2px;
+}
+
+.onboarding-btn-primary {
+  background: var(--color-primary, #21d4fd);
+  color: #0f172a;
+}
+
+.onboarding-btn-primary:hover {
+  filter: brightness(1.1);
+  box-shadow: 0 0 12px rgba(33, 212, 253, 0.4);
+}
+
+.onboarding-btn-ghost {
+  background: transparent;
+  color: var(--text-secondary, #94a3b8);
+  border: 1px solid var(--border-light, rgba(255,255,255,0.12));
+}
+
+.onboarding-btn-ghost:hover {
+  background: var(--interactive-hover, rgba(255,255,255,0.06));
+  color: var(--text-primary, #f1f5f9);
+}
+
+.onboarding-btn-link {
+  background: transparent;
+  color: var(--text-muted, #64748b);
+  font-size: 12px;
+  padding: var(--spacing-xs, 6px) var(--spacing-sm, 8px);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.onboarding-btn-link:hover {
+  color: var(--text-secondary, #94a3b8);
+}
+
+/* ── 無障礙：Reduced Motion ── */
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-spotlight {
+    animation: none;
+    transition: none;
+  }
+
+  .onboarding-tooltip {
+    transition: none;
+  }
+
+  .onboarding-overlay {
+    transition: none;
+  }
+
+  .onboarding-dot {
+    transition: none;
+  }
+}
+
+/* ── 手機版 ── */
+@media (max-width: 768px) {
+  .onboarding-tooltip {
+    width: calc(100vw - 24px);
+    left: 12px !important;
+    right: 12px !important;
+    padding: var(--spacing-md, 16px);
+  }
+
+  .onboarding-tooltip-title {
+    font-size: var(--font-size-md, 16px);
+  }
+}
