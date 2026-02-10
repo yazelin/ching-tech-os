@@ -3,6 +3,7 @@
 import json
 import logging
 import shutil
+import tempfile
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -105,11 +106,11 @@ async def get_skill(name: str, session: SessionData = Depends(require_admin)):
 async def get_skill_meta(name: str, session: SessionData = Depends(require_admin)):
     """取得 skill 的 _meta.json 資訊"""
     sm = get_skill_manager()
-    skill_dir = sm.skills_dir / name
-    if not skill_dir.is_dir():
+    skill = await sm.get_skill(name)
+    if not skill:
         raise HTTPException(status_code=404, detail=f"Skill '{name}' not found")
 
-    meta = ClawHubClient.read_meta(skill_dir)
+    meta = ClawHubClient.read_meta(sm.skills_dir / name)
     return {"name": name, "meta": meta}
 
 
@@ -247,32 +248,30 @@ async def hub_install(
 
     client = get_clawhub_client()
     dest = sm.skills_dir / data.name
-    tmp_dest = sm.skills_dir / f".{data.name}.installing"
     try:
-        # 取得 skill 詳情以獲得版本號和 owner
-        detail = await client.get_skill(data.name)
-        latest = detail.get("latestVersion", {})
-        version = data.version or latest.get("version", "")
-        owner = detail.get("owner", {})
-        owner_handle = owner.get("handle", "")
+        with tempfile.TemporaryDirectory(dir=sm.skills_dir, prefix=f".{data.name}.installing-") as tmp_dir_path:
+            tmp_dest = Path(tmp_dir_path)
 
-        if not version:
-            raise ClawHubError("找不到可用版本")
+            # 取得 skill 詳情以獲得版本號和 owner
+            detail = await client.get_skill(data.name)
+            latest = detail.get("latestVersion", {})
+            version = data.version or latest.get("version", "")
+            owner = detail.get("owner", {})
+            owner_handle = owner.get("handle", "")
 
-        # 清理可能殘留的臨時目錄
-        if tmp_dest.exists():
-            shutil.rmtree(tmp_dest)
+            if not version:
+                raise ClawHubError("找不到可用版本")
 
-        # 下載並解壓到臨時目錄（避免並發衝突）
-        await client.download_and_extract(data.name, version, tmp_dest)
+            # 下載並解壓到臨時目錄（避免並發衝突）
+            await client.download_and_extract(data.name, version, tmp_dest)
 
-        # 寫入 _meta.json
-        ClawHubClient.write_meta(tmp_dest, data.name, version, owner_handle)
+            # 寫入 _meta.json
+            ClawHubClient.write_meta(tmp_dest, data.name, version, owner_handle)
 
-        # 原子移動到最終目錄
-        if dest.exists():
-            shutil.rmtree(dest)
-        tmp_dest.rename(dest)
+            # 原子移動到最終目錄
+            if dest.exists():
+                shutil.rmtree(dest)
+            tmp_dest.rename(dest)
 
     except ClawHubError as e:
         raise HTTPException(
@@ -284,10 +283,6 @@ async def hub_install(
             status_code=500,
             detail=f"安裝失敗（檔案系統錯誤）: {e}",
         )
-    finally:
-        # 清理臨時目錄
-        if tmp_dest.exists():
-            shutil.rmtree(tmp_dest)
 
     # 重載
     await sm.reload_skills()

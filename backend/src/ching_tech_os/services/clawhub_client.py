@@ -8,6 +8,7 @@ import io
 import json
 import logging
 import re
+import shutil
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -195,7 +196,7 @@ class ClawHubClient:
                 target_path.parent.mkdir(parents=True, exist_ok=True)
                 # 解壓檔案
                 with zf.open(info) as src, open(target_path, "wb") as dst:
-                    dst.write(src.read())
+                    shutil.copyfileobj(src, dst)
 
         logger.info(f"已解壓 skill: {slug}@{version} → {dest_dir}")
         return {"slug": slug, "version": version, "path": str(dest_dir)}
@@ -219,9 +220,11 @@ class ClawHubClient:
 
         with zipfile.ZipFile(io.BytesIO(data)) as zf:
             for info in zf.infolist():
+                if info.is_dir():
+                    continue
                 # 支援 ZIP 中可能有前綴目錄的情況
                 name = info.filename
-                basename = name.rsplit("/", 1)[-1] if "/" in name else name
+                basename = Path(name).name
                 if basename == filename or name == filename:
                     if info.file_size > 10 * 1024 * 1024:  # 10MB limit
                         raise ClawHubError(f"檔案過大: {info.file_size} bytes")

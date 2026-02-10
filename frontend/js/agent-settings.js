@@ -1388,8 +1388,9 @@ const AgentSettingsApp = (function() {
 
               // 作者資訊（含 avatar）
               if (owner.handle) {
-                const avatarHtml = owner.image
-                  ? `<img class="skill-hub-avatar-sm" src="${escapeHtml(owner.image)}" alt="${escapeHtml(owner.displayName || owner.handle)}">`
+                const avatarUrl = (owner.image || '').startsWith('http') ? owner.image : null;
+                const avatarHtml = avatarUrl
+                  ? `<img class="skill-hub-avatar-sm" src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(owner.displayName || owner.handle)}">`
                   : '';
                 addField('作者', `${avatarHtml}${escapeHtml(owner.displayName || owner.handle)}`, true);
               }
