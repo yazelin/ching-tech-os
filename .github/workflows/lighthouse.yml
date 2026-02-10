@@ -1,0 +1,59 @@
+name: Lighthouse CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  lighthouse:
+    name: Run Lighthouse and upload reports
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build --if-present
+
+      - name: Start static server
+        run: |
+          npx http-server frontend/dist -p 8000 -a 127.0.0.1 --silent > http-server.log 2>&1 &
+          echo "HTTP_SERVER_PID=$!" > server.pid
+          for i in {1..10}; do
+            if curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/ | grep -q 200; then
+              echo "server ready" && break;
+            fi
+            sleep 1;
+          done
+
+      - name: Run Lighthouse (JSON + HTML)
+        run: |
+          npx -y lighthouse http://127.0.0.1:8000 --output=json --output-path=./lighthouse-report.json --chrome-flags="--headless --no-sandbox --disable-gpu" --only-categories=performance,accessibility,best-practices,seo || true
+          npx -y lighthouse http://127.0.0.1:8000 --output=html --output-path=./lighthouse-report.html --chrome-flags="--headless --no-sandbox --disable-gpu" --only-categories=performance,accessibility,best-practices,seo || true
+
+      - name: Upload Lighthouse reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-reports
+          path: |
+            ./lighthouse-report.json
+            ./lighthouse-report.html
+            ./http-server.log
+
+      - name: Stop server
+        if: always()
+        run: |
+          if [ -f server.pid ]; then
+            kill $(cat server.pid) || true
+          fi
+          sleep 1
