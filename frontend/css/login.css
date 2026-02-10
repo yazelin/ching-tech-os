@@ -206,24 +206,15 @@
   height: 44px;
 }
 
-/* 覆蓋瀏覽器自動填入樣式 */
+/* 覆蓋瀏覽器自動填入樣式（使用 CSS 變數，自動適應主題） */
 .form-group .input:-webkit-autofill,
 .form-group .input:-webkit-autofill:hover,
 .form-group .input:-webkit-autofill:focus,
 .form-group .input:-webkit-autofill:active {
-  -webkit-box-shadow: 0 0 0 1000px #1a1a1a inset !important;
+  -webkit-box-shadow: 0 0 0 1000px var(--color-background) inset !important;
   -webkit-text-fill-color: var(--text-primary) !important;
   caret-color: var(--text-primary);
   transition: background-color 5000s ease-in-out 0s;
-}
-
-/* 亮色主題自動填入樣式 */
-:root[data-theme="light"] .form-group .input:-webkit-autofill,
-:root[data-theme="light"] .form-group .input:-webkit-autofill:hover,
-:root[data-theme="light"] .form-group .input:-webkit-autofill:focus,
-:root[data-theme="light"] .form-group .input:-webkit-autofill:active {
-  -webkit-box-shadow: 0 0 0 1000px #f5f5f5 inset !important;
-  -webkit-text-fill-color: var(--text-primary) !important;
 }
 
 .form-group .input-icon {
@@ -412,23 +403,15 @@
   color: var(--text-muted);
 }
 
-/* 覆蓋瀏覽器自動填入樣式 */
+/* 覆蓋瀏覽器自動填入樣式（使用 CSS 變數，自動適應主題） */
 .change-password-form .form-group .input:-webkit-autofill,
 .change-password-form .form-group .input:-webkit-autofill:hover,
 .change-password-form .form-group .input:-webkit-autofill:focus,
 .change-password-form .form-group .input:-webkit-autofill:active {
-  -webkit-box-shadow: 0 0 0 1000px #1a1a1a inset !important;
+  -webkit-box-shadow: 0 0 0 1000px var(--color-background) inset !important;
   -webkit-text-fill-color: var(--text-primary) !important;
   caret-color: var(--text-primary);
   transition: background-color 5000s ease-in-out 0s;
-}
-
-:root[data-theme="light"] .change-password-form .form-group .input:-webkit-autofill,
-:root[data-theme="light"] .change-password-form .form-group .input:-webkit-autofill:hover,
-:root[data-theme="light"] .change-password-form .form-group .input:-webkit-autofill:focus,
-:root[data-theme="light"] .change-password-form .form-group .input:-webkit-autofill:active {
-  -webkit-box-shadow: 0 0 0 1000px #f5f5f5 inset !important;
-  -webkit-text-fill-color: var(--text-primary) !important;
 }
 
 .change-password-error {
