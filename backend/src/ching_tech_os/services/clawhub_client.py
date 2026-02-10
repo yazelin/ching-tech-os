@@ -13,6 +13,7 @@ import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
+from fastapi import Request
 import httpx
 
 logger = logging.getLogger(__name__)
@@ -308,6 +309,11 @@ def init_clawhub_client(app) -> ClawHubClient:
         _client = ClawHubClient()
     app.state.clawhub_client = _client
     return _client
+
+
+def get_clawhub_client_di(request: Request) -> ClawHubClient:
+    """FastAPI 依賴注入：從 app.state 取得 ClawHubClient"""
+    return request.app.state.clawhub_client
 
 
 async def close_clawhub_client(app=None) -> None:

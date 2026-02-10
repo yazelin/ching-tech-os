@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 from ..models.auth import SessionData
 from .auth import require_admin
 from ..skills import get_skill_manager
-from ..services.clawhub_client import ClawHubClient, ClawHubError, get_clawhub_client, validate_slug
+from ..services.clawhub_client import ClawHubClient, ClawHubError, get_clawhub_client_di, validate_slug
 
 # Per-skill 安裝鎖（防止同一 skill 的並發安裝競爭條件）
 _install_locks: dict[str, asyncio.Lock] = {}
@@ -172,13 +172,12 @@ async def reload_skills(session: SessionData = Depends(require_admin)):
 async def hub_search(
     data: HubSearchRequest,
     session: SessionData = Depends(require_admin),
+    client: ClawHubClient = Depends(get_clawhub_client_di),
 ):
     """搜尋 ClawHub marketplace（使用 REST API）"""
     query = (data.query or "").strip()
     if not query or len(query) > 100:
         raise HTTPException(status_code=400, detail="搜尋關鍵字無效")
-
-    client = get_clawhub_client()
     try:
         results = await client.search(query)
     except ClawHubError as e:
@@ -194,12 +193,11 @@ async def hub_search(
 async def hub_inspect(
     data: HubInspectRequest,
     session: SessionData = Depends(require_admin),
+    client: ClawHubClient = Depends(get_clawhub_client_di),
 ):
     """預覽 ClawHub skill（使用 REST API）"""
     if not validate_slug(data.slug):
         raise HTTPException(status_code=400, detail="Slug 格式無效")
-
-    client = get_clawhub_client()
     try:
         # 取得 skill 詳情（含 owner、stats、latestVersion）
         detail = await client.get_skill(data.slug)
@@ -235,6 +233,7 @@ async def hub_inspect(
 async def hub_install(
     data: HubInstallRequest,
     session: SessionData = Depends(require_admin),
+    client: ClawHubClient = Depends(get_clawhub_client_di),
 ):
     """從 ClawHub 安裝 skill（使用 REST API）"""
     # 驗證名稱
@@ -258,7 +257,6 @@ async def hub_install(
                 detail=f"Skill '{data.name}' 已安裝。如需更新請先移除。",
             )
 
-        client = get_clawhub_client()
         dest = sm.skills_dir / data.name
         try:
             with tempfile.TemporaryDirectory(dir=sm.skills_dir, prefix=f".{data.name}.installing-") as tmp_dir_path:
