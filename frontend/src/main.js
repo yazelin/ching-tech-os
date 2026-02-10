@@ -42,6 +42,7 @@ document.addEventListener('DOMContentLoaded', async function () {
   // Initialize all modules
   WindowModule.init();
   HeaderModule.init();
+  CommandPaletteModule.init();
   DesktopModule.init();
   TaskbarModule.init();
   SocketClient.connect();
