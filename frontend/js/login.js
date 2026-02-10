@@ -298,13 +298,15 @@ const LoginModule = (function() {
             overlay.remove();
             resolve(true);
           } else {
-            errorDiv.textContent = result.error || '變更密碼失敗';
+            // [Sprint7] 原始: errorDiv.textContent = result.error || '變更密碼失敗'; errorDiv.classList.add('show')
+            UIHelpers.showError(errorDiv, { message: result.error || '變更密碼失敗', variant: 'compact' });
             errorDiv.classList.add('show');
             submitBtn.disabled = false;
             submitBtn.textContent = '確認變更';
           }
         } catch (error) {
-          errorDiv.textContent = '發生錯誤，請稍後再試';
+          // [Sprint7] 原始: errorDiv.textContent = '發生錯誤，請稍後再試'; errorDiv.classList.add('show')
+          UIHelpers.showError(errorDiv, { message: '發生錯誤，請稍後再試', variant: 'compact' });
           errorDiv.classList.add('show');
           submitBtn.disabled = false;
           submitBtn.textContent = '確認變更';
@@ -387,11 +389,13 @@ const LoginModule = (function() {
           window.location.href = 'index.html';
         }
       } else {
-        errorDiv.textContent = result.error || '登入失敗';
+        // [Sprint7] 原始: errorDiv.textContent = result.error || '登入失敗'; errorDiv.classList.add('show')
+        UIHelpers.showError(errorDiv, { message: result.error || '登入失敗', variant: 'compact' });
         errorDiv.classList.add('show');
       }
     } catch (error) {
-      errorDiv.textContent = '登入時發生錯誤，請稍後再試';
+      // [Sprint7] 原始: errorDiv.textContent = '登入時發生錯誤，請稍後再試'; errorDiv.classList.add('show')
+      UIHelpers.showError(errorDiv, { message: '登入時發生錯誤，請稍後再試', variant: 'compact' });
       errorDiv.classList.add('show');
     } finally {
       resetSubmitBtn(submitBtn);
