@@ -153,6 +153,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Cache-Control 設定（BFCache 優化）
+from .middleware.cache_control import CacheControlMiddleware  # noqa: E402
+app.add_middleware(CacheControlMiddleware)
+
 # 註冊路由
 app.include_router(auth.router)
 app.include_router(knowledge.router)
