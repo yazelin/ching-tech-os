@@ -110,6 +110,9 @@ const PdfViewerModule = (function() {
    */
   function handleInit(windowEl, wId) {
     windowId = wId;
+    // [Sprint7] 使用 UIHelpers 初始化 loading 狀態
+    const loadingContainer = windowEl.querySelector('.pdf-loading-container');
+    if (loadingContainer) UIHelpers.showLoading(loadingContainer, { text: '載入 PDF 中…' });
     bindEvents(windowEl);
     loadPdf();
   }
@@ -153,10 +156,8 @@ const PdfViewerModule = (function() {
           </div>
         </div>
         <div class="pdf-content" id="pdfContent">
-          <div class="pdf-loading">
-            <span class="icon">${getIcon('file-pdf')}</span>
-            <span>載入 PDF 中...</span>
-          </div>
+          <!-- [Sprint7] 原始: <div class="pdf-loading"><span class="icon">...</span><span>載入 PDF 中...</span></div> -->
+          <div class="pdf-loading-container"></div>
         </div>
         <div class="viewer-statusbar">
           <span id="pdfStatusInfo">${currentFilename}</span>
@@ -238,12 +239,8 @@ const PdfViewerModule = (function() {
 
     } catch (error) {
       console.error('[PdfViewer] 載入 PDF 失敗:', error);
-      contentEl.innerHTML = `
-        <div class="pdf-error">
-          <span class="icon">${getIcon('alert')}</span>
-          <span>無法載入 PDF: ${error.message}</span>
-        </div>
-      `;
+      // [Sprint7] 原始: contentEl.innerHTML = '<div class="pdf-error"><span class="icon">...</span><span>無法載入 PDF</span></div>'
+      UIHelpers.showError(contentEl, { message: '無法載入 PDF', detail: error.message });
     }
   }
 
