@@ -29,7 +29,7 @@
   cursor: pointer;
   transform: translateX(120%);
   opacity: 0;
-  transition: transform 0.3s ease, opacity 0.3s ease;
+  transition: transform var(--transition-slow), opacity var(--transition-slow);
 }
 
 .notification-toast.show {
@@ -72,7 +72,7 @@
   cursor: pointer;
   color: var(--text-secondary, #a0a0a0);
   opacity: 0.6;
-  transition: opacity 0.2s;
+  transition: opacity var(--transition-normal);
   flex-shrink: 0;
 }
 

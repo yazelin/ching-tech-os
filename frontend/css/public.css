@@ -126,7 +126,7 @@ body {
     color: var(--public-text-secondary);
     cursor: pointer;
     font-size: 14px;
-    transition: all 0.2s;
+    transition: all var(--transition-normal);
 }
 
 .header-btn:hover {
@@ -404,7 +404,7 @@ body {
     border-radius: var(--public-radius-md);
     text-align: center;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all var(--transition-normal);
 }
 
 .attachment-item:hover {
@@ -458,7 +458,7 @@ body {
     border-radius: var(--public-radius-sm);
     font-size: 12px;
     cursor: pointer;
-    transition: background 0.2s;
+    transition: background var(--transition-normal);
 }
 
 .attachment-btn:hover {
@@ -632,7 +632,7 @@ a.nas-file-download-btn,
     font-weight: 500;
     cursor: pointer;
     text-decoration: none !important;
-    transition: background 0.2s;
+    transition: background var(--transition-normal);
 }
 
 a.nas-file-download-btn:hover,

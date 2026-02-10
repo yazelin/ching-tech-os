@@ -542,7 +542,7 @@
     height: 100%;
     z-index: 1000;
     transform: translateX(-100%);
-    transition: transform 0.3s ease;
+    transition: transform var(--transition-slow);
     border-right: 1px solid var(--border-subtle);
   }
 
@@ -562,7 +562,7 @@
     background: var(--bg-overlay-dark);
     z-index: 999;
     opacity: 0;
-    transition: opacity 0.3s ease;
+    transition: opacity var(--transition-slow);
   }
 
   .ai-assistant.mobile-sidebar-open .ai-sidebar-overlay {

@@ -110,7 +110,7 @@
   color: var(--text-primary);
   font-size: 13px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--transition-fast);
 }
 
 .vnd-action-btn:hover {
@@ -191,7 +191,7 @@
   margin-bottom: 4px;
   border-radius: 8px;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background var(--transition-fast);
 }
 
 .vnd-list-item:hover {
@@ -259,7 +259,7 @@
   width: 4px;
   cursor: col-resize;
   background: transparent;
-  transition: background 0.15s;
+  transition: background var(--transition-fast);
 }
 
 .vnd-resizer:hover {
@@ -526,7 +526,7 @@
   color: var(--text-primary);
   font-size: 14px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--transition-fast);
 }
 
 .vnd-btn:hover {
@@ -619,7 +619,7 @@
     bottom: 0;
     z-index: 0;
     transform: translateX(100%);
-    transition: transform 0.2s ease;
+    transition: transform var(--transition-normal);
   }
 
   .vnd-container.showing-detail .vnd-list-panel {

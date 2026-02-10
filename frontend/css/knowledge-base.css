@@ -1635,7 +1635,7 @@
     width: 100% !important;
     max-width: none;
     border-right: none;
-    transition: transform 0.3s ease, opacity 0.3s ease;
+    transition: transform var(--transition-slow), opacity var(--transition-slow);
   }
 
   /* 詳情面板：手機版全螢幕覆蓋 */
@@ -1646,7 +1646,7 @@
     right: 0;
     bottom: 0;
     transform: translateX(100%);
-    transition: transform 0.3s ease;
+    transition: transform var(--transition-slow);
     z-index: 10;
     background-color: var(--color-background); /* 實心背景 */
   }

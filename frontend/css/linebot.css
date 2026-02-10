@@ -24,7 +24,7 @@
     color: var(--text-secondary);
     cursor: pointer;
     border-radius: 4px 4px 0 0;
-    transition: all 0.2s;
+    transition: all var(--transition-normal);
 }
 
 .linebot-tab:hover {
@@ -53,7 +53,7 @@
     cursor: pointer;
     border-radius: 16px;
     font-size: 13px;
-    transition: all 0.2s;
+    transition: all var(--transition-normal);
     display: flex;
     align-items: center;
     gap: 6px;
@@ -138,7 +138,7 @@
     border: 1px solid var(--border-light);
     border-radius: 8px;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all var(--transition-normal);
 }
 
 .linebot-group-card:hover {
@@ -499,7 +499,7 @@
     border-radius: 4px;
     color: var(--text-primary);
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all var(--transition-normal);
 }
 
 .linebot-pagination button:hover:not(:disabled) {
@@ -605,7 +605,7 @@
     border-radius: 8px;
     border: 1px solid var(--border-subtle);
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all var(--transition-normal);
 }
 
 .linebot-file-card:hover {
@@ -738,7 +738,7 @@
     border-radius: 4px;
     cursor: pointer;
     color: var(--text-secondary);
-    transition: all 0.15s;
+    transition: all var(--transition-fast);
 }
 
 .linebot-icon-btn:hover {
@@ -834,7 +834,7 @@
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all var(--transition-normal);
     background: var(--bg-surface);
     color: var(--text-primary);
 }
@@ -997,7 +997,7 @@
     bottom: 0;
     background-color: rgba(255, 255, 255, 0.2);
     border-radius: 24px;
-    transition: 0.3s;
+    transition: var(--transition-slow);
 }
 
 .linebot-toggle-slider:before {
@@ -1010,7 +1010,7 @@
     transform: translateY(-50%);
     background-color: white;
     border-radius: 50%;
-    transition: 0.3s;
+    transition: var(--transition-slow);
 }
 
 .linebot-toggle input:checked + .linebot-toggle-slider {
