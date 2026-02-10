@@ -117,28 +117,29 @@
   <script src="js/login.js"></script>
   -->
   <script>
-    document.getElementById('iconAccount').innerHTML = getIcon('account');
-    document.getElementById('iconLock').innerHTML = getIcon('lock');
-    document.getElementById('iconLogin').innerHTML = getIcon('login');
-    document.getElementById('iconPasswordToggle').innerHTML = getIcon('eye-off');
-    document.getElementById('copyrightYear').textContent = new Date().getFullYear();
+    document.addEventListener('DOMContentLoaded', function () {
+      document.getElementById('iconAccount').innerHTML = getIcon('account');
+      document.getElementById('iconLock').innerHTML = getIcon('lock');
+      document.getElementById('iconLogin').innerHTML = getIcon('login');
+      document.getElementById('iconPasswordToggle').innerHTML = getIcon('eye-off');
+      document.getElementById('copyrightYear').textContent = new Date().getFullYear();
 
-    // 主題切換按鈕
-    const themeToggleBtn = document.getElementById('themeToggle');
-    const iconTheme = document.getElementById('iconTheme');
+      // 主題切換按鈕
+      var themeToggleBtn = document.getElementById('themeToggle');
+      var iconTheme = document.getElementById('iconTheme');
 
-    function updateThemeIcon() {
-      const theme = ThemeManager.getTheme();
-      iconTheme.innerHTML = theme === 'dark' ? getIcon('sun') : getIcon('moon');
-    }
+      function updateThemeIcon() {
+        var theme = ThemeManager.getTheme();
+        iconTheme.innerHTML = theme === 'dark' ? getIcon('sun') : getIcon('moon');
+      }
 
-    updateThemeIcon();
-
-    themeToggleBtn.addEventListener('click', () => {
-      ThemeManager.toggleTheme();
       updateThemeIcon();
-    });
 
+      themeToggleBtn.addEventListener('click', function () {
+        ThemeManager.toggleTheme();
+        updateThemeIcon();
+      });
+    });
   </script>
 </body>
 </html>
