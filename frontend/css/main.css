@@ -453,6 +453,9 @@
 
 /* ==========================================================================
    Global Focus-Visible Styles (無障礙焦點指示器)
+   策略：全域 :focus-visible 確保鍵盤導航時所有互動元素顯示焦點環，
+   同時以 :focus:not(:focus-visible) 隱藏滑鼠操作時的焦點環。
+   各模組 CSS 可覆寫個別元素的焦點樣式（如 desktop.css、window.css 等）。
    ========================================================================== */
 :focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring-color);
