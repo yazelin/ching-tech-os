@@ -1117,13 +1117,13 @@ const AgentSettingsApp = (function() {
         const updated = relativeTime(r.updatedAt);
         const ownerName = (r.owner && (r.owner.displayName || r.owner.handle))
           || (slug.includes('/') ? slug.split('/')[0] : '')
-          || '未知作者';
+          || '';
 
         return `
           <div class="skill-hub-result-item">
             <div class="agent-list-item-info">
               <div class="agent-list-item-name">${escapeHtml(displayName)}</div>
-              <div class="skill-hub-author">by ${escapeHtml(ownerName)}</div>
+              ${ownerName ? `<div class="skill-hub-author">by ${escapeHtml(ownerName)}</div>` : ''}
               <div class="skill-hub-summary">${escapeHtml(summary)}</div>
               <div class="skill-list-item-meta">
                 ${version ? `<span class="skill-badge">${escapeHtml(version)}</span>` : ''}
