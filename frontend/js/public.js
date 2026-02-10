@@ -170,8 +170,11 @@
         loadingEl.style.display = 'none';
         contentEl.style.display = 'none';
         errorPageEl.style.display = 'flex';
-        errorTitleEl.textContent = title;
-        errorMessageEl.textContent = message;
+        // [Sprint7] 原始: errorTitleEl.textContent = title; errorMessageEl.textContent = message;
+        UIHelpers.showError(errorPageEl, { message: title, detail: message });
+        // 保留返回首頁連結
+        const homeLink = document.getElementById('home-link-error');
+        if (homeLink) errorPageEl.appendChild(homeLink);
     }
 
     /**
