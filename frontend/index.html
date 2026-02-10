@@ -12,9 +12,7 @@
   <!-- [Perf] Preload 關鍵 CSS、字型與 LCP hero（logo），加速首屏渲染 -->
   <link rel="preload" href="dist/index.bundle.css" as="style">
   <link rel="preload" href="fonts/JetBrainsMonoNerdFont-Regular.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="assets/images/logo-cyan-static.svg" as="image" type="image/svg+xml">
-  <link rel="preload" as="image" type="image/webp" href="assets/images/logo.webp">
-  <link rel="preload" as="image" type="image/webp" href="assets/images/wallpaper.webp">
+  <link rel="preload" as="image" type="image/svg+xml" href="assets/images/logo-cyan-static.svg" fetchpriority="high">
 
   <!-- [Perf] Critical CSS — 內聯首屏渲染所需最小樣式，避免 FOUC 並加速 LCP -->
   <style>
@@ -104,6 +102,15 @@
       flex: 1;
       padding: var(--spacing-lg);
       padding-top: calc(var(--header-height) + var(--spacing-lg));
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+    }
+    /* 防止 LCP 圖片產生 layout shift */
+    .header-logo {
+      width: 24px;
+      height: 24px;
+      aspect-ratio: 1 / 1;
     }
   </style>
 
@@ -152,13 +159,13 @@
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
 </head>
 <body>
-  <div class="desktop-container" data-bg="assets/images/wallpaper.webp">
+  <div class="desktop-container" data-bg="assets/images/wallpaper.png">
     <!-- Header Bar -->
     <header class="header-bar" role="banner">
       <div class="header-left">
         <picture>
-          <source type="image/webp" srcset="assets/images/logo.webp">
-          <img src="assets/images/logo-cyan-static.svg" alt="Logo" class="header-logo">
+          <!-- <source type="image/webp" srcset="assets/images/logo.webp"> -->
+          <img src="assets/images/logo-cyan-static.svg" alt="Logo" class="header-logo" width="24" height="24" fetchpriority="high">
         </picture>
         <span class="header-title">ChingTech <span class="header-title-os">OS</span></span>
       </div>
