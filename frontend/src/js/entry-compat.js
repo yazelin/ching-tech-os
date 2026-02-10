@@ -23,6 +23,7 @@
 // ─── 基礎設施 ───
 import '../../js/config.js';
 import '../../js/icons.js';
+import '../../js/ui-helpers.js';         // 統一回饋狀態元件（依賴 icons.js 的 getIcon）
 import '../../js/file-utils.js';
 import '../../js/path-utils.js';
 

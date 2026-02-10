@@ -310,7 +310,9 @@
   color: var(--tag-color-blue);
 }
 
-/* Loading & Empty States */
+/* Loading & Empty States
+   ※ 已遷移至 main.css 的 .ui-state 統一元件
+      保留舊 class 做向下相容（以防第三方或動態生成的片段仍使用） */
 .kb-loading,
 .kb-empty {
   display: flex;
@@ -558,7 +560,8 @@
   margin: 2em 0;
 }
 
-/* Content Empty State */
+/* Content Empty State
+   ※ 已遷移至 .ui-state--empty.ui-state--fill（保留舊 class 向下相容） */
 .kb-content-empty {
   display: flex;
   flex-direction: column;

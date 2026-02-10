@@ -1331,3 +1331,136 @@ input {
 @keyframes spinner-rotate {
   to { transform: rotate(360deg); }
 }
+
+/* ==========================================================================
+   統一回饋狀態元件（Loading / Empty / Error）
+   各模組共用，取代原本分散的 .kb-loading、.ai-chat-empty 等
+   ========================================================================== */
+
+/* ── 共用基底：置中 flex 容器 ── */
+.ui-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm, 8px);
+  padding: var(--spacing-lg, 24px);
+  text-align: center;
+  color: var(--text-secondary, #a0a0a0);
+  font-size: var(--font-size-sm, 13px);
+  min-height: 120px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* 填滿父容器高度（用於主內容面板） */
+.ui-state--fill {
+  height: 100%;
+}
+
+/* 固定高度（用於列表區塊） */
+.ui-state--compact {
+  min-height: 80px;
+  padding: var(--spacing-md, 16px);
+}
+
+/* ── 圖示共用 ── */
+.ui-state .ui-state-icon svg {
+  width: 48px;
+  height: 48px;
+  opacity: 0.3;
+}
+
+.ui-state--fill .ui-state-icon svg {
+  width: 64px;
+  height: 64px;
+  opacity: 0.2;
+}
+
+.ui-state--compact .ui-state-icon svg {
+  width: 32px;
+  height: 32px;
+  opacity: 0.3;
+}
+
+/* ── Loading 狀態 ── */
+.ui-state--loading .ui-state-icon svg {
+  animation: ui-state-spin 1s linear infinite;
+}
+
+@keyframes ui-state-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Loading 骨架列表（多行佔位） */
+.ui-state-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs, 4px);
+  width: 100%;
+  padding: var(--spacing-sm, 8px);
+}
+
+.ui-state-skeleton .skeleton {
+  height: 44px;
+  width: 100%;
+  border-radius: var(--radius-sm, 6px);
+}
+
+.ui-state-skeleton .skeleton:nth-child(2) { width: 90%; }
+.ui-state-skeleton .skeleton:nth-child(3) { width: 75%; }
+
+/* ── Empty 狀態 ── */
+.ui-state--empty {
+  color: var(--text-muted, #888888);
+}
+
+.ui-state--empty .ui-state-text {
+  max-width: 280px;
+  line-height: 1.5;
+}
+
+/* ── Error 狀態 ── */
+.ui-state--error .ui-state-icon svg {
+  opacity: 0.6;
+  color: var(--color-error, #dc2626);
+}
+
+.ui-state--error .ui-state-text {
+  color: var(--color-error, #dc2626);
+  opacity: 0.85;
+}
+
+.ui-state--error .ui-state-detail {
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-muted, #888888);
+  max-width: 320px;
+  word-break: break-word;
+}
+
+/* 重試按鈕 */
+.ui-state-retry {
+  margin-top: var(--spacing-sm, 8px);
+  padding: var(--spacing-xs, 4px) var(--spacing-md, 16px);
+  border: 1px solid var(--border-light, rgba(255, 255, 255, 0.1));
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-surface, rgba(0, 0, 0, 0.1));
+  color: var(--text-secondary, #a0a0a0);
+  font-size: var(--font-size-xs, 12px);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.ui-state-retry:hover {
+  background: var(--hover-bg, rgba(255, 255, 255, 0.1));
+  border-color: var(--border-medium, rgba(255, 255, 255, 0.15));
+  color: var(--text-primary, #f0f0f0);
+}
+
+/* ── Reduced Motion ── */
+@media (prefers-reduced-motion: reduce) {
+  .ui-state--loading .ui-state-icon svg {
+    animation: none !important;
+    opacity: 0.5;
+  }
+}
