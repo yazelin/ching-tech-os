@@ -743,8 +743,8 @@ const AgentSettingsApp = (function() {
       sources.forEach(source => {
         if (!source) return;
         const option = document.createElement('option');
-        option.value = source;
-        option.textContent = source;
+        option.value = source.id || source;
+        option.textContent = source.name || source.id || source;
         select.appendChild(option);
       });
     } catch (e) {
@@ -1189,7 +1189,8 @@ const AgentSettingsApp = (function() {
    */
   async function installSkill(name, version, source) {
     try {
-      const body = { name, source: source || null };
+      const body = { name };
+      if (source) body.source = source;
       if (version) body.version = version;
 
       const response = await fetch('/api/skills/hub/install', {
@@ -1411,7 +1412,7 @@ const AgentSettingsApp = (function() {
             const resp = await fetch('/api/skills/hub/inspect', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-              body: JSON.stringify({ slug, source: source || null }),
+              body: JSON.stringify(source ? { slug, source } : { slug }),
             });
             if (!resp.ok) {
               let errorDetail;
