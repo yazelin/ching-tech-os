@@ -69,8 +69,41 @@ const WindowModule = (function() {
    * 更新手機模式狀態（由 resize 事件觸發）
    */
   function _updateMobileState() {
+    const wasMobile = _isMobile;
     _isMobile = window.innerWidth <= MOBILE_BREAKPOINT;
+
+    // 切換到手機模式時，強制所有現有視窗全螢幕（CSS 已處理佈局，這裡同步 JS 狀態）
+    if (_isMobile && !wasMobile) {
+      Object.keys(windows).forEach(id => {
+        const info = windows[id];
+        if (info && !info.maximized) {
+          // 儲存桌面狀態以便切回時還原
+          info._desktopRestoreState = {
+            left: info.element.style.left,
+            top: info.element.style.top,
+            width: info.element.style.width,
+            height: info.element.style.height
+          };
+        }
+      });
+    }
+
+    // 從手機切回桌面時，還原之前的尺寸
+    if (!_isMobile && wasMobile) {
+      Object.keys(windows).forEach(id => {
+        const info = windows[id];
+        if (info && info._desktopRestoreState) {
+          info.element.style.left = info._desktopRestoreState.left;
+          info.element.style.top = info._desktopRestoreState.top;
+          info.element.style.width = info._desktopRestoreState.width;
+          info.element.style.height = info._desktopRestoreState.height;
+          delete info._desktopRestoreState;
+        }
+      });
+    }
+
     _updateMobileWindowClass();
+    _updateMobileDockVisibility();
   }
 
   /**
@@ -80,6 +113,56 @@ const WindowModule = (function() {
   function _updateMobileWindowClass() {
     const hasWindows = Object.keys(windows).length > 0;
     document.body.classList.toggle('mobile-window-active', _isMobile && hasWindows);
+  }
+
+  /**
+   * Sprint 3：手機視窗開啟時隱藏 Dock / Taskbar
+   * （CSS 已透過 body.mobile-window-active .taskbar 隱藏，
+   *   此函式負責在 JS 層面同步 aria-hidden 以改善無障礙）
+   */
+  function _updateMobileDockVisibility() {
+    const taskbar = document.querySelector('.taskbar');
+    if (!taskbar) return;
+    const shouldHide = _isMobile && Object.keys(windows).length > 0;
+    taskbar.setAttribute('aria-hidden', shouldHide ? 'true' : 'false');
+  }
+
+  /**
+   * Sprint 3：在 header 注入手機版應用程式選單按鈕（漢堡選單）
+   * 僅在手機寬度且按鈕不存在時建立
+   */
+  function _ensureMobileMenuButton() {
+    if (document.querySelector('.header-mobile-menu-btn')) return;
+
+    const headerLeft = document.querySelector('.header-left');
+    if (!headerLeft) return;
+
+    const btn = document.createElement('button');
+    btn.className = 'header-mobile-menu-btn';
+    btn.title = '應用程式選單';
+    btn.setAttribute('aria-label', '開啟應用程式選單');
+    btn.innerHTML = `<span class="icon" aria-hidden="true">${typeof getIcon === 'function' ? getIcon('menu') : '☰'}</span>`;
+
+    // 點擊時切換桌面圖示顯示（收起視窗、回到桌面）
+    btn.addEventListener('click', () => {
+      const windowIds = Object.keys(windows);
+      if (windowIds.length > 0) {
+        // 有視窗時，關閉最上層視窗（回到桌面）
+        if (typeof HeaderModule !== 'undefined') {
+          // 複用 header 的 logo 點擊邏輯
+          let topWindowId = windowIds[0];
+          let topZIndex = 0;
+          windowIds.forEach(id => {
+            const zIndex = parseInt(windows[id].element.style.zIndex) || 0;
+            if (zIndex > topZIndex) { topZIndex = zIndex; topWindowId = id; }
+          });
+          closeWindow(topWindowId);
+        }
+      }
+    });
+
+    // 插入到 logo 之前
+    headerLeft.insertBefore(btn, headerLeft.firstChild);
   }
 
   /**
@@ -199,6 +282,7 @@ const WindowModule = (function() {
 
     // 更新手機版桌面圖示隱藏狀態
     _updateMobileWindowClass();
+    _updateMobileDockVisibility();
 
     // 加入瀏覽器歷史記錄（支援返回鍵關閉視窗）
     history.pushState({ windowId: windowId, appId: appId }, '', '');
@@ -812,6 +896,7 @@ const WindowModule = (function() {
 
       // 更新手機版桌面圖示隱藏狀態
       _updateMobileWindowClass();
+      _updateMobileDockVisibility();
     };
 
     // Listen for animation end; fallback 200ms for reduced-motion
@@ -1049,6 +1134,7 @@ const WindowModule = (function() {
         }
         notifyStateChange('close', appId);
         _updateMobileWindowClass();
+        _updateMobileDockVisibility();
       }
     }
   }
@@ -1077,6 +1163,11 @@ const WindowModule = (function() {
 
     // 初始化手機模式狀態
     _updateMobileState();
+
+    // Sprint 3：手機模式下注入應用程式選單按鈕
+    if (_isMobile) {
+      _ensureMobileMenuButton();
+    }
   }
 
   // Public API

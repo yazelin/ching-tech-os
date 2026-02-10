@@ -237,3 +237,42 @@
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* ==========================================================================
+   Sprint 3 — 手機響應式優化
+   ========================================================================== */
+@media (max-width: 768px) {
+  /* 終端機容器移除多餘 padding */
+  .terminal-container {
+    padding: 2px;
+  }
+
+  /* 狀態列：縮小字體、改為換行佈局 */
+  .terminal-status-bar {
+    flex-wrap: wrap;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-xs);
+    font-size: 10px;
+  }
+
+  /* 重新連線對話框：適應小螢幕 */
+  .terminal-reconnect-dialog {
+    max-width: calc(100vw - 32px);
+    padding: var(--spacing-md);
+  }
+
+  .terminal-reconnect-actions {
+    flex-direction: column;
+  }
+
+  .terminal-reconnect-actions .btn {
+    min-width: unset;
+    width: 100%;
+  }
+
+  /* Session 列表觸控友善 */
+  .terminal-session-item {
+    padding: var(--spacing-md) var(--spacing-sm);
+    min-height: 44px;
+  }
+}

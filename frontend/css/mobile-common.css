@@ -1,5 +1,6 @@
 /* ==========================================================================
    ChingTech OS - Mobile Common Styles（手機響應式共用樣式）
+   Sprint 3 深度優化
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
@@ -61,6 +62,59 @@
   html {
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
+  }
+
+  /* ========================================================================
+     6. Sprint 3 — 全域字體與間距微調
+     ======================================================================== */
+
+  /* 基礎字體略為放大，提高小螢幕可讀性 */
+  body {
+    font-size: var(--font-size-md, 15px);
+    line-height: 1.5;
+  }
+
+  /* ========================================================================
+     7. Sprint 3 — Taskbar / Dock 在手機視窗開啟時隱藏
+     ======================================================================== */
+  body.mobile-window-active .taskbar {
+    display: none;
+  }
+
+  /* ========================================================================
+     8. Sprint 3 — 應用程式選單按鈕（由 JS 插入 .header-mobile-menu-btn）
+     ======================================================================== */
+  .header-mobile-menu-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-sm, 6px);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+    margin-right: var(--spacing-xs, 4px);
+  }
+
+  .header-mobile-menu-btn:hover,
+  .header-mobile-menu-btn:active {
+    background-color: var(--hover-bg, rgba(255, 255, 255, 0.08));
+    color: var(--text-primary);
+  }
+
+  .header-mobile-menu-btn .icon svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  /* ========================================================================
+     9. Sprint 3 — 通用工具列換行（給子元件 CSS 繼承用）
+     ======================================================================== */
+  .toolbar-wrap-mobile {
+    flex-wrap: wrap;
+    gap: var(--spacing-xs, 4px);
+    justify-content: center;
   }
 }
 

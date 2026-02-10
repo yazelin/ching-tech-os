@@ -95,3 +95,33 @@
   font-size: 16px;
   color: inherit;
 }
+
+/* ==========================================================================
+   Sprint 3 — 手機響應式優化
+   ========================================================================== */
+@media (max-width: 768px) {
+  .external-app-loading {
+    font-size: var(--font-size-sm);
+    gap: var(--spacing-sm);
+  }
+
+  .external-app-loading .icon {
+    font-size: 24px;
+  }
+
+  /* 錯誤狀態按鈕加大觸控區域 */
+  .external-app-open-link {
+    padding: var(--spacing-md) var(--spacing-lg);
+    font-size: var(--font-size-md);
+    min-height: 44px;
+  }
+
+  .external-app-error {
+    padding: var(--spacing-md);
+    font-size: var(--font-size-sm);
+  }
+
+  .external-app-error .icon {
+    font-size: 36px;
+  }
+}

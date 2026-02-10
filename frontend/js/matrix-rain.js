@@ -1,6 +1,7 @@
 /**
  * ChingTech OS - Matrix Rain Effect
  * 像素風格：正方形格子、無間隔、全畫面佈滿
+ * Sprint 3：行動裝置降頻 / prefers-reduced-motion 停用 / Page Visibility 暫停
  */
 
 const MatrixRain = (function() {
@@ -16,16 +17,30 @@ const MatrixRain = (function() {
   let animationId = null;
   let lastTime = 0;
   let radialCache = [];
+  /** @type {boolean} 目前是否處於暫停狀態（頁面隱藏或手動暫停） */
+  let paused = false;
 
   // 字符集（半形片假名 + 數字 + 符號）
   const chars = 'ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜｦﾝ0123456789ABCDEFZ';
 
-  // 設定
+  // 設定（桌面預設值）
   const config = {
     cellSize: 20,          // 正方形格子大小
-    interval: 45,
+    interval: 45,          // 動畫幀間隔（ms）
     streamLength: 35,
   };
+
+  // Sprint 3：行動裝置降頻設定
+  const MOBILE_BREAKPOINT = 768;
+  const MOBILE_INTERVAL = 90;        // 行動裝置幀間隔（約 11fps → 降低 GPU 負擔）
+  const MOBILE_CELL_SIZE = 28;       // 行動裝置加大格子（減少總繪製量）
+
+  /**
+   * 偵測是否為行動裝置寬度
+   */
+  function isMobileWidth() {
+    return window.innerWidth <= MOBILE_BREAKPOINT;
+  }
 
   /**
    * 取得主題顏色
@@ -58,11 +73,52 @@ const MatrixRain = (function() {
   }
 
   /**
+   * Sprint 3：Page Visibility API — 頁面隱藏時暫停重繪
+   */
+  function handleVisibilityChange() {
+    if (document.hidden) {
+      pause();
+    } else {
+      resume();
+    }
+  }
+
+  /**
+   * 暫停動畫（不銷毀 canvas）
+   */
+  function pause() {
+    if (paused) return;
+    paused = true;
+    if (animationId) {
+      cancelAnimationFrame(animationId);
+      animationId = null;
+    }
+  }
+
+  /**
+   * 恢復動畫
+   */
+  function resume() {
+    if (!paused) return;
+    paused = false;
+    if (canvas && ctx) {
+      lastTime = performance.now();
+      animationId = requestAnimationFrame(update);
+    }
+  }
+
+  /**
    * 初始化
    */
   function init() {
     // 尊重使用者的 prefers-reduced-motion 設定
     if (prefersReducedMotion()) {
+      return;
+    }
+
+    // Sprint 3：行動裝置偵測 — 直接停用動畫以節省電力
+    if (isMobileWidth()) {
+      // 行動裝置上不啟動 matrix rain，節省電力與效能
       return;
     }
 
@@ -94,6 +150,10 @@ const MatrixRain = (function() {
     }
 
     ctx = canvas.getContext('2d');
+
+    // Sprint 3：根據裝置寬度調整格子與幀率
+    _applyDeviceConfig();
+
     resize();
     window.addEventListener('resize', resize);
 
@@ -102,14 +162,35 @@ const MatrixRain = (function() {
       attributeFilter: ['data-theme']
     });
 
+    // Sprint 3：Page Visibility API
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     lastTime = performance.now();
     animationId = requestAnimationFrame(update);
+  }
+
+  /**
+   * Sprint 3：根據裝置寬度套用效能設定
+   */
+  function _applyDeviceConfig() {
+    if (isMobileWidth()) {
+      config.cellSize = MOBILE_CELL_SIZE;
+      config.interval = MOBILE_INTERVAL;
+    } else {
+      config.cellSize = 20;
+      config.interval = 45;
+    }
   }
 
   /**
    * 調整大小
    */
   function resize() {
+    if (!canvas) return;
+
+    // Sprint 3：resize 時重新評估裝置設定
+    _applyDeviceConfig();
+
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
@@ -163,6 +244,8 @@ const MatrixRain = (function() {
    * 更新並繪製
    */
   function update(currentTime) {
+    if (paused) return;
+
     animationId = requestAnimationFrame(update);
 
     if (currentTime - lastTime < config.interval) return;
@@ -270,13 +353,15 @@ const MatrixRain = (function() {
 
   function destroy() {
     stop();
+    paused = false;
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
     if (canvas && canvas.parentNode) {
       canvas.parentNode.removeChild(canvas);
     }
     window.removeEventListener('resize', resize);
   }
 
-  return { init, stop, destroy };
+  return { init, stop, destroy, pause, resume };
 })();
 
 document.addEventListener('DOMContentLoaded', function() {
