@@ -430,12 +430,8 @@ const AgentSettingsApp = (function() {
     if (!container) return;
 
     if (agents.length === 0) {
-      container.innerHTML = `
-        <div class="agent-list-empty">
-          <span class="icon">${getIcon('robot-outline')}</span>
-          <p>尚無 Agent</p>
-        </div>
-      `;
+      /* [Sprint6] 原: <div class="agent-list-empty">... */
+      UIHelpers.showEmpty(container, { icon: 'robot-outline', text: '尚無 Agent' });
       return;
     }
 
@@ -473,13 +469,8 @@ const AgentSettingsApp = (function() {
     if (!main) return;
 
     if (!agentId) {
-      main.innerHTML = `
-        <div class="agent-empty-state">
-          <span class="icon">${getIcon('robot-outline')}</span>
-          <h3>選擇或建立 Agent</h3>
-          <p>從左側選擇一個 Agent 進行設定</p>
-        </div>
-      `;
+      /* [Sprint6] 原: <div class="agent-empty-state">... 選擇或建立 Agent */
+      UIHelpers.showEmpty(main, { icon: 'robot-outline', text: '選擇或建立 Agent', subtext: '從左側選擇一個 Agent 進行設定' });
       renderAgentList();
       return;
     }
@@ -731,12 +722,8 @@ const AgentSettingsApp = (function() {
     if (!container) return;
 
     if (skills.length === 0) {
-      container.innerHTML = `
-        <div class="agent-list-empty">
-          <span class="icon">${getIcon('puzzle-outline')}</span>
-          <p>尚無 Skills</p>
-        </div>
-      `;
+      /* [Sprint6] 原: <div class="agent-list-empty">... 尚無 Skills */
+      UIHelpers.showEmpty(container, { icon: 'puzzle-outline', text: '尚無 Skills' });
       return;
     }
 
@@ -904,7 +891,8 @@ const AgentSettingsApp = (function() {
         if (backBtn) backBtn.style.display = 'flex';
       }
     } catch (e) {
-      main.innerHTML = `<div class="agent-empty-state"><p>載入失敗: ${e.message}</p></div>`;
+      /* [Sprint6] 原: <div class="agent-empty-state"><p>載入失敗... */
+      UIHelpers.showError(main, { message: '載入失敗: ' + e.message });
     }
   }
 
@@ -1087,11 +1075,13 @@ const AgentSettingsApp = (function() {
     if (!resultsContainer) return;
 
     if (!query.trim()) {
-      resultsContainer.innerHTML = '<div class="agent-list-empty"><p>輸入關鍵字搜尋</p></div>';
+      /* [Sprint6] 原: <div class="agent-list-empty"><p>輸入關鍵字搜尋</p></div> */
+      UIHelpers.showEmpty(resultsContainer, { text: '輸入關鍵字搜尋' });
       return;
     }
 
-    resultsContainer.innerHTML = '<div class="agent-list-empty"><p>搜尋中...</p></div>';
+    /* [Sprint6] 原: <div class="agent-list-empty"><p>搜尋中...</p></div> */
+    UIHelpers.showLoading(resultsContainer, { text: '搜尋中...' });
 
     try {
       const response = await fetch('/api/skills/hub/search', {
@@ -1104,7 +1094,8 @@ const AgentSettingsApp = (function() {
       const results = data.results || [];
 
       if (results.length === 0) {
-        resultsContainer.innerHTML = '<div class="agent-list-empty"><p>無搜尋結果</p></div>';
+        /* [Sprint6] 原: <div class="agent-list-empty"><p>無搜尋結果</p></div> */
+        UIHelpers.showEmpty(resultsContainer, { text: '無搜尋結果' });
         return;
       }
 
@@ -1139,7 +1130,8 @@ const AgentSettingsApp = (function() {
         `;
       }).join('');
     } catch (e) {
-      resultsContainer.innerHTML = `<div class="agent-list-empty"><p>搜尋失敗: ${escapeHtml(e.message)}</p></div>`;
+      /* [Sprint6] 原: <div class="agent-list-empty"><p>搜尋失敗... */
+      UIHelpers.showError(resultsContainer, { message: '搜尋失敗: ' + escapeHtml(e.message) });
     }
   }
 

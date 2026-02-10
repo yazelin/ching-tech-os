@@ -268,12 +268,8 @@ const PromptEditorApp = (function() {
     if (!container) return;
 
     if (prompts.length === 0) {
-      container.innerHTML = `
-        <div class="prompt-list-empty">
-          <span class="icon">${getIcon('file-document-outline')}</span>
-          <p>尚無 Prompt</p>
-        </div>
-      `;
+      /* [Sprint6] 原: <div class="prompt-list-empty">${getIcon('file-document-outline')}... 尚無 Prompt */
+      UIHelpers.showEmpty(container, { icon: 'file-document-outline', text: '尚無 Prompt' });
       return;
     }
 
@@ -311,13 +307,8 @@ const PromptEditorApp = (function() {
     if (!main) return;
 
     if (!promptId) {
-      main.innerHTML = `
-        <div class="prompt-empty-state">
-          <span class="icon">${getIcon('file-document-edit-outline')}</span>
-          <h3>選擇或建立 Prompt</h3>
-          <p>從左側選擇一個 Prompt 進行編輯</p>
-        </div>
-      `;
+      /* [Sprint6] 原: <div class="prompt-empty-state">${getIcon('file-document-edit-outline')}... 選擇或建立 Prompt */
+      UIHelpers.showEmpty(main, { icon: 'file-document-edit-outline', text: '選擇或建立 Prompt', subtext: '從左側選擇一個 Prompt 進行編輯' });
       renderPromptList();
       return;
     }

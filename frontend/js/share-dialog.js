@@ -265,12 +265,8 @@ const ShareDialogModule = (function() {
       const expiresInHours = expiresValue ? parseInt(expiresValue) : null;
 
       // 顯示載入狀態
-      body.innerHTML = `
-        <div class="share-loading">
-          ${icon('loading', 'mdi-spin')}
-          <span>正在產生分享連結...</span>
-        </div>
-      `;
+      /* [Sprint6] 原: <div class="share-loading">${icon('loading', 'mdi-spin')}... 正在產生分享連結... */
+      UIHelpers.showLoading(body, { text: '正在產生分享連結...' });
 
       try {
         const result = await createShareLink(resourceType, resourceId, expiresInHours);
@@ -395,16 +391,8 @@ const ShareDialogModule = (function() {
    * @param {Function} onRetry - 重試回調
    */
   function showError(container, message, onRetry) {
-    container.innerHTML = `
-      <div class="share-error">
-        ${icon('alert-circle')}
-        <p class="share-error-message">${escapeHtml(message)}</p>
-        <button class="share-retry-btn">重試</button>
-      </div>
-    `;
-
-    const retryBtn = container.querySelector('.share-retry-btn');
-    retryBtn.addEventListener('click', onRetry);
+    /* [Sprint6] 原: <div class="share-error">${icon('alert-circle')}... + retry btn */
+    UIHelpers.showError(container, { message: escapeHtml(message), onRetry: onRetry });
   }
 
   /**
