@@ -490,6 +490,78 @@
   opacity: 1;
 }
 
+/* ==========================================================================
+   Sprint 3 — 手機響應式優化
+   ========================================================================== */
+@media (max-width: 768px) {
+  /* 共用工具列：換行且縮小間距 */
+  .viewer-toolbar {
+    flex-wrap: wrap;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-xs);
+  }
+
+  /* 工具列按鈕略微加大觸控區域 */
+  .viewer-toolbar-btn {
+    width: 40px;
+    height: 40px;
+  }
+
+  /* 隱藏分隔線以節省空間 */
+  .viewer-toolbar-divider {
+    display: none;
+  }
+
+  /* 狀態列縮小 */
+  .viewer-statusbar {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    font-size: 11px;
+  }
+
+  /* 文字檢視器 toolbar 換行 */
+  .txt-toolbar {
+    flex-wrap: wrap;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-xs) var(--spacing-sm);
+  }
+
+  .txt-mode-group {
+    flex-wrap: wrap;
+  }
+
+  .txt-mode-btn {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  /* 文字內容字體 */
+  .text-viewer-content pre {
+    font-size: 13px;
+    padding: var(--spacing-sm);
+  }
+
+  /* PDF 工具列換行 */
+  .pdf-toolbar {
+    flex-wrap: wrap;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-xs) var(--spacing-sm);
+  }
+
+  .pdf-toolbar-divider {
+    display: none;
+  }
+
+  .pdf-toolbar-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  /* PDF 內容：減少 padding */
+  .pdf-content {
+    padding: var(--spacing-xs);
+  }
+}
+
 /* PDF Viewer Scrollbar */
 .pdf-content::-webkit-scrollbar {
   width: 10px;

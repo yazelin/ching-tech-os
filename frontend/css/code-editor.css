@@ -55,3 +55,17 @@
   opacity: 0;
   transition: opacity var(--transition-slow);
 }
+
+/* ==========================================================================
+   Sprint 3 — 手機響應式優化
+   ========================================================================== */
+@media (max-width: 768px) {
+  .code-editor-loading {
+    font-size: var(--font-size-sm);
+    gap: var(--spacing-sm);
+  }
+
+  .code-editor-loading .icon {
+    font-size: 24px;
+  }
+}
