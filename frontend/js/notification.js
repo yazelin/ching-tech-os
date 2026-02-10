@@ -1,5 +1,10 @@
 /**
  * 通知模組 - Toast 通知系統
+ *
+ * [Sprint8] 此模組為 Toast 通知系統，與 UIHelpers 容器狀態（Loading/Empty/Error）
+ * 為互補關係：UIHelpers 處理容器內的回饋狀態，NotificationModule 處理全域浮動通知。
+ * 當需要在容器中顯示錯誤/載入/空白狀態時，請使用 UIHelpers；
+ * 當需要全域浮動通知時，使用 NotificationModule。
  */
 const NotificationModule = (function () {
   // 通知容器
