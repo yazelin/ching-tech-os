@@ -121,7 +121,7 @@ async def create_chat(
         )
         result = dict(row)
         # Parse JSONB messages
-        result["messages"] = json.loads(result["messages"])
+        result["messages"] = json.loads(result["messages"]) if isinstance(result["messages"], str) else result["messages"]
         return result
 
 
@@ -151,7 +151,7 @@ async def get_chat(chat_id: UUID, user_id: int | None = None) -> dict | None:
             return None
         result = dict(row)
         # Parse JSONB messages
-        result["messages"] = json.loads(result["messages"])
+        result["messages"] = json.loads(result["messages"]) if isinstance(result["messages"], str) else result["messages"]
         return result
 
 
@@ -215,7 +215,7 @@ async def update_chat(
         if row is None:
             return None
         result = dict(row)
-        result["messages"] = json.loads(result["messages"])
+        result["messages"] = json.loads(result["messages"]) if isinstance(result["messages"], str) else result["messages"]
         return result
 
 
@@ -252,7 +252,7 @@ async def update_chat_messages(
         if row is None:
             return None
         result = dict(row)
-        result["messages"] = json.loads(result["messages"])
+        result["messages"] = json.loads(result["messages"]) if isinstance(result["messages"], str) else result["messages"]
         return result
 
 

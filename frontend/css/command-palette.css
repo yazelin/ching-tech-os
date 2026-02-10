@@ -65,8 +65,8 @@
   position: fixed;
   inset: 0;
   z-index: 10000;
-  background-color: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(4px);
+  background-color: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
   display: flex;
   justify-content: center;
   align-items: flex-start;
@@ -86,7 +86,7 @@
   width: 560px;
   max-width: 90vw;
   max-height: 420px;
-  background-color: var(--bg-glass-heavy);
+  background-color: var(--modal-bg);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg), 0 0 40px rgba(var(--color-primary-rgb), 0.1);

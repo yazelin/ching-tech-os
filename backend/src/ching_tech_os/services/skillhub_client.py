@@ -69,7 +69,7 @@ class SkillHubClient:
         self._index: dict | None = None
         self._client = httpx.AsyncClient(
             timeout=httpx.Timeout(connect=5.0, read=30.0, write=5.0, pool=5.0),
-            follow_redirects=False,  # SSRF 防護
+            follow_redirects=True,
         )
 
     async def close(self) -> None:

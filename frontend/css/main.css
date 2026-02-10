@@ -41,8 +41,8 @@
   --bg-surface: rgba(0, 0, 0, 0.1);
   --bg-surface-dark: rgba(0, 0, 0, 0.2);
   --bg-surface-darker: rgba(0, 0, 0, 0.3);
-  --bg-overlay: rgba(0, 0, 0, 0.6);
-  --bg-overlay-dark: rgba(0, 0, 0, 0.8);
+  --bg-overlay: rgba(0, 0, 0, 0.7);
+  --bg-overlay-dark: rgba(0, 0, 0, 0.85);
   --border-subtle: rgba(255, 255, 255, 0.05);
   --border-light: rgba(255, 255, 255, 0.1);
   --border-medium: rgba(255, 255, 255, 0.15);
@@ -73,6 +73,12 @@
   --window-titlebar-bg: #1e1e1e;
   --bg-tooltip: rgba(0, 0, 0, 0.9);
   --tooltip-text: #e8e8e8;
+
+  /* 面板/編輯器實心背景色 */
+  --bg-primary: #1a1a1a;
+  --bg-secondary: #222222;
+  --bg-tertiary: #2a2a2a;
+  --bg-input: #1e1e1e;
 
   /* 互動效果（暗色主題用白色半透明） */
   --interactive-hover: rgba(255, 255, 255, 0.08);
@@ -277,8 +283,8 @@
   --bg-surface: rgba(0, 0, 0, 0.03);
   --bg-surface-dark: rgba(0, 0, 0, 0.05);
   --bg-surface-darker: rgba(0, 0, 0, 0.08);
-  --bg-overlay: rgba(0, 0, 0, 0.4);
-  --bg-overlay-dark: rgba(0, 0, 0, 0.6);
+  --bg-overlay: rgba(0, 0, 0, 0.6);
+  --bg-overlay-dark: rgba(0, 0, 0, 0.8);
   --border-subtle: rgba(0, 0, 0, 0.05);
   --border-light: rgba(0, 0, 0, 0.1);
   --border-medium: rgba(0, 0, 0, 0.15);
@@ -309,6 +315,12 @@
   --window-titlebar-bg: #f0f0f0;
   --bg-tooltip: rgba(32, 32, 32, 0.95);
   --tooltip-text: #f8f8f8;
+
+  /* 面板/編輯器實心背景色 */
+  --bg-primary: #f5f5f5;
+  --bg-secondary: #eeeeee;
+  --bg-tertiary: #e8e8e8;
+  --bg-input: #ffffff;
 
   /* 互動效果（亮色主題用黑色半透明） */
   --interactive-hover: rgba(0, 0, 0, 0.05);

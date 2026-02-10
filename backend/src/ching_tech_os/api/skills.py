@@ -68,6 +68,77 @@ def _source_label(source: str) -> str:
     return "SkillHub" if source == "skillhub" else "ClawHub"
 
 
+def _flatten_single_subdir(dest: Path) -> None:
+    """若解壓後只有一個子目錄（ZIP 巢狀），將內容提升到上層。"""
+    entries = [e for e in dest.iterdir() if not e.name.startswith("_meta")]
+    subdirs = [e for e in entries if e.is_dir()]
+    files = [e for e in entries if e.is_file()]
+    if len(subdirs) == 1 and len(files) == 0:
+        nested = subdirs[0]
+        logger.info(f"偵測到 ZIP 巢狀目錄，提升: {nested.name}/")
+        for item in nested.iterdir():
+            target = dest / item.name
+            if target.exists():
+                if target.is_dir():
+                    shutil.rmtree(target)
+                else:
+                    target.unlink()
+            item.rename(target)
+        nested.rmdir()
+
+
+import re as _re
+_FRONTMATTER_RE = _re.compile(r"^---\s*\n", _re.MULTILINE)
+
+
+def _ensure_skill_md_frontmatter(
+    skill_md: Path, slug: str, detail: dict, source_tag: str,
+) -> None:
+    """確保 SKILL.md 有 YAML frontmatter；沒有的話從 detail 生成。"""
+    if not skill_md.exists():
+        # 完全沒有 SKILL.md，建立一個基本的
+        skill_info = detail.get("skill", {})
+        name = skill_info.get("name") or slug
+        desc = skill_info.get("description") or ""
+        skill_md.write_text(
+            f"---\nname: {slug}\ndescription: \"{desc}\"\nsource: {source_tag}\n---\n\n# {name}\n\n{desc}\n",
+            encoding="utf-8",
+        )
+        return
+
+    md_content = skill_md.read_text(encoding="utf-8")
+    if _FRONTMATTER_RE.match(md_content):
+        # 已有 frontmatter，修正 name 為安裝 slug 並補 source
+        changed = False
+        # 確保 name 和目錄名一致
+        name_re = _re.compile(r"^name:\s*.+$", _re.MULTILINE)
+        if name_re.search(md_content):
+            new_content = name_re.sub(f"name: {slug}", md_content, count=1)
+            if new_content != md_content:
+                md_content = new_content
+                changed = True
+        if "source:" not in md_content:
+            md_content = md_content.replace(
+                "---\n\n", f"source: {source_tag}\n---\n\n", 1
+            )
+            changed = True
+        if changed:
+            skill_md.write_text(md_content, encoding="utf-8")
+        return
+
+    # 沒有 frontmatter，從 detail 生成
+    skill_info = detail.get("skill", {})
+    name = skill_info.get("name") or slug
+    desc = skill_info.get("description") or ""
+    tags = skill_info.get("tags") or []
+    tags_str = ", ".join(tags) if tags else ""
+    frontmatter = f"---\nname: {slug}\ndescription: \"{desc}\"\nsource: {source_tag}\n"
+    if tags_str:
+        frontmatter += f"tags: [{tags_str}]\n"
+    frontmatter += "---\n\n"
+    skill_md.write_text(frontmatter + md_content, encoding="utf-8")
+
+
 # === Request Models ===
 
 class SkillUpdateRequest(BaseModel):
@@ -363,13 +434,12 @@ async def hub_install(
 
             # 檢查是否已安裝（在鎖內檢查，避免 TOCTOU）
             existing = await sm.get_skill(data.name)
-            if existing:
+            dest = sm.skills_dir / data.name
+            if existing or dest.exists():
                 raise HTTPException(
                     status_code=409,
                     detail=f"Skill '{data.name}' 已安裝。如需更新請先移除。",
                 )
-
-            dest = sm.skills_dir / data.name
             try:
                 with tempfile.TemporaryDirectory(dir=sm.skills_dir, prefix=f".{data.name}.installing-") as tmp_dir_path:
                     tmp_dest = Path(tmp_dir_path)
@@ -390,15 +460,14 @@ async def hub_install(
                     # 下載並解壓到臨時目錄
                     await client.download_and_extract(data.name, version, tmp_dest)
 
-                    # 標記 source（讓前端顯示移除按鈕）
+                    # 處理巢狀目錄：ZIP 內若只有一個子目錄，提升其內容
+                    _flatten_single_subdir(tmp_dest)
+
+                    # 確保 SKILL.md 有 YAML frontmatter（外部來源可能沒有）
                     skill_md = tmp_dest / "SKILL.md"
-                    if skill_md.exists():
-                        md_content = skill_md.read_text(encoding="utf-8")
-                        if "source:" not in md_content:
-                            md_content = md_content.replace(
-                                "---\n\n", f"source: {source_tag}\n---\n\n", 1
-                            )
-                            skill_md.write_text(md_content, encoding="utf-8")
+                    _ensure_skill_md_frontmatter(
+                        skill_md, data.name, detail, source_tag,
+                    )
 
                     # 寫入 _meta.json（使用對應的 client）
                     client.write_meta(tmp_dest, data.name, version, owner_handle)

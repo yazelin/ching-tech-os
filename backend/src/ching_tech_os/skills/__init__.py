@@ -123,8 +123,8 @@ def _validate_skill_name(name: str) -> str:
 
 def _build_skill(config: dict, body: str, skill_dir: Path, source: str = "native") -> Skill:
     """從 frontmatter + body 建立 Skill 物件。"""
-    # 驗證名稱（防止路徑穿越）
-    name = config.get("name", skill_dir.name)
+    # 使用目錄名作為 skill 識別名（確保與目錄一致，避免刪除時路徑不符）
+    name = skill_dir.name
     _validate_skill_name(name)
 
     # allowed-tools（標準）或 tools（舊版）

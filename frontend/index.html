@@ -101,9 +101,6 @@
       flex: 1;
       padding: var(--spacing-lg);
       padding-top: calc(var(--header-height) + var(--spacing-lg));
-      background-size: cover;
-      background-position: center;
-      background-repeat: no-repeat;
     }
     /* 防止 LCP 圖片產生 layout shift */
     .header-logo {
@@ -151,7 +148,7 @@
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
 </head>
 <body>
-  <div class="desktop-container" data-bg="assets/images/wallpaper.png">
+  <div class="desktop-container">
     <!-- Header Bar -->
     <header class="header-bar" role="banner">
       <div class="header-left">
@@ -200,10 +197,6 @@
       <!-- Desktop icons will be rendered by JavaScript -->
     </main>
 
-    <!-- Taskbar / Dock -->
-    <nav class="taskbar" role="navigation" aria-label="快速啟動列">
-      <!-- Taskbar icons will be rendered by JavaScript -->
-    </nav>
   </div>
 
   <!-- 外部 CDN 相依（defer 以避免阻塞解析；document-order 確保在 module script 前執行） -->
@@ -212,9 +205,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.min.js" defer></script>
-
-  <!-- 延遲載入背景圖片 -->
-  <script src="js/lazy-bg.js" defer></script>
 
   <!-- JS 載入（Vite build 或 legacy script tags） -->
   <!-- 若使用 Vite dev/build：取消下一行註解並刪除 legacy block -->
@@ -272,7 +262,6 @@
       HeaderModule.init();
       CommandPaletteModule.init();
       DesktopModule.init();
-      TaskbarModule.init();
       SocketClient.connect();
       OnboardingModule.init();
     });

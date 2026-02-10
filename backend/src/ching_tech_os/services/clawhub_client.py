@@ -52,7 +52,7 @@ class ClawHubClient:
         self._client = httpx.AsyncClient(
             base_url=self._base_url,
             timeout=httpx.Timeout(connect=5.0, read=30.0, write=5.0, pool=5.0),
-            follow_redirects=False,  # SSRF 防護
+            follow_redirects=True,
         )
 
     async def close(self) -> None:

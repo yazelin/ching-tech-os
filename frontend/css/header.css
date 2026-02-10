@@ -8,14 +8,13 @@
   left: 0;
   right: 0;
   height: var(--header-height);
-  background-color: var(--bg-glass);
-  border-bottom: 1px solid var(--interactive-border);
+  background-color: var(--window-titlebar-bg);
+  border-bottom: 1px solid var(--border-light);
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 var(--spacing-md);
   z-index: 100;
-  backdrop-filter: blur(8px);
   user-select: none;
   -webkit-user-select: none;
 }

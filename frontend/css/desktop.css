@@ -99,7 +99,7 @@
   align-items: center;
   justify-content: center;
   color: var(--color-primary);
-  background: linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.3) 0%, var(--accent-bg-subtle) 100%);
+  background: linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.6) 0%, rgba(var(--color-primary-rgb), 0.35) 100%);
   border-radius: var(--radius-lg);
   border: 1px solid var(--accent-bg-medium);
 }
