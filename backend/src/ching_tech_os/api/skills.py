@@ -8,7 +8,11 @@ import tempfile
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from typing import Literal
 from pydantic import BaseModel, Field
+
+# 允許的 Hub 來源
+HubSource = Literal["clawhub", "skillhub"]
 
 from ..models.auth import SessionData
 from .auth import require_admin
@@ -20,6 +24,7 @@ from ..services.skillhub_client import (
     get_skillhub_client_di,
     skillhub_enabled,
 )
+from ..services.hub_meta import read_meta
 
 # Per-skill 安裝鎖（防止同一 skill 的並發安裝競爭條件）
 # value: (lock, ref_count)
@@ -30,27 +35,37 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/skills", tags=["skills"])
 
-
-def _use_skillhub() -> bool:
-    return skillhub_enabled()
-
-
-def _hub_label() -> str:
-    return "SkillHub" if _use_skillhub() else "ClawHub"
+# Hub 錯誤類型聯集
+_HubError = (ClawHubError, SkillHubError)
 
 
-def _hub_source_tag() -> str:
-    return "skillhub" if _use_skillhub() else "clawhub"
+def _get_clients(request: Request) -> list[tuple[str, ClawHubClient | SkillHubClient]]:
+    """取得所有可用的 Hub clients（ClawHub 永遠可用，SkillHub 依 feature flag）"""
+    clients: list[tuple[str, ClawHubClient | SkillHubClient]] = []
+    # ClawHub 永遠啟用
+    clients.append(("clawhub", get_clawhub_client_di(request)))
+    # SkillHub 依 feature flag
+    if skillhub_enabled():
+        try:
+            clients.append(("skillhub", get_skillhub_client_di(request)))
+        except SkillHubError:
+            logger.warning("SkillHub 已啟用但 client 初始化失敗，略過")
+    return clients
 
 
-def _hub_error_class() -> type[ClawHubError | SkillHubError]:
-    return SkillHubError if _use_skillhub() else ClawHubError
-
-
-def get_hub_client_di(request: Request) -> ClawHubClient | SkillHubClient:
-    if _use_skillhub():
+def _get_client_for_source(
+    request: Request, source: HubSource,
+) -> ClawHubClient | SkillHubClient:
+    """根據來源標籤取得對應的 client"""
+    if source == "skillhub":
+        if not skillhub_enabled():
+            raise HTTPException(status_code=400, detail="SkillHub 未啟用")
         return get_skillhub_client_di(request)
     return get_clawhub_client_di(request)
+
+
+def _source_label(source: str) -> str:
+    return "SkillHub" if source == "skillhub" else "ClawHub"
 
 
 # === Request Models ===
@@ -63,18 +78,33 @@ class SkillUpdateRequest(BaseModel):
 
 class HubSearchRequest(BaseModel):
     query: str
+    source: HubSource | None = None  # None = both
 
 
 class HubInspectRequest(BaseModel):
     slug: str
+    source: HubSource = "clawhub"
 
 
 class HubInstallRequest(BaseModel):
     name: str
     version: str | None = Field(None, max_length=50)
+    source: HubSource = "clawhub"
 
 
 # === Endpoints ===
+
+@router.get("/hub/sources")
+async def hub_sources(
+    request: Request,
+    session: SessionData = Depends(require_admin),
+):
+    """列出可用的 Hub 來源"""
+    sources = [{"id": "clawhub", "name": "ClawHub", "enabled": True}]
+    if skillhub_enabled():
+        sources.append({"id": "skillhub", "name": "SkillHub", "enabled": True})
+    return {"sources": sources}
+
 
 @router.get("")
 async def list_skills(session: SessionData = Depends(require_admin)):
@@ -113,7 +143,7 @@ async def get_skill(name: str, session: SessionData = Depends(require_admin)):
     script_tools = await sm.get_scripts_info(name)
 
     # 讀取 _meta.json
-    meta = ClawHubClient.read_meta(sm.skills_dir / name)
+    meta = read_meta(sm.skills_dir / name)
 
     return {
         "name": skill.name,
@@ -144,7 +174,7 @@ async def get_skill_meta(name: str, session: SessionData = Depends(require_admin
     if not skill:
         raise HTTPException(status_code=404, detail=f"Skill '{name}' not found")
 
-    meta = ClawHubClient.read_meta(sm.skills_dir / name)
+    meta = read_meta(sm.skills_dir / name)
     return {"name": name, "meta": meta}
 
 
@@ -195,43 +225,85 @@ async def reload_skills(session: SessionData = Depends(require_admin)):
     return {"reloaded": count}
 
 
-# === Hub REST API 整合 ===
+# === Hub REST API 整合（雙來源） ===
 
 @router.post("/hub/search")
 async def hub_search(
     data: HubSearchRequest,
+    request: Request,
     session: SessionData = Depends(require_admin),
-    client: ClawHubClient | SkillHubClient = Depends(get_hub_client_di),
 ):
-    """搜尋 Hub marketplace（使用 REST API）"""
+    """搜尋 Hub marketplace（支援雙來源合併）
+
+    - source=None → 同時搜尋 ClawHub + SkillHub，合併結果
+    - source="clawhub" → 只搜 ClawHub
+    - source="skillhub" → 只搜 SkillHub
+    """
     query = (data.query or "").strip()
     if not query or len(query) > 100:
         raise HTTPException(status_code=400, detail="搜尋關鍵字無效")
-    try:
-        results = await client.search(query)
-    except (ClawHubError, SkillHubError) as e:
-        raise HTTPException(
-            status_code=e.status_code or 502,
-            detail=f"{_hub_label()} 搜尋失敗: {e}",
-        )
 
-    return {"query": query, "results": results}
+    # 決定要查哪些來源
+    if data.source:
+        # 指定單一來源
+        client = _get_client_for_source(request, data.source)
+        try:
+            results = await client.search(query)
+        except _HubError as e:
+            raise HTTPException(
+                status_code=getattr(e, "status_code", None) or 502,
+                detail=f"{_source_label(data.source)} 搜尋失敗: {e}",
+            )
+        # 確保每個結果都有 source 標籤
+        for r in results:
+            r.setdefault("source", data.source)
+        return {"query": query, "results": results}
+
+    # 雙來源：並行搜尋，合併結果
+    clients = _get_clients(request)
+    all_results: list[dict] = []
+    errors: list[str] = []
+
+    async def _search_one(source: str, client: ClawHubClient | SkillHubClient) -> None:
+        try:
+            results = await client.search(query)
+            for r in results:
+                r["source"] = source
+            all_results.extend(results)
+        except Exception as e:
+            errors.append(f"{_source_label(source)}: {e}")
+            logger.warning("搜尋 %s 失敗: %s", source, e)
+
+    await asyncio.gather(*[_search_one(src, cli) for src, cli in clients])
+
+    # 如果全部失敗才報錯
+    if not all_results and errors:
+        raise HTTPException(status_code=502, detail="搜尋失敗: " + "; ".join(errors))
+
+    return {
+        "query": query,
+        "results": all_results,
+        "sources": [src for src, _ in clients],
+        "errors": errors or None,
+    }
 
 
 @router.post("/hub/inspect")
 async def hub_inspect(
     data: HubInspectRequest,
+    request: Request,
     session: SessionData = Depends(require_admin),
-    client: ClawHubClient | SkillHubClient = Depends(get_hub_client_di),
 ):
-    """預覽 Hub skill（使用 REST API）"""
+    """預覽 Hub skill（根據 source 選擇來源）"""
     if not validate_slug(data.slug):
         raise HTTPException(status_code=400, detail="Slug 格式無效")
+
+    client = _get_client_for_source(request, data.source)
     try:
         # 取得 skill 詳情（含 owner、stats、latestVersion）
         detail = await client.get_skill(data.slug)
 
-        # 從 ZIP 取得 SKILL.md 內容（每次呼叫獨立下載，未來可加快取優化）
+        # 從 ZIP 取得 SKILL.md 內容
         skill_info = detail.get("skill", {})
         latest = detail.get("latestVersion", {})
         version = latest.get("version", "")
@@ -242,14 +314,15 @@ async def hub_inspect(
                 data.slug, version, "SKILL.md"
             ) or ""
 
-    except (ClawHubError, SkillHubError) as e:
+    except _HubError as e:
         raise HTTPException(
-            status_code=e.status_code or 502,
-            detail=f"{_hub_label()} inspect 失敗: {e}",
+            status_code=getattr(e, "status_code", None) or 502,
+            detail=f"{_source_label(data.source)} inspect 失敗: {e}",
         )
 
     return {
         "slug": data.slug,
+        "source": data.source,
         "content": content,
         "skill": skill_info,
         "owner": detail.get("owner", {}),
@@ -260,13 +333,16 @@ async def hub_inspect(
 @router.post("/hub/install")
 async def hub_install(
     data: HubInstallRequest,
+    request: Request,
     session: SessionData = Depends(require_admin),
-    client: ClawHubClient | SkillHubClient = Depends(get_hub_client_di),
 ):
-    """從 Hub 安裝 skill（使用 REST API）"""
+    """從 Hub 安裝 skill（根據 source 選擇來源）"""
     # 驗證名稱
     if not validate_slug(data.name):
         raise HTTPException(status_code=400, detail="Skill 名稱格式無效")
+
+    client = _get_client_for_source(request, data.source)
+    source_tag = data.source
 
     # 取得 per-skill 鎖，確保同一 skill 的安裝操作序列化
     async with _lock_for_locks:
@@ -306,7 +382,10 @@ async def hub_install(
                     owner_handle = owner.get("handle", "")
 
                     if not version:
-                        raise _hub_error_class()("找不到可用版本")
+                        raise HTTPException(
+                            status_code=404,
+                            detail=f"在 {_source_label(source_tag)} 中找不到可用版本",
+                        )
 
                     # 下載並解壓到臨時目錄
                     await client.download_and_extract(data.name, version, tmp_dest)
@@ -314,24 +393,24 @@ async def hub_install(
                     # 標記 source（讓前端顯示移除按鈕）
                     skill_md = tmp_dest / "SKILL.md"
                     if skill_md.exists():
-                        content = skill_md.read_text(encoding="utf-8")
-                        if "source:" not in content:
-                            source_tag = _hub_source_tag()
-                            content = content.replace("---\n\n", f"source: {source_tag}\n---\n\n", 1)
-                            skill_md.write_text(content, encoding="utf-8")
+                        md_content = skill_md.read_text(encoding="utf-8")
+                        if "source:" not in md_content:
+                            md_content = md_content.replace(
+                                "---\n\n", f"source: {source_tag}\n---\n\n", 1
+                            )
+                            skill_md.write_text(md_content, encoding="utf-8")
 
-                    # 寫入 _meta.json
-                    meta_writer = SkillHubClient if _use_skillhub() else ClawHubClient
-                    meta_writer.write_meta(tmp_dest, data.name, version, owner_handle)
+                    # 寫入 _meta.json（使用對應的 client）
+                    client.write_meta(tmp_dest, data.name, version, owner_handle)
 
                     # 原子移動到最終目錄
                     if dest.exists():
                         shutil.rmtree(dest)
                     tmp_dest.rename(dest)
 
-            except (ClawHubError, SkillHubError) as e:
+            except _HubError as e:
                 raise HTTPException(
-                    status_code=e.status_code or 502,
+                    status_code=getattr(e, "status_code", None) or 502,
                     detail=f"安裝失敗: {e}",
                 )
             except OSError as e:
@@ -358,6 +437,7 @@ async def hub_install(
     return {
         "installed": data.name,
         "version": version,
+        "source": source_tag,
         "path": str(dest),
         "description": skill.description if skill else "",
         "scripts_count": len(skill.scripts) if skill and skill.scripts else 0,
