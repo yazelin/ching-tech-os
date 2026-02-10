@@ -1163,3 +1163,76 @@ input {
   .show-on-desktop { display: block !important; }
   .flex-on-desktop { display: flex !important; }
 }
+
+/* ==========================================================================
+   App Lazy-Loading Skeleton & Spinner
+   ========================================================================== */
+
+/* 全螢幕半透明遮罩 */
+.app-loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-overlay, rgba(0, 0, 0, 0.6));
+  backdrop-filter: blur(4px);
+  transition: opacity 0.2s ease;
+}
+.app-loading-overlay.fade-out {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Skeleton 容器 */
+.app-loading-skeleton {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 32px 48px;
+  border-radius: 12px;
+  background: var(--bg-surface-dark, rgba(0, 0, 0, 0.2));
+  border: 1px solid var(--border-light, rgba(255, 255, 255, 0.1));
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+/* 旋轉動畫 Spinner */
+.skeleton-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border-medium, rgba(255, 255, 255, 0.15));
+  border-top-color: var(--color-primary, #0891b2);
+  border-radius: 50%;
+  animation: skeleton-spin 0.8s linear infinite;
+}
+
+@keyframes skeleton-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* 載入文字 */
+.skeleton-label {
+  color: var(--text-secondary, #a0a0a0);
+  font-size: 14px;
+  letter-spacing: 0.5px;
+}
+
+/* 通用 Skeleton 佔位條（可在其他地方復用） */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-surface-dark, rgba(0, 0, 0, 0.2)) 25%,
+    var(--border-light, rgba(255, 255, 255, 0.1)) 50%,
+    var(--bg-surface-dark, rgba(0, 0, 0, 0.2)) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease infinite;
+  border-radius: 4px;
+}
+
+@keyframes skeleton-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
