@@ -70,6 +70,10 @@ const TerminalApp = (function() {
      * @param {HTMLElement} container
      */
     init(container) {
+      // [Sprint8] UIHelpers: 在 xterm 初始化前顯示載入狀態
+      UIHelpers.showLoading(container, { text: '終端機載入中…' });
+
+      try {
       // Create terminal instance with theme from CSS variables
       this.terminal = new Terminal({
         cursorBlink: true,
@@ -114,6 +118,10 @@ const TerminalApp = (function() {
 
       // Check for recoverable sessions or create new
       this.checkAndConnect();
+      } catch (err) {
+        // [Sprint8] UIHelpers: xterm 初始化失敗時顯示錯誤
+        UIHelpers.showError(container, { message: '終端機載入失敗', detail: err.message });
+      }
     }
 
     /**
