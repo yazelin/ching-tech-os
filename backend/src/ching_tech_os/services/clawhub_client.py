@@ -52,7 +52,7 @@ class ClawHubClient:
         self._base_url = base_url or _DEFAULT_BASE_URL
         self._client = httpx.AsyncClient(
             base_url=self._base_url,
-            timeout=httpx.Timeout(connect=5, read=30, pool=5),
+            timeout=httpx.Timeout(connect=5.0, read=30.0, write=5.0, pool=5.0),
             follow_redirects=False,  # SSRF 防護
         )
 
@@ -134,7 +134,7 @@ class ClawHubClient:
                 async with self._client.stream(
                     "GET", "/download",
                     params={"slug": slug, "version": version},
-                    timeout=httpx.Timeout(connect=5, read=60, pool=5),
+                    timeout=httpx.Timeout(connect=5.0, read=60.0, write=5.0, pool=5.0),
                 ) as resp:
                     resp.raise_for_status()
                     async for chunk in resp.aiter_bytes():
