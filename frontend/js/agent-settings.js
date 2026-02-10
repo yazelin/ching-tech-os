@@ -670,10 +670,10 @@ const AgentSettingsApp = (function() {
       return;
     }
 
-    // 顯示 loading
+    // [Sprint8] 原: testResult.className = 'agent-test-result loading'; testResult.textContent = '測試中...'
     testResult.style.display = 'block';
-    testResult.className = 'agent-test-result loading';
-    testResult.textContent = '測試中...';
+    testResult.className = 'agent-test-result';
+    UIHelpers.showLoading(testResult, { text: '測試中...', variant: 'compact' });
     testBtn.disabled = true;
 
     try {
@@ -683,12 +683,14 @@ const AgentSettingsApp = (function() {
         testResult.className = 'agent-test-result';
         testResult.textContent = result.response;
       } else {
-        testResult.className = 'agent-test-result error';
-        testResult.textContent = result.error || '測試失敗';
+        // [Sprint8] 原: testResult.className = 'agent-test-result error'; testResult.textContent = result.error || '測試失敗'
+        testResult.className = 'agent-test-result';
+        UIHelpers.showError(testResult, { message: result.error || '測試失敗', variant: 'compact' });
       }
     } catch (e) {
-      testResult.className = 'agent-test-result error';
-      testResult.textContent = e.message || '測試失敗';
+      // [Sprint8] 原: testResult.className = 'agent-test-result error'; testResult.textContent = e.message || '測試失敗'
+      testResult.className = 'agent-test-result';
+      UIHelpers.showError(testResult, { message: e.message || '測試失敗', variant: 'compact' });
     } finally {
       testBtn.disabled = false;
     }
@@ -1182,8 +1184,9 @@ const AgentSettingsApp = (function() {
       return;
     }
 
-    contentEl.textContent = '載入中...';
+    // [Sprint8] 原: contentEl.textContent = '載入中...'
     contentEl.style.display = 'block';
+    UIHelpers.showLoading(contentEl, { text: '載入中...', variant: 'compact' });
 
     try {
       const response = await fetch(`/api/skills/${encodeURIComponent(skillName)}/files/${encodeURIComponent(filePath)}`, {
@@ -1193,7 +1196,8 @@ const AgentSettingsApp = (function() {
       const text = await response.text();
       contentEl.textContent = text;
     } catch (e) {
-      contentEl.textContent = '載入失敗: ' + e.message;
+      // [Sprint8] 原: contentEl.textContent = '載入失敗: ' + e.message
+      UIHelpers.showError(contentEl, { message: '載入失敗', detail: e.message, variant: 'compact' });
     }
   }
 
@@ -1349,8 +1353,11 @@ const AgentSettingsApp = (function() {
               <div class="skill-detail-field">
                 <span class="skill-detail-label">SKILL.md</span>
               </div>
-              <pre class="skill-preview-content" style="display:block;">載入中...</pre>
+              <pre class="skill-preview-content" style="display:block;"></pre>
             </div>`;
+          // [Sprint8] 原: <pre>載入中...</pre>（靜態文字）→ UIHelpers.showLoading
+          const _previewLoading = main.querySelector('.skill-preview-content');
+          if (_previewLoading) UIHelpers.showLoading(_previewLoading, { text: '載入中...', variant: 'compact' });
 
           try {
             const resp = await fetch('/api/skills/hub/inspect', {
@@ -1413,7 +1420,8 @@ const AgentSettingsApp = (function() {
             if (previewEl) previewEl.textContent = result.content || '（空白）';
           } catch (err) {
             const previewEl = main.querySelector('.skill-preview-content');
-            if (previewEl) previewEl.textContent = `預覽失敗: ${err.message}`;
+            // [Sprint8] 原: previewEl.textContent = `預覽失敗: ${err.message}`
+            if (previewEl) UIHelpers.showError(previewEl, { message: '預覽失敗', detail: err.message, variant: 'compact' });
           }
           break;
         }
