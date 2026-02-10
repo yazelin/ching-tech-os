@@ -247,12 +247,10 @@ const AIAssistantApp = (function() {
     if (!container) return;
 
     if (chats.length === 0) {
-      container.innerHTML = `
-        <div class="ai-chat-empty">
-          <span class="icon">${getIcon('chat')}</span>
-          <p>尚無對話</p>
-        </div>
-      `;
+      UIHelpers.showEmpty(container, {
+        icon: 'chat',
+        text: '尚無對話',
+      });
       return;
     }
 

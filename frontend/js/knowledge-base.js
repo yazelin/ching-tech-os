@@ -188,9 +188,9 @@ const KnowledgeBaseModule = (function() {
               <span class="kb-list-count" id="kbListCount">0 筆</span>
             </div>
             <div class="kb-list" id="kbList">
-              <div class="kb-loading">
-                <span class="icon">${getIcon('refresh')}</span>
-                <span>載入中...</span>
+              <div class="ui-state ui-state--loading" role="status" aria-live="polite">
+                <span class="ui-state-icon">${getIcon('refresh')}</span>
+                <span class="ui-state-text">載入中…</span>
               </div>
             </div>
           </div>
@@ -198,10 +198,10 @@ const KnowledgeBaseModule = (function() {
           <div class="kb-resizer" id="kbResizer"></div>
 
           <div class="kb-content-panel" id="kbContentPanel">
-            <div class="kb-content-empty" id="kbContentEmpty">
-              <span class="icon">${getIcon('book-open-page-variant')}</span>
-              <p>選擇一個知識來查看內容</p>
-              <p>或點擊「新增」建立新知識</p>
+            <div class="ui-state ui-state--empty ui-state--fill" id="kbContentEmpty" role="status">
+              <span class="ui-state-icon">${getIcon('book-open-page-variant')}</span>
+              <span class="ui-state-text">選擇一個知識來查看內容</span>
+              <span class="ui-state-text">或點擊「新增」建立新知識</span>
             </div>
             <div class="kb-content-view" id="kbContentView" style="display: none;"></div>
             <div class="kb-editor" id="kbEditor" style="display: none;"></div>
@@ -345,12 +345,7 @@ const KnowledgeBaseModule = (function() {
     }
 
     const listEl = windowEl.querySelector('#kbList');
-    listEl.innerHTML = `
-      <div class="kb-loading">
-        <span class="icon">${getIcon('refresh')}</span>
-        <span>載入中...</span>
-      </div>
-    `;
+    UIHelpers.showLoading(listEl, { icon: 'refresh', text: '載入中…' });
 
     try {
       const params = new URLSearchParams();
@@ -366,12 +361,12 @@ const KnowledgeBaseModule = (function() {
       renderList(windowEl);
     } catch (error) {
       console.error('Failed to load knowledge:', error);
-      listEl.innerHTML = `
-        <div class="kb-empty">
-          <span class="icon">${getIcon('close')}</span>
-          <span>載入失敗: ${error.message}</span>
-        </div>
-      `;
+      UIHelpers.showError(listEl, {
+        icon: 'close',
+        message: '載入失敗',
+        detail: error.message,
+        onRetry: () => loadKnowledge(),
+      });
     }
   }
 
@@ -385,12 +380,10 @@ const KnowledgeBaseModule = (function() {
     countEl.textContent = `${knowledgeList.length} 筆`;
 
     if (knowledgeList.length === 0) {
-      listEl.innerHTML = `
-        <div class="kb-empty">
-          <span class="icon">${getIcon('book-open-page-variant')}</span>
-          <span>沒有找到符合條件的知識</span>
-        </div>
-      `;
+      UIHelpers.showEmpty(listEl, {
+        icon: 'book-open-page-variant',
+        text: '沒有找到符合條件的知識',
+      });
       return;
     }
 
@@ -1409,8 +1402,8 @@ const KnowledgeBaseModule = (function() {
       </div>
       <div class="kb-history-list">
         ${historyData.entries.length === 0 ? `
-          <div class="kb-empty" style="height: 100px;">
-            <span>尚無版本歷史</span>
+          <div class="ui-state ui-state--empty ui-state--compact" role="status">
+            <span class="ui-state-text">尚無版本歷史</span>
           </div>
         ` : historyData.entries.map(entry => `
           <div class="kb-history-item" data-commit="${entry.commit}">
