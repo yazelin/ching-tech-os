@@ -720,6 +720,40 @@ const AgentSettingsApp = (function() {
   }
 
   /**
+   * 載入 Hub 來源
+   */
+  async function loadHubSources() {
+    const select = document.querySelector(`#${windowId} #hub-source-select`);
+    if (!select) return;
+
+    try {
+      const response = await fetch('/api/skills/hub/sources', {
+        headers: getAuthHeaders()
+      });
+      if (!response.ok) throw new Error('Failed to load hub sources');
+      const data = await response.json();
+      const sources = Array.isArray(data) ? data : (data.sources || []);
+
+      select.innerHTML = '';
+      const allOption = document.createElement('option');
+      allOption.value = '';
+      allOption.textContent = '全部';
+      select.appendChild(allOption);
+
+      sources.forEach(source => {
+        if (!source) return;
+        const option = document.createElement('option');
+        option.value = source;
+        option.textContent = source;
+        select.appendChild(option);
+      });
+    } catch (e) {
+      console.error('[AgentSettings] Failed to load hub sources:', e);
+      select.innerHTML = '<option value="">全部</option>';
+    }
+  }
+
+  /**
    * 渲染 Skill 列表
    */
   function renderSkillList() {
@@ -736,7 +770,7 @@ const AgentSettingsApp = (function() {
       const toolCount = s.tools_count || 0;
       const source = s.source || 'unknown';
       const sourceBadgeClass = source === 'native' ? 'skill-source-native' : source === 'openclaw' ? 'skill-source-openclaw' : 'skill-source-other';
-      const hubSource = (s.meta && s.meta.source) || s.hub_source || '';
+      const hubSource = (s.meta && s.meta.source) || '';
       const hubBadge = hubSource ? `<span class="badge-source ${hubSource === 'clawhub' ? 'badge-source-clawhub' : 'badge-source-skillhub'}">${escapeHtml(hubSource)}</span>` : '';
       const isHighlighted = s.name === highlightSkillName;
       return `
@@ -1092,10 +1126,14 @@ const AgentSettingsApp = (function() {
     UIHelpers.showLoading(resultsContainer, { text: '搜尋中...' });
 
     try {
+      const sourceSelect = document.querySelector(`#${windowId} #hub-source-select`);
+      const selectedSource = sourceSelect ? sourceSelect.value : '';
+      const payload = { query, source: selectedSource || null };
+
       const response = await fetch('/api/skills/hub/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ query })
+        body: JSON.stringify(payload)
       });
       if (!response.ok) throw new Error('Search failed');
       const data = await response.json();
@@ -1114,27 +1152,28 @@ const AgentSettingsApp = (function() {
         const version = r.version || '';
         const score = r.score != null ? Math.round(r.score * 100) : null;
         const updated = relativeTime(r.updatedAt);
+        const hubSource = r.source || '';
+        const hubSourceBadge = hubSource ? `<span class="badge-source ${hubSource === 'clawhub' ? 'badge-source-clawhub' : 'badge-source-skillhub'}">${escapeHtml(hubSource)}</span>` : '';
         const ownerName = (r.owner && (r.owner.displayName || r.owner.handle))
           || (slug.includes('/') ? slug.split('/')[0] : '')
           || '';
-        const hubSource = r.source || '';
-        const hubSourceBadge = hubSource ? `<span class="badge-source ${hubSource === 'clawhub' ? 'badge-source-clawhub' : 'badge-source-skillhub'}">${escapeHtml(hubSource)}</span>` : '';
 
         return `
           <div class="skill-hub-result-item">
             <div class="agent-list-item-info">
-              <div class="agent-list-item-name">${escapeHtml(displayName)} ${hubSourceBadge}</div>
+              <div class="agent-list-item-name">${escapeHtml(displayName)}</div>
               ${ownerName ? `<div class="skill-hub-author">by ${escapeHtml(ownerName)}</div>` : ''}
               <div class="skill-hub-summary">${escapeHtml(summary)}</div>
               <div class="skill-list-item-meta">
+                ${hubSourceBadge}
                 ${version ? `<span class="skill-badge">${escapeHtml(version)}</span>` : ''}
                 ${score != null ? `<span class="skill-badge">相關度 ${score}%</span>` : ''}
                 ${updated ? `<span class="skill-badge">${escapeHtml(updated)}</span>` : ''}
               </div>
             </div>
             <div class="skill-hub-result-actions">
-              <button class="btn btn-sm" data-action="preview-skill" data-skill-slug="${escapeHtml(slug)}">預覽</button>
-              <button class="btn btn-sm btn-primary" data-action="install-skill" data-skill-name="${escapeHtml(slug)}" data-skill-version="${escapeHtml(version)}">安裝</button>
+              <button class="btn btn-sm" data-action="preview-skill" data-skill-slug="${escapeHtml(slug)}" data-skill-source="${escapeHtml(hubSource)}">預覽</button>
+              <button class="btn btn-sm btn-primary" data-action="install-skill" data-skill-name="${escapeHtml(slug)}" data-skill-version="${escapeHtml(version)}" data-skill-source="${escapeHtml(hubSource)}">安裝</button>
             </div>
           </div>
         `;
@@ -1148,9 +1187,9 @@ const AgentSettingsApp = (function() {
   /**
    * Install skill from ClawHub
    */
-  async function installSkill(name, version) {
+  async function installSkill(name, version, source) {
     try {
-      const body = { name };
+      const body = { name, source: source || null };
       if (version) body.version = version;
 
       const response = await fetch('/api/skills/hub/install', {
@@ -1265,7 +1304,7 @@ const AgentSettingsApp = (function() {
   async function initApp(windowEl, wId) {
     windowId = wId;
 
-    await Promise.all([loadAgents(), loadPrompts(), loadSkills()]);
+    await Promise.all([loadAgents(), loadPrompts(), loadSkills(), loadHubSources()]);
     renderAgentList();
     renderSkillList();
 
@@ -1339,6 +1378,7 @@ const AgentSettingsApp = (function() {
           break;
         case 'preview-skill': {
           const slug = actionEl.dataset.skillSlug;
+          const source = actionEl.dataset.skillSource || null;
           const main = document.querySelector(`#${windowId} .skill-main`);
           if (!main) break;
 
@@ -1371,7 +1411,7 @@ const AgentSettingsApp = (function() {
             const resp = await fetch('/api/skills/hub/inspect', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-              body: JSON.stringify({ slug }),
+              body: JSON.stringify({ slug, source: source || null }),
             });
             if (!resp.ok) {
               let errorDetail;
@@ -1434,7 +1474,7 @@ const AgentSettingsApp = (function() {
           break;
         }
         case 'install-skill':
-          installSkill(actionEl.dataset.skillName, actionEl.dataset.skillVersion || null);
+          installSkill(actionEl.dataset.skillName, actionEl.dataset.skillVersion || null, actionEl.dataset.skillSource || null);
           break;
         case 'remove-chip':
           actionEl.closest('.skill-chip-removable')?.remove();
