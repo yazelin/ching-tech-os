@@ -87,6 +87,9 @@ const ImageViewerModule = (function() {
   function handleInit(windowEl, wId) {
     // Set windowId here since createWindow calls onInit before returning
     windowId = wId;
+    // [Sprint7] 使用 UIHelpers 初始化 loading 狀態
+    const loadingContainer = windowEl.querySelector('.image-viewer-loading-container');
+    if (loadingContainer) UIHelpers.showLoading(loadingContainer, { text: '載入中…' });
     bindEvents(windowEl);
     loadImage();
   }
@@ -114,10 +117,8 @@ const ImageViewerModule = (function() {
           </button>
         </div>
         <div class="viewer-content image-viewer-content" id="imgViewerContent">
-          <div class="image-viewer-loading">
-            <span class="icon">${getIcon('file-image')}</span>
-            <span>載入中...</span>
-          </div>
+          <!-- [Sprint7] 原始: <div class="image-viewer-loading"><span class="icon">...</span><span>載入中...</span></div> -->
+          <div class="image-viewer-loading-container"></div>
         </div>
         <div class="viewer-statusbar">
           <span id="imgStatusInfo">-</span>
@@ -175,12 +176,8 @@ const ImageViewerModule = (function() {
     };
 
     img.onerror = () => {
-      content.innerHTML = `
-        <div class="image-viewer-error">
-          <span class="icon">${getIcon('information')}</span>
-          <span>無法載入圖片</span>
-        </div>
-      `;
+      // [Sprint7] 原始: content.innerHTML = '<div class="image-viewer-error"><span class="icon">...</span><span>無法載入圖片</span></div>'
+      UIHelpers.showError(content, { message: '無法載入圖片' });
     };
 
     // Determine the URL to fetch
@@ -216,12 +213,8 @@ const ImageViewerModule = (function() {
       img.src = URL.createObjectURL(blob);
     })
     .catch(error => {
-      content.innerHTML = `
-        <div class="image-viewer-error">
-          <span class="icon">${getIcon('information')}</span>
-          <span>${error.message}</span>
-        </div>
-      `;
+      // [Sprint7] 原始: content.innerHTML = '<div class="image-viewer-error"><span class="icon">...</span><span>${error.message}</span></div>'
+      UIHelpers.showError(content, { message: '載入失敗', detail: error.message });
     });
   }
 
