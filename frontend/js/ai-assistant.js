@@ -58,6 +58,15 @@ const AIAssistantApp = (function() {
    * Load chats from API
    */
   async function loadChats() {
+    const listContainer = windowId
+      ? document.querySelector(`#${windowId} .ai-chat-list`)
+      : null;
+
+    // 顯示 loading 骨架
+    if (listContainer) {
+      UIHelpers.showSkeleton(listContainer, { rows: 4, height: 40 });
+    }
+
     try {
       if (typeof APIClient !== 'undefined') {
         chats = await APIClient.getChats();
@@ -68,6 +77,13 @@ const AIAssistantApp = (function() {
     } catch (e) {
       console.error('[AIAssistant] Failed to load chats:', e);
       chats = [];
+      if (listContainer) {
+        UIHelpers.showError(listContainer, {
+          message: '無法載入對話列表',
+          onRetry: () => loadChats(),
+        });
+        return; // 不執行後續 renderChatList
+      }
     }
   }
 
@@ -292,13 +308,11 @@ const AIAssistantApp = (function() {
     const messages = chat?.messages || [];
 
     if (messages.length === 0) {
-      container.innerHTML = `
-        <div class="ai-welcome">
-          <span class="ai-welcome-icon icon">${getIcon('robot')}</span>
-          <h2>AI 助手</h2>
-          <p>有什麼我可以幫助你的嗎？</p>
-        </div>
-      `;
+      UIHelpers.showEmpty(container, {
+        icon: 'robot',
+        text: 'AI 助手',
+        subtext: '有什麼我可以幫助你的嗎？',
+      });
     } else {
       container.innerHTML = messages.map(msg => {
         // Skip system summary messages in display (or show differently)

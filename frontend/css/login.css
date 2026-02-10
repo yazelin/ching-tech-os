@@ -243,6 +243,75 @@
   color: var(--color-primary);
 }
 
+/* ── 密碼顯示切換按鈕 ── */
+.password-toggle {
+  position: absolute;
+  right: var(--spacing-sm);
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm, 4px);
+  transition: color 0.2s, background-color 0.2s;
+}
+.password-toggle:hover {
+  color: var(--text-primary);
+  background-color: var(--bg-hover, rgba(255,255,255,0.06));
+}
+.password-toggle:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+.password-toggle .icon svg {
+  width: 18px;
+  height: 18px;
+}
+.input-icon--has-toggle .input {
+  padding-right: 44px;
+}
+
+/* ── 即時驗證提示 ── */
+.form-hint {
+  display: block;
+  min-height: 1.2em;
+  font-size: var(--font-size-xs, 12px);
+  color: var(--color-error, #e65050);
+  margin-top: 4px;
+}
+.form-validation-hints {
+  min-height: 1.2em;
+  font-size: var(--font-size-xs, 12px);
+  color: var(--color-error, #e65050);
+  text-align: center;
+  margin-bottom: var(--spacing-xs, 4px);
+}
+.input--invalid {
+  border-color: var(--color-error, #e65050) !important;
+  box-shadow: 0 0 0 1px var(--color-error, #e65050);
+}
+
+/* ── Submit loading 旋轉動畫 ── */
+.login-btn .ui-state-icon svg,
+.login-btn .spin {
+  animation: login-spin 1s linear infinite;
+  width: 18px;
+  height: 18px;
+}
+@keyframes login-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.login-btn[aria-busy="true"] {
+  opacity: 0.75;
+  cursor: wait;
+}
+
 /* Login Button */
 .login-btn {
   width: 100%;

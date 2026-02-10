@@ -59,7 +59,7 @@
         <!-- Password Field -->
         <div class="form-group">
           <label for="password">密碼</label>
-          <div class="input-icon">
+          <div class="input-icon input-icon--has-toggle">
             <input
               type="password"
               id="password"
@@ -68,10 +68,19 @@
               placeholder="請輸入密碼"
               autocomplete="current-password"
               required
+              aria-describedby="passwordHint"
             >
             <span class="icon" id="iconLock"></span>
+            <button type="button" class="password-toggle" id="passwordToggle"
+                    aria-label="顯示密碼" aria-pressed="false" tabindex="0">
+              <span class="icon" id="iconPasswordToggle"></span>
+            </button>
           </div>
+          <span class="form-hint" id="passwordHint" aria-live="polite"></span>
         </div>
+
+        <!-- Validation hint area -->
+        <div class="form-validation-hints" id="formValidationHints" aria-live="polite"></div>
 
         <!-- Submit Button -->
         <button type="submit" class="btn btn-primary login-btn">
@@ -106,6 +115,7 @@
     document.getElementById('iconAccount').innerHTML = getIcon('account');
     document.getElementById('iconLock').innerHTML = getIcon('lock');
     document.getElementById('iconLogin').innerHTML = getIcon('login');
+    document.getElementById('iconPasswordToggle').innerHTML = getIcon('eye-off');
     document.getElementById('copyrightYear').textContent = new Date().getFullYear();
 
     // 主題切換按鈕
