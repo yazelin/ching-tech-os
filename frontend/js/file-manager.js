@@ -1323,7 +1323,7 @@ const FileManagerModule = (function() {
     } else if (FileUtils.isImageFile(file.name)) {
       previewMainHTML = `
         <div class="fm-preview-image">
-          <img id="fmPreviewImage" alt="${file.name}" style="display: none;">
+          <img id="fmPreviewImage" alt="${file.name}" style="display: none;" loading="lazy">
         </div>
       `;
     } else if (FileUtils.isTextFile(file.name)) {
@@ -1429,7 +1429,7 @@ const FileManagerModule = (function() {
     if (FileUtils.isImageFile(file.name)) {
       previewMainHTML = `
         <div class="fm-mobile-preview-image">
-          <img id="fmMobilePreviewImage" alt="${file.name}" style="display: none;">
+          <img id="fmMobilePreviewImage" alt="${file.name}" style="display: none;" loading="lazy">
         </div>
       `;
     } else if (FileUtils.isTextFile(file.name)) {

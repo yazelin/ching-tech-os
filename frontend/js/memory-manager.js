@@ -212,7 +212,7 @@ const MemoryManagerApp = (function() {
            data-id="${user.id}">
         <div class="mm-sidebar-item-avatar">
           ${user.picture_url
-            ? `<img src="${escapeHtml(user.picture_url)}" alt="">`
+            ? `<img src="${escapeHtml(user.picture_url)}" alt="" loading="lazy">`
             : icon('account')}
         </div>
         <div class="mm-sidebar-item-info">
