@@ -64,6 +64,10 @@ async def lifespan(app: FastAPI):
     # 初始化 ClawHub client（存入 app.state 供依賴注入）
     from .services.clawhub_client import ClawHubClient
     app.state.clawhub_client = ClawHubClient()
+    # 初始化 SkillHub client（依 feature flag）
+    from .services.skillhub_client import SkillHubClient, skillhub_enabled
+    if skillhub_enabled():
+        app.state.skillhub_client = SkillHubClient()
     await init_db_pool()
     await ensure_default_linebot_agents()  # 確保 Line Bot Agent 存在
     await session_manager.start_cleanup_task()
@@ -93,6 +97,13 @@ async def lifespan(app: FastAPI):
             del app.state.clawhub_client
     except Exception as e:
         _logging.getLogger(__name__).warning(f"關閉 ClawHub client 失敗: {e}")
+    # 關閉 SkillHub client
+    try:
+        if hasattr(app.state, "skillhub_client"):
+            await app.state.skillhub_client.close()
+            del app.state.skillhub_client
+    except Exception as e:
+        _logging.getLogger(__name__).warning(f"關閉 SkillHub client 失敗: {e}")
     # 清理 Claude agent 工作目錄基底
     try:
         from .services.claude_agent import _WORKING_DIR_BASE
@@ -141,10 +152,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Cache-Control 設定（BFCache 優化）
-from .middleware.cache_control import CacheControlMiddleware  # noqa: E402
-app.add_middleware(CacheControlMiddleware)
 
 # 註冊路由
 app.include_router(auth.router)
