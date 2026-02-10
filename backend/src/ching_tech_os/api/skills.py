@@ -203,7 +203,7 @@ async def hub_inspect(
         # 取得 skill 詳情（含 owner、stats、latestVersion）
         detail = await client.get_skill(data.slug)
 
-        # 從 ZIP 取得 SKILL.md 內容（下載一次，傳入 zip_data 避免重複下載）
+        # 從 ZIP 取得 SKILL.md 內容（每次呼叫獨立下載，未來可加快取優化）
         skill_info = detail.get("skill", {})
         latest = detail.get("latestVersion", {})
         version = latest.get("version", "")
@@ -252,6 +252,7 @@ async def hub_install(
             _install_locks[data.name] = (lock, count + 1)
             install_lock = lock
 
+    version = ""
     try:
         async with install_lock:
             sm = get_skill_manager()

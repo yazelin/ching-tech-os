@@ -42,14 +42,16 @@ class ClawHubError(Exception):
         self.status_code = status_code
 
 
+_DEFAULT_BASE_URL = "https://clawhub.ai/api/v1"
+
+
 class ClawHubClient:
     """ClawHub REST API 非同步客戶端"""
 
-    BASE_URL = "https://clawhub.ai/api/v1"
-
-    def __init__(self):
+    def __init__(self, base_url: str | None = None):
+        self._base_url = base_url or _DEFAULT_BASE_URL
         self._client = httpx.AsyncClient(
-            base_url=self.BASE_URL,
+            base_url=self._base_url,
             timeout=httpx.Timeout(connect=5, read=30, pool=5),
             follow_redirects=False,  # SSRF 防護
         )
@@ -124,6 +126,7 @@ class ClawHubClient:
             ClawHubError: 下載失敗或檔案過大
         """
         tmp_path: Path | None = None
+        success = False
         try:
             with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp_file:
                 tmp_path = Path(tmp_file.name)
@@ -141,22 +144,18 @@ class ClawHubClient:
                             raise ClawHubError(
                                 f"ZIP 檔案過大: {size} bytes（上限 {_MAX_ZIP_SIZE} bytes）"
                             )
+            success = True
             return tmp_path
         except httpx.HTTPStatusError as e:
-            if tmp_path and tmp_path.exists():
-                tmp_path.unlink()
             raise ClawHubError(
                 f"下載失敗: HTTP {e.response.status_code}",
                 status_code=e.response.status_code,
             )
-        except ClawHubError:
-            if tmp_path and tmp_path.exists():
-                tmp_path.unlink()
-            raise
         except httpx.HTTPError as e:
-            if tmp_path and tmp_path.exists():
-                tmp_path.unlink()
             raise ClawHubError(f"下載失敗: {e}")
+        finally:
+            if not success and tmp_path and tmp_path.exists():
+                tmp_path.unlink()
 
     async def download_and_extract(
         self,
