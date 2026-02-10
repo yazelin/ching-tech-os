@@ -224,8 +224,66 @@
   <!-- 延遲載入背景圖片 -->
   <script src="js/lazy-bg.js" defer></script>
 
-  <!-- Vite 建置入口：所有本地 JS 已合併至 src/main.js -->
-  <!-- 原始腳本已備份至 _legacy_scripts/ 目錄 -->
-  <script type="module" src="/src/main.js"></script>
+  <!-- JS 載入（Vite build 或 legacy script tags） -->
+  <!-- 若使用 Vite dev/build：取消下一行註解並刪除 legacy block -->
+  <!-- <script type="module" src="/src/main.js"></script> -->
+
+  <!-- Legacy script loading（非 Vite 環境） -->
+  <script src="js/config.js" defer></script>
+  <script src="js/icons.js" defer></script>
+  <script src="js/ui-helpers.js" defer></script>
+  <script src="js/file-utils.js" defer></script>
+  <script src="js/path-utils.js" defer></script>
+  <script src="js/login.js" defer></script>
+  <script src="js/header.js" defer></script>
+  <script src="js/window.js" defer></script>
+  <script src="js/notification.js" defer></script>
+  <script src="js/socket-client.js" defer></script>
+  <script src="js/api-client.js" defer></script>
+  <script src="js/theme.js" defer></script>
+  <script src="js/user-profile.js" defer></script>
+  <script src="js/ai-assistant.js" defer></script>
+  <script src="js/image-viewer.js" defer></script>
+  <script src="js/text-viewer.js" defer></script>
+  <script src="js/pdf-viewer.js" defer></script>
+  <script src="js/file-opener.js" defer></script>
+  <script src="js/file-manager.js" defer></script>
+  <script src="js/terminal.js" defer></script>
+  <script src="js/code-editor.js" defer></script>
+  <script src="js/external-app.js" defer></script>
+  <script src="js/knowledge-base.js" defer></script>
+  <script src="js/message-center.js" defer></script>
+  <script src="js/settings.js" defer></script>
+  <script src="js/prompt-editor.js" defer></script>
+  <script src="js/agent-settings.js" defer></script>
+  <script src="js/ai-log.js" defer></script>
+  <script src="js/linebot.js" defer></script>
+  <script src="js/permissions.js" defer></script>
+  <script src="js/share-dialog.js" defer></script>
+  <script src="js/share-manager.js" defer></script>
+  <script src="js/memory-manager.js" defer></script>
+  <script src="js/command-palette.js" defer></script>
+  <script src="js/onboarding.js" defer></script>
+  <script src="js/desktop.js" defer></script>
+  <script src="js/taskbar.js" defer></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async function() {
+      document.getElementById('iconClock').innerHTML = window.getIcon('clock-outline');
+      document.getElementById('iconMessages').innerHTML = window.getIcon('bell-outline');
+      document.getElementById('iconUser').innerHTML = window.getIcon('account-circle');
+      document.getElementById('iconLogout').innerHTML = window.getIcon('logout');
+      if (!LoginModule.isLoggedIn()) { window.location.href = 'login.html'; return; }
+      const isValid = await LoginModule.validateSession();
+      if (!isValid) { window.location.href = 'login.html'; return; }
+      await PermissionsModule.init();
+      WindowModule.init();
+      HeaderModule.init();
+      CommandPaletteModule.init();
+      DesktopModule.init();
+      TaskbarModule.init();
+      SocketClient.connect();
+      OnboardingModule.init();
+    });
+  </script>
 </body>
 </html>

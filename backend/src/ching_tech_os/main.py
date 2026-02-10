@@ -287,6 +287,9 @@ async def short_share_url(token: str):
 app.mount("/css", StaticFiles(directory=FRONTEND / "css"), name="css")
 app.mount("/js", StaticFiles(directory=FRONTEND / "js"), name="js")
 app.mount("/assets", StaticFiles(directory=FRONTEND / "assets"), name="assets")
+app.mount("/src", StaticFiles(directory=FRONTEND / "src"), name="src")
+if (FRONTEND / "fonts").is_dir():
+    app.mount("/fonts", StaticFiles(directory=FRONTEND / "fonts"), name="fonts")
 
 # 知識庫本機附件目錄
 KNOWLEDGE_ASSETS = Path(settings.knowledge_data_path) / "assets"
