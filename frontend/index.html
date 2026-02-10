@@ -110,12 +110,12 @@
     </nav>
   </div>
 
-  <!-- 外部 CDN 相依（非 module，同步載入以確保全域變數可用） -->
-  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <!-- 外部 CDN 相依（defer 以避免阻塞解析；document-order 確保在 module script 前執行） -->
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js" defer></script>
   <!-- xterm.js -->
-  <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.min.js" defer></script>
 
   <!-- Vite 建置入口：所有本地 JS 已合併至 src/main.js -->
   <!-- 原始腳本已備份至 _legacy_scripts/ 目錄 -->
