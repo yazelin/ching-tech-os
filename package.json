@@ -1,0 +1,13 @@
+{
+  "name": "ching-tech-os",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ChingTech OS — 前端效能建構工具",
+  "scripts": {
+    "build": "node scripts/build-frontend.mjs",
+    "build:watch": "node scripts/build-frontend.mjs --watch"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

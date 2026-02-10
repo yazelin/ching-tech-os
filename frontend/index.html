@@ -8,7 +8,13 @@
   <!-- Favicon -->
   <link rel="icon" type="image/svg+xml" href="assets/images/logo.svg">
 
-  <!-- Stylesheets -->
+  <!-- [P3 Performance] 合併壓縮後的 CSS bundle（由 npm run build 產生） -->
+  <link rel="stylesheet" href="dist/index.bundle.css">
+
+  <!--
+    [開發者備註] 以下為原始多檔 CSS 引入，已由上方 bundle 取代。
+    若需除錯個別樣式，可取消註解下方區塊並註解上方 bundle 行。
+
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/header.css">
   <link rel="stylesheet" href="css/desktop.css">
@@ -36,6 +42,7 @@
   <link rel="stylesheet" href="css/memory-manager.css">
   <link rel="stylesheet" href="css/notification.css">
   <link rel="stylesheet" href="css/taskbar.css">
+  -->
 
   <!-- xterm.js -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css">
