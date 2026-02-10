@@ -9,6 +9,10 @@
   <!-- Favicon -->
   <link rel="icon" type="image/svg+xml" href="assets/images/logo.svg">
 
+  <!-- [Perf] Preload 關鍵 CSS 與字型，加速首屏渲染 -->
+  <link rel="preload" href="dist/index.bundle.css" as="style">
+  <link rel="preload" href="fonts/JetBrainsMonoNerdFont-Regular.woff2" as="font" type="font/woff2" crossorigin>
+
   <!-- [P3 Performance] 合併壓縮後的 CSS bundle（由 npm run build 產生） -->
   <link rel="stylesheet" href="dist/index.bundle.css">
 
@@ -51,7 +55,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css">
 
   <!-- marked.js for Markdown rendering -->
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
 </head>
 <body>
   <div class="desktop-container">
