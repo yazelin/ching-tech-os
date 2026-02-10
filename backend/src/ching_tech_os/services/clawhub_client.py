@@ -11,7 +11,6 @@ import re
 import shutil
 import tempfile
 import zipfile
-from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import Request
@@ -271,46 +270,15 @@ class ClawHubClient:
         version: str,
         owner: str | None = None,
     ) -> None:
-        """寫入 _meta.json 到 skill 目錄
-
-        Args:
-            dest: skill 目錄
-            slug: skill slug
-            version: 版本號
-            owner: 擁有者 handle
-        """
-        meta = {
-            "slug": slug,
-            "version": version,
-            "source": "clawhub",
-            "installed_at": datetime.now(timezone.utc).isoformat(),
-            "owner": owner or "",
-        }
-        meta_path = dest / "_meta.json"
-        meta_path.write_text(
-            json.dumps(meta, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-        logger.info(f"寫入 _meta.json: {meta_path}")
+        """寫入 _meta.json 到 skill 目錄（委派給共用函式）"""
+        from .hub_meta import write_meta
+        write_meta(dest, slug, version, source="clawhub", owner=owner)
 
     @staticmethod
     def read_meta(skill_dir: Path) -> dict | None:
-        """讀取 skill 目錄中的 _meta.json
-
-        Args:
-            skill_dir: skill 目錄
-
-        Returns:
-            _meta.json 內容字典，或 None（檔案不存在）
-        """
-        meta_path = skill_dir / "_meta.json"
-        if not meta_path.exists():
-            return None
-        try:
-            return json.loads(meta_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError) as e:
-            logger.warning(f"讀取 _meta.json 失敗: {meta_path}: {e}")
-            return None
+        """讀取 skill 目錄中的 _meta.json（委派給共用函式）"""
+        from .hub_meta import read_meta
+        return read_meta(skill_dir)
 
 
 def get_clawhub_client_di(request: Request) -> ClawHubClient:

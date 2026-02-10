@@ -43,7 +43,7 @@ def _hub_source_tag() -> str:
     return "skillhub" if _use_skillhub() else "clawhub"
 
 
-def _hub_error_class():
+def _hub_error_class() -> type[ClawHubError | SkillHubError]:
     return SkillHubError if _use_skillhub() else ClawHubError
 
 
