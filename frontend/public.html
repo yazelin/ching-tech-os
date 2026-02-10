@@ -24,9 +24,19 @@
         }
         return '';
       })();
-      // 動態載入 favicon 和 CSS
-      document.write('<link rel="icon" type="image/svg+xml" href="' + window.PUBLIC_BASE + '/assets/images/logo.svg">');
-      document.write('<link rel="stylesheet" href="' + window.PUBLIC_BASE + '/css/public.css">');
+      // 動態載入 favicon 和 CSS（使用 DOM API 以避免 document.write 阻止 bfcache）
+      (function() {
+        var favicon = document.createElement('link');
+        favicon.rel = 'icon';
+        favicon.type = 'image/svg+xml';
+        favicon.href = window.PUBLIC_BASE + '/assets/images/logo.svg';
+        document.head.appendChild(favicon);
+
+        var css = document.createElement('link');
+        css.rel = 'stylesheet';
+        css.href = window.PUBLIC_BASE + '/css/public.css';
+        document.head.appendChild(css);
+      })();
     </script>
     <!-- Markdown 渲染 -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -132,6 +142,13 @@
         </div>
     </div>
 
-    <script>document.write('<script src="' + window.PUBLIC_BASE + '/js/public.js"><\/script>');</script>
+    <script>
+      // 動態載入 public.js（使用 DOM API 以避免 document.write 阻止 bfcache）
+      (function() {
+        var s = document.createElement('script');
+        s.src = window.PUBLIC_BASE + '/js/public.js';
+        document.body.appendChild(s);
+      })();
+    </script>
 </body>
 </html>
