@@ -192,3 +192,7 @@ function getIcon(name, className = '') {
   }
   return svg;
 }
+
+// 將 getIcon 掛載至 window，確保 Vite/Rollup 不會 tree-shake，
+// 且 src/main.js 在 bundle 頂層呼叫時可正確存取。
+window.getIcon = getIcon;
