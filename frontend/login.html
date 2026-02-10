@@ -8,9 +8,16 @@
   <!-- Favicon -->
   <link rel="icon" type="image/svg+xml" href="assets/images/logo.svg">
 
-  <!-- Stylesheets -->
+  <!-- [P3 Performance] 合併壓縮後的 CSS bundle（由 npm run build 產生） -->
+  <link rel="stylesheet" href="dist/login.bundle.css">
+
+  <!--
+    [開發者備註] 以下為原始多檔 CSS 引入，已由上方 bundle 取代。
+    若需除錯個別樣式，可取消註解下方區塊並註解上方 bundle 行。
+
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/login.css">
+  -->
 </head>
 <body>
   <!-- 主題切換按鈕 -->
@@ -79,7 +86,13 @@
     </div>
   </div>
 
-  <!-- Scripts -->
+  <!-- [P3 Performance] 合併壓縮後的 JS bundle（由 npm run build 產生） -->
+  <script src="dist/login.bundle.js"></script>
+
+  <!--
+    [開發者備註] 以下為原始多檔 JS 引入，已由上方 bundle 取代。
+    若需除錯個別模組，可取消註解下方區塊並註解上方 bundle 行。
+
   <script src="js/config.js"></script>
   <script src="js/icons.js"></script>
   <script src="js/path-utils.js"></script>
@@ -87,6 +100,7 @@
   <script src="js/matrix-rain.js"></script>
   <script src="js/device-fingerprint.js"></script>
   <script src="js/login.js"></script>
+  -->
   <script>
     document.getElementById('iconAccount').innerHTML = getIcon('account');
     document.getElementById('iconLock').innerHTML = getIcon('lock');
