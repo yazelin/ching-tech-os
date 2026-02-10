@@ -286,6 +286,7 @@ async def short_share_url(token: str):
 # 掛載靜態檔案（放在最後，避免覆蓋 API 路由）
 app.mount("/css", StaticFiles(directory=FRONTEND / "css"), name="css")
 app.mount("/js", StaticFiles(directory=FRONTEND / "js"), name="js")
+app.mount("/fonts", StaticFiles(directory=FRONTEND / "fonts"), name="fonts")
 app.mount("/assets", StaticFiles(directory=FRONTEND / "assets"), name="assets")
 app.mount("/src", StaticFiles(directory=FRONTEND / "src"), name="src")
 if (FRONTEND / "fonts").is_dir():

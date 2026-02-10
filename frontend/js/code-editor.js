@@ -111,3 +111,5 @@ const CodeEditorModule = (function() {
     checkAvailability
   };
 })();
+// 將模組掛載到 window，供 desktop.js lazy-loader 偵測
+window.CodeEditorModule = CodeEditorModule;

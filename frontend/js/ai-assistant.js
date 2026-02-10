@@ -936,3 +936,5 @@ const AIAssistantApp = (function() {
     switchToChat
   };
 })();
+// 將模組掛載到 window，供 desktop.js lazy-loader 偵測
+window.AIAssistantApp = AIAssistantApp;

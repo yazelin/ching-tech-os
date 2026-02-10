@@ -82,8 +82,11 @@ const DesktopModule = (function() {
    */
   function loadScript(src) {
     return new Promise((resolve, reject) => {
-      // 檢查是否已有相同 src 的 script 標籤
-      if (document.querySelector(`script[src="${src}"]`)) {
+      // 檢查是否已有相同 src 的 script 標籤（正規化 ./ 前綴）
+      const normalizedSrc = src.replace(/^\.\//, '');
+      if (document.querySelector(`script[src="${src}"]`) ||
+          document.querySelector(`script[src="${normalizedSrc}"]`) ||
+          document.querySelector(`script[src="./${normalizedSrc}"]`)) {
         resolve();
         return;
       }

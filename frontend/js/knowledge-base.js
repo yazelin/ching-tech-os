@@ -1477,3 +1477,5 @@ const KnowledgeBaseModule = (function() {
     close,
   };
 })();
+// 將模組掛載到 window，供 desktop.js lazy-loader 偵測
+window.KnowledgeBaseModule = KnowledgeBaseModule;
