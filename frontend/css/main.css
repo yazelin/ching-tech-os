@@ -1163,3 +1163,117 @@ input {
   .show-on-desktop { display: block !important; }
   .flex-on-desktop { display: flex !important; }
 }
+
+/* ==========================================================================
+   Prefers-Reduced-Motion：無障礙動態偏好
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .skeleton::after {
+    animation: none !important;
+    background: var(--bg-tertiary, #e0e0e0) !important;
+  }
+
+  .spinner {
+    animation: none !important;
+    border-top-color: transparent;
+    opacity: 0.6;
+  }
+}
+
+/* ==========================================================================
+   Skeleton 骨架屏元件
+   ========================================================================== */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-tertiary, #e0e0e0);
+  border-radius: var(--radius-sm, 6px);
+  color: transparent !important;
+  pointer-events: none;
+  user-select: none;
+}
+
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.15) 50%,
+    transparent 100%
+  );
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* Skeleton 變體 */
+.skeleton--text {
+  height: 1em;
+  width: 80%;
+  margin-bottom: var(--spacing-xs, 4px);
+}
+
+.skeleton--circle {
+  border-radius: 50%;
+}
+
+.skeleton--rect {
+  border-radius: var(--radius-sm, 6px);
+}
+
+/* Desktop 圖示骨架 */
+.skeleton--icon {
+  width: 72px;
+  height: 88px;
+  border-radius: var(--radius-md, 8px);
+  margin: var(--spacing-sm, 8px);
+}
+
+/* AI 助手骨架 */
+.skeleton--chat-item {
+  height: 48px;
+  width: 100%;
+  margin-bottom: var(--spacing-xs, 4px);
+  border-radius: var(--radius-sm, 6px);
+}
+
+.skeleton--message {
+  height: 60px;
+  width: 70%;
+  margin-bottom: var(--spacing-sm, 8px);
+  border-radius: var(--radius-md, 8px);
+}
+
+/* ==========================================================================
+   Spinner 載入旋轉元件
+   ========================================================================== */
+.spinner {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  border: 3px solid var(--border-color, #ccc);
+  border-top-color: var(--accent-primary, #5b7ff5);
+  border-radius: 50%;
+  animation: spinner-rotate 0.8s linear infinite;
+}
+
+.spinner--sm { width: 16px; height: 16px; border-width: 2px; }
+.spinner--lg { width: 36px; height: 36px; border-width: 4px; }
+
+@keyframes spinner-rotate {
+  to { transform: rotate(360deg); }
+}

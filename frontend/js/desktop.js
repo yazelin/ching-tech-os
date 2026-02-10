@@ -200,10 +200,24 @@ const DesktopModule = (function() {
     const desktopArea = document.querySelector('.desktop-area');
     if (!desktopArea) return;
 
+    // 插入 skeleton 骨架佔位元素
+    const skeletonCount = 8;
+    const skeletons = [];
+    for (let i = 0; i < skeletonCount; i++) {
+      const sk = document.createElement('div');
+      sk.className = 'skeleton skeleton--icon';
+      sk.setAttribute('aria-hidden', 'true');
+      desktopArea.appendChild(sk);
+      skeletons.push(sk);
+    }
+
     // 根據權限過濾應用程式
     const visibleApps = typeof PermissionsModule !== 'undefined'
       ? PermissionsModule.getAccessibleApps(applications)
       : applications;
+
+    // 移除 skeleton 並渲染真實圖示
+    skeletons.forEach(sk => sk.remove());
 
     visibleApps.forEach(app => {
       const iconElement = createIconElement(app);

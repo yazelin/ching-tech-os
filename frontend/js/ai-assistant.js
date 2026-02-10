@@ -695,6 +695,33 @@ const AIAssistantApp = (function() {
   async function initApp(windowEl, wId) {
     windowId = wId;
 
+    // 插入 skeleton 骨架佔位元素
+    const chatList = windowEl.querySelector('.ai-chat-list');
+    const messagesContainer = windowEl.querySelector('.ai-messages-container');
+    const chatSkeletons = [];
+    const msgSkeletons = [];
+
+    if (chatList) {
+      for (let i = 0; i < 5; i++) {
+        const sk = document.createElement('div');
+        sk.className = 'skeleton skeleton--chat-item';
+        sk.setAttribute('aria-hidden', 'true');
+        chatList.appendChild(sk);
+        chatSkeletons.push(sk);
+      }
+    }
+
+    if (messagesContainer) {
+      for (let i = 0; i < 3; i++) {
+        const sk = document.createElement('div');
+        sk.className = 'skeleton skeleton--message';
+        sk.setAttribute('aria-hidden', 'true');
+        if (i % 2 === 1) sk.style.marginLeft = 'auto';
+        messagesContainer.appendChild(sk);
+        msgSkeletons.push(sk);
+      }
+    }
+
     // Load data from API
     await loadAgents();
     await loadChats();
@@ -718,6 +745,10 @@ const AIAssistantApp = (function() {
       // Load full details for current chat
       await switchChat(currentChatId);
     }
+
+    // 移除所有 skeleton 骨架
+    chatSkeletons.forEach(sk => sk.remove());
+    msgSkeletons.forEach(sk => sk.remove());
 
     // Render initial state
     renderChatList();
