@@ -747,32 +747,47 @@ const WindowModule = (function() {
   }
 
   /**
-   * Close a window
+   * Close a window (with closing animation)
    * @param {string} windowId
    */
   function closeWindow(windowId) {
     const windowInfo = windows[windowId];
     if (!windowInfo) return;
 
+    const windowEl = windowInfo.element;
     const appId = windowInfo.appId;
 
-    // Call onClose callback
-    if (windowInfo.onClose) {
-      windowInfo.onClose(windowId);
-    }
+    // Add closing animation class
+    windowEl.classList.add('closing');
 
-    // Remove from DOM
-    windowInfo.element.remove();
+    // Guard against double-fire (animationend + setTimeout)
+    let removed = false;
+    const removeWindow = () => {
+      if (removed) return;
+      removed = true;
 
-    // Remove from state
-    delete windows[windowId];
-    const index = windowOrder.indexOf(windowId);
-    if (index > -1) {
-      windowOrder.splice(index, 1);
-    }
+      // Call onClose callback
+      if (windowInfo.onClose) {
+        windowInfo.onClose(windowId);
+      }
 
-    // Notify state change
-    notifyStateChange('close', appId);
+      // Remove from DOM
+      windowEl.remove();
+
+      // Remove from state
+      delete windows[windowId];
+      const index = windowOrder.indexOf(windowId);
+      if (index > -1) {
+        windowOrder.splice(index, 1);
+      }
+
+      // Notify state change
+      notifyStateChange('close', appId);
+    };
+
+    // Listen for animation end; fallback 200ms for reduced-motion
+    windowEl.addEventListener('animationend', removeWindow, { once: true });
+    setTimeout(removeWindow, 200);
   }
 
   /**
