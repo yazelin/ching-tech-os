@@ -168,18 +168,18 @@ const UserProfileModule = (function() {
 
       // Validation
       if (hasPassword && !currentPassword) {
-        messageEl.className = 'user-profile-message error';
-        messageEl.textContent = '請輸入目前密碼';
+        // [Sprint8] 原: messageEl.className = 'user-profile-message error'; messageEl.textContent = '請輸入目前密碼'
+        UIHelpers.showError(messageEl, { message: '請輸入目前密碼', variant: 'compact' });
         return;
       }
       if (!newPassword || newPassword.length < 8) {
-        messageEl.className = 'user-profile-message error';
-        messageEl.textContent = '新密碼至少需要 8 個字元';
+        // [Sprint8] 原: messageEl.className = 'user-profile-message error'; messageEl.textContent = '新密碼至少需要 8 個字元'
+        UIHelpers.showError(messageEl, { message: '新密碼至少需要 8 個字元', variant: 'compact' });
         return;
       }
       if (newPassword !== confirmPassword) {
-        messageEl.className = 'user-profile-message error';
-        messageEl.textContent = '兩次輸入的密碼不一致';
+        // [Sprint8] 原: messageEl.className = 'user-profile-message error'; messageEl.textContent = '兩次輸入的密碼不一致'
+        UIHelpers.showError(messageEl, { message: '兩次輸入的密碼不一致', variant: 'compact' });
         return;
       }
 
