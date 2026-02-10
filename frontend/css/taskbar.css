@@ -65,7 +65,7 @@
 }
 
 .taskbar-icon .icon {
-  color: var(--text-secondary, #aaa);
+  color: var(--text-secondary);
   transition: color var(--transition-fast, 0.15s) ease;
 }
 
@@ -75,7 +75,7 @@
 }
 
 .taskbar-icon:hover .icon {
-  color: var(--color-primary, #00d4aa);
+  color: var(--color-primary);
 }
 
 /* ── Tooltip ── */
@@ -89,7 +89,7 @@
   background-color: var(--bg-tooltip, rgba(0,0,0,0.85));
   border-radius: var(--radius-sm, 6px);
   font-size: var(--font-size-xs, 12px);
-  color: var(--tooltip-text, #fff);
+  color: var(--tooltip-text);
   white-space: nowrap;
   opacity: 0;
   visibility: hidden;
@@ -125,7 +125,7 @@
 .taskbar-icon .indicator-dot {
   width: 4px;
   height: 4px;
-  background-color: var(--color-accent, #00d4aa);
+  background-color: var(--color-accent);
   border-radius: 50%;
 }
 
@@ -156,7 +156,7 @@
   border-radius: var(--radius-sm, 6px);
   cursor: pointer;
   font-size: var(--font-size-sm, 13px);
-  color: var(--text-primary, #eee);
+  color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -168,7 +168,7 @@
 }
 
 .taskbar-window-menu-item.minimized {
-  color: var(--text-secondary, #aaa);
+  color: var(--text-secondary);
   font-style: italic;
 }
 

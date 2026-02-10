@@ -281,19 +281,19 @@
   display: block;
   min-height: 1.2em;
   font-size: var(--font-size-xs, 12px);
-  color: var(--color-error, #e65050);
+  color: var(--color-error);
   margin-top: 4px;
 }
 .form-validation-hints {
   min-height: 1.2em;
   font-size: var(--font-size-xs, 12px);
-  color: var(--color-error, #e65050);
+  color: var(--color-error);
   text-align: center;
   margin-bottom: var(--spacing-xs, 4px);
 }
 .input--invalid {
-  border-color: var(--color-error, #e65050) !important;
-  box-shadow: 0 0 0 1px var(--color-error, #e65050);
+  border-color: var(--color-error) !important;
+  box-shadow: 0 0 0 1px var(--color-error);
 }
 
 /* ── Submit loading 旋轉動畫 ── */

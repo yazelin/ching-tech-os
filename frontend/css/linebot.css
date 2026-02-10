@@ -642,7 +642,7 @@
 
 .linebot-file-icon-wrapper.video {
     background: var(--tag-bg-purple, rgba(156, 39, 176, 0.15));
-    color: var(--tag-color-purple, #9c27b0);
+    color: var(--tag-color-purple);
 }
 
 .linebot-file-icon-wrapper.audio {
