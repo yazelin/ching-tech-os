@@ -194,9 +194,8 @@ const CommandPaletteModule = (function () {
     const hasResults = apps.length > 0 || windows.length > 0;
 
     if (!hasResults) {
-      resultsEl.innerHTML = `<div class="command-palette-empty">${
-        q ? '找不到符合的結果' : '輸入關鍵字開始搜尋'
-      }</div>`;
+      // [Sprint7] 原始: resultsEl.innerHTML = '<div class="command-palette-empty">...(找不到符合的結果|輸入關鍵字開始搜尋)</div>'
+      UIHelpers.showEmpty(resultsEl, { icon: 'magnify', text: q ? '找不到符合的結果' : '輸入關鍵字開始搜尋' });
       return;
     }
 
