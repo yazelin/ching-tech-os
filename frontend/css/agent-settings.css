@@ -753,6 +753,7 @@
 /* Hub search */
 .skill-hub-search {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 8px;
   flex-shrink: 0;
