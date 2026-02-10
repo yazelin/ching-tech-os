@@ -152,6 +152,8 @@ const OnboardingModule = (function () {
     const targetEl = document.querySelector(step.target);
 
     if (!targetEl) {
+      // [Sprint8] UIHelpers: 目標不存在時記錄警告
+      console.warn(`[Onboarding] 步驟 ${currentStep + 1} 目標元素未找到: ${step.target}`);
       // 目標不存在，跳至下一步
       if (currentStep < STEPS.length - 1) {
         currentStep++;
