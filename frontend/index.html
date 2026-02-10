@@ -44,7 +44,7 @@
 <body>
   <div class="desktop-container">
     <!-- Header Bar -->
-    <header class="header-bar">
+    <header class="header-bar" role="banner">
       <div class="header-left">
         <img src="assets/images/logo-cyan-static.svg" alt="Logo" class="header-logo">
         <span class="header-title">ChingTech <span class="header-title-os">OS</span></span>
@@ -54,7 +54,7 @@
         <!-- Reserved for future navigation or search -->
       </div>
 
-      <div class="header-right">
+      <nav class="header-right" role="navigation" aria-label="系統功能列">
         <!-- System Time -->
         <div class="header-time">
           <span class="icon" id="iconClock"></span>
@@ -82,11 +82,9 @@
           <span class="icon" id="iconLogout"></span>
           <span>登出</span>
         </button>
-      </div>
+      </nav>
     </header>
-
-    <!-- Desktop Area -->
-    <main class="desktop-area">
+    <main class="desktop-area" role="main">
       <!-- Desktop icons will be rendered by JavaScript -->
     </main>
 

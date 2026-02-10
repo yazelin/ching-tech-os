@@ -58,6 +58,13 @@
    Desktop Icons
    ========================================================================== */
 .desktop-icon {
+  /* Button reset — 移除原生按鈕樣式 */
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -69,7 +76,11 @@
   transition: all var(--transition-fast);
   user-select: none;
   -webkit-user-select: none;
-  outline: none;
+}
+
+.desktop-icon:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .desktop-icon:hover {
