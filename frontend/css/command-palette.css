@@ -1,0 +1,285 @@
+/* ==========================================================================
+   ChingTech OS - Command Palette / 全域搜尋 (P10)
+   ========================================================================== */
+
+/* ---------- Trigger Button (header-center) ---------- */
+.command-palette-trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: 4px 12px;
+  height: 28px;
+  min-width: 200px;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.command-palette-trigger:hover {
+  background-color: var(--interactive-hover);
+  border-color: var(--accent-border);
+  color: var(--text-primary);
+}
+
+.command-palette-trigger .icon svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.command-palette-trigger-text {
+  flex: 1;
+  text-align: left;
+  opacity: 0.7;
+}
+
+.command-palette-trigger-kbd {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  opacity: 0.6;
+}
+
+.command-palette-trigger-kbd kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  background-color: var(--bg-surface-dark);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-family: inherit;
+  line-height: 1.2;
+}
+
+/* ---------- Overlay / Backdrop ---------- */
+.command-palette-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 15vh;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--transition-fast), visibility var(--transition-fast);
+}
+
+.command-palette-overlay.open {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* ---------- Dialog ---------- */
+.command-palette-dialog {
+  width: 560px;
+  max-width: 90vw;
+  max-height: 420px;
+  background-color: var(--bg-glass-heavy);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg), 0 0 40px rgba(var(--color-primary-rgb), 0.1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transform: scale(0.96) translateY(-10px);
+  transition: transform var(--transition-fast);
+}
+
+.command-palette-overlay.open .command-palette-dialog {
+  transform: scale(1) translateY(0);
+}
+
+/* ---------- Search Input Area ---------- */
+.command-palette-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.command-palette-input-wrap .icon {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.command-palette-input-wrap .icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.command-palette-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: var(--font-size-base);
+  color: var(--text-primary);
+  font-family: inherit;
+}
+
+.command-palette-input::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.6;
+}
+
+/* ---------- Results List ---------- */
+.command-palette-results {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-sm) 0;
+}
+
+.command-palette-results::-webkit-scrollbar {
+  width: 4px;
+}
+
+.command-palette-results::-webkit-scrollbar-thumb {
+  background-color: var(--border-light);
+  border-radius: 2px;
+}
+
+/* Section Header */
+.command-palette-section {
+  padding: var(--spacing-xs) var(--spacing-md);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Result Item */
+.command-palette-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.command-palette-item:hover,
+.command-palette-item.active {
+  background-color: var(--interactive-hover);
+}
+
+.command-palette-item.active {
+  background-color: var(--accent-bg-subtle);
+}
+
+.command-palette-item .icon {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.command-palette-item .icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.command-palette-item-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.command-palette-item-name {
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.command-palette-item-desc {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Highlight matched text */
+.command-palette-item-name mark {
+  background: transparent;
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.command-palette-item-badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-surface-dark);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-light);
+}
+
+/* ---------- Footer ---------- */
+.command-palette-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-top: 1px solid var(--border-light);
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
+.command-palette-footer kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  background-color: var(--bg-surface-dark);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  font-family: var(--font-mono);
+  line-height: 1.3;
+}
+
+.command-palette-empty {
+  padding: var(--spacing-lg) var(--spacing-md);
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+/* ---------- Mobile ---------- */
+@media (max-width: 768px) {
+  .command-palette-trigger {
+    min-width: 36px;
+    max-width: 36px;
+    height: 36px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .command-palette-trigger-text,
+  .command-palette-trigger-kbd {
+    display: none;
+  }
+
+  .command-palette-overlay {
+    padding-top: 10vh;
+  }
+
+  .command-palette-dialog {
+    width: 95vw;
+    max-height: 50vh;
+  }
+}

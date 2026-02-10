@@ -55,6 +55,7 @@ const INDEX_CSS = [
   'css/memory-manager.css',
   'css/notification.css',
   'css/taskbar.css',
+  'css/command-palette.css',
 ];
 
 // index.html JS 已由 Vite 管理（src/main.js），此處不再需要獨立 JS bundle。
