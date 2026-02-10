@@ -7,6 +7,7 @@ const NotificationModule = (function () {
 
   /**
    * 初始化通知容器
+   * 樣式已抽出至 css/notification.css，此處僅建立 DOM 容器
    */
   function init() {
     if (container) return;
@@ -14,91 +15,6 @@ const NotificationModule = (function () {
     container = document.createElement('div');
     container.className = 'notification-container';
     document.body.appendChild(container);
-
-    // 注入樣式（如果尚未存在）
-    if (!document.getElementById('notification-styles')) {
-      const style = document.createElement('style');
-      style.id = 'notification-styles';
-      style.textContent = `
-        .notification-container {
-          position: fixed;
-          top: 60px;
-          right: 16px;
-          z-index: 10000;
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-          pointer-events: none;
-        }
-
-        .notification-toast {
-          background: var(--color-surface, #1a2332);
-          border: 1px solid var(--color-border, #2a3a4a);
-          border-radius: var(--radius-md, 8px);
-          padding: 12px 16px;
-          min-width: 280px;
-          max-width: 400px;
-          box-shadow: var(--shadow-lg, 0 8px 32px rgba(0,0,0,0.4));
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          pointer-events: auto;
-          cursor: pointer;
-          transform: translateX(120%);
-          opacity: 0;
-          transition: transform 0.3s ease, opacity 0.3s ease;
-        }
-
-        .notification-toast.show {
-          transform: translateX(0);
-          opacity: 1;
-        }
-
-        .notification-toast.hiding {
-          transform: translateX(120%);
-          opacity: 0;
-        }
-
-        .notification-icon {
-          width: 24px;
-          height: 24px;
-          flex-shrink: 0;
-          color: var(--color-accent, #21D4FD);
-        }
-
-        .notification-content {
-          flex: 1;
-        }
-
-        .notification-title {
-          font-weight: 600;
-          color: var(--color-text-primary, #fff);
-          margin-bottom: 2px;
-        }
-
-        .notification-message {
-          font-size: 13px;
-          color: var(--color-text-secondary, #a0a8b0);
-        }
-
-        .notification-close {
-          width: 20px;
-          height: 20px;
-          background: none;
-          border: none;
-          cursor: pointer;
-          color: var(--color-text-secondary, #a0a8b0);
-          opacity: 0.6;
-          transition: opacity 0.2s;
-          flex-shrink: 0;
-        }
-
-        .notification-close:hover {
-          opacity: 1;
-        }
-      `;
-      document.head.appendChild(style);
-    }
   }
 
   /**
