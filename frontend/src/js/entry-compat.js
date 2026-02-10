@@ -64,4 +64,3 @@ import '../../js/command-palette.js';
 
 // ─── 桌面 & Taskbar（最後載入，因為依賴上述模組） ───
 import '../../js/desktop.js';
-import '../../js/taskbar.js';
