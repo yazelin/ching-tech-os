@@ -52,11 +52,34 @@ const WindowModule = (function() {
   const MOBILE_BREAKPOINT = 768;
 
   /**
-   * Check if current device is mobile
+   * 快取 isMobile 結果，於 resize 時更新
+   * @type {boolean}
+   */
+  let _isMobile = window.innerWidth <= MOBILE_BREAKPOINT;
+
+  /**
+   * 判斷目前是否為手機寬度（<= 768px）
    * @returns {boolean}
    */
   function isMobile() {
-    return window.innerWidth <= MOBILE_BREAKPOINT;
+    return _isMobile;
+  }
+
+  /**
+   * 更新手機模式狀態（由 resize 事件觸發）
+   */
+  function _updateMobileState() {
+    _isMobile = window.innerWidth <= MOBILE_BREAKPOINT;
+    _updateMobileWindowClass();
+  }
+
+  /**
+   * 根據手機模式與視窗數量，切換 body 的 mobile-window-active class
+   * 用於隱藏桌面圖示等 CSS 效果
+   */
+  function _updateMobileWindowClass() {
+    const hasWindows = Object.keys(windows).length > 0;
+    document.body.classList.toggle('mobile-window-active', _isMobile && hasWindows);
   }
 
   /**
@@ -173,6 +196,9 @@ const WindowModule = (function() {
 
     // Notify state change
     notifyStateChange('open', appId);
+
+    // 更新手機版桌面圖示隱藏狀態
+    _updateMobileWindowClass();
 
     // 加入瀏覽器歷史記錄（支援返回鍵關閉視窗）
     history.pushState({ windowId: windowId, appId: appId }, '', '');
@@ -301,8 +327,8 @@ const WindowModule = (function() {
    * @param {MouseEvent|TouchEvent} e
    */
   function startDrag(windowId, e) {
-    // 手機上停用拖曳（僅限滑鼠；觸控拖曳另行處理）
-    if (isMobile() && e.type === 'mousedown') return;
+    // 手機上完全停用拖曳（視窗已全螢幕）
+    if (isMobile()) return;
 
     const windowInfo = windows[windowId];
     if (!windowInfo) return;
@@ -445,8 +471,8 @@ const WindowModule = (function() {
    * @param {string} direction - 'n', 's', 'e', 'w', 'nw', 'ne', 'sw', 'se'
    */
   function startResize(windowId, e, direction) {
-    // 手機上停用調整大小（僅限滑鼠）
-    if (isMobile() && e.type === 'mousedown') return;
+    // 手機上完全停用調整大小（視窗已全螢幕）
+    if (isMobile()) return;
 
     const windowInfo = windows[windowId];
     if (!windowInfo) return;
@@ -783,6 +809,9 @@ const WindowModule = (function() {
 
       // Notify state change
       notifyStateChange('close', appId);
+
+      // 更新手機版桌面圖示隱藏狀態
+      _updateMobileWindowClass();
     };
 
     // Listen for animation end; fallback 200ms for reduced-motion
@@ -1019,6 +1048,7 @@ const WindowModule = (function() {
           windowOrder.splice(index, 1);
         }
         notifyStateChange('close', appId);
+        _updateMobileWindowClass();
       }
     }
   }
@@ -1039,13 +1069,20 @@ const WindowModule = (function() {
     // 監聽瀏覽器返回鍵
     window.addEventListener('popstate', handlePopState);
 
+    // 監聽視窗大小變化，更新手機模式狀態
+    window.addEventListener('resize', _updateMobileState);
+
     // 初始化時加入一個基礎歷史記錄（桌面狀態）
     history.replaceState({ desktop: true }, '', '');
+
+    // 初始化手機模式狀態
+    _updateMobileState();
   }
 
   // Public API
   return {
     init,
+    isMobile,
     createWindow,
     closeWindow,
     focusWindow,
