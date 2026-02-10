@@ -51,9 +51,29 @@ const MatrixRain = (function() {
   }
 
   /**
+   * 偵測使用者是否偏好減少動態效果
+   */
+  function prefersReducedMotion() {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+
+  /**
    * 初始化
    */
   function init() {
+    // 尊重使用者的 prefers-reduced-motion 設定
+    if (prefersReducedMotion()) {
+      return;
+    }
+
+    // 監聽設定變化（使用者可能在執行期間切換）
+    window.matchMedia('(prefers-reduced-motion: reduce)')
+      .addEventListener('change', (e) => {
+        if (e.matches) {
+          destroy();
+        }
+      });
+
     canvas = document.createElement('canvas');
     canvas.id = 'matrix-rain';
     canvas.style.cssText = `
