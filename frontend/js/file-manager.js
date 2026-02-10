@@ -282,7 +282,8 @@ const FileManagerModule = (function() {
     const password = passwordInput.value;
 
     if (!host || !username || !password) {
-      errorDiv.textContent = '請填寫所有欄位';
+      // [Sprint8] 原: errorDiv.textContent = '請填寫所有欄位'; errorDiv.classList.add('show')
+      UIHelpers.showError(errorDiv, { message: '請填寫所有欄位', variant: 'compact' });
       errorDiv.classList.add('show');
       return;
     }
@@ -320,12 +321,14 @@ const FileManagerModule = (function() {
           DesktopModule.showToast(`已連線至 ${host}`, 'success');
         }
       } else {
-        errorDiv.textContent = data.error || '連線失敗';
+        // [Sprint8] 原: errorDiv.textContent = data.error || '連線失敗'; errorDiv.classList.add('show')
+        UIHelpers.showError(errorDiv, { message: data.error || '連線失敗', variant: 'compact' });
         errorDiv.classList.add('show');
       }
     } catch (error) {
       console.error('NAS 連線錯誤:', error);
-      errorDiv.textContent = '無法連線至伺服器';
+      // [Sprint8] 原: errorDiv.textContent = '無法連線至伺服器'; errorDiv.classList.add('show')
+      UIHelpers.showError(errorDiv, { message: '無法連線至伺服器', variant: 'compact' });
       errorDiv.classList.add('show');
     } finally {
       submitBtn.disabled = false;
