@@ -13,6 +13,8 @@
   <link rel="preload" href="dist/index.bundle.css" as="style">
   <link rel="preload" href="fonts/JetBrainsMonoNerdFont-Regular.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="assets/images/logo-cyan-static.svg" as="image" type="image/svg+xml">
+  <link rel="preload" as="image" type="image/webp" href="assets/images/logo.webp">
+  <link rel="preload" as="image" type="image/webp" href="assets/images/wallpaper.webp">
 
   <!-- [Perf] Critical CSS — 內聯首屏渲染所需最小樣式，避免 FOUC 並加速 LCP -->
   <style>
@@ -150,11 +152,14 @@
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
 </head>
 <body>
-  <div class="desktop-container">
+  <div class="desktop-container" data-bg="assets/images/wallpaper.webp">
     <!-- Header Bar -->
     <header class="header-bar" role="banner">
       <div class="header-left">
-        <img src="assets/images/logo-cyan-static.svg" alt="Logo" class="header-logo">
+        <picture>
+          <source type="image/webp" srcset="assets/images/logo.webp">
+          <img src="assets/images/logo-cyan-static.svg" alt="Logo" class="header-logo">
+        </picture>
         <span class="header-title">ChingTech <span class="header-title-os">OS</span></span>
       </div>
 
@@ -208,6 +213,9 @@
   <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.min.js" defer></script>
+
+  <!-- 延遲載入背景圖片 -->
+  <script src="js/lazy-bg.js" defer></script>
 
   <!-- Vite 建置入口：所有本地 JS 已合併至 src/main.js -->
   <!-- 原始腳本已備份至 _legacy_scripts/ 目錄 -->

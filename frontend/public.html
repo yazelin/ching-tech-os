@@ -36,6 +36,14 @@
         css.rel = 'stylesheet';
         css.href = window.PUBLIC_BASE + '/css/public.css';
         document.head.appendChild(css);
+
+        // Preload webp logo
+        var preload = document.createElement('link');
+        preload.rel = 'preload';
+        preload.as = 'image';
+        preload.type = 'image/webp';
+        preload.href = window.PUBLIC_BASE + '/assets/images/logo.webp';
+        document.head.appendChild(preload);
       })();
     </script>
     <!-- Markdown 渲染 -->
@@ -48,7 +56,10 @@
     <!-- 頂部導覽列 -->
     <header class="public-header">
         <div class="header-left">
-            <img id="header-logo" src="" alt="擎添工業" class="logo">
+            <picture>
+              <source type="image/webp" srcset="assets/images/logo.webp">
+              <img id="header-logo" src="" alt="擎添工業" class="logo">
+            </picture>
             <span class="brand-name">擎添工業</span>
         </div>
         <div class="header-right">
@@ -143,6 +154,12 @@
     </div>
 
     <script>
+      // 動態載入 lazy-bg.js
+      (function() {
+        var lb = document.createElement('script');
+        lb.src = window.PUBLIC_BASE + '/js/lazy-bg.js';
+        document.body.appendChild(lb);
+      })();
       // 動態載入 public.js（使用 DOM API 以避免 document.write 阻止 bfcache）
       (function() {
         var s = document.createElement('script');

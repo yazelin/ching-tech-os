@@ -12,6 +12,7 @@
   <!-- [Perf] Preload 關鍵 CSS 與字型，加速首屏渲染 -->
   <link rel="preload" href="dist/login.bundle.css" as="style">
   <link rel="preload" href="fonts/JetBrainsMonoNerdFont-Regular.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" as="image" type="image/webp" href="assets/images/logo.webp">
 
   <!-- [P3 Performance] 合併壓縮後的 CSS bundle（由 npm run build 產生） -->
   <link rel="stylesheet" href="dist/login.bundle.css">
@@ -36,7 +37,10 @@
     <div class="login-card">
       <!-- Logo Section -->
       <div class="login-logo">
-        <img src="assets/images/logo-cyan-static.svg" alt="ChingTech OS Logo" class="login-logo-icon">
+        <picture>
+          <source type="image/webp" srcset="assets/images/logo.webp">
+          <img src="assets/images/logo-cyan-static.svg" alt="ChingTech OS Logo" class="login-logo-icon">
+        </picture>
         <h1 class="login-logo-text">ChingTech<br><span>OS</span></h1>
       </div>
 
@@ -115,6 +119,7 @@
   <script src="js/matrix-rain.js"></script>
   <script src="js/device-fingerprint.js"></script>
   <script src="js/login.js"></script>
+  <script src="js/lazy-bg.js"></script>
   -->
   <script>
     document.addEventListener('DOMContentLoaded', function () {
