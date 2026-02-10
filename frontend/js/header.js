@@ -88,7 +88,8 @@ const HeaderModule = (function() {
         }
       }
     } catch (error) {
-      // Fall through to fallback
+      // [Sprint8] UIHelpers: 使用者資訊載入失敗時顯示簡要錯誤圖示
+      console.warn('[Header] 使用者資訊載入失敗，使用 session fallback:', error.message);
     }
 
     // Fallback: show username from session
