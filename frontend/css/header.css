@@ -279,11 +279,23 @@
 
 /* Reduced Motion 支援 */
 @media (prefers-reduced-motion: reduce) {
+  .header-logo {
+    animation: none;
+  }
+  :root[data-theme="light"] .header-logo {
+    animation: none;
+  }
   .header-badge.badge-bump,
   .header-badge.badge-appear,
   .header-messages-btn.bell-ring .icon {
     animation: none;
   }
+}
+
+/* data-animations="off" 支援 */
+html[data-animations="off"] .header-logo,
+html[data-animations="off"][data-theme="light"] .header-logo {
+  animation: none;
 }
 
 /* ==========================================================================
