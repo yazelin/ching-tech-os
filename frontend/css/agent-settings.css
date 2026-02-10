@@ -625,6 +625,41 @@
   color: var(--text-muted);
 }
 
+/* Hub 來源 badge（ClawHub / SkillHub） */
+.badge-source {
+  display: inline-block;
+  padding: 1px 6px;
+  font-size: 10px;
+  border-radius: 4px;
+  font-weight: 500;
+  vertical-align: middle;
+}
+
+.badge-source-clawhub {
+  background: rgba(66, 133, 244, 0.2);
+  color: var(--color-primary);
+}
+
+.badge-source-skillhub {
+  background: rgba(52, 199, 89, 0.2);
+  color: var(--color-success);
+}
+
+/* Hub 來源篩選下拉選單 */
+.skill-hub-source-select {
+  width: auto;
+  min-width: 100px;
+  max-width: 140px;
+  flex-shrink: 0;
+  font-size: 13px;
+  padding: 4px 8px;
+}
+
+.skill-hub-source-select option {
+  background-color: var(--color-background);
+  color: var(--text-primary);
+}
+
 /* Skill list item actions */
 .skill-list-item {
   position: relative;
