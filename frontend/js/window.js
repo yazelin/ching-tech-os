@@ -256,6 +256,12 @@ const WindowModule = (function() {
     // Add to DOM
     desktopArea.appendChild(windowEl);
 
+    // [Sprint8] UIHelpers: 當 content 為空時，預設顯示載入狀態
+    if (!content || !content.trim()) {
+      const contentArea = windowEl.querySelector('.window-content');
+      if (contentArea) UIHelpers.showLoading(contentArea, { text: '載入中…' });
+    }
+
     // Store window info
     windows[windowId] = {
       element: windowEl,
