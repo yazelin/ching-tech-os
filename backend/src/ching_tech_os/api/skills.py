@@ -1,18 +1,23 @@
 """Skills API（僅限管理員）"""
 
+import asyncio
 import json
 import logging
 import shutil
 import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, Field
 
 from ..models.auth import SessionData
 from .auth import require_admin
 from ..skills import get_skill_manager
 from ..services.clawhub_client import ClawHubClient, ClawHubError, get_clawhub_client, validate_slug
+
+# Per-skill 安裝鎖（防止同一 skill 的並發安裝競爭條件）
+_install_locks: dict[str, asyncio.Lock] = {}
+_lock_for_locks = asyncio.Lock()
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +42,7 @@ class HubInspectRequest(BaseModel):
 
 class HubInstallRequest(BaseModel):
     name: str
-    version: str | None = None
+    version: str | None = Field(None, max_length=50)
 
 
 # === Endpoints ===
@@ -236,57 +241,64 @@ async def hub_install(
     if not validate_slug(data.name):
         raise HTTPException(status_code=400, detail="Skill 名稱格式無效")
 
-    sm = get_skill_manager()
+    # 取得 per-skill 鎖，確保同一 skill 的安裝操作序列化
+    async with _lock_for_locks:
+        if data.name not in _install_locks:
+            _install_locks[data.name] = asyncio.Lock()
+        install_lock = _install_locks[data.name]
 
-    # 檢查是否已安裝
-    existing = await sm.get_skill(data.name)
-    if existing:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Skill '{data.name}' 已安裝。如需更新請先移除。",
-        )
+    async with install_lock:
+        sm = get_skill_manager()
 
-    client = get_clawhub_client()
-    dest = sm.skills_dir / data.name
-    try:
-        with tempfile.TemporaryDirectory(dir=sm.skills_dir, prefix=f".{data.name}.installing-") as tmp_dir_path:
-            tmp_dest = Path(tmp_dir_path)
+        # 檢查是否已安裝（在鎖內檢查，避免 TOCTOU）
+        existing = await sm.get_skill(data.name)
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Skill '{data.name}' 已安裝。如需更新請先移除。",
+            )
 
-            # 取得 skill 詳情以獲得版本號和 owner
-            detail = await client.get_skill(data.name)
-            latest = detail.get("latestVersion", {})
-            version = data.version or latest.get("version", "")
-            owner = detail.get("owner", {})
-            owner_handle = owner.get("handle", "")
+        client = get_clawhub_client()
+        dest = sm.skills_dir / data.name
+        try:
+            with tempfile.TemporaryDirectory(dir=sm.skills_dir, prefix=f".{data.name}.installing-") as tmp_dir_path:
+                tmp_dest = Path(tmp_dir_path)
 
-            if not version:
-                raise ClawHubError("找不到可用版本")
+                # 取得 skill 詳情以獲得版本號和 owner
+                detail = await client.get_skill(data.name)
+                latest = detail.get("latestVersion", {})
+                version = data.version or latest.get("version", "")
+                owner = detail.get("owner", {})
+                owner_handle = owner.get("handle", "")
 
-            # 下載並解壓到臨時目錄（避免並發衝突）
-            await client.download_and_extract(data.name, version, tmp_dest)
+                if not version:
+                    raise ClawHubError("找不到可用版本")
 
-            # 寫入 _meta.json
-            ClawHubClient.write_meta(tmp_dest, data.name, version, owner_handle)
+                # 下載並解壓到臨時目錄
+                await client.download_and_extract(data.name, version, tmp_dest)
 
-            # 原子移動到最終目錄
-            if dest.exists():
-                shutil.rmtree(dest)
-            tmp_dest.rename(dest)
+                # 寫入 _meta.json
+                ClawHubClient.write_meta(tmp_dest, data.name, version, owner_handle)
 
-    except ClawHubError as e:
-        raise HTTPException(
-            status_code=e.status_code or 502,
-            detail=f"安裝失敗: {e}",
-        )
-    except OSError as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"安裝失敗（檔案系統錯誤）: {e}",
-        )
+                # 原子移動到最終目錄
+                if dest.exists():
+                    shutil.rmtree(dest)
+                tmp_dest.rename(dest)
 
-    # 重載
-    await sm.reload_skills()
-    skill = await sm.get_skill(data.name)
+        except ClawHubError as e:
+            raise HTTPException(
+                status_code=e.status_code or 502,
+                detail=f"安裝失敗: {e}",
+            )
+        except OSError as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"安裝失敗（檔案系統錯誤）: {e}",
+            )
+
+        # 重載
+        await sm.reload_skills()
+        skill = await sm.get_skill(data.name)
 
     return {
         "installed": data.name,

@@ -128,14 +128,14 @@ class ClawHubClient:
                 timeout=httpx.Timeout(connect=5, read=60, pool=5),
             ) as resp:
                 resp.raise_for_status()
-                data = b""
+                data = bytearray()
                 async for chunk in resp.aiter_bytes():
-                    data += chunk
+                    data.extend(chunk)
                     if len(data) > _MAX_ZIP_SIZE:
                         raise ClawHubError(
                             f"ZIP 檔案過大: {len(data)} bytes（上限 {_MAX_ZIP_SIZE} bytes）"
                         )
-                return data
+                return bytes(data)
         except httpx.HTTPStatusError as e:
             raise ClawHubError(
                 f"下載失敗: HTTP {e.response.status_code}",
@@ -219,16 +219,21 @@ class ClawHubClient:
         data = zip_data or await self.download_zip(slug, version)
 
         with zipfile.ZipFile(io.BytesIO(data)) as zf:
-            for info in zf.infolist():
-                if info.is_dir():
-                    continue
-                # 支援 ZIP 中可能有前綴目錄的情況
-                name = info.filename
-                basename = Path(name).name
-                if basename == filename or name == filename:
-                    if info.file_size > 10 * 1024 * 1024:  # 10MB limit
-                        raise ClawHubError(f"檔案過大: {info.file_size} bytes")
-                    return zf.read(info).decode("utf-8", errors="replace")
+            # 優先尋找根目錄下的檔案
+            if filename in zf.namelist():
+                info = zf.getinfo(filename)
+            else:
+                # 若根目錄找不到，再搜尋 basename 匹配（支援有前綴目錄的 ZIP）
+                info = next(
+                    (i for i in zf.infolist()
+                     if not i.is_dir() and Path(i.filename).name == filename),
+                    None,
+                )
+
+            if info:
+                if info.file_size > 10 * 1024 * 1024:  # 10MB limit
+                    raise ClawHubError(f"檔案過大: {info.file_size} bytes")
+                return zf.read(info).decode("utf-8", errors="replace")
 
         return None
 
@@ -285,16 +290,31 @@ _client: ClawHubClient | None = None
 
 
 def get_clawhub_client() -> ClawHubClient:
-    """取得全域 ClawHubClient singleton"""
+    """取得全域 ClawHubClient singleton
+
+    Note: 此函式保留向下相容。新程式碼建議使用 FastAPI 依賴注入
+    （透過 Request.app.state.clawhub_client）。
+    """
     global _client
     if _client is None:
         _client = ClawHubClient()
     return _client
 
 
-async def close_clawhub_client() -> None:
+def init_clawhub_client(app) -> ClawHubClient:
+    """初始化 ClawHubClient 並存入 app.state（在 lifespan 啟動時呼叫）"""
+    global _client
+    if _client is None:
+        _client = ClawHubClient()
+    app.state.clawhub_client = _client
+    return _client
+
+
+async def close_clawhub_client(app=None) -> None:
     """關閉全域 ClawHubClient（在 app shutdown 時呼叫）"""
     global _client
+    if app is not None and hasattr(app.state, "clawhub_client"):
+        del app.state.clawhub_client
     if _client is not None:
         await _client.close()
         _client = None
