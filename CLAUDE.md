@@ -5,6 +5,42 @@
 - 使用繁體中文回應
 - 程式碼註解使用繁體中文
 
+## 技術架構
+- 前端：純 HTML5/CSS3/JavaScript（Vanilla JS，IIFE 模組化），無框架
+- 後端：Python 3.11+ FastAPI + asyncpg（PostgreSQL），Pydantic 資料模型，Socket.IO 即時通訊
+- 資料庫：PostgreSQL 16（Docker），Alembic migration 管理
+- 套件管理：後端用 uv + hatchling，前端用 npm
+- 其他：SMB/CIFS（NAS 檔案存取）、Line Bot SDK、Telegram Bot、Claude CLI、MCP Server
+
+## 主要目錄結構
+- `frontend/`：前端資源（index.html、login.html、css、js、assets）
+- `backend/`：後端程式（src/ching_tech_os/、migrations/、pyproject.toml）
+  - `api/`：API 路由
+  - `services/`：業務邏輯
+  - `models/`：Pydantic 資料模型
+  - `middleware/`：中介層
+  - `skills/`：AI Skills 系統
+  - `utils/`：工具函式
+  - `migrations/versions/`：Alembic migration 檔案
+- `docker/`：Docker Compose 設定
+- `data/`：知識庫資料
+- `docs/`：技術文件
+- `openspec/`：功能規格與變更管理
+
+## Python 後端重要依賴
+- `fastapi` + `uvicorn`：Web 框架與 ASGI server
+- `asyncpg` + `sqlalchemy` + `alembic`：資料庫連線、ORM、migration
+- `python-socketio`：即時通訊
+- `pydantic` + `pydantic-settings`：資料驗證與設定管理
+- `anthropic` + `mcp`：Claude AI 整合與 MCP Server
+- `line-bot-sdk`：Line Bot 整合
+- `python-telegram-bot`：Telegram Bot 整合
+- `smbprotocol`：NAS 檔案存取
+- `playwright`：瀏覽器自動化
+- `python-docx` / `openpyxl` / `python-pptx` / `PyMuPDF`：文件讀寫
+- `google-genai`：Google AI 整合
+- `claude-code-acp`：Claude Code Agent Protocol
+
 ## 版本管理
 
 版本號遵循 [Semantic Versioning](https://semver.org/)：`MAJOR.MINOR.PATCH`
@@ -241,6 +277,29 @@ TextViewerModule.open(`/api/knowledge/assets/${path}`, filename);
 - 模態框內容區塊使用 `var(--modal-bg)` 變數
 - 所有 overlay 類別應使用 CSS 變數，避免硬編碼 rgba 值
 
+## 開發與建置指令
+
+```bash
+# 安裝依賴
+cd frontend && npm install
+cd backend && uv sync
+
+# 前端建置
+npm run build  # 或 node scripts/build-frontend.mjs
+
+# 後端 migration
+cd backend && uv run alembic upgrade head
+
+# 啟動服務
+uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8088
+cd frontend && python3 -m http.server 8080
+cd docker && docker compose up -d
+```
+
+## 測試
+- 後端測試：`cd backend && uv run pytest`
+- 前端無自動化測試（純 JS）
+
 ## 文件規範
 
 ### 文件架構
@@ -252,6 +311,11 @@ TextViewerModule.open(`/api/knowledge/assets/${path}`, filename);
 - 詳細的技術設計文件放在 `docs/` 目錄
 - **不要**在子目錄（如 `backend/`、`frontend/`）建立 README
 - 功能規格使用 openspec 管理（`openspec/specs/`）
+
+### 文件更新時機
+- 新增重大功能後更新 `README.md` 功能總覽
+- 技術設計變更後更新對應的 `docs/*.md`
+- API 變更後更新 `docs/backend.md`
 
 ### docs/ 目錄結構
 ```
@@ -272,10 +336,9 @@ docs/
 └── telegram-bot.md          # Telegram Bot 整合
 ```
 
-### 文件更新時機
-- 新增重大功能後更新 `README.md` 功能總覽
-- 技術設計變更後更新對應的 `docs/*.md`
-- API 變更後更新 `docs/backend.md`
+## API 文件
+- Swagger UI: `http://localhost:8088/docs`
+- ReDoc: `http://localhost:8088/redoc`
 
 ## GitHub CLI 注意事項
 
@@ -292,3 +355,6 @@ gh pr view 24
 # ✅ 正確：指定欄位
 gh pr view 24 --json title,body,state,url,reviews,comments
 ```
+
+## 授權
+- MIT License
