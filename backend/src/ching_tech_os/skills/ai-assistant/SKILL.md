@@ -49,23 +49,149 @@ metadata:
 · ❌ 錯誤：用 Read 看圖後回覆「已完成」← 用戶看不到圖！
 
 【AI 文件/簡報生成】
-- generate_md2ppt: 產生專業簡報（MD2PPT 格式，可線上編輯並匯出 PPTX）
-  · content: 簡報主題或內容說明（必填，盡量詳細描述）
-  · style: 風格需求（可選，如：科技藍、溫暖橙、清新綠、極簡灰、電競紫）
+- generate_md2ppt: 儲存 MD2PPT 簡報並建立分享連結（可線上編輯並匯出 PPTX）
+  · markdown_content: 已格式化的 MD2PPT markdown（必填，必須以 --- 開頭）
+  · ⚠️ 你必須先根據下方格式規範產生完整 markdown，再傳入此工具
   · 回傳：分享連結 url 和 4 位數密碼 password
-- generate_md2doc: 產生專業文件（MD2DOC 格式，可線上編輯並匯出 Word）
-  · content: 文件內容說明或大綱（必填）
+- generate_md2doc: 儲存 MD2DOC 文件並建立分享連結（可線上編輯並匯出 Word）
+  · markdown_content: 已格式化的 MD2DOC markdown（必填，必須以 --- 開頭）
+  · ⚠️ 你必須先根據下方格式規範產生完整 markdown，再傳入此工具
   · 回傳：分享連結 url 和 4 位數密碼 password
 
-【文件/簡報使用情境】
+【MD2PPT 格式規範】
+直接產生 Markdown 內容，不要包含 ``` 標記。
+
+格式結構：
+1. 全域 Frontmatter（檔案開頭必須有）：
+   ---
+   title: "簡報標題"
+   author: "作者"
+   bg: "#FFFFFF"
+   transition: fade
+   ---
+   theme 可選：amber, midnight, academic, material
+   transition 可選：slide, fade, zoom, none
+2. 分頁：用 === 分隔頁面，前後必須有空行
+3. 每頁 Frontmatter（在 === 後，可設定 layout、bg、mesh 等）
+4. Layout：default | impact | center | grid | two-column | quote | alert
+   · grid 搭配 columns: 2
+   · two-column 用 :: right :: 分隔左右欄（前後必須有空行）
+5. 圖表（JSON 必須用雙引號，前後必須有空行）：
+   ::: chart-bar { "title": "標題", "showValues": true }
+   | 類別 | 數值 |
+   | :--- | :--- |
+   | A | 100 |
+   :::
+   類型：chart-bar, chart-line, chart-pie, chart-area
+6. Mesh 漸層背景：bg: mesh + mesh: { colors: [...], seed: 數字 }
+7. 背景圖片：bgImage: "https://..."
+8. 備忘錄：<!-- note: 演講者筆記 -->
+
+配色建議：
+| 風格 | theme | mesh 配色 | 適用 |
+|------|-------|----------|------|
+| 科技藍 | midnight | ["#0F172A","#1E40AF","#3B82F6"] | 科技、AI |
+| 溫暖橙 | amber | ["#FFF7ED","#FB923C","#EA580C"] | 行銷、活動 |
+| 清新綠 | material | ["#ECFDF5","#10B981","#047857"] | 環保、健康 |
+| 極簡灰 | academic | ["#F8FAFC","#94A3B8","#475569"] | 學術、報告 |
+
+設計原則：
+1. 標題/重點頁（impact/center/quote）→ bg: mesh 或鮮明純色
+2. 資訊頁（grid/two-column/default）→ 淺色（#F8FAFC）或深色（#1E293B）
+3. 不要每頁都用 mesh，會視覺疲勞
+4. 圖表數據要合理，數值要有意義
+
+緊湊範例：
+---
+title: "產品發表會"
+author: "團隊"
+bg: "#FFFFFF"
+transition: fade
+---
+
+# 產品發表會
+## 創新解決方案
+
+===
+
+---
+layout: impact
+bg: mesh
+mesh:
+  colors: ["#0F172A", "#1E40AF", "#3B82F6"]
+---
+
+# 歡迎各位
+
+===
+
+---
+layout: grid
+columns: 2
+bg: "#F8FAFC"
+---
+
+# 市場分析
+
+### 現況
+- 市場持續成長
+- 需求多元化
+
+### 機會
+- 數位轉型趨勢
+- AI 技術成熟
+
+===
+
+---
+layout: center
+bg: mesh
+mesh:
+  colors: ["#0F172A", "#1E40AF", "#3B82F6"]
+---
+
+# 感謝聆聽
+
+【MD2DOC 格式規範】
+直接產生 Markdown 內容，不要包含 ``` 標記。
+
+格式結構：
+1. Frontmatter（必須）：
+   ---
+   title: "文件標題"
+   author: "作者"
+   header: true
+   footer: true
+   ---
+2. 標題層級：只用 H1(#)、H2(##)、H3(###)，H4 以下改用 **粗體**
+3. 目錄（可選）：[TOC] 後接章節列表
+4. 提示區塊（只支援三種）：> [!TIP] / > [!NOTE] / > [!WARNING]
+5. 程式碼區塊：標註語言，:no-ln 隱藏行號，:ln 強制顯示
+6. 行內樣式：**粗體**、*斜體*、<u>底線</u>、`行內碼`
+   UI 按鈕：【確定】、快捷鍵：[Ctrl]+[S]、書名：『書名』
+   智慧連結：[文字](URL) 匯出 Word 時自動生成 QR Code
+7. 表格：標準 Markdown 表格語法
+8. 分隔線：---
+9. Mermaid 圖表（可選）：```mermaid ... ```
+
+設計原則：
+1. H1 大章節、H2 小節、H3 細項，結構清晰
+2. 重要提示用 TIP，補充用 NOTE，警告用 WARNING
+3. 程式碼區塊都要標註語言
+4. 表格內容簡潔，複雜內容用列表
+
+【文件/簡報使用流程】
+1. 用戶要求做簡報/文件時，根據用戶需求和上方格式規範產生完整 markdown 內容
+2. 將產生的 markdown 傳入 generate_md2ppt 或 generate_md2doc 的 markdown_content 參數
+3. 回覆用戶分享連結和密碼
+
+使用情境：
 1. 用戶說「幫我做一份簡報介紹公司產品」
-   → generate_md2ppt(content="公司產品介紹簡報，需要包含產品特色、優勢、應用案例")
-2. 用戶說「做一份科技風的 AI 應用簡報」
-   → generate_md2ppt(content="AI 應用介紹", style="科技藍")
-3. 用戶說「幫我寫一份設備操作 SOP」
-   → generate_md2doc(content="設備操作 SOP，包含開機、操作流程、關機步驟、注意事項")
-4. 用戶說「做一份教學文件說明如何使用系統」
-   → generate_md2doc(content="系統使用教學文件")
+   → 根據 MD2PPT 格式規範產生包含 frontmatter、多頁內容的 markdown
+   → generate_md2ppt(markdown_content="---\ntitle: \"公司產品介紹\"\n...")
+2. 用戶說「幫我寫一份設備操作 SOP」
+   → 根據 MD2DOC 格式規範產生包含 frontmatter、章節結構的 markdown
+   → generate_md2doc(markdown_content="---\ntitle: \"設備操作 SOP\"\n...")
 
 【回覆格式】
 生成完成後，回覆用戶：

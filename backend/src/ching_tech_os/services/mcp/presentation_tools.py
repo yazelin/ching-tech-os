@@ -1,7 +1,10 @@
 """簡報與文件生成、列印前置處理 MCP 工具
 
 包含：generate_presentation, generate_md2ppt, generate_md2doc, prepare_print_file
-以及 MD2PPT/MD2DOC System Prompts 和格式修正函數
+以及格式修正函數
+
+MD2PPT/MD2DOC 格式規範已移至 skills/ai-assistant/SKILL.md，
+由外層 AI Agent 根據規範產生格式化 markdown 後傳入工具。
 """
 
 import asyncio as _asyncio
@@ -11,456 +14,6 @@ import uuid
 from pathlib import Path
 
 from .server import mcp, logger, ensure_db_connection, check_mcp_tool_permission
-
-# ============================================================
-# MD2PPT / MD2DOC System Prompts
-# ============================================================
-
-MD2PPT_SYSTEM_PROMPT = '''你是專業的 MD2PPT-Evolution 簡報設計師。直接輸出 Markdown 代碼，不要包含解釋文字或 ``` 標記。
-
-## 格式結構
-
-### 1. 全域 Frontmatter（檔案開頭必須有）
-```
----
-title: "簡報標題"
-author: "作者"
-bg: "#FFFFFF"
-transition: fade
----
-```
-- theme 可選：amber, midnight, academic, material
-- transition 可選：slide, fade, zoom, none
-
-### 2. 分頁符號
-用 `===` 分隔頁面，前後必須有空行：
-```
-（前一頁內容）
-
-===
-
-（下一頁內容）
-```
-
-### 3. 每頁 Frontmatter（在 === 後）
-```
-===
-
----
-layout: impact
-bg: "#EA580C"
----
-
-# 標題
-```
-
-### 4. Layout 選項
-- `default`：標準頁面
-- `impact`：強調頁（適合重點、開場）
-- `center`：置中頁
-- `grid`：網格（搭配 `columns: 2`）
-- `two-column`：雙欄（用 `:: right ::` 分隔）
-- `quote`：引言頁
-- `alert`：警告/重點提示頁
-
-### 5. 雙欄語法（two-column 或 grid）
-`:: right ::` 前後必須有空行：
-```
-### 左欄標題
-左欄內容
-
-:: right ::
-
-### 右欄標題
-右欄內容
-```
-
-### 6. 圖表語法
-JSON 必須用雙引號，前後必須有空行：
-```
-::: chart-bar { "title": "標題", "showValues": true }
-
-| 類別 | 數值 |
-| :--- | :--- |
-| A | 100 |
-| B | 200 |
-
-:::
-```
-圖表類型：chart-bar, chart-line, chart-pie, chart-area
-
-### 7. Mesh 漸層背景
-```
----
-bg: mesh
-mesh:
-  colors: ["#4158D0", "#C850C0", "#FFCC70"]
-  seed: 12345
----
-```
-
-### 8. 背景圖片
-```
----
-bgImage: "https://images.unsplash.com/..."
----
-```
-
-### 9. 備忘錄（演講者筆記）
-```
-<!-- note:
-這是演講者備忘錄，觀眾看不到。
--->
-```
-
-### 10. 對話模式
-```
-User ":: 這是用戶說的話（靠左）
-
-AI ::" 這是 AI 回覆（靠右）
-
-系統 :": 這是系統提示（置中）
-```
-
-### 11. 程式碼區塊
-```typescript
-const hello = "world";
-```
-
-## 配色建議
-
-| 風格 | theme | mesh 配色 | 適用場景 |
-|------|-------|----------|---------|
-| 科技藍 | midnight | ["#0F172A", "#1E40AF", "#3B82F6"] | 科技、AI、軟體 |
-| 溫暖橙 | amber | ["#FFF7ED", "#FB923C", "#EA580C"] | 行銷、活動、創意 |
-| 清新綠 | material | ["#ECFDF5", "#10B981", "#047857"] | 環保、健康、自然 |
-| 極簡灰 | academic | ["#F8FAFC", "#94A3B8", "#475569"] | 學術、報告、正式 |
-| 電競紫 | midnight | ["#111827", "#7C3AED", "#DB2777"] | 遊戲、娛樂、年輕 |
-
-## 設計原則
-
-1. **標題/重點頁**（impact/center/quote）→ 用 `bg: mesh` 或鮮明純色
-2. **資訊頁**（grid/two-column/default）→ 用淺色純色（#F8FAFC）或深色（#1E293B）
-3. **不要每頁都用 mesh**，會視覺疲勞
-4. **圖表數據要合理**，數值要有意義
-
-## 完整範例
-
----
-title: "產品發表會"
-author: "產品團隊"
-bg: "#FFFFFF"
-transition: fade
----
-
-# 產品發表會
-## 創新解決方案 2026
-
-===
-
----
-layout: impact
-bg: mesh
-mesh:
-  colors: ["#0F172A", "#1E40AF", "#3B82F6"]
----
-
-# 歡迎各位
-## 今天我們將介紹全新產品線
-
-===
-
----
-layout: grid
-columns: 2
-bg: "#F8FAFC"
----
-
-# 市場分析
-
-### 現況
-- 市場規模持續成長
-- 客戶需求多元化
-- 競爭日益激烈
-
-### 機會
-- 數位轉型趨勢
-- AI 技術成熟
-- 新興市場開拓
-
-===
-
----
-layout: two-column
-bg: "#F8FAFC"
----
-
-# 產品特色
-
-### 核心功能
-- 智能分析
-- 即時監控
-- 自動化流程
-
-:: right ::
-
-### 技術優勢
-- 高效能運算
-- 安全加密
-- 彈性擴展
-
-===
-
----
-layout: grid
-columns: 2
-bg: "#F8FAFC"
----
-
-# 業績表現
-
-::: chart-bar { "title": "季度營收", "showValues": true }
-
-| 季度 | 營收 |
-| :--- | :--- |
-| Q1 | 150 |
-| Q2 | 200 |
-| Q3 | 280 |
-| Q4 | 350 |
-
-:::
-
-::: chart-pie { "title": "市場佔比" }
-
-| 區域 | 佔比 |
-| :--- | :--- |
-| 北區 | 40 |
-| 中區 | 35 |
-| 南區 | 25 |
-
-:::
-
-===
-
----
-layout: center
-bg: mesh
-mesh:
-  colors: ["#0F172A", "#1E40AF", "#3B82F6"]
----
-
-# 感謝聆聽
-## 歡迎提問
-'''
-
-MD2DOC_SYSTEM_PROMPT = '''你是專業的 MD2DOC-Evolution 技術文件撰寫專家。直接輸出 Markdown 代碼，不要包含解釋文字或 ``` 標記。
-
-## 格式結構
-
-### 1. Frontmatter（檔案開頭必須有）
-```
----
-title: "文件標題"
-author: "作者名稱"
-header: true
-footer: true
----
-```
-- title 和 author 為必填欄位
-- header/footer 控制頁首頁尾顯示
-
-### 2. 標題層級
-- 只支援 H1 (#)、H2 (##)、H3 (###)
-- H4 以下請改用 **粗體文字** 或列表項目
-
-### 3. 目錄（可選）
-```
-[TOC]
-- 第一章 章節名稱 1
-- 第二章 章節名稱 2
-```
-
-### 4. 提示區塊 (Callouts)
-只支援三種類型：
-```
-> [!TIP]
-> **提示標題**
-> 提示內容，用於分享小撇步或最佳實踐。
-
-> [!NOTE]
-> **筆記標題**
-> 筆記內容，用於補充背景知識。
-
-> [!WARNING]
-> **警告標題**
-> 警告內容，用於重要注意事項。
-```
-
-### 5. 對話模式 (Chat Syntax)
-```
-系統 :": 這是置中的系統訊息。
-
-AI助手 ":: 這是靠左的 AI 回覆，使用 `"::` 語法。
-
-用戶 ::" 這是靠右的用戶訊息，使用 `::"` 語法。
-```
-
-### 6. 程式碼區塊
-```typescript
-// 預設顯示行號，右上角顯示語言名稱
-const config = {
-  name: "example"
-};
-```
-
-隱藏行號（適合短設定檔）：
-```json:no-ln
-{
-  "name": "config",
-  "version": "1.0.0"
-}
-```
-
-強制顯示行號：
-```bash:ln
-npm install
-npm run dev
-```
-
-### 7. 行內樣式
-- **粗體**：`**文字**` → **文字**
-- *斜體*：`*文字*` → *文字*
-- <u>底線</u>：`<u>文字</u>` → <u>底線</u>
-- `行內程式碼`：反引號包覆
-- UI 按鈕：`【確定】` → 【確定】
-- 快捷鍵：`[Ctrl]` + `[S]` → [Ctrl] + [S]
-- 書名/專案名：`『書名』` → 『書名』
-- 智慧連結：`[文字](URL)` → 匯出 Word 時自動生成 QR Code
-
-### 8. 表格
-```
-| 欄位一 | 欄位二 | 欄位三 |
-| --- | --- | --- |
-| 內容 | 內容 | 內容 |
-```
-
-### 9. 列表
-- 第一項
-- 第二項
-  - 巢狀項目（縮排 2 空格）
-  - 巢狀項目
-
-### 10. 分隔線
-```
----
-```
-
-### 11. Mermaid 圖表（可選）
-```mermaid
-graph TD
-    A[開始] --> B{判斷}
-    B -- Yes --> C[執行]
-    B -- No --> D[結束]
-```
-
-## 設計原則
-
-1. **結構清晰**：使用 H1 作為大章節，H2 作為小節，H3 作為細項
-2. **善用 Callouts**：重要提示用 TIP，補充說明用 NOTE，警告事項用 WARNING
-3. **程式碼標註語言**：所有程式碼區塊都要標註語言（typescript, json, bash, python 等）
-4. **表格對齊**：表格內容盡量簡潔，複雜內容用列表呈現
-
-## 完整範例
-
----
-title: "系統操作手冊"
-author: "技術團隊"
-header: true
-footer: true
----
-
-# 系統操作手冊
-
-[TOC]
-- 第一章 系統介紹 1
-- 第二章 基本操作 2
-- 第三章 進階功能 3
-
-## 1. 系統介紹
-
-本系統是專為企業設計的管理平台，提供 **完整的資料管理** 與 *即時監控* 功能。
-
-> [!TIP]
-> **快速開始**
-> 首次使用請先完成帳號設定，詳見第二章說明。
-
----
-
-## 2. 基本操作
-
-### 2.1 登入系統
-
-1. 開啟瀏覽器，輸入系統網址
-2. 輸入帳號密碼
-3. 點擊 【登入】 按鈕
-
-> [!NOTE]
-> **帳號格式**
-> 帳號格式為 `員工編號@公司代碼`，例如：`A001@acme`
-
-### 2.2 常用快捷鍵
-
-| 功能 | Windows | Mac |
-| --- | --- | --- |
-| 儲存 | [Ctrl] + [S] | [Cmd] + [S] |
-| 搜尋 | [Ctrl] + [F] | [Cmd] + [F] |
-| 列印 | [Ctrl] + [P] | [Cmd] + [P] |
-
----
-
-## 3. 進階功能
-
-### 3.1 API 整合
-
-系統提供 RESTful API，可與外部系統整合：
-
-```typescript
-// 取得使用者資料
-const response = await fetch('/api/users', {
-  method: 'GET',
-  headers: {
-    'Authorization': 'Bearer ' + token
-  }
-});
-```
-
-設定檔範例：
-
-```json:no-ln
-{
-  "apiUrl": "https://api.example.com",
-  "timeout": 30000
-}
-```
-
-> [!WARNING]
-> **安全注意**
-> API Token 請妥善保管，切勿分享給他人或提交到版本控制系統。
-
----
-
-### 3.2 常見問題
-
-系統 :": 以下是常見問題的對話範例。
-
-用戶 ::" 我忘記密碼了，該怎麼辦？
-
-客服 ":: 您可以點擊登入頁面的「忘記密碼」連結，系統會發送重設信件到您的註冊信箱。
-
----
-
-更多資訊請參考『系統管理指南』或聯繫技術支援。
-'''
 
 
 # ============================================================
@@ -794,53 +347,42 @@ async def generate_presentation(
 
 @mcp.tool()
 async def generate_md2ppt(
-    content: str,
-    style: str | None = None,
+    markdown_content: str,
     ctos_user_id: int | None = None,
 ) -> str:
     """
-    產生 MD2PPT 格式的簡報內容，並建立帶密碼保護的分享連結
+    儲存 MD2PPT 格式簡報並建立帶密碼保護的分享連結
 
-    用戶說「做簡報」「投影片」「PPT」時呼叫此工具。
-    與 generate_presentation（Marp HTML/PDF）不同，此工具產生可線上編輯的簡報。
+    用戶說「做簡報」「投影片」「PPT」時，先根據 MD2PPT 格式規範產生完整的
+    格式化 markdown（含 frontmatter、=== 分頁、layout 等），再傳入此工具。
+
+    此工具不會產生內容，只負責格式修正、儲存和建立分享連結。
 
     Args:
-        content: 要轉換為簡報的內容或主題
-        style: 風格需求（如：科技藍、簡約深色），不填則自動選擇
+        markdown_content: 已格式化的 MD2PPT markdown（必須以 --- 開頭）
         ctos_user_id: CTOS 用戶 ID（從對話識別取得）
 
     Returns:
         分享連結和存取密碼
     """
-    from ..claude_agent import call_claude
     from ..share import create_share_link
     from ...models.share import ShareLinkCreate
 
     await ensure_db_connection()
 
-    # 組合 prompt
-    style_hint = f"【風格需求】：{style}\n" if style else ""
-    user_prompt = f"{style_hint}【內容】：\n{content}"
-
-    try:
-        logger.debug(f"generate_md2ppt: prompt_len={len(user_prompt)}")
-
-        # 呼叫 Claude 產生內容
-        response = await call_claude(
-            prompt=user_prompt,
-            model="sonnet",
-            system_prompt=MD2PPT_SYSTEM_PROMPT,
-            timeout=180,
+    # 驗證：必須以 --- 開頭（frontmatter）
+    stripped = markdown_content.strip()
+    if not stripped.startswith("---"):
+        return (
+            "❌ markdown_content 必須是已格式化的 MD2PPT markdown，以 --- 開頭（frontmatter）。\n"
+            "請先根據 MD2PPT 格式規範產生包含 frontmatter、=== 分頁、layout 等的完整 markdown，再傳入此工具。"
         )
 
-        if not response.success:
-            logger.warning(f"generate_md2ppt: AI 失敗: {response.error}")
-            return f"❌ AI 產生失敗：{response.error}"
+    try:
+        logger.debug(f"generate_md2ppt: content_len={len(markdown_content)}")
 
-        generated_content = response.message.strip()
-
-        # 自動修正格式問題（不驗證、不重試）
-        generated_content = fix_md2ppt_format(generated_content)
+        # 自動修正格式問題
+        generated_content = fix_md2ppt_format(stripped)
 
         # 建立分享連結
         share_data = ShareLinkCreate(
@@ -892,48 +434,43 @@ async def generate_md2ppt(
 
 @mcp.tool()
 async def generate_md2doc(
-    content: str,
+    markdown_content: str,
     ctos_user_id: int | None = None,
 ) -> str:
     """
-    產生 MD2DOC 格式的文件內容，並建立帶密碼保護的分享連結
+    儲存 MD2DOC 格式文件並建立帶密碼保護的分享連結
 
-    用戶說「寫文件」「做報告」「說明書」「教學」「SOP」時呼叫此工具。
+    用戶說「寫文件」「做報告」「說明書」「教學」「SOP」時，先根據 MD2DOC
+    格式規範產生完整的格式化 markdown（含 frontmatter、H1-H3 結構等），
+    再傳入此工具。
+
+    此工具不會產生內容，只負責格式修正、儲存和建立分享連結。
 
     Args:
-        content: 要轉換為文件的內容
+        markdown_content: 已格式化的 MD2DOC markdown（必須以 --- 開頭）
         ctos_user_id: CTOS 用戶 ID（從對話識別取得）
 
     Returns:
         分享連結和存取密碼
     """
-    from ..claude_agent import call_claude
     from ..share import create_share_link
     from ...models.share import ShareLinkCreate
 
     await ensure_db_connection()
 
-    user_prompt = f"請將以下內容轉換為 MD2DOC 格式的文件：\n\n{content}"
-
-    try:
-        logger.debug(f"generate_md2doc: prompt_len={len(user_prompt)}")
-
-        # 呼叫 Claude 產生內容
-        response = await call_claude(
-            prompt=user_prompt,
-            model="sonnet",
-            system_prompt=MD2DOC_SYSTEM_PROMPT,
-            timeout=180,
+    # 驗證：必須以 --- 開頭（frontmatter）
+    stripped = markdown_content.strip()
+    if not stripped.startswith("---"):
+        return (
+            "❌ markdown_content 必須是已格式化的 MD2DOC markdown，以 --- 開頭（frontmatter）。\n"
+            "請先根據 MD2DOC 格式規範產生包含 frontmatter、H1-H3 結構等的完整 markdown，再傳入此工具。"
         )
 
-        if not response.success:
-            logger.warning(f"generate_md2doc: AI 失敗: {response.error}")
-            return f"❌ AI 產生失敗：{response.error}"
+    try:
+        logger.debug(f"generate_md2doc: content_len={len(markdown_content)}")
 
-        generated_content = response.message.strip()
-
-        # 自動修正格式問題（不驗證、不重試）
-        generated_content = fix_md2doc_format(generated_content)
+        # 自動修正格式問題
+        generated_content = fix_md2doc_format(stripped)
 
         # 建立分享連結
         share_data = ShareLinkCreate(

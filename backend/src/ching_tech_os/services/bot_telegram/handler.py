@@ -842,9 +842,12 @@ async def _handle_text_with_ai(
     # 6. 解析回應（分離文字和檔案）
     reply_text, files = parse_ai_response(ai_message)
 
-    # 7. 發送回覆
+    # 7. 發送回覆（文字失敗不影響後續圖片/檔案發送）
     if reply_text:
-        await adapter.send_text(chat_id, reply_text)
+        try:
+            await adapter.send_text(chat_id, reply_text)
+        except Exception as e:
+            logger.warning(f"發送文字回覆失敗: {e}")
 
     sent_file_msg_ids: list[tuple[int, dict]] = []  # (telegram_message_id, file_info)
     for file_info in files:

@@ -197,36 +197,46 @@ BASE_TOOLS_PROMPT = """【對話附件管理】
 
 # AI 文件生成工具說明（對應 app: ai-assistant）
 AI_DOCUMENT_TOOLS_PROMPT = """【AI 文件/簡報生成】
-- generate_md2ppt: 產生專業簡報（MD2PPT 格式，可線上編輯並匯出 PPTX）
-  · content: 簡報主題或內容說明（必填，盡量詳細描述）
-  · style: 風格需求（可選，如：科技藍、溫暖橙、清新綠、極簡灰、電競紫）
+- generate_md2ppt: 儲存 MD2PPT 簡報並建立分享連結（可線上編輯並匯出 PPTX）
+  · markdown_content: 已格式化的 MD2PPT markdown（必填，必須以 --- 開頭）
+  · ⚠️ 你必須先根據下方格式規範產生完整 markdown，再傳入此工具
   · 回傳：分享連結 url 和 4 位數密碼 password
-- generate_md2doc: 產生專業文件（MD2DOC 格式，可線上編輯並匯出 Word）
-  · content: 文件內容說明或大綱（必填）
+- generate_md2doc: 儲存 MD2DOC 文件並建立分享連結（可線上編輯並匯出 Word）
+  · markdown_content: 已格式化的 MD2DOC markdown（必填，必須以 --- 開頭）
+  · ⚠️ 你必須先根據下方格式規範產生完整 markdown，再傳入此工具
   · 回傳：分享連結 url 和 4 位數密碼 password
 
-【文件/簡報使用情境】
-1. 用戶說「幫我做一份簡報介紹公司產品」
-   → generate_md2ppt(content="公司產品介紹簡報，需要包含產品特色、優勢、應用案例")
-2. 用戶說「做一份科技風的 AI 應用簡報」
-   → generate_md2ppt(content="AI 應用介紹", style="科技藍")
-3. 用戶說「幫我寫一份設備操作 SOP」
-   → generate_md2doc(content="設備操作 SOP，包含開機、操作流程、關機步驟、注意事項")
-4. 用戶說「做一份教學文件說明如何使用系統」
-   → generate_md2doc(content="系統使用教學文件")
+【MD2PPT 格式規範】
+格式結構：
+1. 全域 Frontmatter（開頭必須有）：--- title/author/bg/transition ---
+   theme 可選：amber, midnight, academic, material
+2. 分頁：=== 前後必須有空行
+3. 每頁 Frontmatter：layout/bg/mesh 等
+4. Layout：default | impact | center | grid | two-column | quote | alert
+   · grid 搭配 columns: 2；two-column 用 :: right :: 分隔（前後必須有空行）
+5. 圖表：::: chart-bar { "title": "標題" } + 表格 + :::（JSON 雙引號，前後空行）
+6. Mesh 背景：bg: mesh + mesh: { colors: [...], seed: 數字 }
+配色：科技藍=midnight+["#0F172A","#1E40AF","#3B82F6"]、溫暖橙=amber+["#FFF7ED","#FB923C","#EA580C"]、清新綠=material+["#ECFDF5","#10B981","#047857"]、極簡灰=academic+["#F8FAFC","#94A3B8","#475569"]
+設計原則：重點頁用 mesh/鮮明色、資訊頁用淺色/深色、不要每頁 mesh、圖表數據合理
 
-【回覆格式】
-生成完成後，回覆用戶：
-「已為您生成簡報/文件 👇
-🔗 連結：{url}
-🔑 密碼：{password}
+【MD2DOC 格式規範】
+格式結構：
+1. Frontmatter（必須）：--- title/author/header:true/footer:true ---
+2. 標題：只用 H1-H3，H4+ 改用 **粗體**
+3. 目錄：[TOC] + 章節列表
+4. 提示區塊：> [!TIP] / > [!NOTE] / > [!WARNING]
+5. 程式碼區塊標註語言，:no-ln 隱藏行號
+6. 行內：**粗體**、*斜體*、<u>底線</u>、【按鈕】、[Ctrl]+[S]、『書名』
+設計原則：H1 大章節/H2 小節/H3 細項、善用 Callouts、程式碼標註語言
 
-連結有效期限 24 小時，開啟後可直接編輯並匯出。」
+【文件/簡報使用流程】
+1. 根據用戶需求和上方格式規範產生完整 markdown
+2. 傳入 generate_md2ppt/generate_md2doc 的 markdown_content 參數
+3. 回覆連結和密碼
 
 【意圖判斷】
-- 「做簡報」「投影片」「PPT」「presentation」→ generate_md2ppt
-- 「寫文件」「做報告」「說明書」「教學」「SOP」「document」→ generate_md2doc
-- 如果不確定，詢問用戶是需要「簡報（投影片）」還是「文件（Word）」"""
+- 「做簡報」「投影片」「PPT」→ generate_md2ppt
+- 「寫文件」「做報告」「說明書」「SOP」→ generate_md2doc"""
 
 # AI 圖片生成工具說明（對應 app: ai-assistant）
 AI_IMAGE_TOOLS_PROMPT = """【AI 圖片生成】

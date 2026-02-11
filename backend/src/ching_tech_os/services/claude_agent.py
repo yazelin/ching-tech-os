@@ -61,6 +61,36 @@ def _cleanup_session_workdir(session_dir: str) -> None:
     except OSError as e:
         logger.warning(f"清理工作目錄失敗 {session_dir}: {e}")
 
+
+async def _cleanup_claude_client(client) -> None:
+    """清理 ClaudeClient 底層的 session 和行程
+
+    當 call_claude() 超時或錯誤時，必須主動關閉底層的 ClaudeSDKClient，
+    否則 Claude CLI 子行程會成為殭屍行程持續佔用資源。
+    """
+    try:
+        agent = getattr(client, "agent", None)
+        if agent is None:
+            return
+
+        session_id = getattr(client, "session_id", None)
+        sessions = getattr(agent, "_sessions", {})
+
+        if session_id and session_id in sessions:
+            session = sessions[session_id]
+            sdk_client = getattr(session, "client", None)
+            if sdk_client and getattr(session, "client_started", False):
+                try:
+                    await sdk_client.__aexit__(None, None, None)
+                except Exception as e:
+                    logger.debug(f"清理 ClaudeSDKClient 時忽略錯誤: {e}")
+                session.client = None
+                session.client_started = False
+            # 移除 session 參照
+            del sessions[session_id]
+    except Exception as e:
+        logger.debug(f"清理 ClaudeClient 時忽略錯誤: {e}")
+
 # 模型對應表
 MODEL_MAP = {
     "claude-opus": "opus",
@@ -335,11 +365,12 @@ async def call_claude(
             f"output={_usage_data['output_tokens']}"
         )
 
-    try:
-        # 啟動 session
+    # 將整個 session 生命週期（啟動 + 設定 + 查詢）包在一個 timeout 內，
+    # 避免 start_session() 掛住時沒有超時機制（例如 MCP 工具巢狀呼叫場景）
+    async def _run_session() -> str:
+        """啟動 session、設定模型/權限、送出 prompt"""
         await client.start_session()
 
-        # 設定模型
         if cli_model and cli_model != "sonnet":
             try:
                 await client.set_model(cli_model)
@@ -347,36 +378,15 @@ async def call_claude(
             except (ValueError, RuntimeError, AttributeError) as e:
                 logger.warning(f"設定模型失敗: {e}")
 
-        # 設定 bypassPermissions
         await client.set_mode("bypassPermissions")
 
-        # 送出 prompt（帶超時）
-        try:
-            text_response = await asyncio.wait_for(
-                client.query(full_prompt),
-                timeout=timeout,
-            )
-        except asyncio.TimeoutError:
-            logger.warning(f"call_claude TIMEOUT after {timeout}s, collected {len(tool_calls)} tool calls")
+        return await client.query(full_prompt)
 
-            text_buffer = _clean_overgenerated_response(
-                getattr(client, "_text_buffer", "")
-            )
-
-            error_msg = f"請求超時（{timeout} 秒）"
-            if _active_tools:
-                pending_names = [name for name, _, _ in _active_tools.values()]
-                error_msg += f"，執行中的工具：{', '.join(pending_names)}"
-
-            return ClaudeResponse(
-                success=False,
-                message=text_buffer,
-                error=error_msg,
-                tool_calls=tool_calls,
-                input_tokens=_usage_data.get("input_tokens"),
-                output_tokens=_usage_data.get("output_tokens"),
-                tool_timings=tool_timings,
-            )
+    try:
+        text_response = await asyncio.wait_for(
+            _run_session(),
+            timeout=timeout,
+        )
 
         # 清理 text
         text_response = _clean_overgenerated_response(text_response)
@@ -395,6 +405,28 @@ async def call_claude(
             tool_timings=tool_timings,
         )
 
+    except asyncio.TimeoutError:
+        logger.warning(f"call_claude TIMEOUT after {timeout}s, collected {len(tool_calls)} tool calls")
+
+        text_buffer = _clean_overgenerated_response(
+            getattr(client, "_text_buffer", "")
+        )
+
+        error_msg = f"請求超時（{timeout} 秒）"
+        if _active_tools:
+            pending_names = [name for name, _, _ in _active_tools.values()]
+            error_msg += f"，執行中的工具：{', '.join(pending_names)}"
+
+        return ClaudeResponse(
+            success=False,
+            message=text_buffer,
+            error=error_msg,
+            tool_calls=tool_calls,
+            input_tokens=_usage_data.get("input_tokens"),
+            output_tokens=_usage_data.get("output_tokens"),
+            tool_timings=tool_timings,
+        )
+
     except (ConnectionError, OSError, RuntimeError, asyncio.CancelledError) as e:
         logger.error(f"call_claude 錯誤: {e}", exc_info=True)
         fallback_message = getattr(client, "_text_buffer", "")
@@ -406,6 +438,8 @@ async def call_claude(
             tool_timings=tool_timings,
         )
     finally:
+        # 清理底層 ClaudeClient 的 session 和行程
+        await _cleanup_claude_client(client)
         # 清理 per-session 工作目錄
         _cleanup_session_workdir(session_dir)
 

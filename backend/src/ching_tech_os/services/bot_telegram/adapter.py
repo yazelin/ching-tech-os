@@ -9,6 +9,7 @@ from typing import Any
 
 import httpx
 from telegram import Bot, InputFile
+from telegram.request import HTTPXRequest
 
 from ..bot.adapter import SentMessage
 
@@ -28,7 +29,11 @@ class TelegramBotAdapter:
     platform_type: str = "telegram"
 
     def __init__(self, token: str):
-        self.bot = Bot(token=token)
+        # 預設 read_timeout=5s 太短，AI 產圖等長時間操作容易超時
+        self.bot = Bot(
+            token=token,
+            request=HTTPXRequest(read_timeout=None, write_timeout=None),
+        )
         self._bot_username: str | None = None
 
     @property
