@@ -62,34 +62,6 @@ def _cleanup_session_workdir(session_dir: str) -> None:
         logger.warning(f"清理工作目錄失敗 {session_dir}: {e}")
 
 
-async def _cleanup_claude_client(client) -> None:
-    """清理 ClaudeClient 底層的 session 和行程
-
-    當 call_claude() 超時或錯誤時，必須主動關閉底層的 ClaudeSDKClient，
-    否則 Claude CLI 子行程會成為殭屍行程持續佔用資源。
-    """
-    try:
-        agent = getattr(client, "agent", None)
-        if agent is None:
-            return
-
-        session_id = getattr(client, "session_id", None)
-        sessions = getattr(agent, "_sessions", {})
-
-        if session_id and session_id in sessions:
-            session = sessions[session_id]
-            sdk_client = getattr(session, "client", None)
-            if sdk_client and getattr(session, "client_started", False):
-                try:
-                    await sdk_client.__aexit__(None, None, None)
-                except Exception as e:
-                    logger.debug(f"清理 ClaudeSDKClient 時忽略錯誤: {e}")
-                session.client = None
-                session.client_started = False
-            # 移除 session 參照
-            del sessions[session_id]
-    except Exception as e:
-        logger.debug(f"清理 ClaudeClient 時忽略錯誤: {e}")
 
 # 模型對應表
 MODEL_MAP = {
@@ -439,7 +411,10 @@ async def call_claude(
         )
     finally:
         # 清理底層 ClaudeClient 的 session 和行程
-        await _cleanup_claude_client(client)
+        try:
+            await client.close()
+        except Exception as e:
+            logger.debug(f"清理 ClaudeClient 時忽略錯誤: {e}")
         # 清理 per-session 工作目錄
         _cleanup_session_workdir(session_dir)
 

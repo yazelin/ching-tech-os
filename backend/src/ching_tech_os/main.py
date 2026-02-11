@@ -102,6 +102,9 @@ async def lifespan(app: FastAPI):
 
     await _shutdown_client("clawhub_client")
     await _shutdown_client("skillhub_client")
+    # 關閉 Line Bot 共用客戶端
+    from .services.bot_line.client import close_line_client
+    await close_line_client()
     # 清理 Claude agent 工作目錄基底
     try:
         from .services.claude_agent import _WORKING_DIR_BASE
