@@ -206,18 +206,50 @@ AI_DOCUMENT_TOOLS_PROMPT = """【AI 文件/簡報生成】
   · ⚠️ 你必須先根據下方格式規範產生完整 markdown，再傳入此工具
   · 回傳：分享連結 url 和 4 位數密碼 password
 
+⚠️ 內容品質要求：
+- 每頁包含重點功能 + 實際案例或延伸用法，內容要充實
+- 必須混合使用多種 layout（impact、two-column、grid、center），禁止整份都用同一種
+- 有數據比較時善用圖表（chart-bar、chart-pie）
+
 【MD2PPT 格式規範】
 格式結構：
 1. 全域 Frontmatter（開頭必須有）：--- title/author/bg/transition ---
    theme 可選：amber, midnight, academic, material
 2. 分頁：=== 前後必須有空行
 3. 每頁 Frontmatter：layout/bg/mesh 等
-4. Layout：default | impact | center | grid | two-column | quote | alert
-   · grid 搭配 columns: 2；two-column 用 :: right :: 分隔（前後必須有空行）
-5. 圖表：::: chart-bar { "title": "標題" } + 表格 + :::（JSON 雙引號，前後空行）
-6. Mesh 背景：bg: mesh + mesh: { colors: [...], seed: 數字 }
-配色：科技藍=midnight+["#0F172A","#1E40AF","#3B82F6"]、溫暖橙=amber+["#FFF7ED","#FB923C","#EA580C"]、清新綠=material+["#ECFDF5","#10B981","#047857"]、極簡灰=academic+["#F8FAFC","#94A3B8","#475569"]
-設計原則：重點頁用 mesh/鮮明色、資訊頁用淺色/深色、不要每頁 mesh、圖表數據合理
+4. Layout 選項與適用場景：
+   · default — 標準頁面
+   · impact — 強調頁（開場、重點結論，大標題+副標題）
+   · center — 置中頁（過場、章節分隔）
+   · grid — 網格（搭配 columns: 2，並列比較）
+   · two-column — 雙欄（功能+案例、問題+方案）
+   · quote — 引言頁（金句、客戶評價）
+   · alert — 警告/重點提示頁
+5. 雙欄語法（:: right :: 前後必須有空行）：
+   ### 左欄標題
+   左欄內容
+
+   :: right ::
+
+   ### 右欄標題
+   右欄內容
+6. 圖表（::: 前後必須有空行，JSON 雙引號）：
+   ::: chart-bar { "title": "季度營收", "showValues": true }
+
+   | 季度 | 營收 |
+   | :--- | :--- |
+   | Q1 | 150 |
+   | Q2 | 200 |
+
+   :::
+   類型：chart-bar, chart-line, chart-pie, chart-area
+7. Mesh 背景：bg: mesh + mesh: { colors: [...], seed: 數字 }
+配色：科技藍=midnight+["#0F172A","#1E40AF","#3B82F6"]、溫暖橙=amber+["#FFF7ED","#FB923C","#EA580C"]、清新綠=material+["#ECFDF5","#10B981","#047857"]、極簡灰=academic+["#F8FAFC","#94A3B8","#475569"]、電競紫=midnight+["#111827","#7C3AED","#DB2777"]
+設計原則：
+- 重點頁用 mesh/鮮明色、資訊頁用淺色(#F8FAFC)/深色(#1E293B)
+- 不要每頁 mesh（只在開場、過場、結尾用）
+- ⚠️ 10+頁簡報至少用 3 種以上不同 layout，禁止全部用同一種
+- 資訊頁用 two-column/grid，重點用 impact，有數據用 chart
 
 【MD2DOC 格式規範】
 格式結構：
@@ -227,7 +259,7 @@ AI_DOCUMENT_TOOLS_PROMPT = """【AI 文件/簡報生成】
 4. 提示區塊：> [!TIP] / > [!NOTE] / > [!WARNING]
 5. 程式碼區塊標註語言，:no-ln 隱藏行號
 6. 行內：**粗體**、*斜體*、<u>底線</u>、【按鈕】、[Ctrl]+[S]、『書名』
-設計原則：H1 大章節/H2 小節/H3 細項、善用 Callouts、程式碼標註語言
+設計原則：H1 大章節/H2 小節/H3 細項、善用 Callouts 標注重點、程式碼標註語言
 
 【文件/簡報使用流程】
 1. 根據用戶需求和上方格式規範產生完整 markdown
