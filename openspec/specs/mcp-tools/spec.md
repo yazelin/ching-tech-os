@@ -161,61 +161,23 @@ MCP Server SHALL 提供記憶管理工具，讓 AI 可以在對話中管理記�
 
 ---
 
-## Archived Requirements (Migrated to ERPNext)
+### Requirement: ERPNext 責任邊界
+CTOS 內建 MCP Server SHALL 不再維護 legacy 的專案、物料、廠商管理工具，相關流程由 ERPNext MCP Server 提供。
 
-以下工具已遷移至 ERPNext MCP Server，保留作為歷史參考：
-
-### 專案管理工具 [DEPRECATED]
-- query_project → `list_documents(doctype="Project")`
-- create_project → `create_document(doctype="Project")`
-- update_project → `update_document(doctype="Project")`
-- add_project_member → `update_document(doctype="Project")` (更新 users 子表)
-- update_project_member
-- get_project_members
-- add_project_milestone → `create_document(doctype="Task")`
-- update_milestone → `update_document(doctype="Task")`
-- get_project_milestones → `list_documents(doctype="Task")`
-- add_project_meeting → `create_document(doctype="Event")`
-- update_project_meeting → `update_document(doctype="Event")`
-- get_project_meetings → `list_documents(doctype="Event")`
-- add_project_link → `create_document(doctype="Comment")`
-- update_project_link
-- get_project_links
-- delete_project_link
-- add_project_attachment → `upload_file`
-- update_project_attachment
-- get_project_attachments → `list_documents(doctype="File")`
-- delete_project_attachment
-- add_delivery_schedule → `create_document(doctype="Purchase Order")`
-- update_delivery_schedule
-- get_delivery_schedules
-
-### 廠商管理工具 [DEPRECATED]
-- query_vendors → `list_documents(doctype="Supplier")`
-- add_vendor → `create_document(doctype="Supplier")`
-- update_vendor → `update_document(doctype="Supplier")`
-
-### 物料管理工具 [DEPRECATED]
-- query_inventory → `list_documents(doctype="Item")`
-- add_inventory_item → `create_document(doctype="Item")`
-- update_inventory_item → `update_document(doctype="Item")`
-- query_project_inventory
-- record_inventory_in → `create_document(doctype="Stock Entry")`
-- record_inventory_out → `create_document(doctype="Stock Entry")`
-- adjust_inventory → `create_document(doctype="Stock Entry")`
-- add_inventory_order → `create_document(doctype="Purchase Order")`
-- update_inventory_order → `update_document(doctype="Purchase Order")`
-- get_inventory_orders → `list_documents(doctype="Purchase Order")`
+#### Scenario: 需要專案/庫存/廠商操作
+- **WHEN** AI 流程需要操作專案、庫存或廠商資料
+- **THEN** 系統使用 `mcp__erpnext__*` 工具
+- **AND** 不使用舊版 `query_project`、`query_inventory`、`query_vendors` 系列工具
 
 ---
 
-### Requirement: Skills YAML 完整工具定義
-每個 skill YAML 的 `tools` 列表 SHALL 包含該 skill 所需的全部工具名稱，作為工具白名單的唯一來源。
+### Requirement: Skills SKILL.md 完整工具定義
+每個 skill 的 `SKILL.md` frontmatter `allowed-tools` SHALL 包含該 skill 所需的全部工具名稱，作為工具白名單來源。
 
 #### Scenario: inventory skill 包含完整 ERPNext 工具
 - **WHEN** 載入 inventory skill
 - **THEN** tools 列表 SHALL 包含所有庫存相關的 ERPNext 工具
-- **AND** 包含 `mcp__erpnext__get_item_price`、`mcp__erpnext__make_mapped_doc`、`mcp__erpnext__get_party_balance` 等目前硬編碼但 YAML 缺少的工具
+- **AND** 包含 `mcp__erpnext__get_item_price`、`mcp__erpnext__make_mapped_doc`、`mcp__erpnext__get_party_balance` 等庫存相關工具
 
 #### Scenario: project skill 包含完整 ERPNext 工具
 - **WHEN** 載入 project skill

@@ -834,7 +834,7 @@ const AgentSettingsApp = (function() {
       if (!response.ok) throw new Error('Failed to load skill detail');
       const skill = await response.json();
 
-      const tools = skill.tools || [];
+      const tools = skill.allowed_tools || skill.tools || [];
       const mcpServers = skill.mcp_servers || [];
 
       const source = skill.source || 'unknown';
@@ -846,6 +846,14 @@ const AgentSettingsApp = (function() {
         const files = skill[dir] || [];
         files.forEach(f => browseFiles.push({ dir, path: f }));
       });
+
+      const mobileActionBar = isMobileView() ? `
+        <div class="skill-mobile-action-bar">
+          <button class="btn btn-secondary" data-action="reload-skills-detail">重載</button>
+          <button class="btn btn-primary" data-action="open-skill-sheet" data-skill-name="${escapeHtml(skillName)}">次要設定</button>
+          ${source !== 'native' ? `<button class="btn btn-danger" data-action="remove-skill" data-skill-name="${escapeHtml(skillName)}">移除</button>` : ''}
+        </div>
+      ` : '';
 
       main.innerHTML = `
         <button class="skill-mobile-back-btn" style="display:none;" data-action="skill-mobile-back">
@@ -923,6 +931,7 @@ const AgentSettingsApp = (function() {
             </div>
           ` : ''}
         </div>
+        ${mobileActionBar}
       `;
 
       // Mobile support
@@ -970,6 +979,11 @@ const AgentSettingsApp = (function() {
 
       const overlay = document.querySelector(`#${windowId} .skill-edit-modal-overlay`);
       if (!overlay) return;
+      overlay.classList.toggle('skill-edit-bottom-sheet', isMobileView());
+      const titleEl = overlay.querySelector('.skill-edit-modal-title');
+      if (titleEl) {
+        titleEl.textContent = isMobileView() ? '次要設定' : '編輯 Skill';
+      }
 
       const body = overlay.querySelector('.skill-edit-modal-body');
       const allowedTools = skill.allowed_tools || skill.tools || [];
@@ -1064,7 +1078,10 @@ const AgentSettingsApp = (function() {
    */
   function closeSkillEditModal() {
     const overlay = document.querySelector(`#${windowId} .skill-edit-modal-overlay`);
-    if (overlay) overlay.style.display = 'none';
+    if (overlay) {
+      overlay.style.display = 'none';
+      overlay.classList.remove('skill-edit-bottom-sheet');
+    }
   }
 
   /**
@@ -1377,6 +1394,9 @@ const AgentSettingsApp = (function() {
         case 'save-skill':
           saveSkillFromModal();
           break;
+        case 'open-skill-sheet':
+          openSkillEditModal(actionEl.dataset.skillName || currentSkillName);
+          break;
         case 'preview-skill': {
           const slug = actionEl.dataset.skillSlug;
           const source = actionEl.dataset.skillSource || null;
@@ -1388,6 +1408,13 @@ const AgentSettingsApp = (function() {
             const settings = document.querySelector(`#${windowId} .skill-settings`);
             if (settings) settings.classList.add('showing-editor');
           }
+
+          const mobilePreviewActionBar = isMobileView() ? `
+            <div class="skill-mobile-action-bar">
+              <button class="btn btn-secondary" data-action="skill-mobile-back">返回</button>
+              <button class="btn btn-primary" data-action="install-skill" data-skill-name="${escapeHtml(slug)}" data-skill-source="${escapeHtml(source || '')}">安裝</button>
+            </div>
+          ` : '';
 
           main.innerHTML = `
             <button class="skill-mobile-back-btn" style="${isMobileView() ? 'display:flex;' : 'display:none;'}" data-action="skill-mobile-back">
@@ -1403,7 +1430,8 @@ const AgentSettingsApp = (function() {
                 <span class="skill-detail-label">SKILL.md</span>
               </div>
               <pre class="skill-preview-content" style="display:block;"></pre>
-            </div>`;
+            </div>
+            ${mobilePreviewActionBar}`;
           // [Sprint8] 原: <pre>載入中...</pre>（靜態文字）→ UIHelpers.showLoading
           const _previewLoading = main.querySelector('.skill-preview-content');
           if (_previewLoading) UIHelpers.showLoading(_previewLoading, { text: '載入中...', variant: 'compact' });
@@ -1498,6 +1526,15 @@ const AgentSettingsApp = (function() {
         }
       }
     });
+
+    const skillModalOverlay = root.querySelector('.skill-edit-modal-overlay');
+    if (skillModalOverlay) {
+      skillModalOverlay.addEventListener('click', (e) => {
+        if (e.target === skillModalOverlay) {
+          closeSkillEditModal();
+        }
+      });
+    }
 
     // 初始化 sidebar resizer
     initSidebarResizers(root);

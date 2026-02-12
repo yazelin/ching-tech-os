@@ -13,6 +13,8 @@ import tempfile
 import time
 from pathlib import Path
 
+from ..config import settings
+
 logger = logging.getLogger(__name__)
 
 _VALID_NAME_RE = re.compile(r"^[a-z0-9]([a-z0-9_-]*[a-z0-9])?$")
@@ -128,7 +130,15 @@ class ScriptRunner:
             "SKILL_NAME": skill_name,
             "SKILL_DIR": str(skill_dir),
             "SKILL_ASSETS_DIR": str(skill_dir / "assets"),
+            "CTOS_PROJECT_ROOT": settings.project_root,
         }
+        backend_src = str(Path(settings.project_root) / "backend" / "src")
+        current_pythonpath = os.environ.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = (
+            f"{backend_src}{os.pathsep}{current_pythonpath}"
+            if current_pythonpath
+            else backend_src
+        )
         if env_overrides:
             env.update(env_overrides)
 

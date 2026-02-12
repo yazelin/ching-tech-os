@@ -16,6 +16,8 @@ from typing import Optional
 
 import yaml
 
+from ..config import settings
+
 logger = logging.getLogger(__name__)
 
 # Skills 目錄
@@ -82,6 +84,7 @@ class Skill:
     scripts: list[str] = field(default_factory=list)
     assets: list[str] = field(default_factory=list)
     source: str = "native"  # native | openclaw | claude-code
+    skill_dir: Path | None = None
 
 
 def _extract_ctos_metadata(config: dict) -> tuple[Optional[str], list[str]]:
@@ -159,22 +162,42 @@ def _build_skill(config: dict, body: str, skill_dir: Path, source: str = "native
         scripts=_scan_subdir("scripts"),
         assets=_scan_subdir("assets"),
         source=config.get("source", source),
+        skill_dir=skill_dir,
     )
 
 
 class SkillManager:
     """Skills 載入和管理"""
 
-    def __init__(self, skills_dir: Path | str | None = None):
-        self._skills_dir = Path(skills_dir) if skills_dir else SKILLS_DIR
+    def __init__(
+        self,
+        skills_dir: Path | str | None = None,
+        external_skills_dir: Path | str | None = None,
+    ):
+        self._native_skills_dir = Path(skills_dir) if skills_dir else SKILLS_DIR
+        configured_external = external_skills_dir or settings.skill_external_root
+        self._external_skills_dir = Path(configured_external).expanduser()
+        # 外部目錄做為可寫入目錄（Hub 安裝/匯入）
+        self._writable_skills_dir = self._external_skills_dir
         self._skills: dict[str, Skill] = {}
+        self._skill_dirs: dict[str, Path] = {}
         self._loaded = False
         self._load_lock = asyncio.Lock()
 
     @property
     def skills_dir(self) -> Path:
-        """Skills 目錄路徑"""
-        return self._skills_dir
+        """可寫入的 Skills 目錄路徑（external root）。"""
+        return self._writable_skills_dir
+
+    @property
+    def native_skills_dir(self) -> Path:
+        """內建 Skills 目錄路徑。"""
+        return self._native_skills_dir
+
+    @property
+    def external_skills_dir(self) -> Path:
+        """外部 Skills 目錄路徑。"""
+        return self._external_skills_dir
 
     async def load_skills(self) -> None:
         """掃描 skills 目錄，載入所有 skill 定義（async-safe）"""
@@ -183,7 +206,7 @@ class SkillManager:
                 return
             await asyncio.to_thread(self._load_skills_sync)
 
-    def _load_skill_from_skill_md(self, skill_dir: Path) -> Skill | None:
+    def _load_skill_from_skill_md(self, skill_dir: Path, source: str) -> Skill | None:
         """從 SKILL.md 載入（Agent Skills 標準格式）"""
         skill_md = skill_dir / "SKILL.md"
         if not skill_md.exists():
@@ -195,9 +218,9 @@ class SkillManager:
             logger.warning(f"SKILL.md 無 frontmatter: {skill_dir}")
             return None
 
-        return _build_skill(config, body, skill_dir)
+        return _build_skill(config, body, skill_dir, source=source)
 
-    def _load_skill_from_yaml(self, skill_dir: Path) -> Skill | None:
+    def _load_skill_from_yaml(self, skill_dir: Path, source: str) -> Skill | None:
         """從舊版 skill.yaml + prompt.md 載入（向下相容）"""
         skill_yaml = skill_dir / "skill.yaml"
         if not skill_yaml.exists():
@@ -211,39 +234,81 @@ class SkillManager:
         if prompt_md.exists():
             prompt = prompt_md.read_text(encoding="utf-8")
 
-        return _build_skill(config, prompt, skill_dir)
+        return _build_skill(config, prompt, skill_dir, source=source)
 
     def _load_skills_sync(self) -> None:
         """同步載入 skills（在 thread pool 中執行，避免 blocking event loop）"""
-        if not self._skills_dir.exists():
-            logger.warning(f"Skills 目錄不存在: {self._skills_dir}")
-            self._loaded = True
-            return
+        self._skills.clear()
+        self._skill_dirs.clear()
 
-        for skill_dir in sorted(self._skills_dir.iterdir()):
-            if not skill_dir.is_dir() or skill_dir.name.startswith("_"):
-                continue
+        # 確保 external root 存在（預設 ~/SDD/skill）
+        try:
+            self._external_skills_dir.mkdir(parents=True, exist_ok=True)
+            from .seed_external import ensure_seed_skills
+            ensure_seed_skills(self._external_skills_dir)
+        except Exception as e:
+            logger.warning(f"建立/初始化 external skills 目錄失敗: {self._external_skills_dir} ({e})")
 
-            try:
-                # 優先讀 SKILL.md，否則回退到 skill.yaml + prompt.md
-                skill = self._load_skill_from_skill_md(skill_dir)
-                if skill is None:
-                    skill = self._load_skill_from_yaml(skill_dir)
-                if skill is None:
+        def _load_root(root: Path, source: str, can_override_existing: bool) -> None:
+            if not root.exists():
+                logger.warning(f"Skills 目錄不存在: {root}")
+                return
+
+            for skill_dir in sorted(root.iterdir()):
+                if not skill_dir.is_dir() or skill_dir.name.startswith("_"):
                     continue
 
-                self._skills[skill.name] = skill
-                refs_info = f", {len(skill.references)} refs" if skill.references else ""
-                logger.debug(
-                    f"載入 skill: {skill.name} "
-                    f"({len(skill.allowed_tools)} tools{refs_info})"
-                )
+                try:
+                    # 優先讀 SKILL.md，否則回退到 skill.yaml + prompt.md
+                    skill = self._load_skill_from_skill_md(skill_dir, source=source)
+                    if skill is None:
+                        skill = self._load_skill_from_yaml(skill_dir, source=source)
+                    if skill is None:
+                        continue
 
-            except (yaml.YAMLError, OSError) as e:
-                logger.error(f"載入 skill 失敗 {skill_dir}: {e}")
+                    existing = self._skills.get(skill.name)
+                    if existing:
+                        if can_override_existing:
+                            prev_dir = self._skill_dirs.get(skill.name)
+                            logger.info(
+                                "skill 來源覆蓋: %s (%s -> %s)",
+                                skill.name,
+                                prev_dir,
+                                skill_dir,
+                            )
+                        else:
+                            logger.info(
+                                "跳過同名 skill（保留 external 優先）: %s (%s)",
+                                skill.name,
+                                skill_dir,
+                            )
+                            continue
+
+                    self._skills[skill.name] = skill
+                    self._skill_dirs[skill.name] = skill_dir
+                    refs_info = f", {len(skill.references)} refs" if skill.references else ""
+                    logger.debug(
+                        "載入 skill: %s (%s, %s tools%s)",
+                        skill.name,
+                        source,
+                        len(skill.allowed_tools),
+                        refs_info,
+                    )
+
+                except (yaml.YAMLError, OSError) as e:
+                    logger.error(f"載入 skill 失敗 {skill_dir}: {e}")
+
+        # external-first：同名 skill 由 external 覆蓋 native
+        _load_root(self._external_skills_dir, source="external", can_override_existing=True)
+        _load_root(self._native_skills_dir, source="native", can_override_existing=False)
 
         self._loaded = True
-        logger.info(f"共載入 {len(self._skills)} 個 skills")
+        logger.info(
+            "共載入 %s 個 skills（external: %s, native: %s）",
+            len(self._skills),
+            self._external_skills_dir,
+            self._native_skills_dir,
+        )
 
     def import_openclaw_skill(self, skill_path: Path) -> Path:
         """從 OpenClaw / Agent Skills 標準 SKILL.md 匯入。
@@ -265,7 +330,7 @@ class SkillManager:
 
         name = config.get("name", skill_path.name)
         _validate_skill_name(name)
-        dest_dir = self._skills_dir / name
+        dest_dir = self.skills_dir / name
         dest_dir.mkdir(parents=True, exist_ok=True)
 
         # 確保 metadata.ctos 存在（防禦 metadata: null）
@@ -317,6 +382,22 @@ class SkillManager:
         """取得所有 skills"""
         await self.load_skills()
         return list(self._skills.values())
+
+    def _is_within_skill_roots(self, path: Path) -> bool:
+        """檢查路徑是否在受信任的 skill roots 內。"""
+        resolved = path.resolve()
+        for root in (self._external_skills_dir, self._native_skills_dir):
+            try:
+                resolved.relative_to(root.resolve())
+                return True
+            except ValueError:
+                continue
+        return False
+
+    async def get_skill_dir(self, name: str) -> Path | None:
+        """取得 skill 實際目錄（可能為 external 或 native）。"""
+        await self.load_skills()
+        return self._skill_dirs.get(name)
 
     async def get_skills_for_user(
         self,
@@ -397,15 +478,15 @@ class SkillManager:
         if name not in self._skills:
             return False
 
-        skill_dir = self._skills_dir / name
+        skill_dir = self._skill_dirs.get(name)
+        if not skill_dir:
+            return False
         skill_md_path = skill_dir / "SKILL.md"
         if not skill_md_path.exists():
             return False
 
-        # 安全檢查：確保在 skills 目錄下（防止 symlink 攻擊）
-        try:
-            skill_md_path.resolve().relative_to(self._skills_dir.resolve())
-        except ValueError:
+        # 安全檢查：確保在受信任的 skills roots 下（防止 symlink 攻擊）
+        if not self._is_within_skill_roots(skill_md_path):
             return False
 
         text = skill_md_path.read_text(encoding="utf-8")
@@ -458,14 +539,14 @@ class SkillManager:
             return False
 
         import shutil
-        skill_dir = self._skills_dir / name
+        skill_dir = self._skill_dirs.get(name)
+        if not skill_dir:
+            return False
         if not skill_dir.is_dir():
             return False
 
-        # 安全檢查：確保在 skills 目錄下
-        try:
-            skill_dir.resolve().relative_to(self._skills_dir.resolve())
-        except ValueError:
+        # 安全檢查：確保在受信任的 skills roots 下
+        if not self._is_within_skill_roots(skill_dir):
             return False
 
         shutil.rmtree(skill_dir)
@@ -485,13 +566,17 @@ class SkillManager:
         if not any(file_path.startswith(p) for p in allowed_prefixes):
             return None
 
-        full_path = self._skills_dir / name / file_path
+        skill_dir = self._skill_dirs.get(name)
+        if not skill_dir:
+            return None
+
+        full_path = skill_dir / file_path
         if not full_path.is_file():
             return None
 
         # 安全檢查：不允許路徑穿越
         try:
-            full_path.resolve().relative_to((self._skills_dir / name).resolve())
+            full_path.resolve().relative_to(skill_dir.resolve())
         except ValueError:
             return None
         return full_path.read_text(encoding="utf-8")
@@ -516,7 +601,11 @@ class SkillManager:
         if not script_name or any(p in script_name for p in ("..", os.path.sep, os.path.altsep) if p):
             return None
 
-        scripts_dir = self._skills_dir / skill_name / "scripts"
+        skill_dir = self._skill_dirs.get(skill_name)
+        if not skill_dir:
+            return None
+
+        scripts_dir = skill_dir / "scripts"
         if not scripts_dir.is_dir():
             return None
 
@@ -536,8 +625,12 @@ class SkillManager:
         if skill_name not in self._skills:
             return []
 
+        skill_dir = self._skill_dirs.get(skill_name)
+        if not skill_dir:
+            return []
+
         from .script_runner import ScriptRunner
-        runner = ScriptRunner(self._skills_dir)
+        runner = ScriptRunner(skill_dir.parent)
         return runner.list_scripts(skill_name)
 
     async def get_all_script_skills(self) -> list[str]:
@@ -547,6 +640,26 @@ class SkillManager:
             name for name, skill in self._skills.items()
             if skill.scripts
         ]
+
+    async def get_script_fallback_map(self, skill_name: str) -> dict[str, str]:
+        """取得 script -> MCP tool fallback 對應表。"""
+        await self.load_skills()
+        skill = self._skills.get(skill_name)
+        if not skill:
+            return {}
+
+        ctos_meta = (skill.metadata or {}).get("ctos") or {}
+        raw_mapping = ctos_meta.get("script_mcp_fallback") or {}
+        if not isinstance(raw_mapping, dict):
+            return {}
+
+        mapping: dict[str, str] = {}
+        for script_name, tool_name in raw_mapping.items():
+            if not isinstance(script_name, str) or not isinstance(tool_name, str):
+                continue
+            if script_name and tool_name:
+                mapping[script_name] = tool_name
+        return mapping
 
     # 禁止 skill 存取的敏感環境變數
     _ENV_BLOCKLIST = frozenset({

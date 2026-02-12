@@ -8,6 +8,8 @@
 
 import logging
 
+from ...config import settings
+
 logger = logging.getLogger("bot.agents")
 
 # 嘗試載入 SkillManager
@@ -16,6 +18,9 @@ try:
     _HAS_SKILL_MANAGER = True
 except (ImportError, ModuleNotFoundError):
     _HAS_SKILL_MANAGER = False
+
+
+_SCRIPT_RUNNER_TOOL = "mcp__ching-tech-os__run_skill_script"
 
 
 # ============================================================
@@ -598,14 +603,60 @@ async def get_tools_for_user(
     Returns:
         去重後的工具名稱列表
     """
+    def _dedupe(tools: list[str]) -> list[str]:
+        return list(dict.fromkeys(tools))
+
+    def _normalize_ching_tool_name(tool_name: str) -> str:
+        if tool_name.startswith("mcp__"):
+            return tool_name
+        return f"mcp__ching-tech-os__{tool_name}"
+
+    async def _build_route_state(skills) -> dict:
+        route_state = {
+            "policy": settings.skill_route_policy,
+            "fallback_enabled": settings.skill_script_fallback_enabled,
+            "has_script_skills": False,
+            "script_skill_count": 0,
+            "script_mcp_overlap": [],
+            "suppressed_mcp_tools": [],
+        }
+        overlap: set[str] = set()
+        for skill in skills:
+            if not skill.scripts:
+                continue
+            route_state["has_script_skills"] = True
+            route_state["script_skill_count"] += 1
+            fallback_map = await sm.get_script_fallback_map(skill.name)
+            for fallback_tool in fallback_map.values():
+                overlap.add(_normalize_ching_tool_name(fallback_tool))
+
+        route_state["script_mcp_overlap"] = sorted(overlap)
+        if route_state["policy"] == "script-first":
+            route_state["suppressed_mcp_tools"] = sorted(overlap)
+        return route_state
+
     # 優先使用 SkillManager
     if _HAS_SKILL_MANAGER:
         try:
             sm = get_skill_manager()
-            tools = await sm.get_tool_names(app_permissions)
-            if tools:
-                # 去重（多個 skill 可能有重複工具）
-                return list(dict.fromkeys(tools))
+            skills = await sm.get_skills_for_user(app_permissions)
+            tools: list[str] = []
+            for skill in skills:
+                tools.extend(skill.allowed_tools)
+
+            route_state = await _build_route_state(skills)
+            if route_state["has_script_skills"]:
+                tools.append(_SCRIPT_RUNNER_TOOL)
+
+            suppressed = set(route_state["suppressed_mcp_tools"])
+            if suppressed:
+                tools = [tool for tool in tools if tool not in suppressed]
+                logger.info(
+                    "script-first 路由：隱藏 MCP tools=%s",
+                    sorted(suppressed),
+                )
+
+            return _dedupe(tools)
         except (OSError, ValueError, RuntimeError) as e:
             logger.warning(f"SkillManager 取得工具列表失敗，使用 fallback: {e}")
 
@@ -616,7 +667,48 @@ async def get_tools_for_user(
         if app_id is None or app_permissions.get(app_id, False):
             tools.extend(app_tools)
     # 去重
-    return list(dict.fromkeys(tools))
+    return _dedupe(tools)
+
+
+async def get_tool_routing_for_user(
+    app_permissions: dict[str, bool],
+) -> dict:
+    """回傳當前使用者的工具路由決策（供 ai_logs/debug 使用）。"""
+    route_state = {
+        "policy": settings.skill_route_policy,
+        "fallback_enabled": settings.skill_script_fallback_enabled,
+        "has_script_skills": False,
+        "script_skill_count": 0,
+        "script_mcp_overlap": [],
+        "suppressed_mcp_tools": [],
+    }
+
+    if not _HAS_SKILL_MANAGER:
+        return route_state
+
+    try:
+        sm = get_skill_manager()
+        skills = await sm.get_skills_for_user(app_permissions)
+        overlap: set[str] = set()
+        for skill in skills:
+            if not skill.scripts:
+                continue
+            route_state["has_script_skills"] = True
+            route_state["script_skill_count"] += 1
+            fallback_map = await sm.get_script_fallback_map(skill.name)
+            for fallback_tool in fallback_map.values():
+                if fallback_tool.startswith("mcp__"):
+                    overlap.add(fallback_tool)
+                else:
+                    overlap.add(f"mcp__ching-tech-os__{fallback_tool}")
+
+        route_state["script_mcp_overlap"] = sorted(overlap)
+        if route_state["policy"] == "script-first":
+            route_state["suppressed_mcp_tools"] = sorted(overlap)
+    except (OSError, ValueError, RuntimeError) as e:
+        logger.warning(f"取得工具路由決策失敗: {e}")
+
+    return route_state
 
 
 async def get_mcp_servers_for_user(
@@ -635,7 +727,11 @@ async def get_mcp_servers_for_user(
     if _HAS_SKILL_MANAGER:
         try:
             sm = get_skill_manager()
+            skills = await sm.get_skills_for_user(app_permissions)
             servers = await sm.get_required_mcp_servers(app_permissions)
+            if any(skill.scripts for skill in skills):
+                # script runner 需要 ching-tech-os server
+                servers.add("ching-tech-os")
             if servers:
                 return servers
         except (OSError, ValueError, RuntimeError) as e:

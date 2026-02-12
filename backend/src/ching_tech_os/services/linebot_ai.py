@@ -498,9 +498,17 @@ async def process_message_with_ai(
         logger.info(f"使用者權限過濾後的 MCP 工具數量: {len(mcp_tools)}, role={user_role}")
 
         # 外部 MCP 工具（由 SkillManager 動態產生，含 fallback）
-        from .linebot_agents import get_tools_for_user, get_mcp_servers_for_user
+        from .linebot_agents import (
+            get_tools_for_user,
+            get_mcp_servers_for_user,
+            get_tool_routing_for_user,
+        )
+        tool_routing = await get_tool_routing_for_user(app_permissions)
+        suppressed_tools = set(tool_routing.get("suppressed_mcp_tools") or [])
+        if suppressed_tools:
+            mcp_tools = [tool for tool in mcp_tools if tool not in suppressed_tools]
         skill_tools = await get_tools_for_user(app_permissions)
-        all_tools = agent_tools + mcp_tools + skill_tools
+        all_tools = list(dict.fromkeys(agent_tools + mcp_tools + skill_tools))
 
         # 取得需要的 MCP server 集合（按需載入）
         required_mcp_servers = await get_mcp_servers_for_user(app_permissions)
@@ -537,6 +545,7 @@ async def process_message_with_ai(
             model=model,
             response=response,
             duration_ms=duration_ms,
+            tool_routing=tool_routing,
         )
 
         # 檢查 nanobanana 是否有錯誤（overloaded/timeout）
@@ -744,6 +753,7 @@ async def log_linebot_ai_call(
     response,
     duration_ms: int,
     context_type_override: str | None = None,
+    tool_routing: dict | None = None,
 ) -> None:
     """
     記錄 Line Bot AI 調用到 AI Log
@@ -759,6 +769,7 @@ async def log_linebot_ai_call(
         model: 使用的模型
         response: Claude 回應物件
         duration_ms: 耗時（毫秒）
+        tool_routing: 工具路由決策資訊（script-first / fallback）
     """
     try:
         # 根據對話類型取得對應的 Agent
@@ -769,7 +780,7 @@ async def log_linebot_ai_call(
 
         # 將 tool_calls 和 tool_timings 轉換為可序列化的格式
         parsed_response = None
-        if response.tool_calls or response.tool_timings:
+        if response.tool_calls or response.tool_timings or tool_routing:
             parsed_response = {}
             if response.tool_calls:
                 parsed_response["tool_calls"] = [
@@ -783,6 +794,8 @@ async def log_linebot_ai_call(
                 ]
             if response.tool_timings:
                 parsed_response["tool_timings"] = response.tool_timings
+            if tool_routing:
+                parsed_response["tool_routing"] = tool_routing
 
         # 組合完整輸入（含歷史對話）
         if history:

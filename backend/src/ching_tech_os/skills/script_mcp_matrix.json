@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "route_policy": "script-first",
+  "capabilities": [
+    {
+      "name": "get_message_attachments",
+      "skill": "base",
+      "script": "get_message_attachments",
+      "script_first": true,
+      "fallback_mcp_tool": "get_message_attachments"
+    },
+    {
+      "name": "summarize_chat",
+      "skill": "base",
+      "script": "summarize_chat",
+      "script_first": true,
+      "fallback_mcp_tool": "summarize_chat"
+    },
+    {
+      "name": "create_share_link",
+      "skill": "share-links",
+      "script": "create_share_link",
+      "script_first": true,
+      "fallback_mcp_tool": "create_share_link"
+    },
+    {
+      "name": "search_nas_files",
+      "skill": "file-manager",
+      "script": "search_nas_files",
+      "script_first": true,
+      "fallback_mcp_tool": "search_nas_files"
+    },
+    {
+      "name": "get_nas_file_info",
+      "skill": "file-manager",
+      "script": "get_nas_file_info",
+      "script_first": true,
+      "fallback_mcp_tool": "get_nas_file_info"
+    },
+    {
+      "name": "prepare_file_message",
+      "skill": "file-manager",
+      "script": "prepare_file_message",
+      "script_first": true,
+      "fallback_mcp_tool": "prepare_file_message"
+    },
+    {
+      "name": "convert_pdf_to_images",
+      "skill": "pdf-converter",
+      "script": "convert_pdf_to_images",
+      "script_first": true,
+      "fallback_mcp_tool": "convert_pdf_to_images"
+    },
+    {
+      "name": "project-management",
+      "skill": "project",
+      "script": null,
+      "script_first": false,
+      "fallback_mcp_tool": null,
+      "notes": "跨系統 ERPNext 整合，保留 MCP-only"
+    },
+    {
+      "name": "inventory-management",
+      "skill": "inventory",
+      "script": null,
+      "script_first": false,
+      "fallback_mcp_tool": null,
+      "notes": "跨系統 ERPNext 整合，保留 MCP-only"
+    },
+    {
+      "name": "printer",
+      "skill": "printer",
+      "script": null,
+      "script_first": false,
+      "fallback_mcp_tool": null,
+      "notes": "印表機整合，保留 MCP-only"
+    }
+  ]
+}

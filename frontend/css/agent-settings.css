@@ -691,7 +691,7 @@
 .skill-edit-modal-overlay {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--bg-overlay-dark);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -873,6 +873,10 @@
 
 .skill-detail-header-bar .skill-reload-btn:hover {
   opacity: 1;
+}
+
+.skill-mobile-action-bar {
+  display: none;
 }
 
 /* ==========================================================================
@@ -1066,6 +1070,46 @@
   .skill-mobile-back-btn .icon svg {
     width: 20px;
     height: 20px;
+  }
+
+  .skill-main {
+    padding-bottom: calc(76px + env(safe-area-inset-bottom));
+  }
+
+  .skill-detail {
+    padding-bottom: calc(96px + env(safe-area-inset-bottom));
+  }
+
+  .skill-mobile-action-bar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-sm);
+    padding-bottom: calc(var(--spacing-sm) + env(safe-area-inset-bottom));
+    background: var(--bg-surface-dark);
+    border-top: 1px solid var(--border-subtle);
+    z-index: 15;
+  }
+
+  .skill-mobile-action-bar .btn {
+    flex: 1;
+    min-height: 44px;
+    justify-content: center;
+  }
+
+  .skill-edit-modal-overlay.skill-edit-bottom-sheet {
+    align-items: flex-end;
+  }
+
+  .skill-edit-modal-overlay.skill-edit-bottom-sheet .skill-edit-modal {
+    width: 100%;
+    max-width: none;
+    max-height: 78%;
+    border-radius: 14px 14px 0 0;
+    border-bottom: none;
   }
 
   /* Hub 搜尋結果全寬 */

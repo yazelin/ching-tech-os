@@ -214,7 +214,8 @@ async def get_skill(name: str, session: SessionData = Depends(require_admin)):
     script_tools = await sm.get_scripts_info(name)
 
     # 讀取 _meta.json
-    meta = read_meta(sm.skills_dir / name)
+    skill_dir = await sm.get_skill_dir(name)
+    meta = read_meta(skill_dir) if skill_dir else {}
 
     return {
         "name": skill.name,
@@ -245,7 +246,8 @@ async def get_skill_meta(name: str, session: SessionData = Depends(require_admin
     if not skill:
         raise HTTPException(status_code=404, detail=f"Skill '{name}' not found")
 
-    meta = read_meta(sm.skills_dir / name)
+    skill_dir = await sm.get_skill_dir(name)
+    meta = read_meta(skill_dir) if skill_dir else {}
     return {"name": name, "meta": meta}
 
 
@@ -435,6 +437,7 @@ async def hub_install(
             # 檢查是否已安裝（在鎖內檢查，避免 TOCTOU）
             existing = await sm.get_skill(data.name)
             dest = sm.skills_dir / data.name
+            sm.skills_dir.mkdir(parents=True, exist_ok=True)
             if existing or dest.exists():
                 raise HTTPException(
                     status_code=409,

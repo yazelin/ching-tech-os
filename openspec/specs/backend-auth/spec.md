@@ -290,6 +290,11 @@ TBD - created by archiving change add-backend-nas-auth. Update Purpose after arc
 ### Requirement: 使用者 App 權限控制
 系統 SHALL 支援為每個使用者設定獨立的 App 權限，權限限制適用於 Web UI、後端 API 和 Line Bot AI。
 
+#### Scenario: 更新 App 權限立即生效
+- **WHEN** 管理員更新某使用者的 app 權限設定
+- **THEN** 後續 Web UI 顯示、API 存取與 Line Bot 工具白名單立即套用新權限
+- **AND** 不需重啟服務
+
 ---
 
 ### Requirement: 後端 API App 權限檢查

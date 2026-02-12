@@ -26,7 +26,11 @@ from ..bot_line import (
     save_file_record,
     verify_binding_code,
 )
-from ..linebot_agents import get_mcp_servers_for_user, get_tools_for_user
+from ..linebot_agents import (
+    get_mcp_servers_for_user,
+    get_tools_for_user,
+    get_tool_routing_for_user,
+)
 from ..mcp import get_mcp_tool_names
 from ..permissions import get_mcp_tools_for_user, get_user_app_permissions_sync
 from ..user import get_user_role_and_permissions
@@ -719,9 +723,13 @@ async def _handle_text_with_ai(
     # 內建 MCP 工具（ching-tech-os server）
     mcp_tools = await get_mcp_tool_names(exclude_group_only=not is_group)
     mcp_tools = get_mcp_tools_for_user(user_role, user_permissions, mcp_tools)
+    tool_routing = await get_tool_routing_for_user(app_permissions)
+    suppressed_tools = set(tool_routing.get("suppressed_mcp_tools") or [])
+    if suppressed_tools:
+        mcp_tools = [tool for tool in mcp_tools if tool not in suppressed_tools]
     # 外部 MCP 工具（由 SkillManager 動態產生，含 fallback）
     skill_tools = await get_tools_for_user(app_permissions)
-    all_tools = builtin_tools + mcp_tools + skill_tools
+    all_tools = list(dict.fromkeys(builtin_tools + mcp_tools + skill_tools))
 
     # 取得需要的 MCP server 集合（按需載入）
     required_mcp_servers = await get_mcp_servers_for_user(app_permissions)
@@ -825,6 +833,7 @@ async def _handle_text_with_ai(
                 response=response,
                 duration_ms=duration_ms,
                 context_type_override=context_type,
+                tool_routing=tool_routing,
             )
         except Exception as e:
             logger.error(f"記錄 AI Log 失敗: {e}", exc_info=True)
