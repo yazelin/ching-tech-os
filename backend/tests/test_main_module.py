@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -11,15 +12,40 @@ import pytest
 from fastapi import FastAPI
 from starlette.requests import Request
 
-from ching_tech_os import main
 from ching_tech_os.services.errors import ServiceError
 
 
+def _load_main(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    from ching_tech_os.config import settings
+
+    frontend = tmp_path / "frontend"
+    for d in ("css", "js", "fonts", "assets", "src"):
+        (frontend / d).mkdir(parents=True, exist_ok=True)
+    (frontend / "login.html").write_text("login", encoding="utf-8")
+    (frontend / "index.html").write_text("index", encoding="utf-8")
+    (frontend / "public.html").write_text(
+        (
+            '<meta property="og:title" content="擎添工業 - 分享內容">'
+            '<meta property="og:description" content="此為擎添工業內部分享的文件或專案資訊">'
+            "<title>擎添工業 - 分享內容</title>"
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(settings, "frontend_dir", str(frontend))
+    monkeypatch.setattr(settings, "project_attachments_path", str(tmp_path / "project-attachments"))
+    monkeypatch.setattr(settings, "knowledge_data_path", str(tmp_path / "knowledge-data"))
+    monkeypatch.setattr(settings, "ctos_mount_path", str(tmp_path))
+    monkeypatch.setattr(settings, "line_files_nas_path", "")
+    monkeypatch.setattr(settings, "knowledge_nas_path", "k")
+    monkeypatch.setattr(settings, "project_nas_path", "p")
+
+    import ching_tech_os.main as main_module
+    return importlib.reload(main_module)
+
+
 def test_ensure_directories(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(main.settings, "knowledge_nas_path", "k")
-    monkeypatch.setattr(main.settings, "project_nas_path", "p")
-    monkeypatch.setattr(main.settings, "ctos_mount_path", str(tmp_path))
-    monkeypatch.setattr(main.settings, "line_files_nas_path", "")
+    main = _load_main(monkeypatch, tmp_path)
     main.ensure_directories()
     assert (tmp_path / "k").exists()
     assert (tmp_path / "p").exists()
@@ -27,7 +53,8 @@ def test_ensure_directories(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> 
 
 
 @pytest.mark.asyncio
-async def test_service_error_handler() -> None:
+async def test_service_error_handler(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    main = _load_main(monkeypatch, tmp_path)
     req = Request({"type": "http", "method": "GET", "path": "/x", "headers": [], "query_string": b"", "scheme": "http", "server": ("test", 80)})
     resp = await main.service_error_handler(req, ServiceError("錯誤", code="X", status_code=418))
     assert resp.status_code == 418
@@ -35,6 +62,7 @@ async def test_service_error_handler() -> None:
 
 @pytest.mark.asyncio
 async def test_lifespan_startup_shutdown(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    main = _load_main(monkeypatch, tmp_path)
     app = FastAPI()
 
     monkeypatch.setattr(main.settings, "bot_secret_key", "")
@@ -92,10 +120,8 @@ async def test_lifespan_startup_shutdown(monkeypatch: pytest.MonkeyPatch, tmp_pa
 
 @pytest.mark.asyncio
 async def test_pages_and_short_share_url(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    main = _load_main(monkeypatch, tmp_path)
     frontend = tmp_path / "frontend"
-    frontend.mkdir(parents=True, exist_ok=True)
-    (frontend / "login.html").write_text("login", encoding="utf-8")
-    (frontend / "index.html").write_text("index", encoding="utf-8")
     (frontend / "public.html").write_text(
         (
             '<meta property="og:title" content="擎添工業 - 分享內容">'
