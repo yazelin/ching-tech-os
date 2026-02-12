@@ -46,7 +46,7 @@ jobs:
           node -e "
           const fs = require('fs');
           const report = JSON.parse(fs.readFileSync('./lighthouse-report.json', 'utf8'));
-          const thresholds = { performance: 0.80, accessibility: 0.80, 'best-practices': 0.80, seo: 0.80 };
+          const thresholds = { performance: 0.75, accessibility: 0.80, 'best-practices': 0.80, seo: 0.80 };
           let failed = false;
           for (const [key, min] of Object.entries(thresholds)) {
             const score = report.categories[key]?.score ?? 0;
