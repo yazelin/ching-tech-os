@@ -21,6 +21,13 @@
         "set -a && source /path/to/ching-tech-os/.env && set +a && uvx nanobanana-py"
       ]
     },
+    "playwright": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "@playwright/mcp@latest"
+      ]
+    },
     "printer": {
       "type": "stdio",
       "command": "uvx",
