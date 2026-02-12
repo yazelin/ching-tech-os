@@ -44,8 +44,11 @@ npm run build
 # 後端全量測試
 npm run test:backend
 
-# 後端 coverage 測試（門檻 20%）
+# 後端 coverage 測試（門檻 21%）
 npm run test:backend:cov
+
+# 下一階門檻預檢（22%，不作為目前 CI Gate）
+npm run test:backend:cov:next
 ```
 
 ### 單一測試（快速迭代）
@@ -77,13 +80,18 @@ uv run pytest -k permissions -v
 2. `uv sync` 安裝後端依賴
 3. 執行 pytest + coverage：
    - `--cov=src/ching_tech_os`
-   - `--cov-fail-under=20`
+   - `--cov-fail-under=21`
    - 產生 `coverage.xml`、`htmlcov/`、`pytest-report.xml`
 4. 上傳測試報告 artifacts（供下載檢查）
 
 > 既有 `lighthouse.yml` 會繼續處理前端 Lighthouse 品質檢查。
 
 ## 4. 提高測試率的落地規則
+
+### Coverage 門檻拉升節奏（Step-by-step）
+- **目前 CI Gate**：21%
+- **下一階預檢**：22%（使用 `npm run test:backend:cov:next`）
+- **建議拉升規則**：當 `cov:next` 在主分支連續穩定通過後，再把 CI Gate 提升到同等門檻（每次 +1%）。
 
 ### 後端 API / Service 變更
 - 新增或修改 API 路由時，至少補對應 `backend/tests/` 測試（成功與錯誤情境）。
