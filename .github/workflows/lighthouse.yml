@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+
 jobs:
   lighthouse:
     name: Run Lighthouse and upload reports
@@ -28,7 +31,7 @@ jobs:
       - name: Start static server
         run: |
           npx http-server frontend/dist -p 8000 -a 127.0.0.1 --silent > http-server.log 2>&1 &
-          echo "HTTP_SERVER_PID=$!" > server.pid
+          echo "$!" > server.pid
           for i in {1..10}; do
             if curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/ | grep -q 200; then
               echo "server ready" && break;
@@ -73,6 +76,6 @@ jobs:
         if: always()
         run: |
           if [ -f server.pid ]; then
-            kill $(cat server.pid) || true
+            kill "$(cat server.pid)" || true
           fi
           sleep 1

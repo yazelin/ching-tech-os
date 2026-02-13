@@ -16,7 +16,7 @@
 # repo 根目錄
 npm ci
 
-# 前端 Vite 工具鏈
+# 前端依賴（目前由根目錄 `scripts/build-frontend.mjs` 以 esbuild 打包）
 cd frontend && npm ci && cd ..
 
 # 後端（含 dev 依賴）

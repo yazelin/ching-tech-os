@@ -19,6 +19,14 @@ logger = logging.getLogger(__name__)
 
 _VALID_NAME_RE = re.compile(r"^[a-z0-9]([a-z0-9_-]*[a-z0-9])?$")
 _DEFAULT_TIMEOUT = 30
+_PROTECTED_ENV_KEYS = {
+    "PATH",
+    "HOME",
+    "PYTHONPATH",
+    "PYTHONHOME",
+    "VIRTUAL_ENV",
+    "LD_PRELOAD",
+}
 
 
 class ScriptRunner:
@@ -100,6 +108,18 @@ class ScriptRunner:
             return ["bash", str(script_path)]
         return None
 
+    @staticmethod
+    def _filter_env_overrides(env_overrides: dict[str, str]) -> dict[str, str]:
+        """過濾不可覆蓋的關鍵環境變數。"""
+        filtered: dict[str, str] = {}
+        for key, value in env_overrides.items():
+            upper_key = key.upper()
+            if upper_key in _PROTECTED_ENV_KEYS or upper_key.startswith("LD_"):
+                logger.warning("Ignore protected env override: %s", key)
+                continue
+            filtered[key] = value
+        return filtered
+
     async def execute_path(
         self,
         script_path: Path,
@@ -140,7 +160,7 @@ class ScriptRunner:
             else backend_src
         )
         if env_overrides:
-            env.update(env_overrides)
+            env.update(self._filter_env_overrides(env_overrides))
 
         # 在暫存目錄中執行（安全隔離，防止寫入 skill 目錄）
         start = time.monotonic()
