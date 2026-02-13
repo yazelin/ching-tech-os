@@ -29,6 +29,10 @@ class _CM:
         return None
 
 
+def _normalize_sql(sql: str) -> str:
+    return " ".join(sql.split())
+
+
 def _now() -> datetime:
     return datetime.now()
 
@@ -103,21 +107,87 @@ def _log_dict(lid, aid) -> dict:
 async def test_ai_chat_service_paths(monkeypatch: pytest.MonkeyPatch) -> None:
     chat_id = uuid4()
     conn = AsyncMock()
-    conn.fetch = AsyncMock(side_effect=[
-        [{"id": uuid4(), "name": "agent-a", "display_name": "A", "description": None, "model": "m", "is_active": True}],  # get_available_agents
-        [{"id": chat_id, "user_id": 1, "title": "t", "model": "m", "prompt_name": "p", "created_at": _now(), "updated_at": _now()}],  # get_user_chats
-    ])
-    conn.fetchrow = AsyncMock(side_effect=[
-        {"content": "sys"},  # get_agent_system_prompt
-        {"id": uuid4(), "name": "agent-a", "display_name": "A", "model": "m", "is_active": True, "tools": '["t"]', "settings": '{"x":1}', "system_prompt": "sys"},  # get_agent_config
-        {"id": chat_id, "user_id": 1, "title": "new", "model": "claude-sonnet", "prompt_name": "default", "messages": "[]", "created_at": _now(), "updated_at": _now()},  # create_chat
-        {"id": chat_id, "user_id": 1, "title": "new", "model": "claude-sonnet", "prompt_name": "default", "messages": '[{"role":"user","content":"x","timestamp":1}]', "created_at": _now(), "updated_at": _now()},  # get_chat
-        {"id": chat_id, "user_id": 1, "title": "u", "model": "m2", "prompt_name": "p2", "messages": "[]", "created_at": _now(), "updated_at": _now()},  # update_chat
-        {"id": chat_id, "user_id": 1, "title": "u", "model": "m2", "prompt_name": "p2", "messages": '[{"role":"assistant","content":"ok","timestamp":2}]', "created_at": _now(), "updated_at": _now()},  # update_chat_messages
-        {"id": chat_id, "user_id": 1, "title": "u", "model": "m2", "prompt_name": "p2", "messages": "[]", "created_at": _now(), "updated_at": _now()},  # get_chat for append
-        {"id": chat_id, "user_id": 1, "title": "u", "model": "m2", "prompt_name": "p2", "messages": '[{"role":"user","content":"new","timestamp":3}]', "created_at": _now(), "updated_at": _now()},  # update_chat_messages for append
-    ])
-    conn.execute = AsyncMock(side_effect=["DELETE 1", "UPDATE 1"])
+
+    async def _fetch(query: str, *args):
+        sql = _normalize_sql(query)
+        if "FROM ai_agents" in sql and "WHERE is_active = true" in sql:
+            return [{"id": uuid4(), "name": "agent-a", "display_name": "A", "description": None, "model": "m", "is_active": True}]
+        if "FROM ai_chats" in sql and "ORDER BY updated_at DESC" in sql and args == (1,):
+            return [{"id": chat_id, "user_id": 1, "title": "t", "model": "m", "prompt_name": "p", "created_at": _now(), "updated_at": _now()}]
+        raise AssertionError(f"Unexpected fetch SQL: {sql}")
+
+    async def _fetchrow(query: str, *args):
+        sql = _normalize_sql(query)
+        if "SELECT p.content FROM ai_agents a LEFT JOIN ai_prompts p" in sql:
+            return {"content": "sys"}
+        if "SELECT a.id, a.name, a.display_name, a.model, a.is_active, a.tools, a.settings," in sql:
+            return {
+                "id": uuid4(),
+                "name": "agent-a",
+                "display_name": "A",
+                "model": "m",
+                "is_active": True,
+                "tools": '["t"]',
+                "settings": '{"x":1}',
+                "system_prompt": "sys",
+            }
+        if sql.startswith("INSERT INTO ai_chats"):
+            return {
+                "id": chat_id,
+                "user_id": 1,
+                "title": "new",
+                "model": "claude-sonnet",
+                "prompt_name": "default",
+                "messages": "[]",
+                "created_at": _now(),
+                "updated_at": _now(),
+            }
+        if sql.startswith("SELECT id, user_id, title, model, prompt_name, messages, created_at, updated_at FROM ai_chats WHERE id = $1 AND user_id = $2"):
+            return {
+                "id": chat_id,
+                "user_id": 1,
+                "title": "new",
+                "model": "claude-sonnet",
+                "prompt_name": "default",
+                "messages": '[{"role":"user","content":"x","timestamp":1}]',
+                "created_at": _now(),
+                "updated_at": _now(),
+            }
+        if sql.startswith("UPDATE ai_chats") and "SET title = $1, updated_at = NOW()" in sql:
+            return {
+                "id": chat_id,
+                "user_id": 1,
+                "title": "u",
+                "model": "m2",
+                "prompt_name": "p2",
+                "messages": "[]",
+                "created_at": _now(),
+                "updated_at": _now(),
+            }
+        if sql.startswith("UPDATE ai_chats") and "SET messages = $1::jsonb, updated_at = NOW()" in sql:
+            return {
+                "id": chat_id,
+                "user_id": 1,
+                "title": "u",
+                "model": "m2",
+                "prompt_name": "p2",
+                "messages": args[0],
+                "created_at": _now(),
+                "updated_at": _now(),
+            }
+        raise AssertionError(f"Unexpected fetchrow SQL: {sql}")
+
+    async def _execute(query: str, *_args):
+        sql = _normalize_sql(query)
+        if sql.startswith("DELETE FROM ai_chats"):
+            return "DELETE 1"
+        if sql.startswith("UPDATE ai_chats") and "SET title = $1, updated_at = NOW()" in sql:
+            return "UPDATE 1"
+        raise AssertionError(f"Unexpected execute SQL: {sql}")
+
+    conn.fetch = AsyncMock(side_effect=_fetch)
+    conn.fetchrow = AsyncMock(side_effect=_fetchrow)
+    conn.execute = AsyncMock(side_effect=_execute)
     monkeypatch.setattr(ai_chat, "get_connection", lambda: _CM(conn))
 
     agents = await ai_chat.get_available_agents()
@@ -132,7 +202,7 @@ async def test_ai_chat_service_paths(monkeypatch: pytest.MonkeyPatch) -> None:
     assert (await ai_chat.update_chat(chat_id, 1, title="u"))["title"] == "u"
     assert (await ai_chat.update_chat_messages(chat_id, [{"role": "assistant", "content": "ok", "timestamp": 2}], 1))["messages"][0]["role"] == "assistant"
     appended = await ai_chat.append_message(chat_id, "user", "new", 1)
-    assert appended is not None and appended["messages"][0]["content"] == "new"
+    assert appended is not None and appended["messages"][-1]["content"] == "new"
     assert await ai_chat.update_chat_title(chat_id, "t2", 1) is True
 
     # update_chat 無更新欄位
