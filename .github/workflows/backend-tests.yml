@@ -15,7 +15,7 @@ jobs:
     name: Backend pytest with coverage
     runs-on: ubuntu-latest
     env:
-      COVERAGE_FAIL_UNDER: "80"
+      COVERAGE_FAIL_UNDER: "81"
 
     defaults:
       run:
