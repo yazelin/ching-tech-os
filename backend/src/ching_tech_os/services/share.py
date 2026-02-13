@@ -4,6 +4,7 @@ import secrets
 import string
 import bcrypt
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
 
 from pathlib import Path
 

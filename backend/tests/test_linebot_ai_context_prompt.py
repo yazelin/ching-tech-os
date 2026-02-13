@@ -189,3 +189,34 @@ async def test_build_system_prompt_personal_unbound(monkeypatch: pytest.MonkeyPa
     assert "【自訂記憶】" in prompt
     assert "【網頁讀取】" not in prompt
 
+
+@pytest.mark.asyncio
+async def test_build_system_prompt_group_unbound_and_personal_bound(monkeypatch: pytest.MonkeyPatch) -> None:
+    # 群組：未關聯帳號分支（ctos_user_id: （未關聯））
+    monkeypatch.setattr(linebot_ai, "get_line_user_record", AsyncMock(return_value={"id": "u3", "user_id": None}))
+    monkeypatch.setattr(
+        "ching_tech_os.services.bot_line.get_active_group_memories",
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        "ching_tech_os.services.bot_line.get_active_user_memories",
+        AsyncMock(return_value=[]),
+    )
+    conn = AsyncMock()
+    conn.fetchrow = AsyncMock(return_value={"name": "群組B"})
+    monkeypatch.setattr(linebot_ai, "get_connection", lambda: _CM(conn))
+    prompt_group = await linebot_ai.build_system_prompt(
+        line_group_id=uuid4(),
+        line_user_id="U3",
+        base_prompt="G",
+    )
+    assert "ctos_user_id: （未關聯）" in prompt_group
+
+    # 個人：已關聯帳號分支（ctos_user_id: 777）
+    monkeypatch.setattr(linebot_ai, "get_line_user_record", AsyncMock(return_value={"id": "u4", "user_id": 777}))
+    prompt_personal = await linebot_ai.build_system_prompt(
+        line_group_id=None,
+        line_user_id="U4",
+        base_prompt="P",
+    )
+    assert "ctos_user_id: 777" in prompt_personal
