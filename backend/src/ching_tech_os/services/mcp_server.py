@@ -2743,11 +2743,12 @@ async def share_knowledge_attachment(
 
         # 根據檔案類型產生前端 URL
         from ..config import settings
+        env_param = "&trial" if "/trial" in settings.public_url else ""
         if ext == ".md2ppt":
-            app_url = f"{settings.md2ppt_url}/?shareToken={result.token}"
+            app_url = f"{settings.md2ppt_url}/?shareToken={result.token}{env_param}"
             app_name = "MD2PPT"
         else:  # .md2doc
-            app_url = f"{settings.md2doc_url}/?shareToken={result.token}"
+            app_url = f"{settings.md2doc_url}/?shareToken={result.token}{env_param}"
             app_name = "MD2DOC"
 
         # 轉換為台北時區顯示
@@ -6659,7 +6660,8 @@ async def generate_md2ppt(
 
         # 產生 MD2PPT 連結
         from ..config import settings
-        md2ppt_url = f"{settings.md2ppt_url}/?shareToken={share_link.token}"
+        env_param = "&trial" if "/trial" in settings.public_url else ""
+        md2ppt_url = f"{settings.md2ppt_url}/?shareToken={share_link.token}{env_param}"
 
         # 同時保存檔案到 NAS，以便加入知識庫附件
         from pathlib import Path
@@ -6762,7 +6764,8 @@ async def generate_md2doc(
 
         # 產生 MD2DOC 連結
         from ..config import settings
-        md2doc_url = f"{settings.md2doc_url}/?shareToken={share_link.token}"
+        env_param = "&trial" if "/trial" in settings.public_url else ""
+        md2doc_url = f"{settings.md2doc_url}/?shareToken={share_link.token}{env_param}"
 
         # 同時保存檔案到 NAS，以便加入知識庫附件
         from pathlib import Path
