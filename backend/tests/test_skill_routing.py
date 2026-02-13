@@ -168,3 +168,33 @@ async def test_run_skill_script_fallback_to_mcp(monkeypatch):
     assert payload["output"] == "share-link-created"
     assert payload["route"]["fallback_used"] is True
     assert payload["route"]["fallback_tool"] == "create_share_link"
+
+
+@pytest.mark.asyncio
+async def test_run_skill_script_denies_when_requires_app_without_user_id(monkeypatch):
+    """requires_app 的 skill 若缺少 ctos_user_id，應直接拒絕。"""
+
+    skill_obj = SimpleNamespace(
+        name="secure-skill",
+        requires_app="file-manager",
+        metadata={"ctos": {}},
+    )
+
+    class FakeSkillManager:
+        async def get_skill(self, _name):
+            return skill_obj
+
+    monkeypatch.setattr(
+        "ching_tech_os.skills.get_skill_manager",
+        lambda: FakeSkillManager(),
+    )
+
+    raw = await skill_script_tools.run_skill_script(
+        skill="secure-skill",
+        script="read_secret",
+        input="{}",
+        ctos_user_id=None,
+    )
+    payload = json.loads(raw)
+    assert payload["success"] is False
+    assert "缺少使用者身分" in payload["error"]

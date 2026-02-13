@@ -23,6 +23,37 @@ except (ImportError, ModuleNotFoundError):
 _SCRIPT_RUNNER_TOOL = "mcp__ching-tech-os__run_skill_script"
 
 
+def _normalize_ching_tool_name(tool_name: str) -> str:
+    if tool_name.startswith("mcp__"):
+        return tool_name
+    return f"mcp__ching-tech-os__{tool_name}"
+
+
+async def _calculate_tool_routing_state(sm, skills) -> dict:
+    route_state = {
+        "policy": settings.skill_route_policy,
+        "fallback_enabled": settings.skill_script_fallback_enabled,
+        "has_script_skills": False,
+        "script_skill_count": 0,
+        "script_mcp_overlap": [],
+        "suppressed_mcp_tools": [],
+    }
+    overlap: set[str] = set()
+    for skill in skills:
+        if not skill.scripts:
+            continue
+        route_state["has_script_skills"] = True
+        route_state["script_skill_count"] += 1
+        fallback_map = await sm.get_script_fallback_map(skill.name)
+        for fallback_tool in fallback_map.values():
+            overlap.add(_normalize_ching_tool_name(fallback_tool))
+
+    route_state["script_mcp_overlap"] = sorted(overlap)
+    if route_state["policy"] == "script-first":
+        route_state["suppressed_mcp_tools"] = sorted(overlap)
+    return route_state
+
+
 # ============================================================
 # 按 App 權限分類的工具說明 Prompt 區塊
 # ============================================================
@@ -606,35 +637,6 @@ async def get_tools_for_user(
     def _dedupe(tools: list[str]) -> list[str]:
         return list(dict.fromkeys(tools))
 
-    def _normalize_ching_tool_name(tool_name: str) -> str:
-        if tool_name.startswith("mcp__"):
-            return tool_name
-        return f"mcp__ching-tech-os__{tool_name}"
-
-    async def _build_route_state(skills) -> dict:
-        route_state = {
-            "policy": settings.skill_route_policy,
-            "fallback_enabled": settings.skill_script_fallback_enabled,
-            "has_script_skills": False,
-            "script_skill_count": 0,
-            "script_mcp_overlap": [],
-            "suppressed_mcp_tools": [],
-        }
-        overlap: set[str] = set()
-        for skill in skills:
-            if not skill.scripts:
-                continue
-            route_state["has_script_skills"] = True
-            route_state["script_skill_count"] += 1
-            fallback_map = await sm.get_script_fallback_map(skill.name)
-            for fallback_tool in fallback_map.values():
-                overlap.add(_normalize_ching_tool_name(fallback_tool))
-
-        route_state["script_mcp_overlap"] = sorted(overlap)
-        if route_state["policy"] == "script-first":
-            route_state["suppressed_mcp_tools"] = sorted(overlap)
-        return route_state
-
     # 優先使用 SkillManager
     if _HAS_SKILL_MANAGER:
         try:
@@ -644,7 +646,7 @@ async def get_tools_for_user(
             for skill in skills:
                 tools.extend(skill.allowed_tools)
 
-            route_state = await _build_route_state(skills)
+            route_state = await _calculate_tool_routing_state(sm, skills)
             if route_state["has_script_skills"]:
                 tools.append(_SCRIPT_RUNNER_TOOL)
 
@@ -689,22 +691,7 @@ async def get_tool_routing_for_user(
     try:
         sm = get_skill_manager()
         skills = await sm.get_skills_for_user(app_permissions)
-        overlap: set[str] = set()
-        for skill in skills:
-            if not skill.scripts:
-                continue
-            route_state["has_script_skills"] = True
-            route_state["script_skill_count"] += 1
-            fallback_map = await sm.get_script_fallback_map(skill.name)
-            for fallback_tool in fallback_map.values():
-                if fallback_tool.startswith("mcp__"):
-                    overlap.add(fallback_tool)
-                else:
-                    overlap.add(f"mcp__ching-tech-os__{fallback_tool}")
-
-        route_state["script_mcp_overlap"] = sorted(overlap)
-        if route_state["policy"] == "script-first":
-            route_state["suppressed_mcp_tools"] = sorted(overlap)
+        route_state = await _calculate_tool_routing_state(sm, skills)
     except (OSError, ValueError, RuntimeError) as e:
         logger.warning(f"取得工具路由決策失敗: {e}")
 
