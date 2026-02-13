@@ -280,6 +280,70 @@ class TestSessionManagerDelete:
 
 
 # ============================================================
+# SessionManager 其他方法測試
+# ============================================================
+
+class _CancelledTask:
+    def __init__(self):
+        self.cancel_called = False
+
+    def cancel(self):
+        self.cancel_called = True
+
+    def __await__(self):
+        async def _inner():
+            raise asyncio.CancelledError()
+        return _inner().__await__()
+
+
+class TestSessionManagerMaintenance:
+    @pytest.mark.asyncio
+    async def test_cleanup_expired_and_active_count(self, session_manager):
+        conn, cm = _make_mock_connection()
+        conn.execute = AsyncMock(side_effect=["DELETE 5", "BROKEN"])
+        conn.fetchval = AsyncMock(side_effect=[3, None])
+
+        with patch("ching_tech_os.services.session.get_connection", return_value=cm):
+            assert await session_manager.cleanup_expired() == 5
+            assert await session_manager.cleanup_expired() == 0
+            assert await session_manager.get_active_session_count() == 3
+            assert await session_manager.get_active_session_count() == 0
+
+    @pytest.mark.asyncio
+    async def test_start_cleanup_task_and_stop_cleanup_task(self, session_manager, monkeypatch):
+        logger_info = MagicMock()
+        logger_error = MagicMock()
+        monkeypatch.setattr("ching_tech_os.services.session.logger.info", logger_info)
+        monkeypatch.setattr("ching_tech_os.services.session.logger.error", logger_error)
+        monkeypatch.setattr("ching_tech_os.services.session.settings.session_cleanup_interval_minutes", 0)
+        session_manager.cleanup_expired = AsyncMock(side_effect=[1, Exception("boom"), asyncio.CancelledError()])
+
+        await session_manager.start_cleanup_task()
+        await asyncio.sleep(0.05)
+
+        assert logger_info.called
+        assert logger_error.called
+
+        # 任務已結束時再次 stop 應可安全處理
+        await session_manager.stop_cleanup_task()
+        assert session_manager._cleanup_task is None
+
+    @pytest.mark.asyncio
+    async def test_start_cleanup_task_when_already_started(self, session_manager):
+        session_manager._cleanup_task = object()
+        await session_manager.start_cleanup_task()
+        assert session_manager._cleanup_task is not None
+
+    @pytest.mark.asyncio
+    async def test_stop_cleanup_task_cancelled(self, session_manager):
+        task = _CancelledTask()
+        session_manager._cleanup_task = task
+        await session_manager.stop_cleanup_task()
+        assert task.cancel_called is True
+        assert session_manager._cleanup_task is None
+
+
+# ============================================================
 # nas_connect 非阻塞測試
 # ============================================================
 

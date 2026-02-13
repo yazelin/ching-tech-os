@@ -29,6 +29,8 @@ from ching_tech_os.services.share import (
     ShareLinkLockedError,
     ShareLinkNotFoundError,
 )
+from ching_tech_os.services.knowledge import KnowledgeNotFoundError, KnowledgeError
+from ching_tech_os.services.project import ProjectError
 
 
 def _build_app(session: SimpleNamespace) -> FastAPI:
@@ -117,6 +119,11 @@ async def test_create_link_error_branches(monkeypatch: pytest.MonkeyPatch) -> No
         resp = await client.post("/api/share", json={"resource_type": "content", "content": "x"})
         assert resp.status_code == 500
 
+    monkeypatch.setattr(share_api, "get_knowledge", lambda _rid: (_ for _ in ()).throw(KnowledgeNotFoundError("missing")))
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post("/api/share", json={"resource_type": "knowledge", "resource_id": "kb404"})
+        assert resp.status_code == 404
+
 
 @pytest.mark.asyncio
 async def test_list_and_delete_routes(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -146,6 +153,20 @@ async def test_list_and_delete_routes(monkeypatch: pytest.MonkeyPatch) -> None:
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.delete("/api/share/x")
         assert resp.status_code == 403
+
+    # 非管理員看 all 仍走 list_my_links
+    user_app = _build_app(SimpleNamespace(role="user", username="u1", user_id=1))
+    user_transport = ASGITransport(app=user_app)
+    monkeypatch.setattr(share_api, "list_my_links", AsyncMock(return_value=ShareLinkListResponse(links=[_sample_link()])))
+    async with AsyncClient(transport=user_transport, base_url="http://test") as client:
+        resp = await client.get("/api/share?view=all")
+        assert resp.status_code == 200
+        assert resp.json()["is_admin"] is False
+
+    monkeypatch.setattr(share_api, "list_my_links", AsyncMock(side_effect=ShareError("boom")))
+    async with AsyncClient(transport=user_transport, base_url="http://test") as client:
+        resp = await client.get("/api/share")
+        assert resp.status_code == 500
 
 
 @pytest.mark.asyncio
@@ -248,3 +269,143 @@ async def test_public_attachment_and_download_routes(monkeypatch: pytest.MonkeyP
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.get("/api/public/tok/download")
         assert resp.status_code == 500
+
+
+@pytest.mark.asyncio
+async def test_get_public_attachment_additional_branches(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(
+        share_api,
+        "get_link_info",
+        AsyncMock(return_value={"resource_type": "knowledge", "resource_id": "kb1"}),
+    )
+    monkeypatch.setattr(share_api.settings, "knowledge_data_path", str(tmp_path))
+    monkeypatch.setattr(share_api, "get_nas_attachment", lambda _path: b"nas-bytes")
+
+    # local:/knowledge/assets/images
+    local_asset = tmp_path / "assets" / "images" / "kb1-ok.png"
+    local_asset.parent.mkdir(parents=True, exist_ok=True)
+    local_asset.write_bytes(b"img")
+    resp1 = await share_api.get_public_attachment("tok", "local:/knowledge/assets/images/kb1-ok.png")
+    assert resp1.body == b"img"
+
+    # local:/knowledge/images
+    resp2 = await share_api.get_public_attachment("tok", "local:/knowledge/images/kb1-ok.png")
+    assert resp2.body == b"img"
+
+    # local/images 權限錯誤
+    with pytest.raises(Exception) as exc1:
+        await share_api.get_public_attachment("tok", "local/images/not-kb1.png")
+    assert getattr(exc1.value, "status_code", None) == 403
+
+    # local/images 檔案不存在
+    with pytest.raises(Exception) as exc2:
+        await share_api.get_public_attachment("tok", "local/images/kb1-missing.png")
+    assert getattr(exc2.value, "status_code", None) == 404
+
+    # ctos://knowledge/attachments
+    resp3 = await share_api.get_public_attachment("tok", "ctos://knowledge/attachments/kb1/a.txt")
+    assert resp3.body == b"nas-bytes"
+
+    # ctos:/knowledge/attachments
+    resp3 = await share_api.get_public_attachment("tok", "ctos:/knowledge/attachments/kb1/a.txt")
+    assert resp3.body == b"nas-bytes"
+
+    # nas://knowledge
+    resp4 = await share_api.get_public_attachment("tok", "nas://knowledge/attachments/kb1/a.txt")
+    assert resp4.body == b"nas-bytes"
+
+    # nas:/knowledge
+    resp5 = await share_api.get_public_attachment("tok", "nas:/knowledge/attachments/kb1/a.txt")
+    assert resp5.body == b"nas-bytes"
+
+    # NAS 附件越權
+    with pytest.raises(Exception) as exc3:
+        await share_api.get_public_attachment("tok", "attachments/other/a.txt")
+    assert getattr(exc3.value, "status_code", None) == 403
+
+    # 非 knowledge 類型
+    monkeypatch.setattr(
+        share_api,
+        "get_link_info",
+        AsyncMock(return_value={"resource_type": "content", "resource_id": "x"}),
+    )
+    with pytest.raises(Exception) as exc4:
+        await share_api.get_public_attachment("tok", "local/images/kb1-ok.png")
+    assert getattr(exc4.value, "status_code", None) == 400
+
+    # token/知識錯誤映射
+    monkeypatch.setattr(share_api, "get_link_info", AsyncMock(side_effect=ShareLinkNotFoundError()))
+    with pytest.raises(Exception) as exc5:
+        await share_api.get_public_attachment("tok", "local/images/kb1-ok.png")
+    assert getattr(exc5.value, "status_code", None) == 404
+
+    monkeypatch.setattr(share_api, "get_link_info", AsyncMock(side_effect=ShareLinkExpiredError()))
+    with pytest.raises(Exception) as exc6:
+        await share_api.get_public_attachment("tok", "local/images/kb1-ok.png")
+    assert getattr(exc6.value, "status_code", None) == 410
+
+    monkeypatch.setattr(share_api, "get_link_info", AsyncMock(side_effect=KnowledgeError("x")))
+    with pytest.raises(Exception) as exc7:
+        await share_api.get_public_attachment("tok", "local/images/kb1-ok.png")
+    assert getattr(exc7.value, "status_code", None) == 404
+
+
+@pytest.mark.asyncio
+async def test_download_shared_file_error_mappings(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(share_api, "get_link_info", AsyncMock(side_effect=ShareLinkNotFoundError()))
+    with pytest.raises(Exception) as exc1:
+        await share_api.download_shared_file("tok")
+    assert getattr(exc1.value, "status_code", None) == 404
+
+    monkeypatch.setattr(share_api, "get_link_info", AsyncMock(side_effect=ShareLinkExpiredError()))
+    with pytest.raises(Exception) as exc2:
+        await share_api.download_shared_file("tok")
+    assert getattr(exc2.value, "status_code", None) == 410
+
+    monkeypatch.setattr(
+        share_api,
+        "get_link_info",
+        AsyncMock(return_value={"resource_type": "nas_file", "resource_id": "x"}),
+    )
+    monkeypatch.setattr(
+        share_api,
+        "validate_nas_file_path",
+        lambda _p: (_ for _ in ()).throw(NasFileNotFoundError("missing")),
+    )
+    with pytest.raises(Exception) as exc3:
+        await share_api.download_shared_file("tok")
+    assert getattr(exc3.value, "status_code", None) == 404
+
+    monkeypatch.setattr(
+        share_api,
+        "validate_nas_file_path",
+        lambda _p: (_ for _ in ()).throw(NasFileAccessDenied("deny")),
+    )
+    with pytest.raises(Exception) as exc4:
+        await share_api.download_shared_file("tok")
+    assert getattr(exc4.value, "status_code", None) == 403
+
+    monkeypatch.setattr(
+        share_api,
+        "get_link_info",
+        AsyncMock(return_value={"resource_type": "project_attachment", "resource_id": str(uuid4())}),
+    )
+    monkeypatch.setattr(
+        "ching_tech_os.services.share.get_project_attachment_info",
+        AsyncMock(side_effect=ResourceNotFoundError("gone")),
+    )
+    with pytest.raises(Exception) as exc5:
+        await share_api.download_shared_file("tok")
+    assert getattr(exc5.value, "status_code", None) == 404
+
+    monkeypatch.setattr(
+        "ching_tech_os.services.share.get_project_attachment_info",
+        AsyncMock(return_value={"project_id": uuid4()}),
+    )
+    monkeypatch.setattr(
+        "ching_tech_os.services.project.get_attachment_content",
+        AsyncMock(side_effect=ProjectError("missing")),
+    )
+    with pytest.raises(Exception) as exc6:
+        await share_api.download_shared_file("tok")
+    assert getattr(exc6.value, "status_code", None) == 404
