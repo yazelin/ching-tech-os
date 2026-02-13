@@ -170,6 +170,7 @@ ching-tech-os/
 | [docs/backend.md](docs/backend.md) | 後端開發指南、API 參考 |
 | [docs/frontend.md](docs/frontend.md) | 前端開發指南、IIFE 模組 |
 | [docs/design-system.md](docs/design-system.md) | CSS 設計系統、變數參考 |
+| [docs/testing-ci.md](docs/testing-ci.md) | 開發機安裝、測試流程與 CI 規範 |
 
 ### 架構設計
 

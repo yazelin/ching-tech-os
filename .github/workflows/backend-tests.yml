@@ -1,0 +1,58 @@
+name: Backend Test & Coverage
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend-tests:
+    name: Backend pytest with coverage
+    runs-on: ubuntu-latest
+    env:
+      COVERAGE_FAIL_UNDER: "90"
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install backend dependencies
+        run: uv sync
+
+      - name: Run pytest + coverage
+        run: |
+          uv run pytest \
+            --cov=src/ching_tech_os \
+            --cov-report=term-missing:skip-covered \
+            --cov-report=xml \
+            --cov-report=html \
+            --junitxml=pytest-report.xml \
+            --cov-fail-under=${COVERAGE_FAIL_UNDER}
+
+      - name: Upload backend test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-reports
+          path: |
+            backend/coverage.xml
+            backend/htmlcov
+            backend/pytest-report.xml

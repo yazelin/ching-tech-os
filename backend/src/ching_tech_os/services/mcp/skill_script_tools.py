@@ -5,10 +5,32 @@
 
 import json
 import logging
+from typing import Any
 
 from .server import mcp
 
 logger = logging.getLogger("mcp_server")
+
+
+def _parse_json_object(text: str) -> dict[str, Any] | None:
+    """解析 JSON 物件字串，失敗回傳 None。"""
+    if not text:
+        return None
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    if isinstance(payload, dict):
+        return payload
+    return None
+
+
+def _normalize_tool_name(tool_name: str) -> str:
+    """標準化 MCP tool name（移除前綴）。"""
+    clean_name = tool_name.strip()
+    if clean_name.startswith("mcp__ching-tech-os__"):
+        return clean_name.replace("mcp__ching-tech-os__", "", 1)
+    return clean_name
 
 
 @mcp.tool()
@@ -26,6 +48,7 @@ async def run_skill_script(
     # NOTE: ctos_user_id 由 bot framework 在呼叫時注入（見 agents.py），
     # LLM 無法控制此參數。MCP tool 簽名包含它是因為 framework 需要傳入。
     from ...skills import get_skill_manager
+    from ...config import settings
     from ...skills.script_runner import ScriptRunner
 
     sm = get_skill_manager()
@@ -37,13 +60,16 @@ async def run_skill_script(
 
     # 權限檢查：驗證使用者有此 skill 的 requires_app 權限
     if skill_obj.requires_app:
-        from ..permissions import get_user_app_permissions, DEFAULT_APP_PERMISSIONS
-        if ctos_user_id:
-            user_apps = await get_user_app_permissions(ctos_user_id)
-            allowed = user_apps.get(skill_obj.requires_app, False)
-        else:
-            # 未提供使用者 ID，使用預設權限
-            allowed = DEFAULT_APP_PERMISSIONS.get(skill_obj.requires_app, False)
+        from ..permissions import get_user_app_permissions
+
+        if ctos_user_id is None:
+            return json.dumps({
+                "success": False,
+                "error": f"無權限使用 skill '{skill}'（缺少使用者身分，需 {skill_obj.requires_app} 權限）",
+            }, ensure_ascii=False)
+
+        user_apps = await get_user_app_permissions(ctos_user_id)
+        allowed = user_apps.get(skill_obj.requires_app, False)
 
         if not allowed:
             return json.dumps({
@@ -63,13 +89,61 @@ async def run_skill_script(
     # 取得環境變數覆寫（從 SKILL.md metadata.openclaw.requires.env）
     env_overrides = sm.get_skill_env_overrides(skill_obj)
 
+    skill_dir = await sm.get_skill_dir(skill)
+    if not skill_dir:
+        return json.dumps({"success": False, "error": f"Skill directory not found: {skill}"}, ensure_ascii=False)
+
     # 執行（傳入已驗證的 script_path，避免重複解析）
-    runner = ScriptRunner(sm.skills_dir)
+    runner = ScriptRunner(skill_dir.parent)
     result = await runner.execute_path(script_path, skill, input=input, env_overrides=env_overrides)
+
+    route_info: dict[str, Any] = {
+        "policy": settings.skill_route_policy,
+        "skill": skill,
+        "script": script,
+        "fallback_used": False,
+        "fallback_tool": None,
+        "fallback_reason": None,
+    }
+
+    # script 失敗時：可選 fallback 到對應 MCP tool
+    if not result.get("success") and settings.skill_script_fallback_enabled:
+        fallback_map = await sm.get_script_fallback_map(skill)
+        fallback_tool = fallback_map.get(script)
+        if fallback_tool:
+            from .server import execute_tool
+
+            fallback_args = _parse_json_object(input) or {}
+            # 若 script 有提供 normalized_input，優先使用（可做前置驗證/清洗）
+            output_json = _parse_json_object(result.get("output", ""))
+            normalized_input = output_json.get("normalized_input") if output_json else None
+            if isinstance(normalized_input, dict):
+                fallback_args = normalized_input
+
+            if ctos_user_id is not None and "ctos_user_id" not in fallback_args:
+                fallback_args["ctos_user_id"] = ctos_user_id
+
+            clean_tool = _normalize_tool_name(fallback_tool)
+            fallback_output = await execute_tool(clean_tool, fallback_args)
+            route_info["fallback_tool"] = clean_tool
+            route_info["fallback_reason"] = result.get("error")
+            if not fallback_output.startswith("執行失敗："):
+                route_info["fallback_used"] = True
+                result = {
+                    "success": True,
+                    "output": fallback_output,
+                    "error": "",
+                    "duration_ms": result.get("duration_ms", 0),
+                }
+            else:
+                result["error"] = f"{result.get('error')}; fallback 失敗: {fallback_output}"
+
+    result["route"] = route_info
 
     logger.info(
         f"run_skill_script: {skill}/{script} "
-        f"success={result['success']} duration={result['duration_ms']}ms"
+        f"success={result['success']} fallback={route_info['fallback_used']} "
+        f"duration={result['duration_ms']}ms"
     )
 
     # 記錄 ai_log
@@ -81,6 +155,7 @@ async def run_skill_script(
             model="script",
             input_prompt=f"{skill}/{script}: {input}",
             raw_response=result.get("output"),
+            parsed_response=result,
             error_message=result.get("error") if not result.get("success") else None,
             duration_ms=result.get("duration_ms"),
             success=result.get("success", False),

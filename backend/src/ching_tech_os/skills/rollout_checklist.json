@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "items": [
+    {
+      "id": "external-root-ready",
+      "description": "external root (~/SDD/skill) 已建立並啟用 external-first 載入",
+      "completed": true
+    },
+    {
+      "id": "override-logging-ready",
+      "description": "同名 skill 覆蓋行為可觀測（debug/info log）",
+      "completed": true
+    },
+    {
+      "id": "script-fallback-ready",
+      "description": "run_skill_script 失敗時可依 mapping fallback MCP 並回傳路由資訊",
+      "completed": true
+    },
+    {
+      "id": "ai-log-routing-ready",
+      "description": "ai_logs parsed_response 含 tool_routing",
+      "completed": true
+    },
+    {
+      "id": "mobile-skill-ui-ready",
+      "description": "手機 Skill 管理頁單欄流程 + 底部固定主操作 + 次要設定 bottom sheet",
+      "completed": true
+    }
+  ],
+  "default_route_switched": true,
+  "default_route_policy": "script-first"
+}

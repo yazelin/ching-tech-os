@@ -132,7 +132,7 @@ const AgentSettingsApp = (function() {
   async function saveAgent(agentId, data) {
     try {
       const method = agentId ? 'PUT' : 'POST';
-      const url = (window.API_BASE || '') + (agentId ? `/api/ai/agents/${agentId}` : '/api/ai/agents');
+      const url = agentId ? `/api/ai/agents/${agentId}` : '/api/ai/agents';
 
       const response = await fetch(url, {
         method,
@@ -293,27 +293,31 @@ const AgentSettingsApp = (function() {
    */
   function buildEditForm(agent) {
     const isNew = !agent || !agent.id;
+    const safeAgentId = escapeHtml(agent?.id || '');
+    const safeName = escapeHtml(agent?.name || '');
+    const safeDisplayName = escapeHtml(agent?.display_name || '');
+    const safeDescription = escapeHtml(agent?.description || '');
 
     return `
       <button class="agent-mobile-back-btn" id="agentMobileBackBtn" style="display: none;">
         <span class="icon">${getIcon('chevron-left')}</span>
         <span>返回列表</span>
       </button>
-      <div class="agent-form" data-agent-id="${agent?.id || ''}">
+      <div class="agent-form" data-agent-id="${safeAgentId}">
         <div class="agent-form-section">
           <div class="agent-form-section-title">基本資訊</div>
           <div class="agent-form-row">
             <div class="agent-form-group flex-1">
               <label class="agent-form-label">名稱 (唯一識別)</label>
               <input type="text" class="agent-form-input" name="name"
-                     value="${agent?.name || ''}"
+                     value="${safeName}"
                      placeholder="例: web-chat-default"
                      ${!isNew ? 'readonly' : ''}>
             </div>
             <div class="agent-form-group flex-1">
               <label class="agent-form-label">顯示名稱</label>
               <input type="text" class="agent-form-input" name="display_name"
-                     value="${agent?.display_name || ''}"
+                     value="${safeDisplayName}"
                      placeholder="例: 預設對話">
             </div>
           </div>
@@ -321,7 +325,7 @@ const AgentSettingsApp = (function() {
             <div class="agent-form-group flex-1">
               <label class="agent-form-label">說明</label>
               <input type="text" class="agent-form-input" name="description"
-                     value="${agent?.description || ''}"
+                     value="${safeDescription}"
                      placeholder="此 Agent 的用途說明">
             </div>
           </div>
@@ -334,8 +338,8 @@ const AgentSettingsApp = (function() {
               <label class="agent-form-label">Model</label>
               <select class="agent-form-select" name="model">
                 ${availableModels.map(m => `
-                  <option value="${m.id}" ${agent?.model === m.id ? 'selected' : ''}>
-                    ${m.name}
+                  <option value="${escapeHtml(String(m.id))}" ${agent?.model === m.id ? 'selected' : ''}>
+                    ${escapeHtml(m.name)}
                   </option>
                 `).join('')}
               </select>
@@ -345,8 +349,8 @@ const AgentSettingsApp = (function() {
               <select class="agent-form-select" name="system_prompt_id">
                 <option value="">不指定</option>
                 ${prompts.map(p => `
-                  <option value="${p.id}" ${agent?.system_prompt_id === p.id ? 'selected' : ''}>
-                    ${p.display_name || p.name}
+                  <option value="${escapeHtml(String(p.id))}" ${agent?.system_prompt_id === p.id ? 'selected' : ''}>
+                    ${escapeHtml(p.display_name || p.name)}
                   </option>
                 `).join('')}
               </select>
@@ -359,10 +363,10 @@ const AgentSettingsApp = (function() {
           <div class="agent-tools-grid">
             ${availableTools.map(t => `
               <label class="agent-tool-item">
-                <input type="checkbox" name="tools" value="${t.id}"
+                <input type="checkbox" name="tools" value="${escapeHtml(t.id)}"
                        ${agent?.tools?.includes(t.id) ? 'checked' : ''}>
-                <span class="agent-tool-name">${t.name}</span>
-                <span class="agent-tool-desc">${t.desc}</span>
+                <span class="agent-tool-name">${escapeHtml(t.name)}</span>
+                <span class="agent-tool-desc">${escapeHtml(t.desc)}</span>
               </label>
             `).join('')}
           </div>
@@ -440,11 +444,11 @@ const AgentSettingsApp = (function() {
 
     container.innerHTML = agents.map(a => `
       <div class="agent-list-item ${a.id === currentAgentId ? 'active' : ''}"
-           data-agent-id="${a.id}">
+           data-agent-id="${escapeHtml(String(a.id || ''))}">
         <div class="agent-list-item-status ${a.is_active ? 'active' : 'inactive'}"></div>
         <div class="agent-list-item-info">
-          <div class="agent-list-item-name">${a.display_name || a.name}</div>
-          <div class="agent-list-item-model">${a.model}</div>
+          <div class="agent-list-item-name">${escapeHtml(a.display_name || a.name || '')}</div>
+          <div class="agent-list-item-model">${escapeHtml(a.model || '')}</div>
         </div>
       </div>
     `).join('');
@@ -834,7 +838,7 @@ const AgentSettingsApp = (function() {
       if (!response.ok) throw new Error('Failed to load skill detail');
       const skill = await response.json();
 
-      const tools = skill.tools || [];
+      const tools = skill.allowed_tools || skill.tools || [];
       const mcpServers = skill.mcp_servers || [];
 
       const source = skill.source || 'unknown';
@@ -846,6 +850,14 @@ const AgentSettingsApp = (function() {
         const files = skill[dir] || [];
         files.forEach(f => browseFiles.push({ dir, path: f }));
       });
+
+      const mobileActionBar = isMobileView() ? `
+        <div class="skill-mobile-action-bar">
+          <button class="btn btn-secondary" data-action="reload-skills-detail">重載</button>
+          <button class="btn btn-primary" data-action="open-skill-sheet" data-skill-name="${escapeHtml(skillName)}">次要設定</button>
+          ${source !== 'native' ? `<button class="btn btn-danger" data-action="remove-skill" data-skill-name="${escapeHtml(skillName)}">移除</button>` : ''}
+        </div>
+      ` : '';
 
       main.innerHTML = `
         <button class="skill-mobile-back-btn" style="display:none;" data-action="skill-mobile-back">
@@ -923,6 +935,7 @@ const AgentSettingsApp = (function() {
             </div>
           ` : ''}
         </div>
+        ${mobileActionBar}
       `;
 
       // Mobile support
@@ -970,6 +983,11 @@ const AgentSettingsApp = (function() {
 
       const overlay = document.querySelector(`#${windowId} .skill-edit-modal-overlay`);
       if (!overlay) return;
+      overlay.classList.toggle('skill-edit-bottom-sheet', isMobileView());
+      const titleEl = overlay.querySelector('.skill-edit-modal-title');
+      if (titleEl) {
+        titleEl.textContent = isMobileView() ? '次要設定' : '編輯 Skill';
+      }
 
       const body = overlay.querySelector('.skill-edit-modal-body');
       const allowedTools = skill.allowed_tools || skill.tools || [];
@@ -1064,7 +1082,10 @@ const AgentSettingsApp = (function() {
    */
   function closeSkillEditModal() {
     const overlay = document.querySelector(`#${windowId} .skill-edit-modal-overlay`);
-    if (overlay) overlay.style.display = 'none';
+    if (overlay) {
+      overlay.style.display = 'none';
+      overlay.classList.remove('skill-edit-bottom-sheet');
+    }
   }
 
   /**
@@ -1377,6 +1398,9 @@ const AgentSettingsApp = (function() {
         case 'save-skill':
           saveSkillFromModal();
           break;
+        case 'open-skill-sheet':
+          openSkillEditModal(actionEl.dataset.skillName || currentSkillName);
+          break;
         case 'preview-skill': {
           const slug = actionEl.dataset.skillSlug;
           const source = actionEl.dataset.skillSource || null;
@@ -1388,6 +1412,13 @@ const AgentSettingsApp = (function() {
             const settings = document.querySelector(`#${windowId} .skill-settings`);
             if (settings) settings.classList.add('showing-editor');
           }
+
+          const mobilePreviewActionBar = isMobileView() ? `
+            <div class="skill-mobile-action-bar">
+              <button class="btn btn-secondary" data-action="skill-mobile-back">返回</button>
+              <button class="btn btn-primary" data-action="install-skill" data-skill-name="${escapeHtml(slug)}" data-skill-source="${escapeHtml(source || '')}">安裝</button>
+            </div>
+          ` : '';
 
           main.innerHTML = `
             <button class="skill-mobile-back-btn" style="${isMobileView() ? 'display:flex;' : 'display:none;'}" data-action="skill-mobile-back">
@@ -1403,7 +1434,8 @@ const AgentSettingsApp = (function() {
                 <span class="skill-detail-label">SKILL.md</span>
               </div>
               <pre class="skill-preview-content" style="display:block;"></pre>
-            </div>`;
+            </div>
+            ${mobilePreviewActionBar}`;
           // [Sprint8] 原: <pre>載入中...</pre>（靜態文字）→ UIHelpers.showLoading
           const _previewLoading = main.querySelector('.skill-preview-content');
           if (_previewLoading) UIHelpers.showLoading(_previewLoading, { text: '載入中...', variant: 'compact' });
@@ -1498,6 +1530,15 @@ const AgentSettingsApp = (function() {
         }
       }
     });
+
+    const skillModalOverlay = root.querySelector('.skill-edit-modal-overlay');
+    if (skillModalOverlay) {
+      skillModalOverlay.addEventListener('click', (e) => {
+        if (e.target === skillModalOverlay) {
+          closeSkillEditModal();
+        }
+      });
+    }
 
     // 初始化 sidebar resizer
     initSidebarResizers(root);

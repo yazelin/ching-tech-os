@@ -105,6 +105,22 @@ class Settings:
     )
 
     # ===================
+    # Skill 系統設定
+    # ===================
+    # 外部 skill 根目錄（external-first 載入）
+    skill_external_root: str = _get_env(
+        "SKILL_EXTERNAL_ROOT",
+        str(Path.home() / "SDD/skill"),
+    )
+    # 工具路由策略：script-first | mcp-first
+    skill_route_policy: str = _get_env("SKILL_ROUTE_POLICY", "script-first")
+    # script 失敗時是否允許 fallback 到對應 MCP
+    skill_script_fallback_enabled: bool = _get_env_bool(
+        "SKILL_SCRIPT_FALLBACK_ENABLED",
+        True,
+    )
+
+    # ===================
     # Line Bot 設定
     # ===================
     line_channel_secret: str = _get_env("LINE_CHANNEL_SECRET", required=True)

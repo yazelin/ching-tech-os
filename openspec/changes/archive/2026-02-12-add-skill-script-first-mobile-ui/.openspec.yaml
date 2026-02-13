@@ -1,0 +1,8 @@
+id: add-skill-script-first-mobile-ui
+title: Skill Script-First 與手機操作精簡
+status: proposed
+created: 2026-02-12
+specs:
+  - skill-management
+  - bot-platform
+  - mobile-app-layout

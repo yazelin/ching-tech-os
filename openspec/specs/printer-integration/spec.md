@@ -1,5 +1,6 @@
-# Printer Integration
+# printer-integration Specification
 
+## Purpose
 透過 CUPS 整合列印功能，讓 AI Agent 可以列印 NAS 檔案、上傳檔案及 AI 生成文件。
 
 ## Requirements
