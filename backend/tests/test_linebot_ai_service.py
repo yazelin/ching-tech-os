@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
@@ -326,3 +327,328 @@ async def test_process_message_with_ai_reset_push_fallback(monkeypatch: pytest.M
     )
     assert "已清除對話歷史" in (result or "")
     push_text.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_process_message_with_ai_reset_push_also_fail(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(linebot_ai, "is_reset_command", lambda _content: True)
+    monkeypatch.setattr(linebot_ai, "reset_conversation", AsyncMock(return_value=True))
+    monkeypatch.setattr(linebot_ai, "save_bot_response", AsyncMock(return_value=uuid4()))
+    monkeypatch.setattr(linebot_ai, "reply_text", AsyncMock(side_effect=RuntimeError("expired")))
+    monkeypatch.setattr(linebot_ai, "push_text", AsyncMock(side_effect=RuntimeError("push failed")))
+
+    result = await linebot_ai.process_message_with_ai(
+        message_uuid=uuid4(),
+        content="/新對話",
+        line_group_id=None,
+        line_user_id="U1",
+        reply_token="r1",
+    )
+    assert "已清除對話歷史" in (result or "")
+
+
+@pytest.mark.asyncio
+async def test_process_message_with_ai_not_triggered(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(linebot_ai, "is_reset_command", lambda _content: False)
+    is_bot_message = AsyncMock(return_value=False)
+    monkeypatch.setattr(linebot_ai, "is_bot_message", is_bot_message)
+    monkeypatch.setattr(linebot_ai, "should_trigger_ai", lambda *_args, **_kwargs: False)
+
+    result = await linebot_ai.process_message_with_ai(
+        message_uuid=uuid4(),
+        content="一般聊天",
+        line_group_id=uuid4(),
+        line_user_id="U1",
+        reply_token="r1",
+        quoted_message_id="q1",
+    )
+    assert result is None
+    is_bot_message.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_process_message_with_ai_agent_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(linebot_ai, "is_reset_command", lambda _content: False)
+    monkeypatch.setattr(linebot_ai, "should_trigger_ai", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(linebot_ai, "get_linebot_agent", AsyncMock(return_value=None))
+    reply_text = AsyncMock()
+    monkeypatch.setattr(linebot_ai, "reply_text", reply_text)
+
+    result = await linebot_ai.process_message_with_ai(
+        message_uuid=uuid4(),
+        content="hello",
+        line_group_id=None,
+        line_user_id="U1",
+        reply_token="r1",
+    )
+    assert result is not None and "Agent 'linebot-personal' 不存在" in result
+    reply_text.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_process_message_with_ai_missing_system_prompt(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(linebot_ai, "is_reset_command", lambda _content: False)
+    monkeypatch.setattr(linebot_ai, "should_trigger_ai", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        linebot_ai,
+        "get_linebot_agent",
+        AsyncMock(return_value={"model": "claude-sonnet", "system_prompt": "bad", "tools": []}),
+    )
+    reply_text = AsyncMock()
+    warning = MagicMock()
+    monkeypatch.setattr(linebot_ai, "reply_text", reply_text)
+    monkeypatch.setattr(linebot_ai.logger, "warning", warning)
+
+    result = await linebot_ai.process_message_with_ai(
+        message_uuid=uuid4(),
+        content="hello",
+        line_group_id=None,
+        line_user_id="U1",
+        reply_token="r1",
+    )
+    assert result is not None and "沒有設定 system_prompt" in result
+    reply_text.assert_awaited_once()
+    warning.assert_called_once()
+
+
+def _mock_claude_response(
+    *,
+    success: bool = True,
+    message: str = "AI回覆",
+    error: str | None = None,
+    tool_calls: list | None = None,
+):
+    return SimpleNamespace(
+        success=success,
+        message=message,
+        error=error,
+        tool_calls=tool_calls or [],
+        tool_timings={},
+        input_tokens=1,
+        output_tokens=2,
+    )
+
+
+def _patch_process_base(monkeypatch: pytest.MonkeyPatch) -> dict:
+    user_module = importlib.import_module("ching_tech_os.services.user")
+    permissions_module = importlib.import_module("ching_tech_os.services.permissions")
+    linebot_agents_module = importlib.import_module("ching_tech_os.services.linebot_agents")
+    mcp_module = importlib.import_module("ching_tech_os.services.mcp")
+
+    monkeypatch.setattr(linebot_ai, "is_reset_command", lambda _content: False)
+    monkeypatch.setattr(linebot_ai, "is_bot_message", AsyncMock(return_value=True))
+    monkeypatch.setattr(linebot_ai, "should_trigger_ai", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        linebot_ai,
+        "get_linebot_agent",
+        AsyncMock(
+            return_value={
+                "model": "claude-sonnet",
+                "system_prompt": {"content": "BASE"},
+                "tools": ["WebSearch"],
+            }
+        ),
+    )
+    monkeypatch.setattr(linebot_ai, "build_system_prompt", AsyncMock(return_value="SYS"))
+    monkeypatch.setattr(linebot_ai, "get_conversation_context", AsyncMock(return_value=([], [], [])))
+    monkeypatch.setattr(linebot_ai, "get_image_info_by_line_message_id", AsyncMock(return_value=None))
+    monkeypatch.setattr(linebot_ai, "get_file_info_by_line_message_id", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        user_module,
+        "get_user_role_and_permissions",
+        AsyncMock(return_value={"role": "admin", "permissions": {"apps": {}}}),
+    )
+    monkeypatch.setattr(
+        permissions_module,
+        "get_user_app_permissions_sync",
+        lambda *_args, **_kwargs: {"knowledge-base": True},
+    )
+    monkeypatch.setattr(
+        permissions_module,
+        "get_mcp_tools_for_user",
+        lambda _role, _permissions, tools: tools,
+    )
+    monkeypatch.setattr(
+        mcp_module,
+        "get_mcp_tool_names",
+        AsyncMock(return_value=["mcp__ching-tech-os__create_share_link"]),
+    )
+    monkeypatch.setattr(
+        linebot_agents_module,
+        "get_tool_routing_for_user",
+        AsyncMock(return_value={"suppressed_mcp_tools": ["mcp__ching-tech-os__create_share_link"]}),
+    )
+    monkeypatch.setattr(
+        linebot_agents_module,
+        "get_tools_for_user",
+        AsyncMock(return_value=["mcp__erpnext__list_documents"]),
+    )
+    monkeypatch.setattr(
+        linebot_agents_module,
+        "get_mcp_servers_for_user",
+        AsyncMock(return_value={"ching-tech-os"}),
+    )
+    monkeypatch.setattr(linebot_ai, "log_linebot_ai_call", AsyncMock())
+    monkeypatch.setattr(linebot_ai, "mark_message_ai_processed", AsyncMock())
+    monkeypatch.setattr(linebot_ai, "extract_nanobanana_error", lambda _calls: None)
+    monkeypatch.setattr(linebot_ai, "check_nanobanana_timeout", lambda _calls: False)
+    monkeypatch.setattr(linebot_ai, "auto_prepare_generated_images", AsyncMock(side_effect=lambda text, _calls: text))
+    monkeypatch.setattr(linebot_ai, "save_bot_response", AsyncMock(side_effect=[uuid4(), uuid4(), uuid4()]))
+    monkeypatch.setattr(linebot_ai, "save_file_record", AsyncMock())
+    monkeypatch.setattr(linebot_ai, "reply_text", AsyncMock())
+    monkeypatch.setattr(linebot_ai, "push_text", AsyncMock())
+
+    get_line_user_record = AsyncMock(return_value={"user_id": 123})
+    monkeypatch.setattr(linebot_ai, "get_line_user_record", get_line_user_record)
+
+    return {"get_line_user_record": get_line_user_record}
+
+
+@pytest.mark.asyncio
+async def test_process_message_with_ai_success_push_fallback_and_quote_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_process_base(monkeypatch)
+    monkeypatch.setattr(
+        linebot_ai,
+        "get_message_content_by_line_message_id",
+        AsyncMock(return_value={"content": "X" * 2105, "display_name": "小明", "is_from_bot": False}),
+    )
+    monkeypatch.setattr(linebot_ai, "call_claude", AsyncMock(return_value=_mock_claude_response()))
+    monkeypatch.setattr(
+        linebot_ai,
+        "parse_ai_response",
+        lambda _text: (
+            "文字回覆",
+            [{
+                "type": "image",
+                "url": "https://example.com/a.jpg",
+                "original_url": "https://example.com/a.jpg",
+                "preview_url": "https://example.com/a.jpg",
+                "name": "圖1.jpg",
+                "nas_path": "ai-images/a.jpg",
+            }],
+        ),
+    )
+
+    send_ai_response = AsyncMock(side_effect=RuntimeError("reply token expired"))
+    push_messages = AsyncMock(return_value=(["m-text", "m-img"], None))
+    monkeypatch.setattr(linebot_ai, "send_ai_response", send_ai_response)
+    monkeypatch.setattr(linebot_ai, "get_line_group_external_id", AsyncMock(return_value="C123"))
+    monkeypatch.setattr(linebot_ai, "push_messages", push_messages)
+
+    result = await linebot_ai.process_message_with_ai(
+        message_uuid=uuid4(),
+        content="幫我處理",
+        line_group_id=uuid4(),
+        line_user_id="U1",
+        reply_token="r1",
+        user_display_name="發問者",
+        quoted_message_id="q1",
+    )
+
+    assert result == "文字回覆"
+    send_ai_response.assert_awaited_once()
+    push_messages.assert_awaited_once()
+    assert linebot_ai.save_file_record.await_count == 1
+
+    prompt_arg = linebot_ai.call_claude.await_args.kwargs["prompt"]
+    assert "[回覆 小明 的訊息" in prompt_arg
+    assert "user[發問者]: 幫我處理" in prompt_arg
+    tools_arg = linebot_ai.call_claude.await_args.kwargs["tools"]
+    assert "mcp__ching-tech-os__create_share_link" not in tools_arg
+    assert "mcp__erpnext__list_documents" in tools_arg
+
+
+@pytest.mark.asyncio
+async def test_process_message_with_ai_nanobanana_fallback_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_process_base(monkeypatch)
+    monkeypatch.setattr(linebot_ai, "get_message_content_by_line_message_id", AsyncMock(return_value=None))
+    monkeypatch.setattr(linebot_ai, "call_claude", AsyncMock(return_value=_mock_claude_response(tool_calls=[SimpleNamespace()])))
+    monkeypatch.setattr(linebot_ai, "extract_nanobanana_error", lambda _calls: "overloaded")
+    monkeypatch.setattr(linebot_ai, "check_nanobanana_timeout", lambda _calls: False)
+    monkeypatch.setattr(linebot_ai, "extract_nanobanana_prompt", lambda _calls: "draw a cat")
+    monkeypatch.setattr(
+        linebot_ai,
+        "generate_image_with_fallback",
+        AsyncMock(return_value=("ai-images/cat.jpg", "flux", None)),
+    )
+    monkeypatch.setattr(linebot_ai, "get_fallback_notification", lambda _service: "（已切換備援）")
+    monkeypatch.setattr(
+        mcp_nas_tools,
+        "prepare_file_message",
+        AsyncMock(
+            return_value='[FILE_MESSAGE:{"type":"image","url":"https://example.com/cat.jpg","original_url":"https://example.com/cat.jpg","name":"cat.jpg","nas_path":"ai-images/cat.jpg"}]'
+        ),
+    )
+    monkeypatch.setattr(
+        linebot_ai,
+        "parse_ai_response",
+        lambda _text: (
+            "圖片已生成",
+            [{
+                "type": "image",
+                "url": "https://example.com/cat.jpg",
+                "original_url": "https://example.com/cat.jpg",
+                "name": "cat.jpg",
+                "nas_path": "ai-images/cat.jpg",
+            }],
+        ),
+    )
+    monkeypatch.setattr(linebot_ai, "send_ai_response", AsyncMock(return_value=["mid1", "mid2"]))
+
+    result = await linebot_ai.process_message_with_ai(
+        message_uuid=uuid4(),
+        content="幫我生成圖片",
+        line_group_id=None,
+        line_user_id="U1",
+        reply_token="r1",
+    )
+    assert result == "圖片已生成"
+    linebot_ai.generate_image_with_fallback.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_process_message_with_ai_failed_response_with_generated_images(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_process_base(monkeypatch)
+    monkeypatch.setattr(linebot_ai, "get_message_content_by_line_message_id", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        linebot_ai,
+        "call_claude",
+        AsyncMock(return_value=_mock_claude_response(success=False, error="timeout", tool_calls=[SimpleNamespace(id="x")])),
+    )
+    monkeypatch.setattr(linebot_ai, "extract_nanobanana_error", lambda _calls: None)
+    monkeypatch.setattr(linebot_ai, "check_nanobanana_timeout", lambda _calls: False)
+    monkeypatch.setattr(linebot_ai, "extract_generated_images_from_tool_calls", lambda _calls: ["img1"])
+    monkeypatch.setattr(linebot_ai, "auto_prepare_generated_images", AsyncMock(return_value="補救訊息"))
+    monkeypatch.setattr(linebot_ai, "parse_ai_response", lambda _text: ("補救文字", []))
+    monkeypatch.setattr(linebot_ai, "send_ai_response", AsyncMock(return_value=["mid"]))
+
+    result = await linebot_ai.process_message_with_ai(
+        message_uuid=uuid4(),
+        content="生成失敗也要回覆",
+        line_group_id=None,
+        line_user_id="U1",
+        reply_token="r1",
+    )
+    assert result == "補救文字"
+
+
+@pytest.mark.asyncio
+async def test_process_message_with_ai_failed_response_without_tool_calls(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_process_base(monkeypatch)
+    monkeypatch.setattr(linebot_ai, "get_message_content_by_line_message_id", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        linebot_ai,
+        "call_claude",
+        AsyncMock(return_value=_mock_claude_response(success=False, error="timeout", tool_calls=[])),
+    )
+    monkeypatch.setattr(linebot_ai, "extract_nanobanana_error", lambda _calls: None)
+    monkeypatch.setattr(linebot_ai, "check_nanobanana_timeout", lambda _calls: False)
+
+    result = await linebot_ai.process_message_with_ai(
+        message_uuid=uuid4(),
+        content="失敗且無工具",
+        line_group_id=None,
+        line_user_id="U1",
+        reply_token="r1",
+    )
+    assert result is None
