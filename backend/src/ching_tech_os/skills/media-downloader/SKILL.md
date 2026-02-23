@@ -37,3 +37,9 @@ metadata:
 3. 使用者確認後，呼叫 download-video 啟動下載
 4. 呼叫 check-download 查詢進度，完成後回報 ctos_path
 5. 若使用者要歸檔，使用 archive_to_library 歸檔到「影片資料」分類
+
+**AI 行為指引：**
+- **嚴禁使用 sleep 等待下載完成**。下載大檔案可能需要數分鐘，啟動後查詢一次進度即可：
+  - 若仍在下載中：回覆使用者目前進度百分比，請他稍後再詢問，**結束本次回應**
+  - 若已完成：回報 ctos_path 並繼續後續操作（歸檔等）
+  - 不要在同一次回應中反覆 sleep + check-download，這會導致超時
