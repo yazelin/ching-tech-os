@@ -34,15 +34,19 @@ def _format_filesize(bytes_val: int | float | None) -> str:
 
 
 def _find_status_file(job_id: str) -> Path | None:
-    """搜尋 job_id 對應的 status.json（掃描日期目錄）。"""
+    """搜尋 job_id 對應的 status.json（僅掃描最近 7 天的日期目錄）。"""
     base_dir = _get_videos_base_dir()
     if not base_dir.exists():
         return None
 
-    # 先嘗試最近 7 天的目錄
+    # 僅搜尋最近 7 天，避免目錄過多時效能問題
+    count = 0
     for date_dir in sorted(base_dir.iterdir(), reverse=True):
         if not date_dir.is_dir():
             continue
+        count += 1
+        if count > 7:
+            break
         status_path = date_dir / job_id / "status.json"
         if status_path.exists():
             return status_path

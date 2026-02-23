@@ -128,24 +128,42 @@ def _do_download(job_dir: Path, status_path: Path, url: str, fmt: str, job_id: s
             # 無 ffmpeg 時選擇已合併的 mp4 格式
             ydl_opts["format"] = "best[ext=mp4]/best"
 
+    # 追蹤 yt-dlp 回報的最終檔名
+    final_filename: list[str] = []
+
+    def postprocess_hook(d: dict) -> None:
+        """追蹤後處理完成後的最終檔名。"""
+        if d.get("status") == "finished" and d.get("info_dict", {}).get("filepath"):
+            final_filename.append(d["info_dict"]["filepath"])
+
+    ydl_opts["postprocessor_hooks"] = [postprocess_hook]
+
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
 
-        # 找到下載的檔案（排除 status.json 和 .tmp）
-        downloaded_files = [
-            f for f in job_dir.iterdir()
-            if f.is_file() and f.name != "status.json" and not f.name.endswith(".tmp")
-        ]
+        # 優先使用 yt-dlp 回報的最終檔名，否則掃描目錄
+        target_file = None
+        if final_filename:
+            candidate = Path(final_filename[-1])
+            if candidate.exists():
+                target_file = candidate
 
-        if not downloaded_files:
+        if not target_file:
+            downloaded_files = [
+                f for f in job_dir.iterdir()
+                if f.is_file() and f.name != "status.json"
+                and not f.name.endswith(".tmp") and not f.name.endswith(".part")
+            ]
+            if downloaded_files:
+                target_file = max(downloaded_files, key=lambda f: f.stat().st_size)
+
+        if not target_file:
             status_data["status"] = "failed"
             status_data["error"] = "下載完成但找不到檔案"
             _write_status(status_path, status_data)
             return
 
-        # 取最大的檔案（應該就是影片）
-        target_file = max(downloaded_files, key=lambda f: f.stat().st_size)
         file_size = target_file.stat().st_size
 
         # 組成 ctos:// 路徑
@@ -235,8 +253,22 @@ def main() -> int:
             sys.stderr = open(os.devnull, "w")
 
             _do_download(job_dir, status_path, url, fmt, job_id)
-        except Exception:
-            pass
+        except Exception as e:
+            # 寫入錯誤日誌以便除錯
+            try:
+                error_log = job_dir / "error.log"
+                error_log.write_text(
+                    f"[{datetime.now().isoformat()}] 背景下載失敗: {e}\n",
+                    encoding="utf-8",
+                )
+                _write_status(status_path, {
+                    "job_id": job_id,
+                    "status": "failed",
+                    "error": str(e),
+                    "created_at": datetime.now().isoformat(),
+                })
+            except Exception:
+                pass
         finally:
             os._exit(0)
 
