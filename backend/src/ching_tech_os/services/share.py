@@ -177,6 +177,7 @@ def validate_nas_file_path(
         NasFileNotFoundError: 檔案不存在
     """
     from .path_manager import path_manager, StorageZone
+    from .shared_source_permissions import SharedSourceAccessDeniedError
 
     ctos_path = Path(settings.ctos_mount_path)
 
@@ -207,8 +208,10 @@ def validate_nas_file_path(
                     source_permissions=source_permissions,
                 )
             )
+        except SharedSourceAccessDeniedError as e:
+            raise NasFileAccessDenied(str(e)) from e
         except ValueError as e:
-            raise NasFileAccessDenied(str(e))
+            raise NasFileAccessDenied(f"無效的路徑：{e}") from e
 
     # 安全檢查：確保路徑在 /mnt/nas/ 下
     nas_path = Path(settings.nas_mount_path)

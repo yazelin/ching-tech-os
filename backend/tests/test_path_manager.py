@@ -6,7 +6,10 @@ from unittest.mock import patch
 import pytest
 
 from ching_tech_os.services.path_manager import PathManager, StorageZone
-from ching_tech_os.services.shared_source_permissions import SHARED_SOURCE_ACCESS_DENIED_MESSAGE
+from ching_tech_os.services.shared_source_permissions import (
+    SHARED_SOURCE_ACCESS_DENIED_MESSAGE,
+    SharedSourceAccessDeniedError,
+)
 
 
 @pytest.fixture
@@ -86,17 +89,25 @@ class TestSharedSubSources:
         )
 
     def test_shared_source_permission_filter(self, path_manager):
-        with pytest.raises(ValueError, match=SHARED_SOURCE_ACCESS_DENIED_MESSAGE):
+        with pytest.raises(SharedSourceAccessDeniedError, match=SHARED_SOURCE_ACCESS_DENIED_MESSAGE):
             path_manager.to_filesystem(
                 "shared://circuits/c1/layout.dwg",
                 source_permissions={"projects": True, "circuits": False},
             )
 
     def test_shared_fallback_permission_filter(self, path_manager):
-        with pytest.raises(ValueError, match=SHARED_SOURCE_ACCESS_DENIED_MESSAGE):
+        with pytest.raises(SharedSourceAccessDeniedError, match=SHARED_SOURCE_ACCESS_DENIED_MESSAGE):
             path_manager.to_filesystem(
                 "shared://team-a/spec.pdf",
                 source_permissions={"projects": False, "circuits": True},
+            )
+
+    def test_shared_source_implicit_permission_denial(self, path_manager):
+        """未在權限中定義的來源應被隱性拒絕（deny-by-default）。"""
+        with pytest.raises(SharedSourceAccessDeniedError, match=SHARED_SOURCE_ACCESS_DENIED_MESSAGE):
+            path_manager.to_filesystem(
+                "shared://circuits/c1/layout.dwg",
+                source_permissions={"projects": True},  # 只允許 projects，circuits 未定義
             )
 
 

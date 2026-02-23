@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Optional
 import re
 
-from .shared_source_permissions import resolve_shared_source_mount
+from .shared_source_permissions import SharedSourceAccessDeniedError, resolve_shared_source_mount
 
 class StorageZone(Enum):
     """儲存區域"""

@@ -9,6 +9,13 @@ from ..database import get_connection
 SHARED_SOURCE_ACCESS_DENIED_MESSAGE = "權限不足：無法存取此 shared 來源"
 
 
+class SharedSourceAccessDeniedError(ValueError):
+    """當存取 shared 來源權限不足時拋出的例外。"""
+
+    def __init__(self, message: str = SHARED_SOURCE_ACCESS_DENIED_MESSAGE):
+        super().__init__(message)
+
+
 def _normalize_preferences(raw_preferences: dict | str | None) -> dict:
     """正規化使用者 preferences。"""
     if raw_preferences is None:
@@ -56,7 +63,7 @@ def filter_shared_mounts_by_permissions(
     return {
         source: mount_path
         for source, mount_path in shared_mounts.items()
-        if source_permissions.get(source, True)
+        if source_permissions.get(source, False)
     }
 
 
@@ -71,7 +78,7 @@ def resolve_shared_source_mount(
 
     allowed_mounts = filter_shared_mounts_by_permissions(shared_mounts, source_permissions)
     if source_name not in allowed_mounts:
-        raise ValueError(SHARED_SOURCE_ACCESS_DENIED_MESSAGE)
+        raise SharedSourceAccessDeniedError()
 
     return shared_mounts[source_name]
 
@@ -82,7 +89,7 @@ async def get_allowed_shared_mounts_for_user(
 ) -> dict[str, str]:
     """依使用者設定取得可用的 shared 掛載點。"""
     if ctos_user_id is None:
-        return dict(shared_mounts)
+        return {}
 
     async with get_connection() as conn:
         row = await conn.fetchrow(
@@ -91,7 +98,7 @@ async def get_allowed_shared_mounts_for_user(
         )
 
     if not row:
-        return dict(shared_mounts)
+        return {}
 
     if (row["role"] or "user") == "admin":
         return dict(shared_mounts)

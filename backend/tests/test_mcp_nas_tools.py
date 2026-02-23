@@ -99,7 +99,7 @@ async def test_search_nas_files_denied_sources(monkeypatch: pytest.MonkeyPatch) 
         AsyncMock(return_value={}),
     )
     out = await nas_tools.search_nas_files("demo", ctos_user_id=1)
-    assert nas_tools.SHARED_SOURCE_ACCESS_DENIED_MESSAGE in out
+    assert "權限不足" in out
 
 
 @pytest.mark.asyncio

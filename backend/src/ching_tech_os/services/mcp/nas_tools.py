@@ -10,7 +10,7 @@ from uuid import UUID
 from .server import mcp, logger, ensure_db_connection, check_mcp_tool_permission, to_taipei_time, TAIPEI_TZ
 from ...database import get_connection
 from ..shared_source_permissions import (
-    SHARED_SOURCE_ACCESS_DENIED_MESSAGE,
+    SharedSourceAccessDeniedError,
     get_allowed_shared_mounts_for_user,
 )
 
@@ -132,7 +132,7 @@ async def search_nas_files(
     from pathlib import Path
     shared_mounts = await _get_user_shared_mounts(ctos_user_id)
     if not shared_mounts:
-        return f"錯誤：{SHARED_SOURCE_ACCESS_DENIED_MESSAGE}"
+        return "錯誤：權限不足：無法存取任何 shared 來源"
     search_sources = {
         source_name: Path(mount_path)
         for source_name, mount_path in shared_mounts.items()
@@ -436,9 +436,9 @@ async def read_document(
     )
     try:
         resolved_path = path_manager.to_filesystem(file_path, source_permissions=source_permissions)
+    except SharedSourceAccessDeniedError as e:
+        return f"錯誤：{e}"
     except ValueError as e:
-        if str(e) == SHARED_SOURCE_ACCESS_DENIED_MESSAGE:
-            return f"錯誤：{SHARED_SOURCE_ACCESS_DENIED_MESSAGE}"
         return f"錯誤：{e}"
     full_path = Path(resolved_path)
 
