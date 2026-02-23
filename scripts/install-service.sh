@@ -20,6 +20,8 @@ MOUNT_PROJECTS_UNIT="mnt-nas-projects.mount"
 MOUNT_PROJECTS_PATH="${NAS_MOUNT_BASE}/projects"
 MOUNT_CIRCUITS_UNIT="mnt-nas-circuits.mount"
 MOUNT_CIRCUITS_PATH="${NAS_MOUNT_BASE}/circuits"
+MOUNT_LIBRARY_UNIT="mnt-nas-library.mount"
+MOUNT_LIBRARY_PATH="${NAS_MOUNT_BASE}/library"
 
 # 檢查是否以 root 執行
 if [ "$EUID" -ne 0 ]; then
@@ -64,6 +66,7 @@ chmod 600 ${NAS_CREDENTIALS_FILE}
 mkdir -p ${MOUNT_CTOS_PATH}
 mkdir -p ${MOUNT_PROJECTS_PATH}
 mkdir -p ${MOUNT_CIRCUITS_PATH}
+mkdir -p ${MOUNT_LIBRARY_PATH}
 
 # 停止現有掛載（如果存在）
 if systemctl is-active --quiet ${MOUNT_CTOS_UNIT}; then
@@ -77,6 +80,10 @@ fi
 if systemctl is-active --quiet ${MOUNT_CIRCUITS_UNIT}; then
     echo "停止現有 circuits 掛載..."
     systemctl stop ${MOUNT_CIRCUITS_UNIT}
+fi
+if systemctl is-active --quiet ${MOUNT_LIBRARY_UNIT}; then
+    echo "停止現有 library 掛載..."
+    systemctl stop ${MOUNT_LIBRARY_UNIT}
 fi
 
 # 移除舊的單一掛載（如果存在）
@@ -141,15 +148,35 @@ Options=credentials=${NAS_CREDENTIALS_FILE},uid=1000,gid=1000,iocharset=utf8,_ne
 WantedBy=multi-user.target
 EOF
 
+# 建立 library mount unit（讀寫）- 擎添圖書館
+echo "建立 library mount unit..."
+cat > /etc/systemd/system/${MOUNT_LIBRARY_UNIT} << EOF
+[Unit]
+Description=NAS CIFS Mount - Library (擎添圖書館)
+After=network-online.target
+Wants=network-online.target
+
+[Mount]
+What=//${NAS_HOST}/擎添圖書館
+Where=${MOUNT_LIBRARY_PATH}
+Type=cifs
+Options=credentials=${NAS_CREDENTIALS_FILE},uid=1000,gid=1000,iocharset=utf8,_netdev
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
 # 啟用並啟動 NAS 掛載
 echo "啟用 NAS 掛載..."
 systemctl daemon-reload
 systemctl enable ${MOUNT_CTOS_UNIT}
 systemctl enable ${MOUNT_PROJECTS_UNIT}
 systemctl enable ${MOUNT_CIRCUITS_UNIT}
+systemctl enable ${MOUNT_LIBRARY_UNIT}
 systemctl start ${MOUNT_CTOS_UNIT}
 systemctl start ${MOUNT_PROJECTS_UNIT}
 systemctl start ${MOUNT_CIRCUITS_UNIT}
+systemctl start ${MOUNT_LIBRARY_UNIT}
 
 # 確認掛載成功
 MOUNT_SUCCESS=true
@@ -171,6 +198,13 @@ if mountpoint -q ${MOUNT_CIRCUITS_PATH}; then
     echo "circuits 掛載成功: ${MOUNT_CIRCUITS_PATH}"
 else
     echo "警告：circuits 掛載可能未成功，請檢查 systemctl status ${MOUNT_CIRCUITS_UNIT}"
+    MOUNT_SUCCESS=false
+fi
+
+if mountpoint -q ${MOUNT_LIBRARY_PATH}; then
+    echo "library 掛載成功: ${MOUNT_LIBRARY_PATH}"
+else
+    echo "警告：library 掛載可能未成功，請檢查 systemctl status ${MOUNT_LIBRARY_UNIT}"
     MOUNT_SUCCESS=false
 fi
 
@@ -201,7 +235,7 @@ cat > ${SERVICE_FILE} << EOF
 Description=Ching Tech OS Web Desktop Service
 After=network.target docker.service ${MOUNT_CTOS_UNIT}
 Requires=docker.service ${MOUNT_CTOS_UNIT}
-Wants=${MOUNT_PROJECTS_UNIT} ${MOUNT_CIRCUITS_UNIT}
+Wants=${MOUNT_PROJECTS_UNIT} ${MOUNT_CIRCUITS_UNIT} ${MOUNT_LIBRARY_UNIT}
 
 [Service]
 Type=simple
@@ -263,8 +297,10 @@ echo "  sudo journalctl -u ${SERVICE_NAME} -f   # 查看日誌"
 echo "  sudo systemctl status ${MOUNT_CTOS_UNIT}     # 查看 ctos 掛載狀態"
 echo "  sudo systemctl status ${MOUNT_PROJECTS_UNIT} # 查看 projects 掛載狀態"
 echo "  sudo systemctl status ${MOUNT_CIRCUITS_UNIT} # 查看 circuits 掛載狀態"
+echo "  sudo systemctl status ${MOUNT_LIBRARY_UNIT}  # 查看 library 掛載狀態"
 echo ""
 echo "NAS 掛載點:"
 echo "  ${MOUNT_CTOS_PATH} (讀寫) - 系統檔案"
 echo "  ${MOUNT_PROJECTS_PATH} (唯讀) - 專案資料分享"
 echo "  ${MOUNT_CIRCUITS_PATH} (唯讀) - 線路圖"
+echo "  ${MOUNT_LIBRARY_PATH} (讀寫) - 擎添圖書館"

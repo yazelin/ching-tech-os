@@ -76,6 +76,7 @@ class Settings:
     ctos_mount_path: str = _get_env("CTOS_MOUNT_PATH", "/mnt/nas/ctos")
     projects_mount_path: str = _get_env("PROJECTS_MOUNT_PATH", "/mnt/nas/projects")
     circuits_mount_path: str = _get_env("CIRCUITS_MOUNT_PATH", "/mnt/nas/circuits")
+    library_mount_path: str = _get_env("LIBRARY_MOUNT_PATH", "/mnt/nas/library")
 
     # ===================
     # Session 設定

@@ -19,6 +19,7 @@ def path_manager():
         mock.ctos_mount_path = "/mnt/nas/ctos"
         mock.projects_mount_path = "/mnt/nas/projects"
         mock.circuits_mount_path = "/mnt/nas/circuits"
+        mock.library_mount_path = "/mnt/nas/library"
         mock.nas_mount_path = "/mnt/nas"
         mock.frontend_dir = "/home/ct/SDD/ching-tech-os/frontend"
         yield PathManager()
@@ -82,6 +83,12 @@ class TestSharedSubSources:
             == "/mnt/nas/circuits/c1/layout.dwg"
         )
 
+    def test_shared_library_sub_source(self, path_manager):
+        assert (
+            path_manager.to_filesystem("shared://library/Python入門/book.pdf")
+            == "/mnt/nas/library/Python入門/book.pdf"
+        )
+
     def test_shared_legacy_fallback_to_projects(self, path_manager):
         assert (
             path_manager.to_filesystem("shared://team-a/spec.pdf")
@@ -108,6 +115,24 @@ class TestSharedSubSources:
             path_manager.to_filesystem(
                 "shared://circuits/c1/layout.dwg",
                 source_permissions={"projects": True},  # 只允許 projects，circuits 未定義
+            )
+
+    def test_shared_library_permission_allowed(self, path_manager):
+        """library 來源允許存取時應正常解析。"""
+        assert (
+            path_manager.to_filesystem(
+                "shared://library/Python入門/book.pdf",
+                source_permissions={"projects": True, "circuits": True, "library": True},
+            )
+            == "/mnt/nas/library/Python入門/book.pdf"
+        )
+
+    def test_shared_library_permission_denied(self, path_manager):
+        """library 來源被拒絕時應拋出錯誤。"""
+        with pytest.raises(SharedSourceAccessDeniedError, match=SHARED_SOURCE_ACCESS_DENIED_MESSAGE):
+            path_manager.to_filesystem(
+                "shared://library/Python入門/book.pdf",
+                source_permissions={"projects": True, "circuits": True, "library": False},
             )
 
 
@@ -142,6 +167,10 @@ class TestConversions:
         assert (
             path_manager.to_storage("/mnt/nas/projects/demo/a.pdf")
             == "shared://projects/demo/a.pdf"
+        )
+        assert (
+            path_manager.to_storage("/mnt/nas/library/Python入門/book.pdf")
+            == "shared://library/Python入門/book.pdf"
         )
 
 

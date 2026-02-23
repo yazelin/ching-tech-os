@@ -86,6 +86,7 @@ class PathManager:
         self._shared_mounts = {
             "projects": settings.projects_mount_path,   # /mnt/nas/projects
             "circuits": settings.circuits_mount_path,    # /mnt/nas/circuits
+            "library": settings.library_mount_path,      # /mnt/nas/library
         }
 
         # 舊格式前綴對應（用於向後相容）

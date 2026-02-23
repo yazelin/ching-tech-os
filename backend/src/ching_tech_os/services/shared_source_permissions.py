@@ -59,7 +59,8 @@ def filter_shared_mounts_by_permissions(
 ) -> dict[str, str]:
     """依來源權限過濾 shared 掛載點。"""
     if source_permissions is None:
-        return dict(shared_mounts)
+        from .permissions import DEFAULT_SHARED_SOURCE_PERMISSIONS
+        source_permissions = DEFAULT_SHARED_SOURCE_PERMISSIONS
     return {
         source: mount_path
         for source, mount_path in shared_mounts.items()

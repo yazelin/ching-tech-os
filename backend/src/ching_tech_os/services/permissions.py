@@ -126,10 +126,18 @@ DEFAULT_KNOWLEDGE_PERMISSIONS: dict[str, bool] = {
     "global_delete": False,     # 預設關閉，需管理員開放
 }
 
+# 共用來源預設權限
+DEFAULT_SHARED_SOURCE_PERMISSIONS: dict[str, bool] = {
+    "projects": True,
+    "circuits": True,
+    "library": True,
+}
+
 # 完整預設權限結構
 DEFAULT_PERMISSIONS: dict[str, dict[str, bool]] = {
     "apps": DEFAULT_APP_PERMISSIONS.copy(),
     "knowledge": DEFAULT_KNOWLEDGE_PERMISSIONS.copy(),
+    "shared_sources": DEFAULT_SHARED_SOURCE_PERMISSIONS.copy(),
 }
 
 # 應用程式 ID 對應的顯示名稱
@@ -167,6 +175,7 @@ def get_full_permissions() -> dict[str, dict[str, bool]]:
     return {
         "apps": {app_id: True for app_id in DEFAULT_APP_PERMISSIONS},
         "knowledge": {perm: True for perm in DEFAULT_KNOWLEDGE_PERMISSIONS},
+        "shared_sources": {source: True for source in DEFAULT_SHARED_SOURCE_PERMISSIONS},
     }
 
 
@@ -547,6 +556,7 @@ def get_default_permissions() -> dict[str, dict[str, bool]]:
     return {
         "apps": DEFAULT_APP_PERMISSIONS.copy(),
         "knowledge": DEFAULT_KNOWLEDGE_PERMISSIONS.copy(),
+        "shared_sources": DEFAULT_SHARED_SOURCE_PERMISSIONS.copy(),
     }
 
 
