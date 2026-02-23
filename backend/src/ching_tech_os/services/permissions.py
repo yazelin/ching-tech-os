@@ -70,6 +70,8 @@ TOOL_APP_MAPPING: dict[str, str | None] = {
     "send_nas_file": "file-manager",
     "prepare_file_message": "file-manager",
     "convert_pdf_to_images": "file-manager",
+    "list_library_folders": "file-manager",
+    "archive_to_library": "file-manager",
 
     # 記憶管理工具
     "get_memories": "memory-manager",

@@ -182,11 +182,11 @@ KNOWLEDGE_TOOLS_PROMPT = """【知識庫】
 
 # 檔案管理工具說明（對應 app: file-manager）
 FILE_TOOLS_PROMPT = """【NAS 共用檔案】
-- search_nas_files: 搜尋 NAS 共享檔案（搜尋範圍包含：專案資料、線路圖）
+- search_nas_files: 搜尋 NAS 共享檔案（搜尋範圍包含：專案資料、線路圖、圖書館）
   · keywords: 多個關鍵字用逗號分隔（AND 匹配，大小寫不敏感）
   · file_types: 檔案類型過濾，如 pdf,xlsx,dwg
   · 範例：search_nas_files(keywords="亦達,layout", file_types="pdf")
-  · 結果路徑格式：shared://projects/... 或 shared://circuits/...
+  · 結果路徑格式：shared://projects/...、shared://circuits/... 或 shared://library/...
   · ⚠️ 注意：查找「最近的圖片」或「剛才的圖」請用 get_message_attachments，不要用此工具
 - get_nas_file_info: 取得 NAS 檔案詳細資訊（大小、修改時間）
 - prepare_file_message: 準備檔案訊息（推薦使用）
@@ -216,7 +216,27 @@ FILE_TOOLS_PROMPT = """【NAS 共用檔案】
 2. 用戶回覆要轉換的範圍後，根據回覆設定 pages 參數
 3. 轉換完成後，對每張圖片呼叫 prepare_file_message 發送
 4. 若用戶明確說「轉成圖片」或「全部」，可直接轉換不用詢問
-5. NAS 上的 PDF 轉換：先用 search_nas_files 找到 PDF，再轉換"""
+5. NAS 上的 PDF 轉換：先用 search_nas_files 找到 PDF，再轉換
+
+【圖書館歸檔】
+- list_library_folders: 瀏覽擎添圖書館的資料夾結構
+  · path: 子路徑（可選，預設為根目錄）
+  · max_depth: 瀏覽深度（可選，預設 2）
+- archive_to_library: 將檔案歸檔至擎添圖書館（複製，不移動）
+  · source_path: 來源檔案路徑（僅支援 ctos:// 區域）
+  · category: 大分類（必填），可用值：技術文件、產品資料、教育訓練、法規標準、設計圖面、其他
+  · filename: 新檔名（必填），建議依內容重新命名，格式：品牌-型號-文件類型.ext
+  · folder: 主題子資料夾（可選），不存在會自動建立
+
+【圖書館歸檔流程】
+當使用者要求「存到圖書館」或「歸檔」時：
+1. 用 get_message_attachments 找到上傳的檔案路徑
+2. 用 read_document 讀取檔案內容，判斷分類和適當的檔名
+3. 用 list_library_folders 瀏覽現有結構，選擇或建立合適的子資料夾
+4. 用 archive_to_library 歸檔，注意：
+   - folder 用中文命名，簡潔描述主題（如：馬達規格、PLC程式）
+   - filename 依內容重新命名，格式：品牌-型號-文件類型.副檔名
+   - 若無法判斷內容，使用原始檔名，category 設為「其他」"""
 
 # 基礎工具說明（不需特定權限）
 BASE_TOOLS_PROMPT = """【對話附件管理】
@@ -538,6 +558,7 @@ def generate_usage_tips_prompt(
     if app_permissions.get("file-manager", False):
         tips.extend([
             f"{len(tips)+1}. 用戶要求找專案檔案時，用 search_nas_files 搜尋，找到後用 prepare_file_message 準備發送",
+            f"{len(tips)+1}. 用戶要求「存到圖書館」或「歸檔」時，先找到檔案、讀取內容判斷分類，再用 archive_to_library 歸檔",
         ])
 
     if not tips:

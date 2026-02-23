@@ -1,10 +1,15 @@
 """NAS 檔案相關 MCP 工具
 
-包含：search_nas_files, get_nas_file_info, read_document, send_nas_file, prepare_file_message
+包含：search_nas_files, get_nas_file_info, read_document, send_nas_file,
+      prepare_file_message, list_library_folders, archive_to_library
 """
 
 import asyncio
+import os
+import re
+import shutil
 from datetime import datetime
+from pathlib import Path as FsPath
 from uuid import UUID
 
 from .server import mcp, logger, ensure_db_connection, check_mcp_tool_permission, to_taipei_time, TAIPEI_TZ
@@ -824,3 +829,237 @@ async def prepare_file_message(
     marker = f"[FILE_MESSAGE:{json.dumps(file_info, ensure_ascii=False)}]"
 
     return f"{hint}\n{marker}"
+
+
+# ============================================================
+# 擎添圖書館歸檔工具
+# ============================================================
+
+# 圖書館大分類白名單（第一層目錄）
+LIBRARY_CATEGORIES = [
+    "技術文件",    # 規格書、手冊、datasheet、SOP
+    "產品資料",    # 型錄、報價單、產品目錄
+    "教育訓練",    # 教材、培訓簡報、操作指南
+    "法規標準",    # ISO、CNS、安規、認證文件
+    "設計圖面",    # CAD、線路圖、機構圖
+    "其他",        # 無法分類時的 fallback
+]
+
+
+def _sanitize_path_segment(segment: str) -> str:
+    """清理路徑片段，防止 path traversal"""
+    segment = segment.replace("..", "").replace("/", "").replace("\\", "")
+    segment = segment.lstrip(". ")
+    segment = re.sub(r'[\x00-\x1f]', '', segment)
+    return segment.strip()
+
+
+def _deduplicate_filename(target_dir: FsPath, filename: str) -> str:
+    """如果目標檔案已存在，加數字後綴避免覆蓋"""
+    stem = FsPath(filename).stem
+    suffix = FsPath(filename).suffix
+    target = target_dir / filename
+    counter = 2
+    while target.exists():
+        filename = f"{stem}-{counter}{suffix}"
+        target = target_dir / filename
+        counter += 1
+    return filename
+
+
+async def _check_library_permission(ctos_user_id: int | None) -> tuple[bool, str]:
+    """檢查使用者是否有圖書館存取權限，回傳 (allowed, library_mount_path 或 error_msg)"""
+    from ...config import settings
+
+    shared_mounts = await _get_user_shared_mounts(ctos_user_id)
+    if "library" not in shared_mounts:
+        return False, "權限不足：無法存取圖書館"
+    return True, settings.library_mount_path
+
+
+@mcp.tool()
+async def list_library_folders(
+    path: str = "",
+    max_depth: int = 2,
+    ctos_user_id: int | None = None,
+) -> str:
+    """
+    瀏覽擎添圖書館的資料夾結構，了解現有分類以做出歸檔決策
+
+    Args:
+        path: 子路徑（相對於圖書館根目錄），預設為根目錄
+        max_depth: 瀏覽深度，預設 2
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+    """
+    await ensure_db_connection()
+
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("list_library_folders", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
+    lib_allowed, lib_result = await _check_library_permission(ctos_user_id)
+    if not lib_allowed:
+        return f"錯誤：{lib_result}"
+    library_root = lib_result
+
+    # 組合目標路徑
+    if path:
+        clean_path = _sanitize_path_segment(path)
+        target_dir = FsPath(library_root) / clean_path
+    else:
+        target_dir = FsPath(library_root)
+
+    if not target_dir.exists():
+        return f"路徑不存在：{path or '(根目錄)'}"
+    if not target_dir.is_dir():
+        return f"路徑不是資料夾：{path}"
+
+    # 遍歷資料夾結構
+    lines = ["擎添圖書館/" + (f"{path}/" if path else "")]
+    _walk_tree(target_dir, lines, prefix="", current_depth=0, max_depth=max_depth)
+
+    if len(lines) == 1:
+        lines.append("  (空)")
+
+    return "\n".join(lines)
+
+
+def _walk_tree(
+    directory: FsPath,
+    lines: list[str],
+    prefix: str,
+    current_depth: int,
+    max_depth: int,
+) -> None:
+    """遞迴建立樹狀結構文字"""
+    if current_depth >= max_depth:
+        return
+
+    try:
+        entries = sorted(directory.iterdir(), key=lambda e: (not e.is_dir(), e.name.lower()))
+    except PermissionError:
+        lines.append(f"{prefix}├── (無權限)")
+        return
+
+    dirs = [e for e in entries if e.is_dir()]
+    files = [e for e in entries if e.is_file()]
+
+    for i, d in enumerate(dirs):
+        is_last = (i == len(dirs) - 1) and not files
+        connector = "└── " if is_last else "├── "
+
+        # 計算子目錄中的檔案數
+        try:
+            file_count = sum(1 for f in d.rglob("*") if f.is_file())
+        except PermissionError:
+            file_count = 0
+        count_str = f" ({file_count} 個檔案)" if file_count > 0 else " (空)"
+
+        lines.append(f"{prefix}{connector}{d.name}/{count_str}")
+
+        # 遞迴子目錄
+        child_prefix = prefix + ("    " if is_last else "│   ")
+        _walk_tree(d, lines, child_prefix, current_depth + 1, max_depth)
+
+    # 列出檔案（只在最後一層顯示）
+    if files and current_depth == max_depth - 1:
+        for i, f in enumerate(files[:10]):  # 最多顯示 10 個
+            is_last = i == min(len(files), 10) - 1
+            connector = "└── " if is_last else "├── "
+            lines.append(f"{prefix}{connector}{f.name}")
+        if len(files) > 10:
+            lines.append(f"{prefix}    ...還有 {len(files) - 10} 個檔案")
+
+
+@mcp.tool()
+async def archive_to_library(
+    source_path: str,
+    category: str,
+    filename: str,
+    folder: str = "",
+    ctos_user_id: int | None = None,
+) -> str:
+    """
+    將檔案歸檔至擎添圖書館。複製檔案（不移動），原始檔案保留。
+
+    Args:
+        source_path: 來源檔案路徑（僅支援 ctos:// 區域，如 linebot 上傳的檔案）
+        category: 大分類，必須是：技術文件、產品資料、教育訓練、法規標準、設計圖面、其他
+        filename: 新檔名（含副檔名），建議依內容重新命名，格式：品牌-型號-文件類型.ext
+        folder: 主題子資料夾名稱（可選），不存在會自動建立（如：馬達規格、PLC程式）
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
+    """
+    await ensure_db_connection()
+
+    # 權限檢查
+    allowed, error_msg = await check_mcp_tool_permission("archive_to_library", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
+    lib_allowed, lib_result = await _check_library_permission(ctos_user_id)
+    if not lib_allowed:
+        return f"錯誤：{lib_result}"
+    library_root = lib_result
+
+    # 驗證 category
+    if category not in LIBRARY_CATEGORIES:
+        return f"錯誤：無效的分類「{category}」，可用分類：{'、'.join(LIBRARY_CATEGORIES)}"
+
+    # 驗證 source_path：必須是 CTOS zone
+    from ..path_manager import path_manager, StorageZone
+    try:
+        parsed = path_manager.parse(source_path)
+    except ValueError as e:
+        return f"錯誤：無效的來源路徑：{e}"
+
+    if parsed.zone != StorageZone.CTOS:
+        return f"錯誤：來源路徑必須是 CTOS 區域（如 linebot 上傳的檔案），目前為 {parsed.zone.value}"
+
+    # 取得實際檔案系統路徑並確認檔案存在
+    try:
+        source_fs_path = FsPath(path_manager.to_filesystem(source_path))
+    except ValueError as e:
+        return f"錯誤：路徑轉換失敗：{e}"
+
+    if not source_fs_path.exists():
+        return f"錯誤：來源檔案不存在：{source_path}"
+    if not source_fs_path.is_file():
+        return f"錯誤：來源路徑不是檔案：{source_path}"
+
+    # 清理 folder 和 filename
+    clean_filename = _sanitize_path_segment(filename)
+    if not clean_filename:
+        # fallback 使用原始檔名
+        clean_filename = source_fs_path.name
+
+    # 組合目標路徑
+    target_dir = FsPath(library_root) / category
+    if folder:
+        clean_folder = _sanitize_path_segment(folder)
+        if clean_folder:
+            target_dir = target_dir / clean_folder
+
+    # 建立目錄（如果不存在）
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    # 檔名去重
+    final_filename = _deduplicate_filename(target_dir, clean_filename)
+    target_path = target_dir / final_filename
+
+    # 複製檔案
+    try:
+        shutil.copy2(str(source_fs_path), str(target_path))
+    except PermissionError:
+        return f"錯誤：沒有寫入權限，請確認圖書館掛載為讀寫模式"
+    except Exception as e:
+        return f"錯誤：複製失敗：{e}"
+
+    # 組合結果路徑
+    relative = str(target_path.relative_to(library_root))
+    result_uri = f"shared://library/{relative}"
+
+    file_size = target_path.stat().st_size
+    size_str = _format_file_size(file_size)
+
+    return f"✅ 已歸檔：{result_uri}（{size_str}）"
