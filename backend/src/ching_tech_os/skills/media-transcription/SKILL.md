@@ -25,14 +25,14 @@ metadata:
 2. **check-transcription** — 查詢轉錄進度（同步）
    - `run_skill_script(skill="media-transcription", script="check-transcription", input='{"job_id":"之前取得的job_id"}')`
    - 回傳轉錄狀態（extracting_audio/transcribing/completed/failed）
-   - 完成時回傳 ctos_path（逐字稿 .md 檔路徑）、transcript_preview（前 500 字預覽，可直接用於簡短摘要）、duration（音訊時長）
+   - 完成時回傳：file_path（逐字稿絕對路徑，可直接用 Read 工具讀取）、transcript_preview（前 500 字預覽）、duration（音訊時長）
 
 **典型使用流程：**
 1. 使用者透過 media-downloader 下載影片，取得 ctos_path
 2. 呼叫 transcribe 啟動轉錄，取得 job_id
-3. 呼叫 check-transcription 查詢進度，完成後取得逐字稿 ctos_path 和 transcript_preview
-4. 讀取逐字稿全文：用 `get_nas_file_info(file_path=ctos_path)` 取得實際路徑，再用 Read 工具讀取 .md 檔。**注意：逐字稿是 .md 格式，read_document 不支援 .md，不要使用 read_document**
-5. 依使用者要求整理摘要/總結/重點筆記（若只需簡短摘要，check-transcription 的 transcript_preview 已有前 500 字，可直接使用）
+3. 呼叫 check-transcription 查詢進度，完成後取得 file_path（絕對路徑）和 transcript_preview
+4. 用 Read 工具直接讀取 file_path 取得逐字稿全文。**不要用 read_document（不支援 .md）、不要用 get_nas_file_info（不需要，check-transcription 已回傳絕對路徑）**
+5. 依使用者要求整理摘要/總結/重點筆記（若只需簡短摘要，transcript_preview 已有前 500 字，可直接使用不需讀全文）
 6. 使用 add_note 存入知識庫，或 archive_to_library 歸檔到圖書館
 
 **AI 行為指引：**

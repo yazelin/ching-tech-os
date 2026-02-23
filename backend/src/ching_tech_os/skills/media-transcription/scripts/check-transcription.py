@@ -129,6 +129,14 @@ def main() -> int:
         result["duration"] = status_data.get("duration", 0)
         result["duration_formatted"] = status_data.get("duration_formatted", "")
         result["transcript_preview"] = status_data.get("transcript_preview", "")
+        # 提供絕對路徑，讓 AI 可直接用 Read 工具讀取（不需再呼叫 get_nas_file_info）
+        ctos_path = status_data.get("ctos_path", "")
+        if ctos_path:
+            try:
+                from ching_tech_os.services.path_manager import path_manager
+                result["file_path"] = path_manager.to_filesystem(ctos_path)
+            except Exception:
+                pass
 
     print(json.dumps(result, ensure_ascii=False))
     return 0
