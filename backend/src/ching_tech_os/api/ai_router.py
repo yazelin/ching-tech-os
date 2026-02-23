@@ -19,21 +19,20 @@ router = APIRouter(prefix="/api/ai", tags=["AI"])
 async def get_current_user_id(request: Request) -> int:
     """從 session 取得當前使用者 ID
 
-    TODO: 實作完整的使用者認證後，這裡應該從 DB 查詢 user_id
-    目前暫時使用 session token 的 hash 作為 user_id
+    需從 session 中的資料庫 user_id 取得，若驗證失敗則回傳 401。
     """
     token = request.cookies.get("session_token")
     if not token:
-        # 開發模式：允許未登入使用，使用預設 user_id
-        return 1
+        raise HTTPException(status_code=401, detail="未登入或 session 已過期")
 
     session = await session_manager.get_session(token)
     if not session:
         raise HTTPException(status_code=401, detail="未登入或 session 已過期")
 
-    # TODO: 從 DB 查詢 user_id
-    # 暫時使用 username 的 hash 作為 user_id
-    return hash(session.username) % 1000000
+    if session.user_id is None:
+        raise HTTPException(status_code=401, detail="未登入或 session 已過期")
+
+    return session.user_id
 
 
 @router.get("/chats", response_model=list[ChatResponse])
