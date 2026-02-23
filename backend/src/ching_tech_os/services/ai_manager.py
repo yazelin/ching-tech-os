@@ -615,14 +615,11 @@ async def get_logs(
             # 處理 script 類型：從 input_prompt 解析 script_label
             item["script_label"] = None
             if item.get("context_type") == "script" and item.get("input_prompt"):
-                try:
-                    input_data = json.loads(item["input_prompt"])
-                    skill = input_data.get("skill", "")
-                    script = input_data.get("script", "")
-                    if skill:
-                        item["script_label"] = f"{skill}/{script}" if script else skill
-                except (json.JSONDecodeError, TypeError, AttributeError):
-                    pass
+                # input_prompt 格式為 "skill/script: {json}"，取冒號前的部分
+                prompt = item["input_prompt"]
+                label = prompt.split(": ", 1)[0].strip() if ": " in prompt else ""
+                if label:
+                    item["script_label"] = label
             # 移除 parsed_response 和 input_prompt（列表不需要完整內容）
             del item["parsed_response"]
             del item["input_prompt"]

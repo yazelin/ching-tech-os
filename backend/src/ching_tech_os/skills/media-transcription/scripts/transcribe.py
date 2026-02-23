@@ -37,11 +37,15 @@ def _get_transcriptions_base_dir() -> Path:
 
 
 def _resolve_ctos_path(ctos_path: str) -> Path | None:
-    """將 ctos:// 路徑解析為實際檔案路徑。"""
+    """將 ctos:// 路徑解析為實際檔案路徑（含路徑穿越防護）。"""
     if not ctos_path.startswith("ctos://"):
         return None
-    relative = ctos_path[len("ctos://"):]
-    return Path(_get_ctos_mount_path()) / relative
+    relative = ctos_path[len("ctos://"):].lstrip("/")
+    base_path = Path(_get_ctos_mount_path()).resolve()
+    full_path = (base_path / relative).resolve()
+    if not str(full_path).startswith(str(base_path)):
+        return None
+    return full_path
 
 
 def _write_status(status_path: Path, data: dict) -> None:
@@ -144,10 +148,15 @@ def _do_transcribe(
 
         transcript_segments = []
         full_text_parts = []
+        last_status_update = time.monotonic()
         for segment in segments:
             text = segment.text.strip()
             if not text:
                 continue
+            # 定期更新狀態檔以防止 check-transcription 判定逾時
+            if time.monotonic() - last_status_update > 30:
+                _write_status(status_path, status_data)
+                last_status_update = time.monotonic()
             # 簡轉繁
             if converter:
                 text = converter.convert(text)
