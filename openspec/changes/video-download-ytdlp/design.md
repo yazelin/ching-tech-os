@@ -75,6 +75,7 @@ CTOS 已有完整的 Skill 系統（script-first 架構）和檔案下載/歸檔
   "ctos_path": "ctos://linebot/videos/2026-02-23/a1b2c3d4/video-title.mp4",
   "error": null
 }
+```
 
 ### 3. yt-dlp 作為 Python 套件安裝（非系統 CLI）
 

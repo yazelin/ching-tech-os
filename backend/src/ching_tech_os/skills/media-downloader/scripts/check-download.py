@@ -23,7 +23,7 @@ def _get_videos_base_dir() -> Path:
 
 def _format_filesize(bytes_val: int | float | None) -> str:
     """將位元組格式化為可讀大小。"""
-    if not bytes_val:
+    if bytes_val is None:
         return "未知"
     bytes_val = float(bytes_val)
     for unit in ["B", "KB", "MB", "GB"]:
@@ -42,7 +42,7 @@ def _find_status_file(job_id: str) -> Path | None:
     # 僅搜尋最近 7 天，避免目錄過多時效能問題
     count = 0
     for date_dir in sorted(base_dir.iterdir(), reverse=True):
-        if not date_dir.is_dir():
+        if not date_dir.is_dir() or len(date_dir.name) != 10:
             continue
         count += 1
         if count > 7:
@@ -65,6 +65,11 @@ def main() -> int:
     job_id = payload.get("job_id", "").strip()
     if not job_id:
         print(json.dumps({"success": False, "error": "缺少 job_id 參數"}, ensure_ascii=False))
+        return 1
+
+    # 驗證 job_id 格式（防止路徑穿越）
+    if not job_id.isalnum() or len(job_id) != 8:
+        print(json.dumps({"success": False, "error": "無效的 job_id 格式"}, ensure_ascii=False))
         return 1
 
     # 找到狀態檔

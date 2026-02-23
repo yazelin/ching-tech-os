@@ -19,7 +19,7 @@ def _format_duration(seconds: int | float | None) -> str:
 
 def _format_filesize(bytes_val: int | float | None) -> str:
     """將位元組格式化為可讀大小。"""
-    if not bytes_val:
+    if bytes_val is None:
         return "未知"
     bytes_val = float(bytes_val)
     for unit in ["B", "KB", "MB", "GB"]:
