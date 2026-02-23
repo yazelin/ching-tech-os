@@ -45,6 +45,7 @@ const AILogApp = (function() {
     { id: 'telegram-group', name: 'Telegram 群組' },
     { id: 'telegram-personal', name: 'Telegram 個人' },
     { id: 'system', name: '系統' },
+    { id: 'script', name: 'Script 執行' },
     { id: 'test', name: '測試' }
   ];
 
@@ -300,8 +301,8 @@ const AILogApp = (function() {
           </span>
         </td>
         <td>${formatDateTime(log.created_at)}</td>
-        <td>${log.agent_name || '-'}</td>
-        <td>${log.context_type || '-'}</td>
+        <td>${log.model === 'script' ? 'Script' : (log.agent_name || '-')}</td>
+        <td>${log.script_label || log.context_type || '-'}</td>
         <td>${renderToolsBadges(log.allowed_tools, log.used_tools)}</td>
         <td><span class="ai-log-duration">${formatDuration(log.duration_ms)}</span></td>
         <td><span class="ai-log-tokens">${formatTokens(log.input_tokens, log.output_tokens)}</span></td>
@@ -316,12 +317,12 @@ const AILogApp = (function() {
             <span class="ai-log-status ${log.success ? 'success' : 'error'}">
               ${getIcon(log.success ? 'check-circle' : 'alert-circle')}
             </span>
-            <span class="ai-log-card-agent">${log.agent_name || '-'}</span>
+            <span class="ai-log-card-agent">${log.model === 'script' ? 'Script' : (log.agent_name || '-')}</span>
           </div>
           <span class="ai-log-card-time">${formatDateTime(log.created_at)}</span>
         </div>
         <div class="ai-log-card-body">
-          <span class="ai-log-card-type">${log.context_type || '-'}</span>
+          <span class="ai-log-card-type">${log.script_label || log.context_type || '-'}</span>
           <div class="ai-log-card-tools">${renderToolsBadges(log.allowed_tools, log.used_tools)}</div>
         </div>
         <div class="ai-log-card-footer">
@@ -441,23 +442,24 @@ const AILogApp = (function() {
 
     // Tab 2: 使用者輸入
     const isInputActive = !log.system_prompt;
-    tabs.push(`<button class="ai-log-detail-tab ${isInputActive ? 'active' : ''}" data-tab="input">輸入</button>`);
+    const isScript = log.model === 'script';
+    tabs.push(`<button class="ai-log-detail-tab ${isInputActive ? 'active' : ''}" data-tab="input">${isScript ? 'Script 輸入' : '輸入'}</button>`);
     panels.push(`
       <div class="ai-log-detail-panel ${isInputActive ? 'active' : ''}" data-panel="input">
         <div class="ai-log-detail-section">
-          <div class="ai-log-detail-text">${escapeHtml(log.input_prompt)}</div>
+          <div class="ai-log-detail-text">${isScript ? formatJson(log.input_prompt) : escapeHtml(log.input_prompt)}</div>
         </div>
       </div>
     `);
 
     // Tab 3: AI 輸出 或 執行流程
-    tabs.push(`<button class="ai-log-detail-tab" data-tab="output">${hasFlow ? '流程' : '輸出'}</button>`);
+    tabs.push(`<button class="ai-log-detail-tab" data-tab="output">${hasFlow ? '流程' : (isScript ? 'Script 輸出' : '輸出')}</button>`);
     panels.push(`
       <div class="ai-log-detail-panel" data-panel="output">
         ${hasFlow ? renderExecutionFlow(log) : `
           <div class="ai-log-detail-section">
             <div class="ai-log-detail-text ${log.error_message ? 'error' : ''}">
-              ${log.error_message ? escapeHtml(log.error_message) : escapeHtml(log.raw_response || '無回應')}
+              ${log.error_message ? escapeHtml(log.error_message) : (isScript ? formatJson(log.raw_response) : escapeHtml(log.raw_response || '無回應'))}
             </div>
           </div>
         `}
@@ -548,14 +550,14 @@ const AILogApp = (function() {
           </div>
         ` : ''}
         <div class="ai-log-detail-section">
-          <div class="ai-log-detail-section-title">使用者輸入</div>
-          <div class="ai-log-detail-text">${escapeHtml(log.input_prompt)}</div>
+          <div class="ai-log-detail-section-title">${log.model === 'script' ? 'Script 輸入' : '使用者輸入'}</div>
+          <div class="ai-log-detail-text">${log.model === 'script' ? formatJson(log.input_prompt) : escapeHtml(log.input_prompt)}</div>
         </div>
         ${hasFlow ? renderExecutionFlow(log) : `
           <div class="ai-log-detail-section">
-            <div class="ai-log-detail-section-title">AI 輸出</div>
+            <div class="ai-log-detail-section-title">${log.model === 'script' ? 'Script 輸出' : 'AI 輸出'}</div>
             <div class="ai-log-detail-text ${log.error_message ? 'error' : ''}">
-              ${log.error_message ? escapeHtml(log.error_message) : escapeHtml(log.raw_response || '無回應')}
+              ${log.error_message ? escapeHtml(log.error_message) : (log.model === 'script' ? formatJson(log.raw_response) : escapeHtml(log.raw_response || '無回應'))}
             </div>
           </div>
         `}
@@ -671,33 +673,48 @@ const AILogApp = (function() {
    * @param {string[]|null} usedTools - 實際使用的工具
    */
   function renderToolsBadges(allowedTools, usedTools) {
-    if (!allowedTools || allowedTools.length === 0) {
+    const hasAllowed = allowedTools && allowedTools.length > 0;
+    const hasUsed = usedTools && usedTools.length > 0;
+
+    if (!hasAllowed && !hasUsed) {
       return '<span class="ai-log-no-tools">-</span>';
     }
 
-    const usedSet = new Set(usedTools || []);
-    const usedList = allowedTools.filter(t => usedSet.has(t));
-    const unusedList = allowedTools.filter(t => !usedSet.has(t));
-
-    // 已使用的工具（永遠顯示）
-    let html = usedList.map(tool => {
-      const escaped = escapeHtml(tool);
-      return `<span class="ai-log-tool-badge used" title="${escaped}">${escaped}</span>`;
-    }).join('');
-
-    // 未使用的工具（預設隱藏，點擊展開）
-    if (unusedList.length > 0) {
-      html += `<button class="ai-log-tools-expand-btn" data-action="toggle-tools" title="展開 ${unusedList.length} 個未使用的工具">+${unusedList.length}</button>`;
-      html += `<span class="ai-log-tools-hidden">`;
-      html += unusedList.map(tool => {
-        const escaped = escapeHtml(tool);
-        return `<span class="ai-log-tool-badge unused" title="${escaped}">${escaped}</span>`;
+    // 直接顯示 used_tools（後端已包含 skill 資訊）
+    let html = '';
+    if (hasUsed) {
+      html += usedTools.map(tool => {
+        const short = escapeHtml(shortenToolName(tool));
+        const full = escapeHtml(tool);
+        return `<span class="ai-log-tool-badge used" title="${full}">${short}</span>`;
       }).join('');
-      html += `</span>`;
+    }
+
+    // 計算未使用的工具：用 base name 比對（處理 enriched name 不精確匹配的情況）
+    if (hasAllowed) {
+      const unusedList = allowedTools.filter(allowedTool => {
+        const baseName = allowedTool.includes('__')
+          ? allowedTool.split('__').pop()
+          : allowedTool;
+        return !(usedTools || []).some(used =>
+          used === allowedTool || used.startsWith(baseName)
+        );
+      });
+
+      if (unusedList.length > 0) {
+        html += `<button class="ai-log-tools-expand-btn" data-action="toggle-tools" title="展開 ${unusedList.length} 個未使用的工具">+${unusedList.length}</button>`;
+        html += `<span class="ai-log-tools-hidden">`;
+        html += unusedList.map(tool => {
+          const short = escapeHtml(shortenToolName(tool));
+          const full = escapeHtml(tool);
+          return `<span class="ai-log-tool-badge unused" title="${full}">${short}</span>`;
+        }).join('');
+        html += `</span>`;
+      }
     }
 
     // 無使用任何工具時顯示數量提示
-    if (usedList.length === 0 && unusedList.length > 0) {
+    if (!hasUsed && hasAllowed) {
       html = `<span class="ai-log-no-tools-used">未使用工具</span>` + html;
     }
 
@@ -785,6 +802,20 @@ const AILogApp = (function() {
   }
 
   /**
+   * 縮短工具名稱顯示
+   * mcp__ching-tech-os__search_knowledge → search_knowledge
+   * run_skill_script(media-downloader/check-download) → media-downloader/check-download
+   */
+  function shortenToolName(name) {
+    if (!name) return '';
+    // run_skill_script(skill/script) → skill/script
+    const skillMatch = name.match(/^run_skill_script\((.+)\)$/);
+    if (skillMatch) return skillMatch[1];
+    // mcp__server__tool_name → tool_name
+    return name.replace(/^mcp__[^_]+__/, '');
+  }
+
+  /**
    * HTML 轉義
    */
   function escapeHtml(text) {
@@ -839,7 +870,11 @@ const AILogApp = (function() {
           <div class="ai-log-flow-header" onclick="this.parentElement.dataset.expanded = this.parentElement.dataset.expanded === 'true' ? 'false' : 'true'">
             <span class="ai-log-flow-number">${index + 1}</span>
             <span class="ai-log-flow-icon">${getIcon('wrench')}</span>
-            <span class="ai-log-flow-name">${escapeHtml(tc.name)}</span>
+            <span class="ai-log-flow-name">${
+              tc.name?.includes('run_skill_script') && tc.input?.skill
+                ? `<span class="ai-log-flow-skill">${escapeHtml(tc.input.skill)}/${escapeHtml(tc.input.script || '?')}</span>`
+                : escapeHtml(shortenToolName(tc.name))
+            }</span>
             ${durationText}
             <span class="ai-log-flow-toggle">${getIcon('chevron-down')}</span>
           </div>

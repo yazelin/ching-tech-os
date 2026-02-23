@@ -478,6 +478,12 @@
   white-space: nowrap;
 }
 
+.ai-log-flow-skill {
+  color: var(--color-accent);
+  font-weight: 500;
+  margin-left: 4px;
+}
+
 .ai-log-flow-duration {
   font-size: 11px;
   font-family: 'JetBrains Mono', monospace;
