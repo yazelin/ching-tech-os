@@ -37,7 +37,7 @@ metadata:
 
 **AI 行為指引：**
 - 當使用者下載了影片/音訊後問「幫我整理內容」、「這在講什麼」等，主動建議先轉錄
-- source_path 必須使用 `ctos://linebot/videos/...` 或 `ctos://linebot/downloads/...` 格式的路徑。這個路徑來自 media-downloader 的 check-download 回傳的 ctos_path，應在對話歷史中找到，**不要自行猜測或拼湊路徑**
+- source_path 必須是 `ctos://` 開頭的完整路徑，來源可能是：media-downloader 的 check-download 回傳的 ctos_path、search_nas_files 搜尋結果、list_library_folders 瀏覽結果、知識庫附件路徑等。**務必從對話歷史或工具回傳結果中取得確切路徑，不要自行猜測或拼湊**
 - 對於短音訊（< 5 分鐘）建議使用 base 模型（速度快）；較長或需要高品質時建議 small 或 medium
 - **嚴禁使用 sleep 等待轉錄完成**。轉錄可能需要數分鐘，啟動後只需查詢一次進度：
   - 若仍在轉錄中：直接回覆使用者「轉錄進行中，請稍後再詢問進度」，**結束本次回應**
