@@ -42,6 +42,7 @@ def _do_download(job_dir: Path, status_path: Path, url: str, fmt: str, job_id: s
 
     last_update_time = 0.0
     last_update_pct = 0.0
+    size_exceeded = False  # flag：大小超限時由外層處理
 
     status_data = {
         "job_id": job_id,
@@ -56,7 +57,7 @@ def _do_download(job_dir: Path, status_path: Path, url: str, fmt: str, job_id: s
     _write_status(status_path, status_data)
 
     def progress_hook(d: dict) -> None:
-        nonlocal last_update_time, last_update_pct
+        nonlocal last_update_time, last_update_pct, size_exceeded
 
         if d.get("status") == "downloading":
             now = time.monotonic()
@@ -64,9 +65,9 @@ def _do_download(job_dir: Path, status_path: Path, url: str, fmt: str, job_id: s
             downloaded = d.get("downloaded_bytes", 0)
             pct = (downloaded / total * 100) if total > 0 else 0.0
 
-            # 檢查大小限制
+            # 標記大小超限（由 yt-dlp 的 max_filesize 選項實際中止）
             if total > MAX_FILESIZE_BYTES:
-                raise Exception(f"檔案超過 500 MB 限制（預估 {total / 1024 / 1024:.0f} MB）")
+                size_exceeded = True
 
             # 節流：每 5 秒或每 5% 更新
             time_diff = now - last_update_time
@@ -138,9 +139,22 @@ def _do_download(job_dir: Path, status_path: Path, url: str, fmt: str, job_id: s
 
     ydl_opts["postprocessor_hooks"] = [postprocess_hook]
 
+    # 不需要排除的輔助檔案
+    _SKIP_FILES = {"status.json", "error.log"}
+
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
+
+        # 大小超限：清理並回報失敗
+        if size_exceeded:
+            for f in job_dir.iterdir():
+                if f.is_file() and f.name not in _SKIP_FILES:
+                    f.unlink(missing_ok=True)
+            status_data["status"] = "failed"
+            status_data["error"] = "檔案超過 500 MB 限制"
+            _write_status(status_path, status_data)
+            return
 
         # 優先使用 yt-dlp 回報的最終檔名，否則掃描目錄
         target_file = None
@@ -152,7 +166,7 @@ def _do_download(job_dir: Path, status_path: Path, url: str, fmt: str, job_id: s
         if not target_file:
             downloaded_files = [
                 f for f in job_dir.iterdir()
-                if f.is_file() and f.name != "status.json"
+                if f.is_file() and f.name not in _SKIP_FILES
                 and not f.name.endswith(".tmp") and not f.name.endswith(".part")
             ]
             if downloaded_files:

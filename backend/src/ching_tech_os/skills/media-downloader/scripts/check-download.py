@@ -39,6 +39,8 @@ def _find_status_file(job_id: str) -> Path | None:
     if not base_dir.exists():
         return None
 
+    resolved_base = base_dir.resolve()
+
     # 僅搜尋最近 7 天，避免目錄過多時效能問題
     count = 0
     for date_dir in sorted(base_dir.iterdir(), reverse=True):
@@ -48,6 +50,11 @@ def _find_status_file(job_id: str) -> Path | None:
         if count > 7:
             break
         status_path = date_dir / job_id / "status.json"
+        # 縱深防禦：驗證路徑未逃出 base_dir
+        try:
+            status_path.resolve().relative_to(resolved_base)
+        except ValueError:
+            continue
         if status_path.exists():
             return status_path
 
@@ -94,12 +101,14 @@ def main() -> int:
                 if elapsed > STALE_TIMEOUT_MINUTES * 60:
                     status_data["status"] = "failed"
                     status_data["error"] = f"下載逾時（超過 {STALE_TIMEOUT_MINUTES} 分鐘無進度）"
-                    # 更新狀態檔
+                    # atomic write 更新狀態檔
                     status_data["updated_at"] = datetime.now().isoformat()
-                    status_path.write_text(
+                    tmp_path = status_path.with_suffix(".tmp")
+                    tmp_path.write_text(
                         json.dumps(status_data, ensure_ascii=False, indent=2),
                         encoding="utf-8",
                     )
+                    tmp_path.replace(status_path)
             except (ValueError, TypeError):
                 pass
 
