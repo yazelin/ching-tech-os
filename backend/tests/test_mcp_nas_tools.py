@@ -25,8 +25,18 @@ class _ConnCtx:
 
 
 def _allow(monkeypatch: pytest.MonkeyPatch, allowed: bool = True):
+    from ching_tech_os.config import settings
+
     monkeypatch.setattr(nas_tools, "ensure_db_connection", AsyncMock())
     monkeypatch.setattr(nas_tools, "check_mcp_tool_permission", AsyncMock(return_value=(allowed, "DENY")))
+    monkeypatch.setattr(
+        nas_tools,
+        "_get_user_shared_mounts",
+        AsyncMock(side_effect=lambda _uid: {
+            "projects": settings.projects_mount_path,
+            "circuits": settings.circuits_mount_path,
+        }),
+    )
 
 
 def test_nas_tools_helpers() -> None:
@@ -81,6 +91,18 @@ async def test_search_nas_files(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
 
 
 @pytest.mark.asyncio
+async def test_search_nas_files_denied_sources(monkeypatch: pytest.MonkeyPatch) -> None:
+    _allow(monkeypatch, True)
+    monkeypatch.setattr(
+        nas_tools,
+        "_get_user_shared_mounts",
+        AsyncMock(return_value={}),
+    )
+    out = await nas_tools.search_nas_files("demo", ctos_user_id=1)
+    assert "權限不足" in out
+
+
+@pytest.mark.asyncio
 async def test_get_file_info_and_read_document(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     _allow(monkeypatch, True)
     import ching_tech_os.services.share as share_module
@@ -91,13 +113,13 @@ async def test_get_file_info_and_read_document(monkeypatch: pytest.MonkeyPatch, 
     monkeypatch.setattr(settings, "nas_mount_path", str(tmp_path))
     doc = tmp_path / "x.pdf"
     doc.write_text("pdf", encoding="utf-8")
-    monkeypatch.setattr(share_module, "validate_nas_file_path", lambda _p: doc)
+    monkeypatch.setattr(share_module, "validate_nas_file_path", lambda _p, **_k: doc)
 
     out = await nas_tools.get_nas_file_info("shared://projects/x.pdf", ctos_user_id=1)
     assert "完整路徑" in out
 
     monkeypatch.setattr(pm.path_manager, "parse", lambda _p: SimpleNamespace(zone=pm.StorageZone.SHARED))
-    monkeypatch.setattr(pm.path_manager, "to_filesystem", lambda _p: str(doc))
+    monkeypatch.setattr(pm.path_manager, "to_filesystem", lambda _p, **_k: str(doc))
     monkeypatch.setattr(dr, "SUPPORTED_EXTENSIONS", {".pdf"})
     monkeypatch.setattr(dr, "LEGACY_EXTENSIONS", {".doc"})
     monkeypatch.setattr(
@@ -124,7 +146,7 @@ async def test_send_nas_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     monkeypatch.setattr(settings, "telegram_bot_token", "tok")
     img = tmp_path / "a.jpg"
     img.write_bytes(b"x" * 100)
-    monkeypatch.setattr(share_module, "validate_nas_file_path", lambda _p: img)
+    monkeypatch.setattr(share_module, "validate_nas_file_path", lambda _p, **_k: img)
     monkeypatch.setattr(share_module, "create_share_link", AsyncMock(return_value=SimpleNamespace(full_url="https://x/s/abc", token="abc")))
 
     class _TG:
@@ -176,7 +198,7 @@ async def test_prepare_file_message(monkeypatch: pytest.MonkeyPatch, tmp_path: P
     nf = tmp_path / "linebot" / "files" / "abc.txt"
     nf.parent.mkdir(parents=True, exist_ok=True)
     nf.write_text("x", encoding="utf-8")
-    monkeypatch.setattr(share_module, "validate_nas_file_path", lambda _p: nf)
+    monkeypatch.setattr(share_module, "validate_nas_file_path", lambda _p, **_k: nf)
     msg2 = await nas_tools.prepare_file_message("shared://projects/abc.txt", ctos_user_id=1)
     assert "[FILE_MESSAGE:" in msg2
 

@@ -160,7 +160,10 @@ def get_full_url(token: str) -> str:
     return f"{settings.public_url}/s/{token}"
 
 
-def validate_nas_file_path(file_path: str) -> Path:
+def validate_nas_file_path(
+    file_path: str,
+    source_permissions: dict[str, bool] | None = None,
+) -> Path:
     """驗證 NAS 檔案路徑
 
     Args:
@@ -174,6 +177,7 @@ def validate_nas_file_path(file_path: str) -> Path:
         NasFileNotFoundError: 檔案不存在
     """
     from .path_manager import path_manager, StorageZone
+    from .shared_source_permissions import SharedSourceAccessDeniedError
 
     ctos_path = Path(settings.ctos_mount_path)
 
@@ -197,7 +201,17 @@ def validate_nas_file_path(file_path: str) -> Path:
         if parsed.zone not in (StorageZone.CTOS, StorageZone.SHARED):
             raise NasFileAccessDenied(f"不允許存取 {parsed.zone.value}:// 區域的檔案")
 
-        full_path = Path(path_manager.to_filesystem(file_path))
+        try:
+            full_path = Path(
+                path_manager.to_filesystem(
+                    file_path,
+                    source_permissions=source_permissions,
+                )
+            )
+        except SharedSourceAccessDeniedError as e:
+            raise NasFileAccessDenied(str(e)) from e
+        except ValueError as e:
+            raise NasFileAccessDenied(f"無效的路徑：{e}") from e
 
     # 安全檢查：確保路徑在 /mnt/nas/ 下
     nas_path = Path(settings.nas_mount_path)
