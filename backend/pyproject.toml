@@ -40,6 +40,8 @@ dependencies = [
     "python-dotenv>=1.2.1",
     "claude-code-acp>=0.4.4",
     "pyyaml>=6.0",
+    # 影片下載
+    "yt-dlp>=2024.0.0",
 ]
 
 [project.optional-dependencies]
