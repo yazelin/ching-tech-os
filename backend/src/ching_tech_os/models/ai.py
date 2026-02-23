@@ -267,6 +267,8 @@ class AiLogListItem(BaseModel):
     agent_id: UUID | None
     agent_name: str | None
     context_type: str | None
+    model: str | None = None
+    script_label: str | None = None  # script 類型的標籤（如 media-downloader/check-download）
     allowed_tools: list[str] | None = None  # 允許使用的工具列表
     used_tools: list[str] | None = None  # 實際使用的工具（從 parsed_response 解析）
     success: bool

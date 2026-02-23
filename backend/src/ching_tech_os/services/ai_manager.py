@@ -572,7 +572,7 @@ async def get_logs(
         rows = await conn.fetch(
             f"""
             SELECT l.id, l.agent_id, a.name as agent_name, l.context_type,
-                   l.allowed_tools, l.parsed_response,
+                   l.model, l.input_prompt, l.allowed_tools, l.parsed_response,
                    l.success, l.duration_ms, l.input_tokens, l.output_tokens, l.created_at
             FROM ai_logs l
             LEFT JOIN ai_agents a ON l.agent_id = a.id
@@ -590,15 +590,39 @@ async def get_logs(
             # 解析 allowed_tools
             if item.get("allowed_tools"):
                 item["allowed_tools"] = json.loads(item["allowed_tools"]) if isinstance(item["allowed_tools"], str) else item["allowed_tools"]
-            # 從 parsed_response 提取 used_tools
+            # 從 parsed_response 提取 used_tools（對 run_skill_script 加上 skill 資訊）
             if item.get("parsed_response"):
                 parsed = json.loads(item["parsed_response"]) if isinstance(item["parsed_response"], str) else item["parsed_response"]
                 tool_calls = parsed.get("tool_calls", []) if parsed else []
-                item["used_tools"] = list(set(tc.get("name") for tc in tool_calls if tc.get("name")))
+                used_tools_set = {}
+                for tc in tool_calls:
+                    name = tc.get("name")
+                    if not name:
+                        continue
+                    # 對 run_skill_script 加上 skill/script 名稱
+                    if "run_skill_script" in name and tc.get("input"):
+                        skill = tc["input"].get("skill", "")
+                        script = tc["input"].get("script", "")
+                        if skill:
+                            label = f"{skill}/{script}" if script else skill
+                            display_name = f"run_skill_script({label})"
+                            used_tools_set[display_name] = True
+                            continue
+                    used_tools_set[name] = True
+                item["used_tools"] = list(used_tools_set.keys())
             else:
                 item["used_tools"] = []
-            # 移除 parsed_response（列表不需要完整內容）
+            # 處理 script 類型：從 input_prompt 解析 script_label
+            item["script_label"] = None
+            if item.get("context_type") == "script" and item.get("input_prompt"):
+                # input_prompt 格式為 "skill/script: {json}"，取冒號前的部分
+                prompt = item["input_prompt"]
+                label = prompt.split(": ", 1)[0].strip() if ": " in prompt else ""
+                if label:
+                    item["script_label"] = label
+            # 移除 parsed_response 和 input_prompt（列表不需要完整內容）
             del item["parsed_response"]
+            del item["input_prompt"]
             items.append(item)
 
         return items, total
