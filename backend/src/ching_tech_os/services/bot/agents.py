@@ -227,6 +227,10 @@ FILE_TOOLS_PROMPT = """【NAS 共用檔案】
   · category: 大分類（必填），可用值：技術文件、產品資料、教育訓練、法規標準、設計圖面、其他
   · filename: 新檔名（必填），建議依內容重新命名，格式：品牌-型號-文件類型.ext
   · folder: 主題子資料夾（可選），不存在會自動建立
+- download_web_file: 下載網路上的文件（PDF、DOC/DOCX、XLS/XLSX、PPT/PPTX、圖片等）
+  · url: 檔案的完整 URL（必填）
+  · filename: 指定儲存的檔案名稱（可選，留空則自動推斷）
+  · 回傳 ctos:// 路徑，可直接傳給 archive_to_library 歸檔
 
 【圖書館歸檔流程】
 當使用者要求「存到圖書館」或「歸檔」時：
@@ -236,7 +240,14 @@ FILE_TOOLS_PROMPT = """【NAS 共用檔案】
 4. 用 archive_to_library 歸檔，注意：
    - folder 用中文命名，簡潔描述主題（如：馬達規格、PLC程式）
    - filename 依內容重新命名，格式：品牌-型號-文件類型.副檔名
-   - 若無法判斷內容，使用原始檔名，category 設為「其他」"""
+   - 若無法判斷內容，使用原始檔名，category 設為「其他」
+
+【URL 檔案下載 → 歸檔流程】
+當使用者提供一個文件 URL 並要求下載或歸檔時：
+1. 用 download_web_file 下載檔案到 CTOS 暫存區
+2. 用 read_document 讀取下載的檔案內容，判斷分類
+3. 用 archive_to_library 歸檔到圖書館
+4. 若下載失敗，告知使用者原因（不支援的格式、檔案過大等）"""
 
 # 基礎工具說明（不需特定權限）
 BASE_TOOLS_PROMPT = """【對話附件管理】

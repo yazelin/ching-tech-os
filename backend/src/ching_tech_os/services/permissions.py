@@ -93,6 +93,7 @@ TOOL_APP_MAPPING: dict[str, str | None] = {
     "create_share_link": None,        # 分享連結（基礎功能）
     "share_knowledge_attachment": None,  # 分享知識庫附件（基礎功能）
     "download_web_image": None,       # 下載網路圖片
+    "download_web_file": "file-manager",  # 下載網路文件（歸檔用）
 }
 
 # ============================================================
