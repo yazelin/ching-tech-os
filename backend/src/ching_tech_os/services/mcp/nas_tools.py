@@ -9,11 +9,30 @@ from uuid import UUID
 
 from .server import mcp, logger, ensure_db_connection, check_mcp_tool_permission, to_taipei_time, TAIPEI_TZ
 from ...database import get_connection
+from ..shared_source_permissions import (
+    SHARED_SOURCE_ACCESS_DENIED_MESSAGE,
+    get_allowed_shared_mounts_for_user,
+)
 
 # Line ImageMessage 支援的圖片格式
 _IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp"}
 # Line ImageMessage 限制 10MB
 _MAX_IMAGE_SIZE = 10 * 1024 * 1024
+
+
+async def _get_user_shared_mounts(ctos_user_id: int | None) -> dict[str, str]:
+    """取得使用者可存取的 shared 掛載點。"""
+    from ..path_manager import path_manager
+
+    return await get_allowed_shared_mounts_for_user(
+        path_manager.get_shared_mounts(),
+        ctos_user_id,
+    )
+
+
+def _to_source_permissions(shared_mounts: dict[str, str]) -> dict[str, bool]:
+    """轉換為 PathManager/Share 驗證使用的來源權限格式。"""
+    return {name: True for name in shared_mounts}
 
 
 def _format_file_size(size_bytes: int) -> str:
@@ -111,13 +130,12 @@ async def search_nas_files(
     # 此工具搜尋的是公司共用區，不是租戶隔離區
     # 公司共用檔案
     from pathlib import Path
-    from ...config import settings
-
-    # 搜尋來源定義（shared zone 的子來源）
-    # TODO: 未來可依使用者權限過濾可搜尋的來源
+    shared_mounts = await _get_user_shared_mounts(ctos_user_id)
+    if not shared_mounts:
+        return f"錯誤：{SHARED_SOURCE_ACCESS_DENIED_MESSAGE}"
     search_sources = {
-        "projects": Path(settings.projects_mount_path),
-        "circuits": Path(settings.circuits_mount_path),
+        source_name: Path(mount_path)
+        for source_name, mount_path in shared_mounts.items()
     }
 
     # 過濾出實際存在的掛載點
@@ -316,7 +334,10 @@ async def get_nas_file_info(
 
     # 統一使用 validate_nas_file_path 進行路徑驗證（支援 shared://projects/...、shared://circuits/... 等）
     try:
-        full_path = validate_nas_file_path(file_path)
+        source_permissions = _to_source_permissions(
+            await _get_user_shared_mounts(ctos_user_id)
+        )
+        full_path = validate_nas_file_path(file_path, source_permissions=source_permissions)
     except NasFileNotFoundError as e:
         return f"錯誤：{e}"
     except NasFileAccessDenied as e:
@@ -410,7 +431,15 @@ async def read_document(
         return f"錯誤：{e}"
 
     # 取得實際檔案系統路徑
-    resolved_path = path_manager.to_filesystem(file_path)
+    source_permissions = _to_source_permissions(
+        await _get_user_shared_mounts(ctos_user_id)
+    )
+    try:
+        resolved_path = path_manager.to_filesystem(file_path, source_permissions=source_permissions)
+    except ValueError as e:
+        if str(e) == SHARED_SOURCE_ACCESS_DENIED_MESSAGE:
+            return f"錯誤：{SHARED_SOURCE_ACCESS_DENIED_MESSAGE}"
+        return f"錯誤：{e}"
     full_path = Path(resolved_path)
 
     # 安全檢查：只允許 CTOS 和 SHARED 區域（不允許 TEMP/LOCAL）
@@ -524,7 +553,10 @@ async def send_nas_file(
 
     # 驗證檔案路徑
     try:
-        full_path = validate_nas_file_path(file_path)
+        source_permissions = _to_source_permissions(
+            await _get_user_shared_mounts(ctos_user_id)
+        )
+        full_path = validate_nas_file_path(file_path, source_permissions=source_permissions)
     except NasFileNotFoundError as e:
         return f"錯誤：{e}"
     except NasFileAccessDenied as e:
@@ -743,7 +775,10 @@ async def prepare_file_message(
         # ===== NAS 檔案處理 =====
         # 驗證檔案路徑
         try:
-            full_path = validate_nas_file_path(file_path)
+            source_permissions = _to_source_permissions(
+                await _get_user_shared_mounts(ctos_user_id)
+            )
+            full_path = validate_nas_file_path(file_path, source_permissions=source_permissions)
         except NasFileNotFoundError as e:
             return f"錯誤：{e}"
         except NasFileAccessDenied as e:

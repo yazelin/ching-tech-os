@@ -26,6 +26,8 @@ from pathlib import Path
 from typing import Optional
 import re
 
+from .shared_source_permissions import resolve_shared_source_mount
+
 class StorageZone(Enum):
     """儲存區域"""
     CTOS = "ctos"        # CTOS 系統檔案
@@ -224,7 +226,11 @@ class PathManager:
             raw=path
         )
 
-    def to_filesystem(self, path: str) -> str:
+    def to_filesystem(
+        self,
+        path: str,
+        source_permissions: dict[str, bool] | None = None,
+    ) -> str:
         """轉換為實際檔案系統路徑
 
         Args:
@@ -257,11 +263,18 @@ class PathManager:
 
         # SHARED zone 子來源解析
         if parsed.zone == StorageZone.SHARED:
-            return self._resolve_shared_path(parsed.path)
+            return self._resolve_shared_path(
+                parsed.path,
+                source_permissions=source_permissions,
+            )
 
         return f"{mount_path}/{parsed.path}"
 
-    def _resolve_shared_path(self, relative_path: str) -> str:
+    def _resolve_shared_path(
+        self,
+        relative_path: str,
+        source_permissions: dict[str, bool] | None = None,
+    ) -> str:
         """解析 shared zone 子來源路徑到實際檔案系統路徑
 
         支援格式：
@@ -272,11 +285,24 @@ class PathManager:
         # 檢查第一段是否為已知子來源
         first_segment = relative_path.split("/", 1)[0]
         if first_segment in self._shared_mounts:
-            mount_path = self._shared_mounts[first_segment]
+            mount_path = resolve_shared_source_mount(
+                self._shared_mounts,
+                first_segment,
+                source_permissions=source_permissions,
+            )
             rest = relative_path[len(first_segment):].lstrip("/")
             return f"{mount_path}/{rest}" if rest else mount_path
         # 向後相容：fallback 到 projects
-        return f"{self._shared_mounts['projects']}/{relative_path}"
+        projects_mount = resolve_shared_source_mount(
+            self._shared_mounts,
+            "projects",
+            source_permissions=source_permissions,
+        )
+        return f"{projects_mount}/{relative_path}"
+
+    def get_shared_mounts(self) -> dict[str, str]:
+        """取得 shared 子來源掛載點。"""
+        return dict(self._shared_mounts)
 
     def to_api(self, path: str) -> str:
         """轉換為前端 API 路徑
