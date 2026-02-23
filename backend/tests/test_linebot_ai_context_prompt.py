@@ -73,7 +73,7 @@ async def test_get_conversation_context_group_branches(monkeypatch: pytest.Monke
     assert "[上傳 PDF（最近）: /tmp/report.pdf（文字版: /tmp/report.txt）]" in joined
     assert "[上傳 PDF: /tmp/scan.pdf（純圖片，無文字）]" in joined
     assert "[上傳檔案: /tmp/a.txt]" in joined
-    assert "big.txt（檔案過大）" in joined
+    assert "big.txt" in joined and "過大無法讀取內容" in joined and "NAS 路徑: nas/big.txt" in joined
     assert "gone.txt 暫存已過期" in joined
     assert "legacy.doc（不支援舊版格式" in joined
     assert "video.mp4（無法讀取此類型）" in joined

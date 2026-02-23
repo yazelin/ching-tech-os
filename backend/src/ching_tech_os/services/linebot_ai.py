@@ -954,8 +954,12 @@ async def get_conversation_context(
 
                 if is_readable_file(file_name):
                     if file_size and file_size > MAX_READABLE_FILE_SIZE:
-                        # 檔案過大
-                        content = f"[上傳檔案: {file_name}（檔案過大）]"
+                        # 檔案過大無法讀取內容，但仍提供 NAS 路徑供歸檔等操作
+                        size_mb = file_size / 1024 / 1024
+                        content = (
+                            f"[上傳檔案: {file_name}（{size_mb:.1f} MB，"
+                            f"過大無法讀取內容，NAS 路徑: {row['nas_path']}）]"
+                        )
                     else:
                         # 可讀取的檔案：確保暫存存在
                         temp_path = await ensure_temp_file(
