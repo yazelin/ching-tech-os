@@ -36,16 +36,52 @@ def _get_transcriptions_base_dir() -> Path:
     return Path(_get_ctos_mount_path()) / "linebot" / "transcriptions"
 
 
-def _resolve_ctos_path(ctos_path: str) -> Path | None:
-    """將 ctos:// 路徑解析為實際檔案路徑（含路徑穿越防護）。"""
-    if not ctos_path.startswith("ctos://"):
+# 允許的掛載路徑前綴（路徑穿越防護白名單）
+_ALLOWED_MOUNT_PREFIXES: list[str] | None = None
+
+
+def _get_allowed_mount_prefixes() -> list[str]:
+    """取得允許的掛載路徑前綴列表。"""
+    global _ALLOWED_MOUNT_PREFIXES
+    if _ALLOWED_MOUNT_PREFIXES is not None:
+        return _ALLOWED_MOUNT_PREFIXES
+    try:
+        from ching_tech_os.config import settings
+        _ALLOWED_MOUNT_PREFIXES = [
+            str(Path(p).resolve())
+            for p in [
+                settings.ctos_mount_path,
+                settings.library_mount_path,
+                settings.projects_mount_path,
+                settings.circuits_mount_path,
+            ]
+            if p
+        ]
+    except ImportError:
+        _ALLOWED_MOUNT_PREFIXES = [
+            str(Path(os.environ.get("CTOS_MOUNT_PATH", "/mnt/nas/ctos")).resolve()),
+        ]
+    return _ALLOWED_MOUNT_PREFIXES
+
+
+def _resolve_source_path(source_path: str) -> Path | None:
+    """將來源路徑（ctos://、shared:// 等）解析為實際檔案路徑。
+
+    使用 PathManager 統一解析，支援所有路徑格式，並以白名單防護路徑穿越。
+    """
+    try:
+        from ching_tech_os.services.path_manager import path_manager
+        fs_path = path_manager.to_filesystem(source_path)
+    except (ValueError, ImportError):
         return None
-    relative = ctos_path[len("ctos://"):].lstrip("/")
-    base_path = Path(_get_ctos_mount_path()).resolve()
-    full_path = (base_path / relative).resolve()
-    if not str(full_path).startswith(str(base_path)):
+
+    # 路徑穿越防護：確保解析後的路徑在允許的掛載點下
+    resolved = str(Path(fs_path).resolve())
+    allowed = _get_allowed_mount_prefixes()
+    if not any(resolved.startswith(prefix) for prefix in allowed):
         return None
-    return full_path
+
+    return Path(fs_path)
 
 
 def _write_status(status_path: Path, data: dict) -> None:
@@ -235,10 +271,10 @@ def main() -> int:
         print(json.dumps({"success": False, "error": "缺少 source_path 參數"}, ensure_ascii=False))
         return 1
 
-    # 解析 ctos:// 路徑
-    source_file = _resolve_ctos_path(source_path)
+    # 解析來源路徑（支援 ctos://、shared:// 等格式）
+    source_file = _resolve_source_path(source_path)
     if source_file is None:
-        print(json.dumps({"success": False, "error": f"無效的路徑格式，需要 ctos:// 開頭：{source_path}"}, ensure_ascii=False))
+        print(json.dumps({"success": False, "error": f"無法解析來源路徑：{source_path}"}, ensure_ascii=False))
         return 1
 
     if not source_file.exists():
@@ -297,21 +333,33 @@ def main() -> int:
         # 子程序：執行轉錄
         try:
             os.setsid()
-            devnull = os.open(os.devnull, os.O_RDWR)
-            os.dup2(devnull, 0)
-            os.dup2(devnull, 1)
-            os.dup2(devnull, 2)
-            os.close(devnull)
+            # 切換 cwd 到 job 目錄（script_runner 的 TemporaryDirectory 會在父程序結束後刪除，
+            # 若 cwd 被刪除會導致 ctranslate2/oneMKL 載入 .so 時 FATAL ERROR）
+            os.chdir(str(job_dir))
+            # 將 stdout/stderr 導向 job 目錄的 worker.log，方便除錯
+            log_file = job_dir / "worker.log"
+            log_fd = os.open(str(log_file), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
+            devnull_fd = os.open(os.devnull, os.O_RDONLY)
+            os.dup2(devnull_fd, 0)
+            os.dup2(log_fd, 1)
+            os.dup2(log_fd, 2)
+            os.close(devnull_fd)
+            os.close(log_fd)
             sys.stdin = open(os.devnull, "r")
-            sys.stdout = open(os.devnull, "w")
-            sys.stderr = open(os.devnull, "w")
+            sys.stdout = os.fdopen(1, "w")
+            sys.stderr = os.fdopen(2, "w")
 
+            print(f"[{datetime.now().isoformat()}] 子程序啟動 PID={os.getpid()}", flush=True)
             _do_transcribe(job_dir, status_path, source_file, source_path, model_name, job_id)
+            print(f"[{datetime.now().isoformat()}] 轉錄完成", flush=True)
         except Exception as e:
             try:
+                import traceback
+                tb = traceback.format_exc()
+                print(f"[{datetime.now().isoformat()}] 背景轉錄失敗: {e}\n{tb}", flush=True)
                 error_log = job_dir / "error.log"
                 error_log.write_text(
-                    f"[{datetime.now().isoformat()}] 背景轉錄失敗: {e}\n",
+                    f"[{datetime.now().isoformat()}] 背景轉錄失敗: {e}\n{tb}\n",
                     encoding="utf-8",
                 )
                 _write_status(status_path, {
