@@ -7,7 +7,7 @@ import json
 import logging
 from typing import Any
 
-from .server import mcp
+from .server import mcp, ensure_db_connection
 
 logger = logging.getLogger("mcp_server")
 
@@ -47,6 +47,7 @@ async def run_skill_script(
     """
     # NOTE: ctos_user_id 由 bot framework 在呼叫時注入（見 agents.py），
     # LLM 無法控制此參數。MCP tool 簽名包含它是因為 framework 需要傳入。
+    await ensure_db_connection()
     from ...skills import get_skill_manager
     from ...config import settings
     from ...skills.script_runner import ScriptRunner
