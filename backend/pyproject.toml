@@ -42,6 +42,9 @@ dependencies = [
     "pyyaml>=6.0",
     # 影片下載
     "yt-dlp>=2024.0.0",
+    # 語音轉文字
+    "faster-whisper>=1.0.0",
+    "opencc-python-reimplemented>=0.1.7",
 ]
 
 [project.optional-dependencies]
