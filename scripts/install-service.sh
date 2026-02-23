@@ -261,6 +261,7 @@ ExecStart=/bin/bash -c 'if [ "\$UVICORN_RELOAD" = "true" ]; then exec /home/ct/.
 
 Restart=on-failure
 RestartSec=10
+SuccessExitStatus=143
 
 # 日誌設定
 StandardOutput=journal
