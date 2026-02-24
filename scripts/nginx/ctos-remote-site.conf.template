@@ -1,0 +1,33 @@
+# ============================================
+# 遠端 CTOS: <CLIENT_ID>
+# Tailscale IP: <TAILSCALE_IP>
+# Port: 8088
+#
+# 使用方式：
+#   1. 複製此檔案，替換 <CLIENT_ID> 和 <TAILSCALE_IP>
+#   2. 將內容加入主站 nginx 設定檔的 server block 中
+#   3. sudo nginx -t && sudo nginx -s reload
+#
+# 詳細說明見 docs/tailscale-multi-site.md
+# ============================================
+
+# CTOS 完整應用（strip prefix 後轉發）
+location /<CLIENT_ID>/ {
+    proxy_pass http://<TAILSCALE_IP>:8088/;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+
+# Line Bot Webhook（改寫路徑後轉發）
+location = /bot/<CLIENT_ID>/webhook {
+    proxy_pass http://<TAILSCALE_IP>:8088/api/bot/line/webhook;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Line-Signature $http_x_line_signature;
+}

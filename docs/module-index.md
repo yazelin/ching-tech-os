@@ -338,6 +338,11 @@ services/scheduler.py      ← APScheduler 任務定義
 5. `frontend/js/share-dialog.js` + `css/share-dialog.css`
 6. `frontend/public.html`（公開頁面）
 
+### 「新增遠端 CTOS 站點（Tailscale）」
+1. 遠端主機安裝 Tailscale + CTOS（見 `docs/tailscale-multi-site.md`）
+2. 主站 nginx 加入 location block（範本：`scripts/nginx/ctos-remote-site.conf.template`）
+3. Line Developer Console 設定 webhook URL
+
 ### 「版本號更新」
 同步修改三個檔案：
 1. `backend/pyproject.toml` → `version`
