@@ -63,6 +63,7 @@ def _resolve_callable(dotted_path: str):
 
 def _register_module_routers(fastapi_app: FastAPI) -> None:
     """依啟用模組動態註冊 API 路由。"""
+    imported_modules: dict[str, object] = {}
     for module_id, info in get_module_registry().items():
         if not is_module_enabled(module_id):
             continue
@@ -73,7 +74,10 @@ def _register_module_routers(fastapi_app: FastAPI) -> None:
             if not isinstance(module_path, str):
                 continue
             try:
-                mod = importlib.import_module(module_path, package=__package__)
+                mod = imported_modules.get(module_path)
+                if mod is None:
+                    mod = importlib.import_module(module_path, package=__package__)
+                    imported_modules[module_path] = mod
                 router = getattr(mod, router_attr)
                 fastapi_app.include_router(router, **kwargs)
             except ImportError as e:

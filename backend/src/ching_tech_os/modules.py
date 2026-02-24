@@ -305,9 +305,8 @@ def get_module_registry() -> dict[str, ModuleInfo]:
 
         sm = get_skill_manager()
         with _SKILL_LOAD_LOCK:
-            if not getattr(sm, "_loaded", False):
-                sm._load_skills_sync()
-        for skill in list(getattr(sm, "_skills", {}).values()):
+            skills = sm.get_loaded_skills()
+        for skill in skills:
             info = _build_skill_module(skill)
             if not info:
                 continue

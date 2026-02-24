@@ -23,3 +23,19 @@ def test_get_enabled_app_manifests_filters_disabled(monkeypatch) -> None:
 
     apps = modules.get_enabled_app_manifests()
     assert [app["id"] for app in apps] == ["settings", "a"]
+
+
+def test_get_module_registry_uses_public_skill_manager_api(monkeypatch) -> None:
+    called = {"value": False}
+
+    class _FakeSkillManager:
+        def get_loaded_skills(self):
+            called["value"] = True
+            return []
+
+    import ching_tech_os.skills as skills_module
+
+    monkeypatch.setattr(skills_module, "get_skill_manager", lambda: _FakeSkillManager())
+    registry = modules.get_module_registry()
+    assert called["value"] is True
+    assert "core" in registry

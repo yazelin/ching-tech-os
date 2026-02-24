@@ -202,6 +202,12 @@ class SkillManager:
                 return
             await asyncio.to_thread(self._load_skills_sync)
 
+    def get_loaded_skills(self) -> list[Skill]:
+        """同步取得 skills；尚未載入時先執行同步載入。"""
+        if not self._loaded:
+            self._load_skills_sync()
+        return list(self._skills.values())
+
     def _load_skill_from_skill_md(self, skill_dir: Path, source: str) -> Skill | None:
         """從 SKILL.md 載入（Agent Skills 標準格式）"""
         skill_md = skill_dir / "SKILL.md"
