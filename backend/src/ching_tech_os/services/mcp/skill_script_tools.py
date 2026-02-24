@@ -33,6 +33,22 @@ def _normalize_tool_name(tool_name: str) -> str:
     return clean_name
 
 
+def _is_fallback_requested(
+    script_error: str,
+    output_error: str,
+    output_json: dict[str, Any] | None,
+) -> bool:
+    """判斷腳本是否明確要求 fallback。"""
+    return (
+        script_error == "fallback_required"
+        or output_error == "fallback_required"
+        or (
+            isinstance(output_json, dict)
+            and output_json.get("allow_fallback") is True
+        )
+    )
+
+
 @mcp.tool()
 async def run_skill_script(
     skill: str, script: str, input: str = "", ctos_user_id: int | None = None,
@@ -107,27 +123,41 @@ async def run_skill_script(
         "fallback_reason": None,
     }
 
-    # script 失敗時：可選 fallback 到對應 MCP tool
-    if not result.get("success") and settings.skill_script_fallback_enabled:
+    # script 失敗時：僅在明確要求 fallback 時才轉呼叫 MCP tool
+    output_json = _parse_json_object(result.get("output", ""))
+    script_error = str(result.get("error") or "")
+    error_from_json = (output_json or {}).get("error")
+    output_error = error_from_json if isinstance(error_from_json, str) else ""
+    fallback_requested = _is_fallback_requested(
+        script_error=script_error,
+        output_error=output_error,
+        output_json=output_json,
+    )
+
+    if (
+        not result.get("success")
+        and settings.skill_script_fallback_enabled
+        and fallback_requested
+    ):
         fallback_map = await sm.get_script_fallback_map(skill)
         fallback_tool = fallback_map.get(script)
         if fallback_tool:
             from .server import execute_tool
 
             fallback_args = _parse_json_object(input) or {}
-            # 若 script 有提供 normalized_input，優先使用（可做前置驗證/清洗）
-            output_json = _parse_json_object(result.get("output", ""))
             normalized_input = output_json.get("normalized_input") if output_json else None
             if isinstance(normalized_input, dict):
                 fallback_args = normalized_input
 
-            if ctos_user_id is not None and "ctos_user_id" not in fallback_args:
+            # 安全性：禁止使用 input 內注入的 ctos_user_id，僅允許 framework 注入值
+            fallback_args.pop("ctos_user_id", None)
+            if ctos_user_id is not None:
                 fallback_args["ctos_user_id"] = ctos_user_id
 
             clean_tool = _normalize_tool_name(fallback_tool)
             fallback_output = await execute_tool(clean_tool, fallback_args)
             route_info["fallback_tool"] = clean_tool
-            route_info["fallback_reason"] = result.get("error")
+            route_info["fallback_reason"] = script_error or output_error or "fallback_required"
             if not fallback_output.startswith("執行失敗："):
                 route_info["fallback_used"] = True
                 result = {
@@ -137,7 +167,11 @@ async def run_skill_script(
                     "duration_ms": result.get("duration_ms", 0),
                 }
             else:
-                result["error"] = f"{result.get('error')}; fallback 失敗: {fallback_output}"
+                base_error = result.get("error") or output_error or "script_failed"
+                result["error"] = f"{skill}/{script}: {base_error}; fallback 失敗: {fallback_output}"
+
+    if not result.get("success") and not result.get("error") and output_error:
+        result["error"] = output_error
 
     result["route"] = route_info
 

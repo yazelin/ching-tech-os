@@ -1,46 +1,28 @@
 ---
 name: file-manager
-description: NAS 共用檔案搜尋、PDF 轉圖片
-allowed-tools: search_nas_files get_nas_file_info prepare_file_message convert_pdf_to_images
+description: NAS 共用檔案搜尋、檔案訊息與 PDF 轉圖片（script-first）
+allowed-tools: mcp__ching-tech-os__run_skill_script
 metadata:
   ctos:
     requires_app: file-manager
     mcp_servers: ching-tech-os
+    script_mcp_fallback:
+      search_nas_files: search_nas_files
+      get_nas_file_info: get_nas_file_info
+      prepare_file_message: prepare_file_message
+      convert_pdf_to_images: convert_pdf_to_images
 ---
 
-【NAS 共用檔案】
-- search_nas_files: 搜尋 NAS 共享檔案（搜尋範圍包含：專案資料、線路圖）
-  · keywords: 多個關鍵字用逗號分隔（AND 匹配，大小寫不敏感）
-  · file_types: 檔案類型過濾，如 pdf,xlsx,dwg
-  · 範例：search_nas_files(keywords="亦達,layout", file_types="pdf")
-  · 結果路徑格式：shared://projects/... 或 shared://circuits/...
-  · ⚠️ 注意：查找「最近的圖片」或「剛才的圖」請用 get_message_attachments，不要用此工具
-- get_nas_file_info: 取得 NAS 檔案詳細資訊（大小、修改時間）
-- prepare_file_message: 準備檔案訊息（推薦使用）
-  · file_path: 檔案完整路徑（從 search_nas_files 取得）
-  · 圖片（jpg/png/gif 等）< 10MB 會直接顯示在回覆中
-  · 其他檔案會以連結形式顯示
-  · 重要：工具返回的 [FILE_MESSAGE:...] 標記必須原封不動包含在回應中，系統會自動處理
-  · 注意：圖片/檔案會顯示在文字下方，請用 👇 而非 👆
+【檔案管理（script-first）】
+- 優先使用 `run_skill_script` 呼叫下列 scripts：
+  - `search_nas_files`
+  - `get_nas_file_info`
+  - `prepare_file_message`
+  - `convert_pdf_to_images`
+- `input` 必須是 JSON 物件字串。
 
-【PDF 轉圖片】
-- convert_pdf_to_images: 將 PDF 轉換為圖片（方便在 Line 中預覽）
-  · pdf_path: PDF 檔案路徑（用戶上傳的 /tmp/bot-files/... 或 NAS 路徑）
-  · pages: 要轉換的頁面
-    - "0"：只查詢頁數，不轉換
-    - "1"：只轉換第 1 頁
-    - "1-3"：轉換第 1 到 3 頁
-    - "all"：轉換全部（預設）
-  · output_format: png（預設）或 jpg
-  · dpi: 解析度，預設 150
-  · 回傳 JSON 包含 total_pages、converted_pages、images（圖片路徑陣列）
-
-【PDF 轉圖片使用流程】
-1. 用戶上傳 PDF 並要求轉圖片時：
-   - 先用 convert_pdf_to_images(pdf_path="...", pages="0") 查詢頁數
-   - 若只有 1 頁：直接 convert_pdf_to_images(pdf_path="...", pages="1") 轉換
-   - 若有多頁：詢問用戶「這份 PDF 共 X 頁，要轉換哪幾頁？」
-2. 用戶回覆要轉換的範圍後，根據回覆設定 pages 參數
-3. 轉換完成後，對每張圖片呼叫 prepare_file_message 發送
-4. 若用戶明確說「轉成圖片」或「全部」，可直接轉換不用詢問
-5. NAS 上的 PDF 轉換：先用 search_nas_files 找到 PDF，再轉換
+【用法範例】
+- `run_skill_script(skill="file-manager", script="search_nas_files", input="{\"keywords\":\"亦達,layout\",\"file_types\":\"pdf\"}")`
+- `run_skill_script(skill="file-manager", script="get_nas_file_info", input="{\"file_path\":\"shared://projects/demo.pdf\"}")`
+- `run_skill_script(skill="file-manager", script="prepare_file_message", input="{\"file_path\":\"shared://projects/demo.pdf\"}")`
+- `run_skill_script(skill="file-manager", script="convert_pdf_to_images", input="{\"pdf_path\":\"ctos://knowledge/demo.pdf\",\"pages\":\"1-3\"}")`

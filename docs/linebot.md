@@ -250,7 +250,7 @@ AI 助理可使用的工具（完整列表見 [docs/mcp-server.md](mcp-server.md
 - `share_knowledge_attachment` - 分享知識庫中的 .md2ppt 或 .md2doc 附件
 
 **AI Skills**
-- `run_skill_script` - 執行 Skill 腳本（如 media-downloader、media-transcription）
+- `run_skill_script` - 執行 Skill 腳本（含 native base/file-manager、media-downloader、media-transcription）
 
 **媒體工具**
 - `download_web_image` - 下載網路圖片到 NAS

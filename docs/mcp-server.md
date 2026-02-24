@@ -300,6 +300,10 @@ result = await execute_tool("generate_md2doc", {
 | `run_skill_script` | 執行 Skill 腳本 | `skill`（必填）, `script`（必填）, `input`, `ctos_user_id` |
 
 > **AI Skills 系統**：支援 media-downloader（影片/音訊下載）和 media-transcription（逐字稿轉錄）等 Skill，透過 Script-first 或 MCP-first 路由策略執行。
+>
+> 目前 native `base`、`file-manager` 也已採 script-first，並以 `script_mcp_fallback` 對應回舊 MCP tool。
+> fallback 僅在 script 明確回傳 `fallback_required`（或 `allow_fallback: true`）時觸發；參數驗證錯誤不會 fallback。
+> 仍高度依賴外部 MCP 的 skill（如 `project`、`inventory`、`printer`、`ai-assistant`）建議維持 MCP 模式並獨立規劃模組化遷移。
 
 ### 列印
 

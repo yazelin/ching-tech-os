@@ -145,6 +145,8 @@ services/hub_meta.py               ← SKILL.md frontmatter 解析
 services/clawhub_client.py         ← ClawHub 市集客戶端
 services/skillhub_client.py        ← SkillHub 市集客戶端
 services/mcp/skill_script_tools.py ← MCP 整合
+skills/base/                       ← 內建：基礎工具（script-first）
+skills/file-manager/               ← 內建：檔案管理（script-first）
 skills/media-downloader/           ← 內建：影片下載
 skills/media-transcription/        ← 內建：語音轉字幕
 ```

@@ -83,7 +83,7 @@ async def test_script_first_suppresses_overlap_tools(monkeypatch):
         async def get_required_mcp_servers(self, _app_permissions):
             return {"ching-tech-os"}
 
-    monkeypatch.setattr(bot_agents, "get_skill_manager", lambda: FakeSkillManager())
+    monkeypatch.setattr(bot_agents, "get_skill_manager", lambda: FakeSkillManager(), raising=False)
     monkeypatch.setattr(bot_agents, "_HAS_SKILL_MANAGER", True)
     monkeypatch.setattr(bot_agents.settings, "skill_route_policy", "script-first")
 
@@ -99,7 +99,7 @@ async def test_script_first_suppresses_overlap_tools(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_run_skill_script_fallback_to_mcp(monkeypatch):
-    """script 執行失敗時，依 mapping fallback 到 MCP tool。"""
+    """script 執行失敗時，依 mapping fallback 到 MCP，且忽略腳本內偽冒的 ctos_user_id。"""
 
     skill_obj = SimpleNamespace(
         name="share-links",
@@ -137,7 +137,7 @@ async def test_run_skill_script_fallback_to_mcp(monkeypatch):
         async def execute_path(self, _script_path, _skill_name, input="", env_overrides=None):
             return {
                 "success": False,
-                "output": '{"normalized_input":{"resource_type":"knowledge","resource_id":"kb-001","expires_in":"24h"}}',
+                "output": '{"normalized_input":{"resource_type":"knowledge","resource_id":"kb-001","expires_in":"24h","ctos_user_id":999}}',
                 "error": "fallback_required",
                 "duration_ms": 12,
             }
@@ -145,6 +145,7 @@ async def test_run_skill_script_fallback_to_mcp(monkeypatch):
     async def fake_execute_tool(tool_name: str, arguments: dict) -> str:
         assert tool_name == "create_share_link"
         assert arguments["resource_id"] == "kb-001"
+        assert arguments["ctos_user_id"] == 123
         return "share-link-created"
 
     async def fake_create_log(_data):
@@ -172,12 +173,95 @@ async def test_run_skill_script_fallback_to_mcp(monkeypatch):
         skill="share-links",
         script="create_share_link",
         input='{"resource_type":"knowledge","resource_id":"kb-001"}',
+        ctos_user_id=123,
     )
     payload = json.loads(raw)
     assert payload["success"] is True
     assert payload["output"] == "share-link-created"
     assert payload["route"]["fallback_used"] is True
     assert payload["route"]["fallback_tool"] == "create_share_link"
+
+
+@pytest.mark.asyncio
+async def test_run_skill_script_invalid_input_no_fallback(monkeypatch):
+    """腳本回報 invalid_input 時，不應 fallback 到 MCP tool。"""
+
+    skill_obj = SimpleNamespace(
+        name="share-links",
+        requires_app=None,
+        metadata={
+            "ctos": {
+                "script_mcp_fallback": {"create_share_link": "create_share_link"},
+            }
+        },
+    )
+
+    class FakeSkillManager:
+        async def get_skill(self, _name):
+            return skill_obj
+
+        async def has_scripts(self, _name):
+            return True
+
+        async def get_script_path(self, _skill, _script):
+            return Path("/tmp/fake.py")
+
+        async def get_skill_dir(self, _name):
+            return Path("/tmp/share-links")
+
+        def get_skill_env_overrides(self, _skill):
+            return {}
+
+        async def get_script_fallback_map(self, _skill_name):
+            return {"create_share_link": "create_share_link"}
+
+    class FakeScriptRunner:
+        def __init__(self, _skills_dir):
+            pass
+
+        async def execute_path(self, _script_path, _skill_name, input="", env_overrides=None):
+            return {
+                "success": False,
+                "output": '{"success":false,"error":"invalid_input: 缺少 resource_id"}',
+                "error": "",
+                "duration_ms": 8,
+            }
+
+    async def fake_execute_tool(_tool_name: str, _arguments: dict) -> str:
+        pytest.fail("invalid_input 不應觸發 fallback")
+
+    async def fake_create_log(_data):
+        return {"id": "fake"}
+
+    monkeypatch.setattr(
+        "ching_tech_os.skills.script_runner.ScriptRunner",
+        FakeScriptRunner,
+    )
+    mcp_server_module = importlib.import_module("ching_tech_os.services.mcp.server")
+    monkeypatch.setattr(mcp_server_module, "execute_tool", fake_execute_tool)
+    monkeypatch.setattr(
+        "ching_tech_os.services.ai_manager.create_log",
+        fake_create_log,
+    )
+    monkeypatch.setattr(
+        "ching_tech_os.skills.get_skill_manager",
+        lambda: FakeSkillManager(),
+    )
+    monkeypatch.setattr(app_settings, "skill_script_fallback_enabled", True)
+    monkeypatch.setattr(app_settings, "skill_route_policy", "script-first")
+    _mock_ensure_db(monkeypatch)
+
+    raw = await skill_script_tools.run_skill_script(
+        skill="share-links",
+        script="create_share_link",
+        input='{"resource_type":"knowledge"}',
+    )
+    payload = json.loads(raw)
+    assert payload["success"] is False
+    assert payload["route"]["fallback_used"] is False
+    assert payload["route"]["fallback_tool"] is None
+    assert payload["error"] == "invalid_input: 缺少 resource_id"
+    assert payload["output"] == '{"success":false,"error":"invalid_input: 缺少 resource_id"}'
 
 
 @pytest.mark.asyncio
