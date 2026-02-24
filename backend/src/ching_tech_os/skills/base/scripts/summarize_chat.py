@@ -11,10 +11,11 @@ def main() -> int:
     if raw:
         try:
             payload = json.loads(raw)
-            if not isinstance(payload, dict):
-                raise ValueError("input 必須是 JSON 物件")
-        except Exception:
+        except json.JSONDecodeError:
             print(json.dumps({"success": False, "error": "invalid_input: 無效的 JSON 輸入"}, ensure_ascii=False))
+            return 1
+        if not isinstance(payload, dict):
+            print(json.dumps({"success": False, "error": "invalid_input: input 必須是 JSON 物件"}, ensure_ascii=False))
             return 1
 
     print(json.dumps({

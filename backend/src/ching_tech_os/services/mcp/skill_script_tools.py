@@ -33,6 +33,22 @@ def _normalize_tool_name(tool_name: str) -> str:
     return clean_name
 
 
+def _is_fallback_requested(
+    script_error: str,
+    output_error: str,
+    output_json: dict[str, Any] | None,
+) -> bool:
+    """判斷腳本是否明確要求 fallback。"""
+    return (
+        script_error == "fallback_required"
+        or output_error == "fallback_required"
+        or (
+            isinstance(output_json, dict)
+            and output_json.get("allow_fallback") is True
+        )
+    )
+
+
 @mcp.tool()
 async def run_skill_script(
     skill: str, script: str, input: str = "", ctos_user_id: int | None = None,
@@ -115,16 +131,10 @@ async def run_skill_script(
         if isinstance(output_json, dict) and isinstance(output_json.get("error"), str)
         else ""
     )
-    is_script_error_fallback = script_error == "fallback_required"
-    is_output_error_fallback = output_error == "fallback_required"
-    is_allow_fallback_true = (
-        isinstance(output_json, dict)
-        and output_json.get("allow_fallback") is True
-    )
-    fallback_requested = (
-        is_script_error_fallback
-        or is_output_error_fallback
-        or is_allow_fallback_true
+    fallback_requested = _is_fallback_requested(
+        script_error=script_error,
+        output_error=output_error,
+        output_json=output_json,
     )
 
     if (

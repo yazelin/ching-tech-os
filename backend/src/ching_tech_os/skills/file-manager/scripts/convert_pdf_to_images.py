@@ -9,12 +9,12 @@ def main() -> int:
     raw = sys.stdin.read().strip()
     try:
         payload = json.loads(raw) if raw else {}
-    except Exception:
+    except json.JSONDecodeError:
         print(json.dumps({"success": False, "error": "invalid_input: 無效的 JSON 輸入"}, ensure_ascii=False))
         return 1
 
     if not isinstance(payload, dict):
-        print(json.dumps({"success": False, "error": "input 必須是 JSON 物件"}, ensure_ascii=False))
+        print(json.dumps({"success": False, "error": "invalid_input: input 必須是 JSON 物件"}, ensure_ascii=False))
         return 1
 
     if "pdf_path" not in payload:
