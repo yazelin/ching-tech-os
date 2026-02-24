@@ -98,6 +98,7 @@ def _build_app() -> FastAPI:
     app = FastAPI()
     app.include_router(skills_api.router)
     app.dependency_overrides[skills_api.require_admin] = lambda: SimpleNamespace(username="admin", role="admin", user_id=1)
+    app.dependency_overrides[skills_api.get_current_session] = lambda: SimpleNamespace(username="user", role="user", user_id=2)
     app.state.clawhub_client = _FakeClient("clawhub")
     app.state.skillhub_client = _FakeClient("skillhub")
     return app
@@ -112,6 +113,10 @@ async def test_skills_route_basics(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
     monkeypatch.setattr(skills_api, "get_skill_manager", lambda: sm)
     monkeypatch.setattr(skills_api, "skillhub_enabled", lambda: True)
     monkeypatch.setattr(skills_api, "read_meta", lambda _p: {"source": "clawhub"})
+
+    frontend_dir = sm.skills_dir / "demo" / "frontend"
+    frontend_dir.mkdir(parents=True, exist_ok=True)
+    (frontend_dir / "main.js").write_text("console.log('demo');", encoding="utf-8")
 
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         assert (await client.get("/api/skills/hub/sources")).status_code == 200
@@ -128,6 +133,9 @@ async def test_skills_route_basics(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
         # file/ref
         assert (await client.get("/api/skills/demo/files/ok.txt")).status_code == 200
         assert (await client.get("/api/skills/demo/files/missing.txt")).status_code == 404
+        assert (await client.get("/api/skills/demo/frontend/main.js")).status_code == 200
+        assert (await client.get("/api/skills/demo/frontend/missing.js")).status_code == 404
+        assert (await client.get("/api/skills/demo/frontend/%2E%2E/secret.js")).status_code == 400
         assert (await client.get("/api/skills/demo/references/ok.md")).status_code == 200
         assert (await client.get("/api/skills/demo/references/missing.md")).status_code == 404
 

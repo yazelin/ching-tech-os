@@ -120,6 +120,8 @@ class Settings:
         "SKILL_SCRIPT_FALLBACK_ENABLED",
         True,
     )
+    # 啟用模組清單（* = 全部啟用）
+    enabled_modules: str = _get_env("ENABLED_MODULES", "*")
 
     # ===================
     # Line Bot 設定

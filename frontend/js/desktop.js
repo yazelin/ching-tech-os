@@ -6,8 +6,8 @@
 const DesktopModule = (function() {
   'use strict';
 
-  // Application definitions
-  const applications = [
+  // Application definitions（API 失敗時 fallback）
+  const fallbackApplications = [
     { id: 'file-manager', name: '檔案管理', icon: 'mdi-folder' },
     { id: 'terminal', name: '終端機', icon: 'mdi-console' },
     { id: 'code-editor', name: 'VSCode', icon: 'mdi-code-braces' },
@@ -24,11 +24,12 @@ const DesktopModule = (function() {
     { id: 'md2ppt', name: 'md2ppt', icon: 'file-powerpoint' },
     { id: 'md2doc', name: 'md2doc', icon: 'file-word' }
   ];
+  let applications = [...fallbackApplications];
 
   // ── Lazy-Loading 機制 ─────────────────────────────────────────────
   // appLoaders：定義大型模組的動態 import 路徑與對應全域變數名稱
   // 當使用者首次點擊 App 時才載入對應的 JS，避免初始頁面載入過多腳本。
-  const appLoaders = {
+  const fallbackAppLoaders = {
     'ai-assistant':   { src: './js/ai-assistant.js',   globalName: 'AIAssistantApp' },
     'file-manager':   { src: './js/file-manager.js',   globalName: 'FileManagerModule' },
     'prompt-editor':  { src: './js/prompt-editor.js',  globalName: 'PromptEditorApp' },
@@ -42,9 +43,19 @@ const DesktopModule = (function() {
     'settings':       { src: './js/settings.js',       globalName: 'SettingsApp' },
     'linebot':        { src: './js/linebot.js',        globalName: 'LineBotApp' },
   };
+  let appLoaders = { ...fallbackAppLoaders };
 
   // 已載入模組的快取，避免重複載入
   const _loadedModules = new Set();
+  const _loadedStyles = new Set();
+
+  function withApiBase(path) {
+    if (typeof path !== 'string' || !path) return path;
+    if (path.startsWith('/api/') || path.startsWith('/socket.io/')) {
+      return `${window.API_BASE || ''}${path}`;
+    }
+    return path;
+  }
 
   /**
    * 顯示 Loading Skeleton（在桌面區域中央）
@@ -82,21 +93,80 @@ const DesktopModule = (function() {
    */
   function loadScript(src) {
     return new Promise((resolve, reject) => {
+      const finalSrc = withApiBase(src);
       // 檢查是否已有相同 src 的 script 標籤（正規化 ./ 前綴）
-      const normalizedSrc = src.replace(/^\.\//, '');
-      if (document.querySelector(`script[src="${src}"]`) ||
+      const normalizedSrc = finalSrc.replace(/^\.\//, '');
+      if (document.querySelector(`script[src="${finalSrc}"]`) ||
           document.querySelector(`script[src="${normalizedSrc}"]`) ||
           document.querySelector(`script[src="./${normalizedSrc}"]`)) {
         resolve();
         return;
       }
       const script = document.createElement('script');
-      script.src = src;
+      script.src = finalSrc;
       script.async = true;
       script.onload = () => resolve();
-      script.onerror = () => reject(new Error(`模組載入失敗: ${src}`));
+      script.onerror = () => reject(new Error(`模組載入失敗: ${finalSrc}`));
       document.head.appendChild(script);
     });
+  }
+
+  function loadCss(href) {
+    const finalHref = withApiBase(href);
+    if (!finalHref || _loadedStyles.has(finalHref)) {
+      return Promise.resolve();
+    }
+    return new Promise((resolve, reject) => {
+      const existing = document.querySelector(`link[data-skill-css="${finalHref}"]`);
+      if (existing) {
+        _loadedStyles.add(finalHref);
+        resolve();
+        return;
+      }
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = finalHref;
+      link.dataset.skillCss = finalHref;
+      link.onload = () => {
+        _loadedStyles.add(finalHref);
+        resolve();
+      };
+      link.onerror = () => reject(new Error(`CSS 載入失敗: ${finalHref}`));
+      document.head.appendChild(link);
+    });
+  }
+
+  async function loadApplicationsFromApi() {
+    try {
+      const response = await fetch('/api/config/apps');
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const data = await response.json();
+      if (!Array.isArray(data) || data.length === 0) {
+        throw new Error('Empty apps list');
+      }
+
+      applications = data;
+      appLoaders = { ...fallbackAppLoaders };
+
+      data.forEach((app) => {
+        if (!app || typeof app !== 'object') return;
+        if (!app.loader || typeof app.loader !== 'object') return;
+        if (!app.id || !app.loader.src || !app.loader.globalName) return;
+        appLoaders[app.id] = {
+          src: app.loader.src,
+          globalName: app.loader.globalName,
+          css: app.css,
+        };
+      });
+      return true;
+    } catch (error) {
+      console.warn('[Desktop] 載入 /api/config/apps 失敗，使用靜態清單:', error);
+      applications = [...fallbackApplications];
+      appLoaders = { ...fallbackAppLoaders };
+      return false;
+    }
   }
 
   /**
@@ -118,6 +188,9 @@ const DesktopModule = (function() {
     if (_loadedModules.has(appId)) return true;
 
     try {
+      if (loader.css) {
+        await loadCss(loader.css);
+      }
       await loadScript(loader.src);
       _loadedModules.add(appId);
       console.log(`[LazyLoad] ✅ 模組已載入: ${appId} (${loader.src})`);
@@ -204,6 +277,20 @@ const DesktopModule = (function() {
    * @param {string} appId
    */
   async function openApp(appId) {
+    if (
+      typeof PermissionsModule !== 'undefined'
+      && !PermissionsModule.isAdmin()
+      && !PermissionsModule.canAccessApp(appId)
+    ) {
+      showToast('無權限使用此功能', 'alert-circle');
+      return;
+    }
+    const app = applications.find(a => a.id === appId);
+    if (!app) {
+      showToast('此功能目前不可用', 'alert-circle');
+      return;
+    }
+
     // ── 不需要 lazy-load 的特殊 App ──
     if (appId === 'erpnext') {
       window.open('http://ct.erp', '_blank');
@@ -253,10 +340,7 @@ const DesktopModule = (function() {
     }
 
     // 未在 appLoaders 中的 App → 開發中提示
-    const app = applications.find(a => a.id === appId);
-    if (app) {
-      showToast(`「${app.name}」功能開發中`, 'wrench');
-    }
+    showToast(`「${app.name}」功能開發中`, 'wrench');
   }
 
   /**
@@ -384,6 +468,7 @@ const DesktopModule = (function() {
   function renderIcons() {
     const desktopArea = document.querySelector('.desktop-area');
     if (!desktopArea) return;
+    desktopArea.querySelectorAll('.desktop-icon, .skeleton--icon').forEach((node) => node.remove());
 
     // 設定桌面區域的無障礙屬性
     desktopArea.setAttribute('role', 'region');
@@ -452,7 +537,8 @@ const DesktopModule = (function() {
   /**
    * Initialize desktop module
    */
-  function init() {
+  async function init() {
+    await loadApplicationsFromApi();
     renderIcons();
   }
 

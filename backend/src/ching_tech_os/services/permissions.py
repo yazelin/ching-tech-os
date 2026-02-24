@@ -165,6 +165,38 @@ APP_DISPLAY_NAMES: dict[str, str] = {
     "settings": "系統設定",
 }
 
+
+def get_effective_app_permissions() -> dict[str, bool]:
+    """取得有效的 App 權限（排除停用模組，合併 Skill 擴充）。"""
+
+    perms = DEFAULT_APP_PERMISSIONS.copy()
+    try:
+        from ..modules import get_module_registry, is_module_enabled
+
+        registry = get_module_registry()
+        for info in registry.values():
+            for app_id, default_value in (info.get("permission_defaults") or {}).items():
+                if isinstance(app_id, str):
+                    perms.setdefault(app_id, bool(default_value))
+
+        for module_id, info in registry.items():
+            if is_module_enabled(module_id):
+                continue
+            for app_id in info.get("app_ids", []):
+                perms.pop(app_id, None)
+    except Exception as e:
+        logger.warning("計算有效 App 權限失敗，使用預設值: %s", e)
+    return perms
+
+
+def _build_default_permissions() -> dict[str, dict[str, bool]]:
+    """建立預設權限快照。"""
+    return {
+        "apps": get_effective_app_permissions(),
+        "knowledge": DEFAULT_KNOWLEDGE_PERMISSIONS.copy(),
+        "shared_sources": DEFAULT_SHARED_SOURCE_PERMISSIONS.copy(),
+    }
+
 # ============================================================
 # 權限檢查函數
 # ============================================================
@@ -175,8 +207,9 @@ def get_full_permissions() -> dict[str, dict[str, bool]]:
 
     用於管理員帳號
     """
+    app_permissions = get_effective_app_permissions()
     return {
-        "apps": {app_id: True for app_id in DEFAULT_APP_PERMISSIONS},
+        "apps": {app_id: True for app_id in app_permissions},
         "knowledge": {perm: True for perm in DEFAULT_KNOWLEDGE_PERMISSIONS},
         "shared_sources": {source: True for source in DEFAULT_SHARED_SOURCE_PERMISSIONS},
     }
@@ -205,11 +238,12 @@ def get_user_permissions(preferences: dict | None) -> dict[str, dict[str, bool]]
     Returns:
         合併後的權限結構
     """
+    default_permissions = _build_default_permissions()
     if preferences is None:
-        return DEFAULT_PERMISSIONS.copy()
+        return default_permissions
 
     user_perms = preferences.get("permissions", {})
-    return deep_merge(DEFAULT_PERMISSIONS.copy(), user_perms)
+    return deep_merge(default_permissions, user_perms)
 
 
 def get_user_permissions_for_role(role: str, preferences: dict | None) -> dict[str, dict[str, bool]]:
@@ -247,7 +281,7 @@ def has_app_permission(
     """
     # 管理員擁有所有權限
     if role == "admin":
-        return True
+        return app_id in get_effective_app_permissions()
 
     # 一般使用者：檢查 permissions，預設使用 DEFAULT_APP_PERMISSIONS
     if permissions and "apps" in permissions:
@@ -255,7 +289,7 @@ def has_app_permission(
         if app_id in app_perms:
             return app_perms[app_id]
 
-    return DEFAULT_APP_PERMISSIONS.get(app_id, False)
+    return get_effective_app_permissions().get(app_id, False)
 
 
 async def get_user_app_permissions(user_id: int) -> dict[str, bool]:
@@ -277,8 +311,9 @@ async def get_user_app_permissions(user_id: int) -> dict[str, bool]:
             user_id,
         )
 
+    effective_defaults = get_effective_app_permissions()
     if not row:
-        return DEFAULT_APP_PERMISSIONS.copy()
+        return effective_defaults.copy()
 
     role = row["role"] or "user"
     preferences = row["preferences"] or {}
@@ -286,10 +321,10 @@ async def get_user_app_permissions(user_id: int) -> dict[str, bool]:
 
     # 管理員擁有所有權限
     if role == "admin":
-        return {app_id: True for app_id in DEFAULT_APP_PERMISSIONS}
+        return {app_id: True for app_id in effective_defaults}
 
     # 一般使用者使用預設權限合併個人設定
-    base_perms = DEFAULT_APP_PERMISSIONS.copy()
+    base_perms = effective_defaults.copy()
     user_app_perms = permissions.get("apps", {})
     base_perms.update(user_app_perms)
 
@@ -311,12 +346,14 @@ def get_user_app_permissions_sync(
     Returns:
         App 權限設定 dict
     """
+    effective_defaults = get_effective_app_permissions()
+
     # 管理員擁有所有權限
     if role == "admin":
-        return {app_id: True for app_id in DEFAULT_APP_PERMISSIONS}
+        return {app_id: True for app_id in effective_defaults}
 
     # 一般使用者使用預設權限合併個人設定
-    base_perms = DEFAULT_APP_PERMISSIONS.copy()
+    base_perms = effective_defaults.copy()
     if user_data:
         preferences = user_data.get("preferences") or {}
         permissions = preferences.get("permissions", {})
@@ -341,10 +378,6 @@ def get_mcp_tools_for_user(
     Returns:
         過濾後的工具名稱列表
     """
-    # 管理員可以使用所有工具
-    if role == "admin":
-        return all_tool_names
-
     allowed_tools = []
     for tool in all_tool_names:
         # 移除 MCP 前綴（如果有的話）
@@ -380,10 +413,6 @@ def check_tool_permission(
     Returns:
         是否有權限使用該工具
     """
-    # 管理員可以使用所有工具
-    if role == "admin":
-        return True
-
     # 移除 MCP 前綴
     clean_name = tool_name.replace("mcp__ching-tech-os__", "")
 
@@ -556,16 +585,28 @@ def get_default_permissions() -> dict[str, dict[str, bool]]:
     用於前端顯示和 API 回應
     """
     # 深拷貝以避免外部修改影響原始值
-    return {
-        "apps": DEFAULT_APP_PERMISSIONS.copy(),
-        "knowledge": DEFAULT_KNOWLEDGE_PERMISSIONS.copy(),
-        "shared_sources": DEFAULT_SHARED_SOURCE_PERMISSIONS.copy(),
-    }
+    return _build_default_permissions()
 
 
 def get_app_display_names() -> dict[str, str]:
     """取得應用程式顯示名稱對照表"""
-    return APP_DISPLAY_NAMES.copy()
+    names = APP_DISPLAY_NAMES.copy()
+    try:
+        from ..modules import get_module_registry
+
+        for info in get_module_registry().values():
+            for app in info.get("app_manifest", []):
+                app_id = app.get("id")
+                app_name = app.get("name")
+                if isinstance(app_id, str) and isinstance(app_name, str) and app_name:
+                    names.setdefault(app_id, app_name)
+
+            for app_id, display_name in (info.get("permission_display_names") or {}).items():
+                if isinstance(app_id, str) and isinstance(display_name, str) and display_name:
+                    names[app_id] = display_name
+    except Exception as e:
+        logger.warning("讀取模組 App 顯示名稱失敗，使用預設值: %s", e)
+    return names
 
 
 # ============================================================
@@ -613,7 +654,7 @@ def require_app_permission(app_id: str) -> Callable:
                 return session
 
         # 無權限
-        app_name = APP_DISPLAY_NAMES.get(app_id, app_id)
+        app_name = get_app_display_names().get(app_id, app_id)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"無「{app_name}」功能權限",

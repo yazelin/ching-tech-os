@@ -52,6 +52,37 @@ def test_ensure_directories(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> 
     assert (tmp_path / "ai-images").exists()
 
 
+def test_register_module_routers_reuses_import(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    main = _load_main(monkeypatch, tmp_path)
+    fake_module = SimpleNamespace(router=object(), line_router=object())
+    import_calls: list[tuple[str, str | None]] = []
+
+    def _fake_import_module(module_path: str, package: str | None = None):
+        import_calls.append((module_path, package))
+        return fake_module
+
+    monkeypatch.setattr(
+        main,
+        "get_module_registry",
+        lambda: {
+            "line-bot": {
+                "routers": [
+                    {"module": ".api.linebot_router", "attr": "router"},
+                    {"module": ".api.linebot_router", "attr": "line_router"},
+                ]
+            }
+        },
+    )
+    monkeypatch.setattr(main, "is_module_enabled", lambda _module_id: True)
+    monkeypatch.setattr(main.importlib, "import_module", _fake_import_module)
+    app = Mock()
+
+    main._register_module_routers(app)
+
+    assert import_calls == [(".api.linebot_router", "ching_tech_os")]
+    assert app.include_router.call_count == 2
+
+
 @pytest.mark.asyncio
 async def test_service_error_handler(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     main = _load_main(monkeypatch, tmp_path)
