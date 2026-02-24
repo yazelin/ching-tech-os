@@ -5,6 +5,7 @@ ChingTech OS - 排程服務
 
 import logging
 import os
+import shutil
 import time
 from datetime import datetime, timedelta
 
@@ -206,6 +207,70 @@ async def cleanup_ai_images():
         logger.error(f"清理 AI 圖片失敗: {e}")
 
 
+async def cleanup_media_temp_folders():
+    """
+    清理影片下載和轉字幕的暫存資料夾
+    刪除超過 7 天的日期資料夾（YYYY-MM-DD）
+    路徑：
+      - {ctos_mount_path}/linebot/videos/YYYY-MM-DD/
+      - {ctos_mount_path}/linebot/transcriptions/YYYY-MM-DD/
+    """
+    from ..config import settings
+
+    base_dirs = [
+        os.path.join(settings.ctos_mount_path, "linebot", "videos"),
+        os.path.join(settings.ctos_mount_path, "linebot", "transcriptions"),
+    ]
+
+    cutoff_date = datetime.now() - timedelta(days=7)
+    total_deleted = 0
+    total_size = 0
+
+    for base_dir in base_dirs:
+        if not os.path.exists(base_dir):
+            logger.debug(f"媒體暫存目錄不存在: {base_dir}")
+            continue
+
+        try:
+            for entry in os.listdir(base_dir):
+                entry_path = os.path.join(base_dir, entry)
+                if not os.path.isdir(entry_path):
+                    continue
+
+                # 解析日期資料夾名稱 YYYY-MM-DD
+                try:
+                    folder_date = datetime.strptime(entry, "%Y-%m-%d")
+                except ValueError:
+                    continue
+
+                if folder_date >= cutoff_date:
+                    continue
+
+                # 計算資料夾大小
+                folder_size = 0
+                for dirpath, _dirnames, filenames in os.walk(entry_path):
+                    for f in filenames:
+                        fp = os.path.join(dirpath, f)
+                        if os.path.isfile(fp):
+                            folder_size += os.path.getsize(fp)
+
+                shutil.rmtree(entry_path)
+                total_deleted += 1
+                total_size += folder_size
+                logger.debug(f"已刪除過期媒體資料夾: {entry_path}")
+
+        except Exception as e:
+            logger.error(f"清理 {base_dir} 失敗: {e}")
+
+    if total_deleted > 0:
+        size_mb = total_size / (1024 * 1024)
+        logger.info(
+            f"清理媒體暫存: 刪除 {total_deleted} 個資料夾，釋放 {size_mb:.1f} MB"
+        )
+    else:
+        logger.debug("媒體暫存清理: 無過期資料夾")
+
+
 async def check_telegram_webhook_health():
     """
     檢查 Telegram Webhook 健康狀態
@@ -291,6 +356,15 @@ def start_scheduler():
         CronTrigger(hour=4, minute=30),
         id='cleanup_ai_images',
         name='清理 AI 生成圖片',
+        replace_existing=True
+    )
+
+    # 每天凌晨 5 點清理超過 7 天的影片下載和轉字幕暫存資料夾
+    scheduler.add_job(
+        cleanup_media_temp_folders,
+        CronTrigger(hour=5, minute=0),
+        id='cleanup_media_temp_folders',
+        name='清理媒體暫存資料夾',
         replace_existing=True
     )
 
