@@ -266,6 +266,7 @@ uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8088 --reload
 | ENABLE_NAS_AUTH | True | 是否啟用 NAS SMB 認證 |
 | BOT_SECRET_KEY | （無預設） | Bot 憑證加密金鑰（AES-256-GCM） |
 | SKILL_ROUTE_POLICY | script-first | Skills 路由策略（script-first / mcp-first） |
+| SKILL_SCRIPT_FALLBACK_ENABLED | true | script 失敗且明確要求 fallback 時，是否回退到對應 MCP tool |
 
 ## 專案結構
 
@@ -319,6 +320,8 @@ backend/
 │   │   ├── document_reader.py # 文件讀取（Word/Excel/PDF）
 │   │   └── scheduler.py      # 排程任務
 │   ├── skills/               # AI Skills 系統
+│   │   ├── base/               # 內建：基礎工具（script-first）
+│   │   ├── file-manager/       # 內建：檔案管理（script-first）
 │   │   ├── script_runner.py    # Skill 腳本運行器
 │   │   ├── media-downloader/   # 影片/音訊下載
 │   │   └── media-transcription/ # 逐字稿轉錄

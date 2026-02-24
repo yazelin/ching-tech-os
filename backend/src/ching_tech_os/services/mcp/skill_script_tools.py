@@ -107,16 +107,34 @@ async def run_skill_script(
         "fallback_reason": None,
     }
 
-    # script 失敗時：可選 fallback 到對應 MCP tool
-    if not result.get("success") and settings.skill_script_fallback_enabled:
+    # script 失敗時：僅在明確要求 fallback 時才轉呼叫 MCP tool
+    output_json = _parse_json_object(result.get("output", ""))
+    script_error = str(result.get("error") or "")
+    output_error = (
+        output_json.get("error")
+        if isinstance(output_json, dict) and isinstance(output_json.get("error"), str)
+        else ""
+    )
+    fallback_requested = (
+        script_error == "fallback_required"
+        or output_error == "fallback_required"
+        or (
+            isinstance(output_json, dict)
+            and output_json.get("allow_fallback") is True
+        )
+    )
+
+    if (
+        not result.get("success")
+        and settings.skill_script_fallback_enabled
+        and fallback_requested
+    ):
         fallback_map = await sm.get_script_fallback_map(skill)
         fallback_tool = fallback_map.get(script)
         if fallback_tool:
             from .server import execute_tool
 
             fallback_args = _parse_json_object(input) or {}
-            # 若 script 有提供 normalized_input，優先使用（可做前置驗證/清洗）
-            output_json = _parse_json_object(result.get("output", ""))
             normalized_input = output_json.get("normalized_input") if output_json else None
             if isinstance(normalized_input, dict):
                 fallback_args = normalized_input
@@ -127,7 +145,7 @@ async def run_skill_script(
             clean_tool = _normalize_tool_name(fallback_tool)
             fallback_output = await execute_tool(clean_tool, fallback_args)
             route_info["fallback_tool"] = clean_tool
-            route_info["fallback_reason"] = result.get("error")
+            route_info["fallback_reason"] = script_error or output_error or "fallback_required"
             if not fallback_output.startswith("執行失敗："):
                 route_info["fallback_used"] = True
                 result = {
@@ -137,7 +155,11 @@ async def run_skill_script(
                     "duration_ms": result.get("duration_ms", 0),
                 }
             else:
-                result["error"] = f"{result.get('error')}; fallback 失敗: {fallback_output}"
+                base_error = result.get("error") or output_error or "script_failed"
+                result["error"] = f"{base_error}; fallback 失敗: {fallback_output}"
+
+    if not result.get("success") and not result.get("error") and output_error:
+        result["error"] = output_error
 
     result["route"] = route_info
 

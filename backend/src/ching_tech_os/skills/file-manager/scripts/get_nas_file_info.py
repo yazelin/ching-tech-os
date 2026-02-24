@@ -1,0 +1,33 @@
+#!/usr/bin/env python3
+"""標準化檔案資訊查詢參數，交由 MCP fallback 執行。"""
+
+import json
+import sys
+
+
+def main() -> int:
+    raw = sys.stdin.read().strip()
+    try:
+        payload = json.loads(raw) if raw else {}
+    except Exception as exc:
+        print(json.dumps({"success": False, "error": f"invalid_input: {exc}"}, ensure_ascii=False))
+        return 1
+
+    if not isinstance(payload, dict):
+        print(json.dumps({"success": False, "error": "input 必須是 JSON 物件"}, ensure_ascii=False))
+        return 1
+
+    if "file_path" not in payload:
+        print(json.dumps({"success": False, "error": "缺少 file_path"}, ensure_ascii=False))
+        return 1
+
+    print(json.dumps({
+        "success": False,
+        "error": "fallback_required",
+        "normalized_input": payload,
+    }, ensure_ascii=False))
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
