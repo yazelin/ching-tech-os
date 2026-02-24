@@ -15,6 +15,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from ..config import settings
 from ..database import get_connection
+from ..modules import get_module_registry, is_module_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -310,6 +311,48 @@ async def check_telegram_webhook_health():
         logger.error(f"檢查 Telegram Webhook 失敗: {e}")
 
 
+def _register_module_job(module_id: str, job: dict) -> None:
+    """註冊模組宣告的排程任務。"""
+    fn_name = job.get("fn")
+    if not isinstance(fn_name, str) or not fn_name:
+        logger.warning("模組 %s 排程任務缺少 fn: %s", module_id, job)
+        return
+
+    job_fn = globals().get(fn_name)
+    if not callable(job_fn):
+        logger.warning("模組 %s 排程函式不存在: %s", module_id, fn_name)
+        return
+
+    trigger_type = job.get("trigger", "interval")
+    try:
+        if trigger_type == "cron":
+            trigger_kwargs = {
+                key: value
+                for key, value in job.items()
+                if key in {"year", "month", "day", "week", "day_of_week", "hour", "minute", "second"}
+            }
+            trigger = CronTrigger(**trigger_kwargs)
+        else:
+            interval_kwargs = {
+                key: value
+                for key, value in job.items()
+                if key in {"weeks", "days", "hours", "minutes", "seconds"}
+            }
+            if not interval_kwargs:
+                interval_kwargs = {"hours": 1}
+            trigger = IntervalTrigger(**interval_kwargs)
+
+        scheduler.add_job(
+            job_fn,
+            trigger,
+            id=f"{module_id}:{fn_name}",
+            name=f"{module_id}:{fn_name}",
+            replace_existing=True,
+        )
+    except Exception as e:
+        logger.warning("註冊模組 %s 排程任務 %s 失敗: %s", module_id, fn_name, e)
+
+
 def start_scheduler():
     """
     啟動排程器
@@ -332,15 +375,6 @@ def start_scheduler():
         replace_existing=True
     )
 
-    # 每小時清理 Line Bot 暫存檔（圖片和檔案）
-    scheduler.add_job(
-        cleanup_linebot_temp_files,
-        IntervalTrigger(hours=1),
-        id='cleanup_linebot_temp_files',
-        name='清理 Line Bot 暫存',
-        replace_existing=True
-    )
-
     # 每小時清理過期分享連結
     scheduler.add_job(
         cleanup_expired_share_links,
@@ -350,23 +384,13 @@ def start_scheduler():
         replace_existing=True
     )
 
-    # 每天凌晨 4 點清理超過 1 個月的 AI 生成圖片
-    scheduler.add_job(
-        cleanup_ai_images,
-        CronTrigger(hour=4, minute=30),
-        id='cleanup_ai_images',
-        name='清理 AI 生成圖片',
-        replace_existing=True
-    )
-
-    # 每天凌晨 5 點清理超過 7 天的影片下載和轉字幕暫存資料夾
-    scheduler.add_job(
-        cleanup_media_temp_folders,
-        CronTrigger(hour=5, minute=0),
-        id='cleanup_media_temp_folders',
-        name='清理媒體暫存資料夾',
-        replace_existing=True
-    )
+    # 依啟用模組註冊排程任務
+    for module_id, info in get_module_registry().items():
+        if not is_module_enabled(module_id):
+            continue
+        for job in info.get("scheduler_jobs", []):
+            if isinstance(job, dict):
+                _register_module_job(module_id, job)
 
     # Telegram Webhook 健康檢查已停用（改用 polling 模式）
     # scheduler.add_job(

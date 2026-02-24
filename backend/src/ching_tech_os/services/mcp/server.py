@@ -72,10 +72,12 @@ async def check_mcp_tool_permission(
     from ..permissions import (
         check_tool_permission,
         TOOL_APP_MAPPING,
-        APP_DISPLAY_NAMES,
-        DEFAULT_APP_PERMISSIONS,
+        get_app_display_names,
+        get_effective_app_permissions,
         is_tool_deprecated,
     )
+    effective_defaults = get_effective_app_permissions()
+    app_display_names = get_app_display_names()
 
     # 檢查工具是否已停用（遷移至 ERPNext）
     is_deprecated, deprecated_message = is_tool_deprecated(tool_name)
@@ -90,9 +92,9 @@ async def check_mcp_tool_permission(
     # 未關聯帳號的使用者，使用預設權限
     if ctos_user_id is None:
         # 檢查預設權限是否允許
-        if DEFAULT_APP_PERMISSIONS.get(required_app, False):
+        if effective_defaults.get(required_app, False):
             return (True, "")
-        app_name = APP_DISPLAY_NAMES.get(required_app, required_app)
+        app_name = app_display_names.get(required_app, required_app)
         return (False, f"需要「{app_name}」功能權限才能使用此工具")
 
     # 查詢使用者角色和權限
@@ -105,9 +107,9 @@ async def check_mcp_tool_permission(
 
     if not row:
         # 使用者不存在，使用預設權限
-        if DEFAULT_APP_PERMISSIONS.get(required_app, False):
+        if effective_defaults.get(required_app, False):
             return (True, "")
-        app_name = APP_DISPLAY_NAMES.get(required_app, required_app)
+        app_name = app_display_names.get(required_app, required_app)
         return (False, f"需要「{app_name}」功能權限才能使用此工具")
 
     role = row["role"] or "user"
@@ -118,7 +120,7 @@ async def check_mcp_tool_permission(
     if check_tool_permission(tool_name, role, permissions):
         return (True, "")
 
-    app_name = APP_DISPLAY_NAMES.get(required_app, required_app)
+    app_name = app_display_names.get(required_app, required_app)
     return (False, f"您沒有「{app_name}」功能權限，無法使用此工具")
 
 

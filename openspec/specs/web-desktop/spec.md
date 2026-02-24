@@ -190,32 +190,35 @@ Desktop Area SHALL 作為主要工作區域，顯示應用程式圖示。
 ---
 
 ### Requirement: 桌面圖示權限控制
+桌面 SHALL 從後端 API 動態取得應用清單，取代前端靜態 `applications` 陣列。停用模組的 App SHALL 不出現在桌面。
 
-桌面模組 SHALL 根據使用者權限顯示或隱藏應用程式圖示。
-
-#### Scenario: 登入後載入權限
-- Given 使用者成功登入
-- When 系統載入桌面
-- Then 呼叫 `GET /api/user/me` 取得權限資訊
-- And 儲存權限資訊到 `window.currentUser`
+#### Scenario: 登入後從 API 載入應用清單
+- **WHEN** 使用者登入成功進入桌面
+- **THEN** `desktop.js` SHALL 呼叫 `GET /api/config/apps` 取得可用應用清單
+- **THEN** 桌面 SHALL 依回傳清單渲染應用圖示
 
 #### Scenario: 顯示有權限的應用程式
-- Given 使用者已登入且權限已載入
-- When 桌面渲染應用程式圖示
-- Then 只顯示使用者有權限的應用程式圖示
-- And 無權限的應用程式圖示不顯示
+- **WHEN** API 回傳應用清單
+- **THEN** SHALL 結合使用者個人 app 權限進一步過濾
+- **THEN** 只顯示使用者有權限的應用
 
-#### Scenario: 管理員看到所有應用程式
-- Given 管理員已登入
-- When 桌面渲染應用程式圖示
-- Then 顯示所有應用程式圖示
+#### Scenario: 管理員看到所有啟用模組的應用程式
+- **WHEN** 登入使用者為管理員
+- **THEN** SHALL 顯示所有啟用模組的應用（不受個人權限限制）
+
+#### Scenario: API 失敗 fallback
+- **WHEN** `/api/config/apps` 請求失敗（網路錯誤、伺服器異常）
+- **THEN** SHALL fallback 到前端內建的靜態 `applications` 清單
+- **THEN** 桌面 SHALL 正常顯示，不因 API 失敗而空白
+
+#### Scenario: Skill 擴充 App 動態載入
+- **WHEN** API 回傳的應用項目包含 `loader` 欄位
+- **THEN** 使用者點擊該 App 時，`desktop.js` SHALL 動態載入 `loader.src` 指定的 JS 檔案
+- **THEN** 若有 `css` 欄位，SHALL 先載入 CSS 再載入 JS
 
 #### Scenario: 開啟無權限應用程式提示
-- Given 應用程式圖示被隱藏
-- When 使用者透過其他方式嘗試開啟該應用程式
-- Then 顯示 toast 通知「您沒有使用 {應用程式名稱} 的權限，請聯繫管理員」
-
----
+- **WHEN** 透過 URL 或程式碼嘗試開啟使用者無權限的 App
+- **THEN** SHALL 顯示「無權限」提示，不開啟視窗
 
 ### Requirement: 使用者管理介面
 
@@ -321,4 +324,3 @@ Desktop Area SHALL 作為主要工作區域，顯示應用程式圖示。
 - **WHEN** 使用者在桌機上操作應用程式視窗
 - **THEN** 視窗可拖曳移動
 - **AND** 視窗可調整大小
-

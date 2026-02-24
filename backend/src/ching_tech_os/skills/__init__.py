@@ -17,28 +17,16 @@ from typing import Optional
 import yaml
 
 from ..config import settings
+from ..services.hub_meta import parse_skill_md as parse_skill_md_frontmatter
 
 logger = logging.getLogger(__name__)
 
 # Skills 目錄
 SKILLS_DIR = Path(__file__).parent
 
-# YAML frontmatter 解析
-_FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n?(.*)", re.DOTALL)
-
-
-def _parse_skill_md(text: str) -> tuple[dict, str]:
-    """解析 SKILL.md：YAML frontmatter + Markdown body。
-
-    Returns:
-        (frontmatter_dict, body_str)
-    """
-    m = _FRONTMATTER_RE.match(text)
-    if not m:
-        return {}, text
-    fm = yaml.safe_load(m.group(1)) or {}
-    body = m.group(2).strip()
-    return fm, body
+def _parse_skill_md(text: str, skill_name: str = "") -> tuple[dict, str]:
+    """解析 SKILL.md frontmatter（含 contributes 驗證）。"""
+    return parse_skill_md_frontmatter(text, skill_name=skill_name)
 
 
 def _parse_allowed_tools(value: str | list | None) -> list[str]:
@@ -148,13 +136,21 @@ def _build_skill(config: dict, body: str, skill_dir: Path, source: str = "native
             if f.is_file()
         )
 
+    metadata = config.get("metadata") or {}
+    if not isinstance(metadata, dict):
+        metadata = {}
+    contributes = config.get("contributes")
+    if isinstance(contributes, dict):
+        metadata = metadata.copy()
+        metadata["contributes"] = contributes
+
     return Skill(
         name=name,
         description=config.get("description", ""),
         license=config.get("license", ""),
         compatibility=config.get("compatibility", ""),
         allowed_tools=allowed_tools,
-        metadata=config.get("metadata") or {},
+        metadata=metadata,
         requires_app=requires_app,
         mcp_servers=mcp_servers,
         prompt=body,
@@ -213,7 +209,7 @@ class SkillManager:
             return None
 
         text = skill_md.read_text(encoding="utf-8")
-        config, body = _parse_skill_md(text)
+        config, body = _parse_skill_md(text, skill_dir.name)
         if not config:
             logger.warning(f"SKILL.md 無 frontmatter: {skill_dir}")
             return None
@@ -326,7 +322,7 @@ class SkillManager:
             raise FileNotFoundError(f"找不到 SKILL.md: {skill_path}")
 
         text = src_skill_md.read_text(encoding="utf-8")
-        config, body = _parse_skill_md(text)
+        config, body = _parse_skill_md(text, skill_path.name)
 
         name = config.get("name", skill_path.name)
         _validate_skill_name(name)
@@ -490,7 +486,7 @@ class SkillManager:
             return False
 
         text = skill_md_path.read_text(encoding="utf-8")
-        config, body = _parse_skill_md(text)
+        config, body = _parse_skill_md(text, name)
         if not config:
             return False
 

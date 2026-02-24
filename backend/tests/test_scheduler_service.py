@@ -154,9 +154,62 @@ def test_start_and_stop_scheduler(monkeypatch: pytest.MonkeyPatch) -> None:
     scheduler.start_scheduler()
     assert dummy.running is True
     assert len(dummy.jobs) == 6
+    job_ids = {kwargs.get("id") for _, kwargs in dummy.jobs}
+    assert "cleanup_old_messages" in job_ids
+    assert "create_next_month_partitions" in job_ids
+    assert "cleanup_expired_share_links" in job_ids
+    assert "file-manager:cleanup_linebot_temp_files" in job_ids
+    assert "file-manager:cleanup_media_temp_folders" in job_ids
+    assert "ai-agent:cleanup_ai_images" in job_ids
 
     scheduler.stop_scheduler()
     assert dummy.running is False
+
+
+def test_start_scheduler_respects_module_enablement(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _DummyScheduler:
+        def __init__(self):
+            self.jobs: list[tuple] = []
+            self.running = False
+
+        def add_job(self, *args, **kwargs):
+            self.jobs.append((args, kwargs))
+
+        def start(self):
+            self.running = True
+
+        def shutdown(self):
+            self.running = False
+
+    dummy = _DummyScheduler()
+    monkeypatch.setattr(scheduler, "scheduler", dummy)
+    monkeypatch.setattr(
+        scheduler,
+        "get_module_registry",
+        lambda: {
+            "file-manager": {
+                "scheduler_jobs": [
+                    {"fn": "cleanup_linebot_temp_files", "trigger": "interval", "hours": 1},
+                ]
+            },
+            "ai-agent": {
+                "scheduler_jobs": [
+                    {"fn": "cleanup_ai_images", "trigger": "cron", "hour": 4, "minute": 30},
+                ]
+            },
+        },
+    )
+    monkeypatch.setattr(
+        scheduler,
+        "is_module_enabled",
+        lambda module_id: module_id != "file-manager",
+    )
+
+    scheduler.start_scheduler()
+    job_ids = {kwargs.get("id") for _, kwargs in dummy.jobs}
+    assert "ai-agent:cleanup_ai_images" in job_ids
+    assert "file-manager:cleanup_linebot_temp_files" not in job_ids
+    assert "cleanup_expired_share_links" in job_ids
 
 
 @pytest.mark.asyncio

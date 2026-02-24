@@ -8,6 +8,7 @@ import tempfile
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import FileResponse
 from typing import Literal
 from pydantic import BaseModel, Field
 
@@ -15,7 +16,7 @@ from pydantic import BaseModel, Field
 HubSource = Literal["clawhub", "skillhub"]
 
 from ..models.auth import SessionData
-from .auth import require_admin
+from .auth import require_admin, get_current_session
 from ..skills import get_skill_manager
 from ..services.clawhub_client import ClawHubClient, ClawHubError, get_clawhub_client_di, validate_slug
 from ..services.skillhub_client import (
@@ -197,6 +198,7 @@ async def list_skills(session: SessionData = Depends(require_admin)):
                 "source": skill.source,
                 "license": skill.license,
                 "compatibility": skill.compatibility,
+                "has_module": bool((skill.metadata or {}).get("contributes")),
             }
             for skill in all_skills
         ]
@@ -234,6 +236,8 @@ async def get_skill(name: str, session: SessionData = Depends(require_admin)):
         "license": skill.license,
         "compatibility": skill.compatibility,
         "metadata": skill.metadata,
+        "has_module": bool((skill.metadata or {}).get("contributes")),
+        "contributes": (skill.metadata or {}).get("contributes"),
         "meta": meta,
     }
 
@@ -514,6 +518,33 @@ async def hub_install(
         "description": skill.description if skill else "",
         "scripts_count": len(skill.scripts) if skill and skill.scripts else 0,
     }
+
+
+@router.get("/{name}/frontend/{file_path:path}")
+async def get_skill_frontend_file(
+    name: str,
+    file_path: str,
+    session: SessionData = Depends(get_current_session),
+):
+    """提供 Skill frontend 靜態資源（JS/CSS）。"""
+    if file_path.startswith("/") or ".." in Path(file_path).parts:
+        raise HTTPException(status_code=400, detail="Invalid file path")
+
+    sm = get_skill_manager()
+    skill_dir = await sm.get_skill_dir(name)
+    if not skill_dir:
+        raise HTTPException(status_code=404, detail=f"Skill '{name}' not found")
+
+    frontend_dir = (skill_dir / "frontend").resolve()
+    target = (frontend_dir / file_path).resolve()
+    try:
+        target.relative_to(frontend_dir)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid file path")
+
+    if not target.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(target)
 
 
 @router.get("/{name}/files/{file_path:path}")

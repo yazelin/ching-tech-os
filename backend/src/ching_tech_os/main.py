@@ -1,5 +1,7 @@
 """FastAPI 應用程式入口"""
 
+import importlib
+import inspect
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -14,8 +16,13 @@ from .database import init_db_pool, close_db_pool
 from .services.session import session_manager
 from .services.terminal import terminal_service
 from .services.scheduler import start_scheduler, stop_scheduler
-from .services.linebot_agents import ensure_default_linebot_agents
-from .api import auth, knowledge, login_records, messages, nas, user, ai_router, ai_management, linebot_router, telegram_router, share, files, presentation, config_public, bot_settings, skills
+from .modules import get_module_registry, is_module_enabled
+
+try:  # 向下相容：保留可 monkeypatch 的符號
+    from .services.linebot_agents import ensure_default_linebot_agents  # noqa: F401
+except Exception:  # pragma: no cover - 僅在依賴缺失時啟用
+    async def ensure_default_linebot_agents():
+        return None
 
 # 建立 Socket.IO 伺服器
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
@@ -44,6 +51,42 @@ def ensure_directories():
                 logger.warning(f"無法建立目錄 {dir_path}: {e}")
 
 
+def _resolve_callable(dotted_path: str):
+    """解析 dotted path 為可呼叫函數。"""
+    module_path, attr = dotted_path.rsplit(".", 1)
+    if module_path.startswith("."):
+        mod = importlib.import_module(module_path, package=__package__)
+    else:
+        mod = importlib.import_module(module_path)
+    return getattr(mod, attr)
+
+
+def _register_module_routers(fastapi_app: FastAPI) -> None:
+    """依啟用模組動態註冊 API 路由。"""
+    for module_id, info in get_module_registry().items():
+        if not is_module_enabled(module_id):
+            continue
+        for router_spec in info.get("routers", []):
+            module_path = router_spec.get("module")
+            router_attr = router_spec.get("attr", "router")
+            kwargs = router_spec.get("kwargs") or {}
+            if not isinstance(module_path, str):
+                continue
+            try:
+                mod = importlib.import_module(module_path, package=__package__)
+                router = getattr(mod, router_attr)
+                fastapi_app.include_router(router, **kwargs)
+            except ImportError as e:
+                logging.getLogger(__name__).warning("模組 %s 路由載入失敗: %s", module_id, e)
+            except AttributeError:
+                logging.getLogger(__name__).warning(
+                    "模組 %s 缺少路由屬性: %s.%s",
+                    module_id,
+                    module_path,
+                    router_attr,
+                )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """應用程式生命週期管理"""
@@ -69,21 +112,40 @@ async def lifespan(app: FastAPI):
     if skillhub_enabled():
         app.state.skillhub_client = SkillHubClient()
     await init_db_pool()
-    await ensure_default_linebot_agents()  # 確保 Line Bot Agent 存在
+
+    # 啟動模組初始化（依啟停狀態）
+    for module_id, info in get_module_registry().items():
+        if not is_module_enabled(module_id):
+            continue
+        startup_path = info.get("lifespan_startup")
+        if not isinstance(startup_path, str) or not startup_path:
+            continue
+        try:
+            startup_fn = _resolve_callable(startup_path)
+            result = startup_fn()
+            if inspect.isawaitable(result):
+                await result
+        except Exception as e:
+            _logging.getLogger(__name__).warning("模組 %s 啟動函式執行失敗: %s", module_id, e)
+
     await session_manager.start_cleanup_task()
     await terminal_service.start_cleanup_task()
     start_scheduler()
+
     # 啟動 Telegram Polling（取代 webhook 模式）
     import asyncio
-    from .services.bot_telegram.polling import run_telegram_polling
-    telegram_polling_task = asyncio.create_task(run_telegram_polling())
+    telegram_polling_task = None
+    if is_module_enabled("telegram-bot"):
+        from .services.bot_telegram.polling import run_telegram_polling
+        telegram_polling_task = asyncio.create_task(run_telegram_polling())
     yield
     # 關閉時
-    telegram_polling_task.cancel()
-    try:
-        await telegram_polling_task
-    except asyncio.CancelledError:
-        pass
+    if telegram_polling_task is not None:
+        telegram_polling_task.cancel()
+        try:
+            await telegram_polling_task
+        except asyncio.CancelledError:
+            pass
     stop_scheduler()
     await terminal_service.stop_cleanup_task()
     terminal_service.close_all()
@@ -159,25 +221,7 @@ from .middleware.cache_control import CacheControlMiddleware  # noqa: E402
 app.add_middleware(CacheControlMiddleware)
 
 # 註冊路由
-app.include_router(auth.router)
-app.include_router(knowledge.router)
-app.include_router(messages.router)
-app.include_router(login_records.router)
-app.include_router(nas.router)
-app.include_router(user.router)
-app.include_router(user.admin_router)  # 管理員 API
-app.include_router(ai_router.router)
-app.include_router(ai_management.router)
-app.include_router(linebot_router.router, prefix="/api/bot")
-app.include_router(linebot_router.line_router, prefix="/api/bot/line")
-app.include_router(telegram_router.router, prefix="/api/bot/telegram")
-app.include_router(share.router)
-app.include_router(share.public_router)
-app.include_router(files.router)
-app.include_router(presentation.router)
-app.include_router(config_public.router)  # 公開配置 API
-app.include_router(skills.router)
-app.include_router(bot_settings.router)  # Bot 設定管理 API
+_register_module_routers(app)
 
 
 @app.get("/api/health")
@@ -321,12 +365,16 @@ async def disconnect(sid):
 
 
 # 註冊 AI 事件（在 api/ai.py 中定義）
-from .api import ai
-ai.register_events(sio)
+if is_module_enabled("ai-agent"):
+    from .api import ai
+
+    ai.register_events(sio)
 
 # 註冊終端機事件
-from .api import terminal
-terminal.register_events(sio)
+if is_module_enabled("terminal"):
+    from .api import terminal
+
+    terminal.register_events(sio)
 
 # 註冊訊息中心事件
 from .api import message_events

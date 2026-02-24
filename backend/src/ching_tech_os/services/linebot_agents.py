@@ -7,6 +7,7 @@ import logging
 
 from . import ai_manager
 from ..models.ai import AiPromptCreate, AiAgentCreate
+from .permissions import get_effective_app_permissions
 
 # 從平台無關的 bot.agents 模組匯入工具 Prompt 與函式（向後相容）
 from .bot.agents import (  # noqa: F401
@@ -429,6 +430,29 @@ DEFAULT_LINEBOT_AGENTS = [
 ]
 
 
+async def _build_seed_prompt(is_group: bool) -> str:
+    """建立預設 Agent 的動態工具 prompt（僅首次建立時使用）。"""
+    base_prompt = (
+        "你是擎添工業的 AI 助理。"
+        if not is_group
+        else "你是擎添工業的 AI 助理，在群組中協助回答問題。"
+    )
+    app_permissions = {app_id: True for app_id in get_effective_app_permissions()}
+    tools_prompt = await generate_tools_prompt(app_permissions, is_group=is_group)
+    usage_tips = generate_usage_tips_prompt(app_permissions, is_group=is_group)
+
+    sections = [base_prompt]
+    if tools_prompt:
+        sections.append("你可以使用以下工具：\n\n" + tools_prompt)
+    if usage_tips:
+        sections.append(usage_tips)
+    sections.append(
+        "回應原則：使用繁體中文、語氣親切專業、不要顯示 UUID。"
+        + ("群組回覆請簡潔。" if is_group else "")
+    )
+    return "\n\n".join(sections)
+
+
 async def ensure_default_linebot_agents() -> None:
     """
     確保預設的 Line Bot Agent 存在。
@@ -453,12 +477,14 @@ async def ensure_default_linebot_agents() -> None:
             prompt_id = existing_prompt["id"]
             logger.debug(f"Prompt '{prompt_config['name']}' 已存在，使用現有 Prompt")
         else:
+            is_group = agent_name == AGENT_LINEBOT_GROUP
+            dynamic_content = await _build_seed_prompt(is_group)
             # 建立 Prompt
             prompt_data = AiPromptCreate(
                 name=prompt_config["name"],
                 display_name=prompt_config["display_name"],
                 category=prompt_config["category"],
-                content=prompt_config["content"],
+                content=dynamic_content or prompt_config["content"],
                 description=prompt_config["description"],
             )
             new_prompt = await ai_manager.create_prompt(prompt_data)
