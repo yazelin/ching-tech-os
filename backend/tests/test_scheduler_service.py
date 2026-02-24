@@ -153,7 +153,7 @@ def test_start_and_stop_scheduler(monkeypatch: pytest.MonkeyPatch) -> None:
 
     scheduler.start_scheduler()
     assert dummy.running is True
-    assert len(dummy.jobs) == 5
+    assert len(dummy.jobs) == 6
 
     scheduler.stop_scheduler()
     assert dummy.running is False

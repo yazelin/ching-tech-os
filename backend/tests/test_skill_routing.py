@@ -13,6 +13,15 @@ from ching_tech_os.services.bot import agents as bot_agents
 from ching_tech_os.services.mcp import skill_script_tools
 
 
+async def _noop():
+    pass
+
+
+def _mock_ensure_db(monkeypatch):
+    """Mock ensure_db_connection 避免 CI 無 DB 環境報錯。"""
+    monkeypatch.setattr(skill_script_tools, "ensure_db_connection", _noop)
+
+
 def _write_skill(path: Path, description: str) -> None:
     path.mkdir(parents=True, exist_ok=True)
     (path / "SKILL.md").write_text(
@@ -157,6 +166,7 @@ async def test_run_skill_script_fallback_to_mcp(monkeypatch):
     )
     monkeypatch.setattr(app_settings, "skill_script_fallback_enabled", True)
     monkeypatch.setattr(app_settings, "skill_route_policy", "script-first")
+    _mock_ensure_db(monkeypatch)
 
     raw = await skill_script_tools.run_skill_script(
         skill="share-links",
@@ -188,6 +198,7 @@ async def test_run_skill_script_denies_when_requires_app_without_user_id(monkeyp
         "ching_tech_os.skills.get_skill_manager",
         lambda: FakeSkillManager(),
     )
+    _mock_ensure_db(monkeypatch)
 
     raw = await skill_script_tools.run_skill_script(
         skill="secure-skill",

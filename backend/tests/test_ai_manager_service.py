@@ -281,6 +281,7 @@ async def test_log_and_stats_paths(monkeypatch: pytest.MonkeyPatch) -> None:
             "context_type": "web",
             "allowed_tools": '["a","b"]',
             "parsed_response": '{"tool_calls":[{"name":"a"},{"name":"a"},{"name":"b"}]}',
+            "input_prompt": "test prompt",
             "success": True,
             "duration_ms": 10,
             "input_tokens": 1,
