@@ -252,30 +252,13 @@ async def test_ai_router_routes_and_auth_helper(monkeypatch: pytest.MonkeyPatch)
     assert client.patch(f"/api/ai/chats/{chat_id}", json=ChatUpdate(title="x").model_dump()).status_code == 200
     assert client.patch(f"/api/ai/chats/{uuid4()}", json=ChatUpdate(title="x").model_dump()).status_code == 404
 
-    # get_current_user_id: 無 cookie
-    scope = {"type": "http", "headers": [], "query_string": b""}
-    req = Request(scope)
-    with pytest.raises(ai_router.HTTPException) as no_cookie_exc:
-        await ai_router.get_current_user_id(req)
-    assert no_cookie_exc.value.status_code == 401
-
-    req2 = Request({"type": "http", "headers": [(b"cookie", b"session_token=abc")], "query_string": b""})
-
-    # session 過期 / 無效
-    monkeypatch.setattr(ai_router.session_manager, "get_session", AsyncMock(return_value=None))
-    with pytest.raises(ai_router.HTTPException) as expired_exc:
-        await ai_router.get_current_user_id(req2)
-    assert expired_exc.value.status_code == 401
-
-    # session 缺少 user_id
-    monkeypatch.setattr(ai_router.session_manager, "get_session", AsyncMock(return_value=SimpleNamespace(username="u1", user_id=None)))
+    # get_current_user_id: session 缺少 user_id → 401
     with pytest.raises(ai_router.HTTPException) as missing_user_id_exc:
-        await ai_router.get_current_user_id(req2)
+        await ai_router.get_current_user_id(SimpleNamespace(username="u1", user_id=None))
     assert missing_user_id_exc.value.status_code == 401
 
-    # 正常 session 回傳資料庫 user_id
-    monkeypatch.setattr(ai_router.session_manager, "get_session", AsyncMock(return_value=SimpleNamespace(username="u1", user_id=42)))
-    assert await ai_router.get_current_user_id(req2) == 42
+    # get_current_user_id: 正常 session → 回傳 user_id
+    assert await ai_router.get_current_user_id(SimpleNamespace(username="u1", user_id=42)) == 42
 
 
 @pytest.mark.asyncio

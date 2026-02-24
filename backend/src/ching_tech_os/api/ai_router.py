@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 
 from ..models.ai import (
     ChatCreate,
@@ -11,27 +11,16 @@ from ..models.ai import (
     ChatUpdate,
 )
 from ..services import ai_chat
-from ..services.session import session_manager
+from .auth import get_current_session
+from ..services.session import SessionData
 
 router = APIRouter(prefix="/api/ai", tags=["AI"])
 
 
-async def get_current_user_id(request: Request) -> int:
-    """從 session 取得當前使用者 ID
-
-    需從 session 中的資料庫 user_id 取得，若驗證失敗則回傳 401。
-    """
-    token = request.cookies.get("session_token")
-    if not token:
-        raise HTTPException(status_code=401, detail="未登入或 session 已過期")
-
-    session = await session_manager.get_session(token)
-    if not session:
-        raise HTTPException(status_code=401, detail="未登入或 session 已過期")
-
+async def get_current_user_id(session: SessionData = Depends(get_current_session)) -> int:
+    """從 session 取得當前使用者 ID（使用標準 Bearer token 認證）"""
     if session.user_id is None:
         raise HTTPException(status_code=401, detail="未登入或 session 已過期")
-
     return session.user_id
 
 
