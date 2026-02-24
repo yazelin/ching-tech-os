@@ -126,11 +126,8 @@ async def run_skill_script(
     # script 失敗時：僅在明確要求 fallback 時才轉呼叫 MCP tool
     output_json = _parse_json_object(result.get("output", ""))
     script_error = str(result.get("error") or "")
-    output_error = (
-        output_json.get("error")
-        if isinstance(output_json, dict) and isinstance(output_json.get("error"), str)
-        else ""
-    )
+    error_from_json = (output_json or {}).get("error")
+    output_error = error_from_json if isinstance(error_from_json, str) else ""
     fallback_requested = _is_fallback_requested(
         script_error=script_error,
         output_error=output_error,
