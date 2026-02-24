@@ -12,6 +12,10 @@
 - 套件管理：後端用 uv + hatchling，前端用 npm
 - 其他：SMB/CIFS（NAS 檔案存取）、Line Bot SDK、Telegram Bot、Claude CLI、MCP Server
 
+## 模組索引
+- **修改功能前**，先查閱 `docs/module-index.md` 快速定位相關檔案
+- 該檔案包含：後端/前端模組地圖、常見修改場景速查
+
 ## 主要目錄結構
 - `frontend/`：前端資源（index.html、login.html、css、js、assets）
 - `backend/`：後端程式（src/ching_tech_os/、migrations/、pyproject.toml）
