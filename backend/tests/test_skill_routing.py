@@ -145,6 +145,7 @@ async def test_run_skill_script_fallback_to_mcp(monkeypatch):
     async def fake_execute_tool(tool_name: str, arguments: dict) -> str:
         assert tool_name == "create_share_link"
         assert arguments["resource_id"] == "kb-001"
+        assert arguments["ctos_user_id"] == 123
         return "share-link-created"
 
     async def fake_create_log(_data):
@@ -171,7 +172,8 @@ async def test_run_skill_script_fallback_to_mcp(monkeypatch):
     raw = await skill_script_tools.run_skill_script(
         skill="share-links",
         script="create_share_link",
-        input='{"resource_type":"knowledge","resource_id":"kb-001"}',
+        input='{"resource_type":"knowledge","resource_id":"kb-001","ctos_user_id":999}',
+        ctos_user_id=123,
     )
     payload = json.loads(raw)
     assert payload["success"] is True

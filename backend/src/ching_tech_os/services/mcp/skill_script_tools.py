@@ -152,7 +152,9 @@ async def run_skill_script(
             if isinstance(normalized_input, dict):
                 fallback_args = normalized_input
 
-            if ctos_user_id is not None and "ctos_user_id" not in fallback_args:
+            # 安全性：禁止使用 input 內注入的 ctos_user_id，僅允許 framework 注入值
+            fallback_args.pop("ctos_user_id", None)
+            if ctos_user_id is not None:
                 fallback_args["ctos_user_id"] = ctos_user_id
 
             clean_tool = _normalize_tool_name(fallback_tool)
