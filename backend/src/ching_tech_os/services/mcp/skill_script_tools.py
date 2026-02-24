@@ -168,7 +168,7 @@ async def run_skill_script(
                 }
             else:
                 base_error = result.get("error") or output_error or "script_failed"
-                result["error"] = f"{base_error}; fallback 失敗: {fallback_output}"
+                result["error"] = f"{skill}/{script}: {base_error}; fallback 失敗: {fallback_output}"
 
     if not result.get("success") and not result.get("error") and output_error:
         result["error"] = output_error

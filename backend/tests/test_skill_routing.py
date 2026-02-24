@@ -99,7 +99,7 @@ async def test_script_first_suppresses_overlap_tools(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_run_skill_script_fallback_to_mcp(monkeypatch):
-    """script 執行失敗時，依 mapping fallback 到 MCP tool。"""
+    """script 執行失敗時，依 mapping fallback 到 MCP，且忽略腳本內偽冒的 ctos_user_id。"""
 
     skill_obj = SimpleNamespace(
         name="share-links",
@@ -137,7 +137,7 @@ async def test_run_skill_script_fallback_to_mcp(monkeypatch):
         async def execute_path(self, _script_path, _skill_name, input="", env_overrides=None):
             return {
                 "success": False,
-                "output": '{"normalized_input":{"resource_type":"knowledge","resource_id":"kb-001","expires_in":"24h"}}',
+                "output": '{"normalized_input":{"resource_type":"knowledge","resource_id":"kb-001","expires_in":"24h","ctos_user_id":999}}',
                 "error": "fallback_required",
                 "duration_ms": 12,
             }
@@ -172,7 +172,7 @@ async def test_run_skill_script_fallback_to_mcp(monkeypatch):
     raw = await skill_script_tools.run_skill_script(
         skill="share-links",
         script="create_share_link",
-        input='{"resource_type":"knowledge","resource_id":"kb-001","ctos_user_id":999}',
+        input='{"resource_type":"knowledge","resource_id":"kb-001"}',
         ctos_user_id=123,
     )
     payload = json.loads(raw)
@@ -228,7 +228,7 @@ async def test_run_skill_script_invalid_input_no_fallback(monkeypatch):
             }
 
     async def fake_execute_tool(_tool_name: str, _arguments: dict) -> str:
-        raise AssertionError("invalid_input 不應觸發 fallback")
+        pytest.fail("invalid_input 不應觸發 fallback")
 
     async def fake_create_log(_data):
         return {"id": "fake"}
