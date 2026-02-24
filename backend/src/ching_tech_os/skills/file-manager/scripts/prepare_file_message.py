@@ -2,20 +2,16 @@
 """標準化檔案發送參數，交由 MCP fallback 執行。"""
 
 import json
-import sys
+
+from ching_tech_os.skills.script_utils import parse_stdin_json_object
 
 
 def main() -> int:
-    raw = sys.stdin.read().strip()
-    try:
-        payload = json.loads(raw) if raw else {}
-    except json.JSONDecodeError:
-        print(json.dumps({"success": False, "error": "invalid_input: 無效的 JSON 輸入"}, ensure_ascii=False))
+    payload, error = parse_stdin_json_object()
+    if error:
+        print(json.dumps({"success": False, "error": error}, ensure_ascii=False))
         return 1
-
-    if not isinstance(payload, dict):
-        print(json.dumps({"success": False, "error": "invalid_input: input 必須是 JSON 物件"}, ensure_ascii=False))
-        return 1
+    payload = payload or {}
 
     if "file_path" not in payload:
         print(json.dumps({"success": False, "error": "缺少 file_path"}, ensure_ascii=False))
