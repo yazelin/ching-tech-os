@@ -113,10 +113,11 @@ def main() -> int:
                 pass
 
     # 格式化回傳
+    status = status_data.get("status", "unknown")
     result = {
         "success": True,
         "job_id": status_data.get("job_id", job_id),
-        "status": status_data.get("status", "unknown"),
+        "status": status,
         "progress": status_data.get("progress", 0),
         "filename": status_data.get("filename", ""),
         "file_size": status_data.get("file_size", 0),
@@ -124,6 +125,16 @@ def main() -> int:
         "ctos_path": status_data.get("ctos_path", ""),
         "error": status_data.get("error"),
     }
+
+    # 完成時提供絕對路徑，讓 AI 可直接定位檔案（不需再呼叫 get_nas_file_info）
+    if status == "completed":
+        ctos_path = status_data.get("ctos_path", "")
+        if ctos_path:
+            try:
+                from ching_tech_os.services.path_manager import path_manager
+                result["file_path"] = path_manager.to_filesystem(ctos_path)
+            except Exception:
+                pass
 
     print(json.dumps(result, ensure_ascii=False))
     return 0
