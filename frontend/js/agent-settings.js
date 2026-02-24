@@ -239,7 +239,7 @@ const AgentSettingsApp = (function() {
             <div class="agent-sidebar-header">
               <div class="skill-sub-tabs">
                 <button class="skill-sub-tab active" data-skill-tab="installed">已安裝</button>
-                <button class="skill-sub-tab" data-skill-tab="hub">ClawHub</button>
+                <button class="skill-sub-tab" data-skill-tab="hub">Hub</button>
                 <button class="btn btn-icon skill-reload-btn-inline" data-action="reload-skills" title="重新載入">
                   <span class="icon">${getIcon('refresh')}</span>
                 </button>
@@ -252,7 +252,7 @@ const AgentSettingsApp = (function() {
             </div>
             <div class="skill-sub-content" data-skill-tab-content="hub" style="display:none;">
               <div class="skill-hub-search">
-                <input type="text" class="agent-form-input skill-hub-search-input" placeholder="搜尋 ClawHub..." data-action="hub-search-input">
+                <input type="text" class="agent-form-input skill-hub-search-input" placeholder="搜尋 Hub..." data-action="hub-search-input">
                 <select id="hub-source-select" class="agent-form-input skill-hub-source-select" data-action="hub-source-select">
                   <!-- 由 JS 動態填充選項 -->
                 </select>
@@ -1131,7 +1131,7 @@ const AgentSettingsApp = (function() {
   }
 
   /**
-   * Search ClawHub
+   * Search Hub
    */
   async function searchHub(query) {
     const resultsContainer = document.querySelector(`#${windowId} .skill-hub-results`);
@@ -1206,7 +1206,7 @@ const AgentSettingsApp = (function() {
   }
 
   /**
-   * Install skill from ClawHub
+   * Install skill from Hub
    */
   async function installSkill(name, version, source) {
     try {
@@ -1565,15 +1565,21 @@ const AgentSettingsApp = (function() {
    * 初始化所有 sidebar resizer（左右拖拉）
    */
   function initSidebarResizers(root) {
+    const MIN_SIDEBAR_WIDTH = 220;
+    const MIN_MAIN_WIDTH = 320;
+    const MAX_SIDEBAR_WIDTH = 720;
+
     root.querySelectorAll('.skill-sidebar-resizer').forEach(resizer => {
       let isResizing = false;
       let startX = 0;
       let startWidth = 0;
       let sidebar = null;
+      let container = null;
 
       resizer.addEventListener('mousedown', (e) => {
         sidebar = resizer.previousElementSibling;
         if (!sidebar || !sidebar.classList.contains('agent-sidebar')) return;
+        container = resizer.parentElement;
         isResizing = true;
         startX = e.clientX;
         startWidth = sidebar.offsetWidth;
@@ -1585,7 +1591,15 @@ const AgentSettingsApp = (function() {
       document.addEventListener('mousemove', (e) => {
         if (!isResizing || !sidebar) return;
         const delta = e.clientX - startX;
-        const newWidth = Math.min(400, Math.max(180, startWidth + delta));
+        const containerWidth = container?.clientWidth || 0;
+        const maxByContainer = containerWidth > 0
+          ? containerWidth - MIN_MAIN_WIDTH
+          : MAX_SIDEBAR_WIDTH;
+        const maxWidth = Math.max(
+          MIN_SIDEBAR_WIDTH,
+          Math.min(MAX_SIDEBAR_WIDTH, maxByContainer)
+        );
+        const newWidth = Math.min(maxWidth, Math.max(MIN_SIDEBAR_WIDTH, startWidth + delta));
         sidebar.style.width = newWidth + 'px';
       });
 
@@ -1593,6 +1607,7 @@ const AgentSettingsApp = (function() {
         if (!isResizing) return;
         isResizing = false;
         sidebar = null;
+        container = null;
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
       });
