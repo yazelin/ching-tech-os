@@ -9,8 +9,8 @@ def main() -> int:
     raw = sys.stdin.read().strip()
     try:
         payload = json.loads(raw) if raw else {}
-    except Exception as exc:
-        print(json.dumps({"success": False, "error": f"invalid_input: {exc}"}, ensure_ascii=False))
+    except Exception:
+        print(json.dumps({"success": False, "error": "invalid_input: 無效的 JSON 輸入"}, ensure_ascii=False))
         return 1
 
     if not isinstance(payload, dict):

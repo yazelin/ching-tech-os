@@ -13,8 +13,8 @@ def main() -> int:
             payload = json.loads(raw)
             if not isinstance(payload, dict):
                 raise ValueError("input 必須是 JSON 物件")
-        except Exception as exc:
-            print(json.dumps({"success": False, "error": f"invalid_input: {exc}"}, ensure_ascii=False))
+        except Exception:
+            print(json.dumps({"success": False, "error": "invalid_input: 無效的 JSON 輸入"}, ensure_ascii=False))
             return 1
 
     payload.setdefault("days", 3)

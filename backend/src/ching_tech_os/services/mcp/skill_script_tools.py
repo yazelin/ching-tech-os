@@ -115,13 +115,16 @@ async def run_skill_script(
         if isinstance(output_json, dict) and isinstance(output_json.get("error"), str)
         else ""
     )
+    is_script_error_fallback = script_error == "fallback_required"
+    is_output_error_fallback = output_error == "fallback_required"
+    is_allow_fallback_true = (
+        isinstance(output_json, dict)
+        and output_json.get("allow_fallback") is True
+    )
     fallback_requested = (
-        script_error == "fallback_required"
-        or output_error == "fallback_required"
-        or (
-            isinstance(output_json, dict)
-            and output_json.get("allow_fallback") is True
-        )
+        is_script_error_fallback
+        or is_output_error_fallback
+        or is_allow_fallback_true
     )
 
     if (
