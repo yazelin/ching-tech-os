@@ -4,6 +4,12 @@
 
 ChingTech OS 前端採用純 HTML5/CSS3/JavaScript（無框架），使用 IIFE（Immediately Invoked Function Expression）模式封裝各功能模組。
 
+## 近期重點（2026-02）
+
+- `desktop.js` 目前優先呼叫 `GET /api/config/apps` 取得啟用 app 清單，API 失敗時才回退到內建 fallback 清單。
+- 支援 skill app 動態載入（loader JS + CSS），來源可由 `SKILL.md contributes.app` 宣告。
+- Agent Settings 的 Hub 頁改為統一 Hub 入口（可透過來源下拉切換 ClawHub / SkillHub）。
+
 ## 技術棧
 
 | 技術 | 用途 |
@@ -215,6 +221,8 @@ case 'my-app':
   break;
 ```
 
+> 若是 **skill app**，請改在 skill 的 `SKILL.md` 使用 `contributes.app` 宣告，並透過 `/api/skills/{name}/frontend/{file_path}` 提供前端資源，不需直接改 `desktop.js` 靜態清單。
+
 ### 5. 在 taskbar.js 註冊（選用）
 
 ```javascript
@@ -358,7 +366,7 @@ element.innerHTML = `<div class="markdown-rendered">${html}</div>`;
 /* 正確 */
 .my-element {
   background: var(--bg-surface);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   border: 1px solid var(--border-light);
 }
 
@@ -375,13 +383,13 @@ element.innerHTML = `<div class="markdown-rendered">${html}</div>`;
 ```css
 .my-select {
   background: var(--bg-surface);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 
 /* 重要：必須為 option 定義樣式 */
 .my-select option {
   background-color: var(--color-background);
-  color: var(--color-text-primary);
+  color: var(--text-primary);
 }
 ```
 

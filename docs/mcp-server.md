@@ -9,6 +9,13 @@ MCP Server 提供一組 AI 工具，可供：
 - Line Bot AI 助理（直接呼叫）
 - 其他 MCP 客戶端
 
+## 近期重點（2026-02）
+
+- MCP 工具改為**條件載入**：`core` 工具永遠載入，其餘依 `ENABLED_MODULES` 判斷是否註冊。
+- Skill 可透過 `contributes.mcp_tools` 動態掛入工具模組，不需改核心 static import。
+- Skills 路由策略預設為 `script-first`：優先執行 `run_skill_script`，必要時才走 MCP fallback。
+- 若要降低預設載入成本，可在 `.mcp.json` 僅保留實際會用到的外部 server（例如先不載入 `erpnext` / `printer` / `nanobanana`）。
+
 ## 設定
 
 ### Claude Code CLI

@@ -10,6 +10,7 @@
 | 檔案 | 用途 |
 |------|------|
 | `main.py` | FastAPI 入口、路由註冊、lifespan（啟動 scheduler/MCP/Telegram） |
+| `modules.py` | 模組 registry、`ENABLED_MODULES` 條件啟停、Skill contributes 合併 |
 | `config.py` | 環境變數設定（Pydantic Settings） |
 | `database.py` | asyncpg 連線池 |
 | `__init__.py` | 版本號 `__version__` |
@@ -144,6 +145,7 @@ services/skills/seed_external.py   ← 外部 Skill 載入
 services/hub_meta.py               ← SKILL.md frontmatter 解析
 services/clawhub_client.py         ← ClawHub 市集客戶端
 services/skillhub_client.py        ← SkillHub 市集客戶端
+modules.py                         ← Skill contributes 轉 module registry
 services/mcp/skill_script_tools.py ← MCP 整合
 skills/base/                       ← 內建：基礎工具（script-first）
 skills/file-manager/               ← 內建：檔案管理（script-first）
@@ -155,12 +157,14 @@ skills/media-transcription/        ← 內建：語音轉字幕
 
 ```
 services/scheduler.py      ← APScheduler 任務定義
-  ├─ cleanup_old_messages()           每日 03:00
-  ├─ create_next_month_partitions()   每月 25 日 04:00
-  ├─ cleanup_linebot_temp_files()     每小時
-  ├─ cleanup_expired_share_links()    每小時
-  ├─ cleanup_ai_images()              每日 04:30
-  └─ cleanup_media_temp_folders()     每日 05:00
+  ├─ core jobs（固定）
+  │   └─ create_next_month_partitions()   每月 25 日 04:00
+  └─ module jobs（依 ENABLED_MODULES / contributes.scheduler）
+      ├─ cleanup_old_messages()           每日 03:00
+      ├─ cleanup_linebot_temp_files()     每小時
+      ├─ cleanup_expired_share_links()    每小時
+      ├─ cleanup_ai_images()              每日 04:30
+      └─ cleanup_media_temp_folders()     每日 05:00
 ```
 
 ### 其他服務
@@ -197,7 +201,7 @@ services/scheduler.py      ← APScheduler 任務定義
 
 | 檔案 | 用途 |
 |------|------|
-| `js/desktop.js` | 應用程式啟動器、圖示、lazy-loading |
+| `js/desktop.js` | 應用程式啟動器、圖示、lazy-loading、`/api/config/apps` 動態清單 |
 | `js/window.js` | 視窗管理（1,208 行） |
 | `js/taskbar.js` | 工作列 |
 | `js/header.js` | 頂部導航列 |
@@ -290,22 +294,24 @@ services/scheduler.py      ← APScheduler 任務定義
 
 ### 「新增一個 MCP 工具」
 1. `services/mcp/` 下對應的 `*_tools.py`（或新建）
-2. `services/mcp/__init__.py`（確認 import）
-3. `services/bot/agents.py`（更新 prompt 模板）
-4. 新增 migration 更新資料庫中的 prompt
-5. `docs/mcp-server.md`（更新文件）
+2. `modules.py`（確認模組 `mcp_module` 或 skill `contributes.mcp_tools` 對應）
+3. `services/mcp/__init__.py`（確認條件載入流程）
+4. `services/bot/agents.py`（更新 prompt 模板）
+5. 新增 migration 更新資料庫中的 prompt
+6. `docs/mcp-server.md`（更新文件）
 
 ### 「新增一個前端應用」
 1. `frontend/js/xxx.js`（IIFE 模組）
 2. `frontend/css/xxx.css`
-3. `frontend/js/desktop.js`（註冊 application + openApp）
-4. `frontend/index.html`（引入 JS/CSS）
-5. `frontend/login.html`（引入 JS/CSS）
-6. `frontend/js/icons.js`（如需新圖示）
+3. 內建 app：更新 `modules.py` 的 `app_manifest` / 模組設定
+4. skill app：在 `SKILL.md` 宣告 `contributes.app`（loader / css）
+5. `frontend/js/desktop.js`（必要時調整 loader）
+6. `frontend/index.html`、`frontend/login.html`（僅靜態內建資源需引入）
+7. `frontend/js/icons.js`（如需新圖示）
 
 ### 「新增一個 API 端點」
 1. `api/xxx.py`（路由定義）
-2. `main.py`（註冊 router）
+2. `modules.py`（新增 router spec，由 `main.py` 動態註冊）
 3. `services/xxx.py`（業務邏輯）
 4. `models/xxx.py`（資料模型）
 5. `migrations/versions/`（如需新表格）

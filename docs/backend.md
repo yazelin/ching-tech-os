@@ -2,6 +2,13 @@
 
 使用 FastAPI + NAS SMB 認證的後端服務。
 
+## 近期重點（2026-02）
+
+- 引入 `modules.py` 模組 registry，透過 `ENABLED_MODULES` 做條件式路由 / MCP / 排程載入。
+- 新增 `GET /api/config/apps`，前端可動態取得啟用 app 清單。
+- Skill 系統支援 `contributes`（app / mcp_tools / scheduler）解析與註冊。
+- Skills Hub 支援多來源（ClawHub + SkillHub），由 `SKILLHUB_ENABLED` 控制是否啟用 SkillHub。
+
 ## 需求
 
 - Python 3.11+
@@ -241,9 +248,25 @@ uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8088 --reload
 
 | 方法 | 端點 | 說明 |
 |------|------|------|
-| GET | `/api/skills` | 列出可用 Skills |
-| POST | `/api/skills/{skill_id}/run` | 執行 Skill script |
-| GET | `/api/skills/{skill_id}/status/{run_id}` | 查詢執行狀態 |
+| GET | `/api/skills` | 列出可用 Skills（含 `has_module`） |
+| GET | `/api/skills/{name}` | 取得 Skill 詳情（含 scripts / contributes） |
+| GET | `/api/skills/{name}/meta` | 取得 Skill `_meta.json` |
+| PUT | `/api/skills/{name}` | 更新 Skill metadata |
+| DELETE | `/api/skills/{name}` | 移除 Skill |
+| POST | `/api/skills/reload` | 重載 Skills |
+| GET | `/api/skills/hub/sources` | 取得 Hub 來源列表 |
+| POST | `/api/skills/hub/search` | 搜尋 Hub Skills |
+| POST | `/api/skills/hub/inspect` | 預覽 Hub Skill |
+| POST | `/api/skills/hub/install` | 安裝 Hub Skill |
+| GET | `/api/skills/{name}/frontend/{file_path}` | 提供 Skill 前端靜態資源（含路徑防護） |
+| GET | `/api/skills/{name}/files/{file_path}` | 讀取 Skill 檔案 |
+
+### 公開配置
+
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| GET | `/api/config/health` | 配置 API 健康檢查 |
+| GET | `/api/config/apps` | 回傳啟用模組的桌面 app 清單 |
 
 ### 終端機 (WebSocket)
 
@@ -253,18 +276,20 @@ uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8088 --reload
 
 ## 環境變數
 
-可透過環境變數覆蓋預設設定（前綴 `CHING_TECH_`）：
+可透過環境變數覆蓋預設設定：
 
 | 變數 | 預設值 | 說明 |
 |------|--------|------|
-| CHING_TECH_NAS_HOST | 192.168.11.50 | NAS 主機位址 |
-| CHING_TECH_DB_HOST | localhost | 資料庫主機 |
-| CHING_TECH_DB_PORT | 5432 | 資料庫埠號 |
-| CHING_TECH_DB_USER | ching_tech | 資料庫使用者 |
-| CHING_TECH_DB_PASSWORD | REMOVED_PASSWORD | 資料庫密碼 |
-| CHING_TECH_SESSION_TTL_HOURS | 8 | Session 有效時間（小時）|
+| NAS_HOST | 192.168.11.50 | NAS 主機位址 |
+| DB_HOST | localhost | 資料庫主機 |
+| DB_PORT | 5432 | 資料庫埠號 |
+| DB_USER | ching_tech | 資料庫使用者 |
+| DB_PASSWORD | （必填） | 資料庫密碼 |
+| SESSION_TTL_HOURS | 8 | Session 有效時間（小時）|
 | ENABLE_NAS_AUTH | True | 是否啟用 NAS SMB 認證 |
 | BOT_SECRET_KEY | （無預設） | Bot 憑證加密金鑰（AES-256-GCM） |
+| ENABLED_MODULES | `*` | 啟用模組清單（`*`=全開） |
+| SKILLHUB_ENABLED | false | 是否啟用 SkillHub 來源 |
 | SKILL_ROUTE_POLICY | script-first | Skills 路由策略（script-first / mcp-first） |
 | SKILL_SCRIPT_FALLBACK_ENABLED | true | script 失敗且明確要求 fallback 時，是否回退到對應 MCP tool |
 
