@@ -541,6 +541,159 @@
 }
 
 /* ==========================================================================
+   User Management - Toolbar & Actions
+   ========================================================================== */
+
+.users-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--spacing-md);
+}
+
+/* 認證方式 Badge */
+.auth-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+}
+
+.auth-badge-password {
+  background-color: var(--color-primary);
+  color: #fff;
+}
+
+.auth-badge-nas {
+  background-color: var(--bg-surface-dark);
+  color: var(--text-secondary);
+}
+
+/* 停用帳號列 */
+.user-row-inactive {
+  opacity: 0.5;
+}
+
+.user-inactive-label {
+  display: inline-flex;
+  align-items: center;
+  margin-left: var(--spacing-xs);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  background-color: var(--color-error);
+  color: #fff;
+}
+
+/* 操作按鈕 wrapper */
+.user-actions-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+/* 操作下拉選單 */
+.user-actions-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 100;
+  min-width: 200px;
+  background-color: var(--modal-bg);
+  border: 1px solid var(--modal-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  padding: var(--spacing-xs) 0;
+}
+
+.user-actions-menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  text-align: left;
+  transition: background-color var(--transition-fast);
+}
+
+.user-actions-menu-item:hover:not(.disabled) {
+  background-color: var(--hover-bg);
+}
+
+.user-actions-menu-item.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.user-actions-menu-item.danger {
+  color: var(--color-error);
+}
+
+.user-actions-menu-item.danger:hover:not(.disabled) {
+  background-color: var(--color-error);
+  color: #fff;
+}
+
+/* 通用對話框表單元素 */
+.dialog-form .form-group {
+  margin-bottom: var(--spacing-md);
+}
+
+.dialog-form .form-group label {
+  display: block;
+  margin-bottom: var(--spacing-xs);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.dialog-form .form-group .required {
+  color: var(--color-error);
+}
+
+.dialog-form .form-group select {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.dialog-form .form-group select option {
+  background-color: var(--color-background);
+  color: var(--text-primary);
+}
+
+.dialog-hint {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  margin-top: var(--spacing-sm);
+  line-height: 1.5;
+}
+
+.dialog-warning {
+  font-size: var(--font-size-sm);
+  color: var(--color-warning);
+  margin-top: var(--spacing-sm);
+}
+
+.dialog-error {
+  display: none;
+  margin-top: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: var(--priority-urgent-bg);
+  color: var(--color-error);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+}
+
+.dialog-error.show {
+  display: block;
+}
+
+/* ==========================================================================
    Bot Settings (Bot 設定)
    ========================================================================== */
 
@@ -737,11 +890,15 @@
     margin-top: var(--spacing-sm);
   }
 
-  /* 權限按鈕：防止文字換行 */
-  .user-permissions-btn {
-    white-space: nowrap;
+  /* 操作按鈕行動版 */
+  .user-actions-wrapper {
     width: 100%;
-    justify-content: center;
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .user-actions-menu {
+    right: 0;
   }
 
   /* 權限對話框調整 */

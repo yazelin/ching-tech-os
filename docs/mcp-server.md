@@ -278,6 +278,35 @@ result = await execute_tool("generate_md2doc", {
 # 回傳：分享連結 + 4 位數密碼
 ```
 
+### NAS 檔案發送
+
+| 工具名稱 | 說明 | 參數 |
+|----------|------|------|
+| `send_nas_file` | 透過 Bot 發送 NAS 檔案給使用者 | `file_path`（必填）, `line_user_id`, `line_group_id` |
+| `archive_to_library` | 將 NAS 檔案歸檔到資料庫管理 | `source_path`（必填）, `category`（必填）, `description` |
+
+### 媒體工具
+
+| 工具名稱 | 說明 | 參數 |
+|----------|------|------|
+| `download_web_image` | 下載網路圖片到 NAS | `url`（必填）, `ctos_user_id` |
+| `download_web_file` | 下載網路檔案到 NAS | `url`（必填）, `filename`, `ctos_user_id` |
+| `convert_pdf_to_images` | 將 PDF 轉為圖片 | `pdf_path`（必填）, `pages`（預設 "all"） |
+
+### AI Skills
+
+| 工具名稱 | 說明 | 參數 |
+|----------|------|------|
+| `run_skill_script` | 執行 Skill 腳本 | `skill`（必填）, `script`（必填）, `input`, `ctos_user_id` |
+
+> **AI Skills 系統**：支援 media-downloader（影片/音訊下載）和 media-transcription（逐字稿轉錄）等 Skill，透過 Script-first 或 MCP-first 路由策略執行。
+
+### 列印
+
+| 工具名稱 | 說明 | 參數 |
+|----------|------|------|
+| `prepare_print_file` | 準備檔案供列印 | `file_path`（必填）, `ctos_user_id` |
+
 ### AI 圖片生成（外部 MCP Server）
 
 透過 nanobanana MCP Server（使用 Google Gemini API）提供 AI 圖片生成功能：
@@ -340,7 +369,17 @@ result = await execute_tool("add_project_member", {
 backend/src/ching_tech_os/
 ├── mcp_cli.py              # CLI 入口點
 └── services/
-    └── mcp_server.py       # MCP Server 實作
+    ├── mcp_server.py       # MCP Server 入口（向下相容）
+    └── mcp/                # MCP 工具模組（依功能分類）
+        ├── server.py             # FastMCP Server 定義
+        ├── knowledge_tools.py    # 知識庫工具
+        ├── media_tools.py        # 媒體工具（下載、轉換）
+        ├── memory_tools.py       # 自訂記憶工具
+        ├── message_tools.py      # 訊息相關工具
+        ├── nas_tools.py          # NAS 檔案工具（搜尋、發送、歸檔）
+        ├── presentation_tools.py # 簡報/列印工具
+        ├── share_tools.py        # 分享連結工具
+        └── skill_script_tools.py # AI Skills 腳本執行
 ```
 
 ### 工具定義方式

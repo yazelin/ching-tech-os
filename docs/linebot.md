@@ -72,6 +72,8 @@ Line Platform
 | 專案管理 | 透過對話建立專案、新增成員和里程碑 |
 | 知識庫 | 透過對話新增筆記、搜尋知識、管理附件、讀取附件內容 |
 | NAS 檔案搜尋 | 搜尋並發送 NAS 共享檔案（圖片直接發送） |
+| 媒體下載 | 從網路下載影片/音訊檔案到 NAS |
+| 逐字稿轉錄 | 將影片/音訊轉錄為逐字稿文字 |
 | 公開分享 | 建立知識庫/專案/檔案的公開連結分享給外部人員 |
 | 群組 Mention | 群組對話回覆時 @ 提及發問用戶，讓用戶收到通知 |
 | 回覆引用 | 回覆文字訊息時自動帶入被回覆的內容 |
@@ -246,6 +248,15 @@ AI 助理可使用的工具（完整列表見 [docs/mcp-server.md](mcp-server.md
 - `generate_md2ppt` - 產生 MD2PPT 格式簡報，建立帶密碼的分享連結，可線上編輯並匯出 PPTX
 - `generate_md2doc` - 產生 MD2DOC 格式文件，建立帶密碼的分享連結，可線上編輯並匯出 Word
 - `share_knowledge_attachment` - 分享知識庫中的 .md2ppt 或 .md2doc 附件
+
+**AI Skills**
+- `run_skill_script` - 執行 Skill 腳本（如 media-downloader、media-transcription）
+
+**媒體工具**
+- `download_web_image` - 下載網路圖片到 NAS
+- `download_web_file` - 下載網路檔案到 NAS
+- `convert_pdf_to_images` - 將 PDF 轉為圖片
+- `send_nas_file` - 透過 Bot 發送 NAS 檔案
 
 **AI 圖片生成**（需設定 nanobanana MCP Server，支援 Hugging Face FLUX 備用）
 - `mcp__nanobanana__generate_image` - 根據文字描述生成圖片

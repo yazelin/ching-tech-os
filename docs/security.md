@@ -3,7 +3,8 @@
 ## 概覽
 
 ChingTech OS 的安全機制包含：
-- NAS SMB 認證
+- 雙重認證（CTOS 本地密碼 + NAS SMB）
+- 管理員使用者管理（CRUD）
 - Session 管理
 - 登入記錄與追蹤
 - 裝置指紋識別
@@ -13,24 +14,80 @@ ChingTech OS 的安全機制包含：
 
 ## 認證機制
 
-### NAS SMB 認證
-
-系統使用公司 NAS 的 SMB 帳號進行認證，不自行管理密碼。
+系統支援兩種認證方式，CTOS 本地密碼認證優先於 NAS SMB 認證。
 
 ```
-使用者 ──登入請求──▶ 後端 ──SMB認證──▶ NAS (192.168.11.50)
-         username                    驗證帳號密碼
+使用者 ──登入請求──▶ 後端 ──(1) 檢查 password_hash──▶ 有密碼 → bcrypt 驗證
+         username          ──(2) password_hash 為 NULL──▶ NAS SMB 認證
          password
 ```
+
+### CTOS 本地密碼認證
+
+使用者在 `users.password_hash` 欄位有值時，系統以 bcrypt 驗證密碼，不經過 NAS。
+
+**特點：**
+- 密碼以 bcrypt hash 儲存於資料庫，安全性高
+- 密碼最低 8 個字元
+- 支援 `must_change_password` 強制首次登入改密碼
+- 管理員可重設密碼或清除密碼（恢復 NAS 認證）
+
+**預設管理員帳號：**
+- Migration 007 自動建立帳號 `ct`，密碼 `36274806`（bcrypt hash）
+- `role` 為 `admin`、`must_change_password` 為 `True`
+- 首次登入後強制變更密碼
+
+### NAS SMB 認證
+
+使用者無本地密碼（`password_hash` 為 NULL）時，系統透過 NAS SMB 驗證。可透過環境變數 `ENABLE_NAS_AUTH` 控制是否啟用（預設啟用）。
 
 **優點：**
 - 使用既有的 NAS 帳號，無需另外管理
 - 密碼存放於 NAS，後端不儲存
 - 登入成功後可直接存取 NAS 檔案
 
+### 停用帳號
+
+`is_active` 為 `False` 的使用者無法登入，系統回傳「此帳號已被停用」。
+
 **實作位置：**
-- `backend/src/ching_tech_os/api/auth.py`
-- `backend/src/ching_tech_os/services/smb.py`
+- `backend/src/ching_tech_os/api/auth.py` — 認證 API
+- `backend/src/ching_tech_os/services/smb.py` — SMB 連線
+- `backend/src/ching_tech_os/services/password.py` — 密碼雜湊與驗證
+
+---
+
+## 管理員使用者管理
+
+管理員（`role = 'admin'`）可透過 API 管理所有使用者帳號。
+
+### API 端點
+
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| GET | `/api/admin/users` | 使用者列表（含 `has_password` 認證方式） |
+| POST | `/api/admin/users` | 建立使用者（密碼 bcrypt hash，`must_change_password: true`） |
+| PATCH | `/api/admin/users/{user_id}` | 編輯使用者（display_name、email、role） |
+| PATCH | `/api/admin/users/{user_id}/permissions` | 更新使用者功能權限 |
+| POST | `/api/admin/users/{user_id}/reset-password` | 重設密碼 |
+| POST | `/api/admin/users/{user_id}/clear-password` | 清除密碼（恢復 NAS 認證） |
+| PATCH | `/api/admin/users/{user_id}/status` | 停用/啟用帳號 |
+| DELETE | `/api/admin/users/{user_id}` | 永久刪除使用者 |
+
+### 管理員自我保護
+
+管理員不能對自己執行以下操作：
+- 降級自己的角色（admin → user）
+- 停用自己的帳號
+- 清除自己的密碼
+- 刪除自己的帳號
+
+非管理員呼叫管理端點會收到 403 錯誤。
+
+**實作位置：**
+- `backend/src/ching_tech_os/api/user.py` — 管理員 API
+- `backend/src/ching_tech_os/services/user.py` — 使用者服務
+- `backend/src/ching_tech_os/models/user.py` — 資料模型
 
 ---
 
@@ -51,10 +108,11 @@ Session 資料儲存於後端記憶體，使用 UUID token 識別。
 
 ```python
 class SessionData:
-    username: str       # 使用者帳號
-    password: str       # SMB 密碼（供檔案操作用）
-    nas_host: str       # NAS 主機位址
-    user_id: int        # 資料庫使用者 ID
+    username: str        # 使用者帳號
+    password: str | None # SMB 密碼（供檔案操作用，本地密碼認證時為 None）
+    nas_host: str        # NAS 主機位址
+    user_id: int         # 資料庫使用者 ID
+    role: str            # 使用者角色（admin / user）
     created_at: datetime
     expires_at: datetime
 ```
@@ -81,6 +139,7 @@ localStorage.removeItem('session_token');
 | 變數 | 預設值 | 說明 |
 |------|--------|------|
 | `CHING_TECH_SESSION_TTL_HOURS` | 8 | Session 有效時間（小時） |
+| `ENABLE_NAS_AUTH` | True | 是否啟用 NAS SMB 認證 |
 
 ---
 
@@ -295,10 +354,15 @@ app.add_middleware(
 | 位置 | 說明 |
 |------|------|
 | `backend/src/ching_tech_os/api/auth.py` | 認證 API |
+| `backend/src/ching_tech_os/api/user.py` | 使用者管理 API（含管理員端點） |
 | `backend/src/ching_tech_os/services/session.py` | Session 管理 |
 | `backend/src/ching_tech_os/services/smb.py` | SMB 認證 |
+| `backend/src/ching_tech_os/services/user.py` | 使用者服務（CRUD、密碼管理） |
+| `backend/src/ching_tech_os/services/password.py` | 密碼雜湊與驗證 |
 | `backend/src/ching_tech_os/services/geoip.py` | GeoIP 解析 |
 | `backend/src/ching_tech_os/services/login_record.py` | 登入記錄 |
+| `backend/src/ching_tech_os/models/user.py` | 使用者資料模型 |
 | `backend/src/ching_tech_os/models/login_record.py` | 登入記錄模型 |
+| `backend/migrations/versions/007_seed_admin_user.py` | 預設管理員帳號 migration |
 | `frontend/js/device-fingerprint.js` | 裝置指紋 |
 | `frontend/js/login.js` | 登入模組 |

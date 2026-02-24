@@ -13,6 +13,12 @@ from ..models.user import (
     UpdatePermissionsRequest,
     UpdatePermissionsResponse,
     DefaultPermissionsResponse,
+    CreateUserRequest,
+    CreateUserResponse,
+    UpdateUserInfoRequest,
+    UpdateUserStatusRequest,
+    ResetPasswordRequest,
+    UserOperationResponse,
 )
 from ..services.user import (
     get_user_by_username,
@@ -23,7 +29,14 @@ from ..services.user import (
     update_user_preferences,
     update_user_permissions,
     _parse_preferences,
+    create_user,
+    update_user_info,
+    deactivate_user,
+    activate_user,
+    clear_user_password,
+    delete_user,
 )
+from ..services.password import hash_password, validate_password_strength
 from ..services.permissions import (
     get_user_permissions_for_role,
     get_default_permissions,
@@ -235,7 +248,7 @@ async def list_users(
 ) -> AdminUserListResponse:
     """取得使用者列表（管理員限定）"""
     result = []
-    users = await get_all_users()
+    users = await get_all_users(include_inactive=True)
 
     for user in users:
         preferences = _parse_preferences(user.get("preferences"))
@@ -251,6 +264,7 @@ async def list_users(
             last_login_at=user["last_login_at"],
             is_active=user.get("is_active", True),
             role=user_role,
+            has_password=bool(user.get("password_hash")),
         ))
 
     return AdminUserListResponse(users=result)
@@ -318,3 +332,239 @@ async def get_default_permissions_api(
         knowledge=defaults["knowledge"],
         app_names=get_app_display_names(),
     )
+
+
+@admin_router.post("/users", response_model=CreateUserResponse)
+async def create_user_api(
+    request: CreateUserRequest,
+    session: SessionData = Depends(require_admin),
+) -> CreateUserResponse:
+    """建立使用者（管理員限定）"""
+    # 驗證角色
+    if request.role not in ("user", "admin"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="角色必須為 'user' 或 'admin'",
+        )
+
+    # 驗證密碼強度
+    is_valid, error_msg = validate_password_strength(request.password)
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_msg,
+        )
+
+    # 建立使用者
+    try:
+        password_hashed = hash_password(request.password)
+        user_id = await create_user(
+            username=request.username,
+            password_hash=password_hashed,
+            display_name=request.display_name,
+            role=request.role,
+            must_change_password=True,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+    return CreateUserResponse(
+        success=True,
+        id=user_id,
+        username=request.username,
+        display_name=request.display_name,
+        role=request.role,
+    )
+
+
+@admin_router.patch("/users/{user_id}", response_model=UserOperationResponse)
+async def update_user_info_api(
+    user_id: int,
+    request: UpdateUserInfoRequest,
+    session: SessionData = Depends(require_admin),
+) -> UserOperationResponse:
+    """編輯使用者資訊（管理員限定）"""
+    # 檢查目標使用者是否存在
+    target_user = await get_user_by_id(user_id)
+    if target_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="使用者不存在",
+        )
+
+    # 管理員不能降級自己的角色
+    if session.user_id == user_id and request.role and request.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="不能降級自己的角色",
+        )
+
+    # 驗證角色
+    if request.role and request.role not in ("user", "admin"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="角色必須為 'user' 或 'admin'",
+        )
+
+    updated = await update_user_info(
+        user_id=user_id,
+        display_name=request.display_name,
+        email=request.email,
+        role=request.role,
+    )
+
+    if updated is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="更新失敗",
+        )
+
+    return UserOperationResponse(success=True, message="使用者資訊已更新")
+
+
+@admin_router.post("/users/{user_id}/reset-password", response_model=UserOperationResponse)
+async def reset_user_password_api(
+    user_id: int,
+    request: ResetPasswordRequest,
+    session: SessionData = Depends(require_admin),
+) -> UserOperationResponse:
+    """重設使用者密碼（管理員限定）"""
+    # 檢查目標使用者是否存在
+    target_user = await get_user_by_id(user_id)
+    if target_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="使用者不存在",
+        )
+
+    # 驗證密碼強度
+    is_valid, error_msg = validate_password_strength(request.new_password)
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_msg,
+        )
+
+    from ..services.user import reset_user_password
+    password_hashed = hash_password(request.new_password)
+    success = await reset_user_password(user_id, password_hashed, must_change=True)
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="重設密碼失敗",
+        )
+
+    return UserOperationResponse(success=True, message="密碼已重設，使用者下次登入需要變更密碼")
+
+
+@admin_router.patch("/users/{user_id}/status", response_model=UserOperationResponse)
+async def update_user_status_api(
+    user_id: int,
+    request: UpdateUserStatusRequest,
+    session: SessionData = Depends(require_admin),
+) -> UserOperationResponse:
+    """停用/啟用使用者帳號（管理員限定）"""
+    # 管理員不能停用自己
+    if session.user_id == user_id and not request.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="不能停用自己的帳號",
+        )
+
+    # 檢查目標使用者是否存在
+    target_user = await get_user_by_id(user_id)
+    if target_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="使用者不存在",
+        )
+
+    if request.is_active:
+        success = await activate_user(user_id)
+        msg = "帳號已啟用"
+    else:
+        success = await deactivate_user(user_id)
+        msg = "帳號已停用"
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="操作失敗",
+        )
+
+    return UserOperationResponse(success=True, message=msg)
+
+
+@admin_router.post("/users/{user_id}/clear-password", response_model=UserOperationResponse)
+async def clear_user_password_api(
+    user_id: int,
+    session: SessionData = Depends(require_admin),
+) -> UserOperationResponse:
+    """清除使用者密碼，恢復 NAS 認證（管理員限定）"""
+    from ..config import settings
+
+    # 管理員不能清除自己的密碼
+    if session.user_id == user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="不能清除自己的密碼",
+        )
+
+    # 檢查 NAS 認證是否啟用
+    if not settings.enable_nas_auth:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="NAS 認證未啟用，清除密碼後使用者將無法登入",
+        )
+
+    # 檢查目標使用者是否存在
+    target_user = await get_user_by_id(user_id)
+    if target_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="使用者不存在",
+        )
+
+    success = await clear_user_password(user_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="清除密碼失敗",
+        )
+
+    return UserOperationResponse(success=True, message="密碼已清除，使用者將改為 NAS 認證登入")
+
+
+@admin_router.delete("/users/{user_id}", response_model=UserOperationResponse)
+async def delete_user_api(
+    user_id: int,
+    session: SessionData = Depends(require_admin),
+) -> UserOperationResponse:
+    """刪除使用者（管理員限定，永久刪除）"""
+    # 管理員不能刪除自己
+    if session.user_id == user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="不能刪除自己的帳號",
+        )
+
+    # 檢查目標使用者是否存在
+    target_user = await get_user_by_id(user_id)
+    if target_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="使用者不存在",
+        )
+
+    success = await delete_user(user_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="刪除失敗",
+        )
+
+    return UserOperationResponse(success=True, message="使用者已永久刪除")

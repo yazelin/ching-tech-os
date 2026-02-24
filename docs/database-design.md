@@ -11,8 +11,13 @@ backend/
 │   ├── env.py                  # 環境設定（整合 config.py）
 │   ├── script.py.mako          # Migration 檔案範本
 │   └── versions/
-│       ├── 001_create_users.py
-│       └── 002_create_ai_chats.py
+│       ├── 001_initial_schema.py              # 初始資料庫結構
+│       ├── 002_seed_data.py                   # 種子資料
+│       ├── 003_remove_multi_tenancy.py        # 移除多租戶架構
+│       ├── 004_remove_tenant_id_partitioned_tables.py  # 移除分區表 tenant_id
+│       ├── 005_sessions_table.py              # 建立 sessions 表
+│       ├── 006_add_username_unique_constraint.py  # username 唯一約束
+│       └── 007_seed_admin_user.py             # 預設管理員帳號
 ```
 
 ## 資料庫連線設定
@@ -38,18 +43,51 @@ async_database_url = "postgresql+asyncpg://user:pass@host:port/db"
 
 ### users 表
 
-儲存透過 NAS 認證登入的使用者。
+儲存系統使用者，支援 CTOS 本地密碼認證與 NAS SMB 認證。
 
 ```sql
 CREATE TABLE users (
     id SERIAL PRIMARY KEY,
-    username VARCHAR(100) UNIQUE NOT NULL,  -- NAS 帳號
-    display_name VARCHAR(100),               -- 顯示名稱
-    created_at TIMESTAMP DEFAULT NOW(),      -- 首次登入時間
-    last_login_at TIMESTAMP                  -- 最後登入時間
+    username VARCHAR(100) UNIQUE NOT NULL,    -- 帳號名稱
+    display_name VARCHAR(100),                -- 顯示名稱
+    password_hash VARCHAR(255),               -- 密碼 bcrypt hash（NULL 表示 NAS 認證）
+    email VARCHAR(255),                       -- 電子郵件
+    role VARCHAR(50) NOT NULL DEFAULT 'user', -- 角色（admin / user）
+    preferences JSONB NOT NULL DEFAULT '{}',  -- 偏好設定（theme、permissions 等）
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,  -- 帳號是否啟用
+    must_change_password BOOLEAN NOT NULL DEFAULT FALSE,  -- 強制變更密碼
+    password_changed_at TIMESTAMPTZ,          -- 最後密碼變更時間
+    created_at TIMESTAMPTZ DEFAULT NOW(),     -- 建立時間
+    last_login_at TIMESTAMPTZ                 -- 最後登入時間
 );
 
 CREATE INDEX idx_users_username ON users(username);
+```
+
+**認證方式判定**：
+- `password_hash` 有值 → CTOS 本地密碼認證
+- `password_hash` 為 NULL → NAS SMB 認證
+
+**預設管理員**（migration 007）：
+- 帳號 `ct`，密碼 `36274806`（bcrypt hash）
+- `role = 'admin'`、`must_change_password = True`
+
+### sessions 表
+
+儲存持久化 Session（migration 005）。
+
+```sql
+CREATE TABLE sessions (
+    token VARCHAR(100) PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    username VARCHAR(100) NOT NULL,
+    data JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    expires_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX idx_sessions_user_id ON sessions(user_id);
+CREATE INDEX idx_sessions_expires_at ON sessions(expires_at);
 ```
 
 ### ai_chats 表
@@ -121,6 +159,8 @@ CREATE TABLE bot_settings (
 | telegram | `admin_chat_id` | 管理員 Chat ID |
 
 > **v0.3.0 變更**：移除多租戶架構（`tenants`、`tenant_admins` 表），所有資料表的 `tenant_id` 欄位已移除。使用者角色簡化為 `admin` / `user`。
+>
+> **v0.3.1 變更**：新增 CTOS 本地密碼認證（users 表新增 `password_hash`、`must_change_password`、`password_changed_at`、`is_active`、`email`、`role` 欄位）。建立 sessions 表支援持久化 Session。新增預設管理員帳號 migration。
 
 ## Alembic 常用指令
 

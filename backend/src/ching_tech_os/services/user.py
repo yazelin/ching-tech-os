@@ -191,6 +191,32 @@ async def create_user(
             raise
 
 
+async def clear_user_password(user_id: int) -> bool:
+    """清除使用者密碼（恢復 NAS 認證）
+
+    將 password_hash、password_changed_at 設為 NULL，
+    must_change_password 設為 False，使登入邏輯 fallback 到 SMB 認證。
+
+    Args:
+        user_id: 使用者 ID
+
+    Returns:
+        是否成功
+    """
+    async with get_connection() as conn:
+        result = await conn.execute(
+            """
+            UPDATE users
+            SET password_hash = NULL,
+                password_changed_at = NULL,
+                must_change_password = false
+            WHERE id = $1
+            """,
+            user_id,
+        )
+        return "UPDATE 1" in result
+
+
 async def deactivate_user(user_id: int) -> bool:
     """停用使用者帳號
 
@@ -239,7 +265,7 @@ async def get_all_users(
     async with get_connection() as conn:
         query = """
             SELECT u.id, u.username, u.display_name, u.created_at, u.last_login_at,
-                   u.preferences, u.is_active, u.role
+                   u.preferences, u.is_active, u.role, u.password_hash
             FROM users u
         """
         if not include_inactive:

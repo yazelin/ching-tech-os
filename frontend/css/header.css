@@ -311,11 +311,11 @@ html[data-animations="off"][data-theme="light"] .header-logo {
   top: calc(100% + 6px);
   right: 0;
   min-width: 180px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--interactive-border, rgba(255,255,255,0.1));
+  background: var(--color-background);
+  border: 1px solid var(--border-medium);
   border-radius: var(--radius-md, 8px);
   padding: var(--spacing-xs, 6px) 0;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
   z-index: 200;
   opacity: 0;
   transform: translateY(-4px);

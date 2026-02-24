@@ -36,16 +36,16 @@ uv run alembic upgrade head
 
 ```bash
 cd backend
-uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8089 --reload
+uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8088 --reload
 ```
 
-服務將在 http://localhost:8089 啟動。
+服務將在 http://localhost:8088 啟動。
 
 ## API 文件
 
 啟動後端後，訪問：
-- Swagger UI: http://localhost:8089/docs
-- ReDoc: http://localhost:8089/redoc
+- Swagger UI: http://localhost:8088/docs
+- ReDoc: http://localhost:8088/redoc
 
 ## 主要 API
 
@@ -53,8 +53,33 @@ uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8089 --reload
 
 | 方法 | 端點 | 說明 |
 |------|------|------|
-| POST | `/api/auth/login` | 登入（NAS SMB 認證） |
+| POST | `/api/auth/login` | 登入（CTOS 密碼優先，NAS SMB 備用） |
 | POST | `/api/auth/logout` | 登出 |
+| POST | `/api/auth/change-password` | 變更密碼（一般使用者自行變更） |
+
+### 使用者
+
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| GET | `/api/user/me` | 取得目前登入使用者資訊 |
+| PATCH | `/api/user/me` | 更新目前登入使用者資訊 |
+| GET | `/api/user/preferences` | 取得偏好設定 |
+| PUT | `/api/user/preferences` | 更新偏好設定 |
+| GET | `/api/user/list` | 取得使用者簡化列表（下拉選單用） |
+
+### 管理員 - 使用者管理
+
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| GET | `/api/admin/users` | 使用者列表（含認證方式） |
+| POST | `/api/admin/users` | 建立使用者 |
+| PATCH | `/api/admin/users/{user_id}` | 編輯使用者資訊 |
+| PATCH | `/api/admin/users/{user_id}/permissions` | 更新使用者權限 |
+| POST | `/api/admin/users/{user_id}/reset-password` | 重設密碼 |
+| POST | `/api/admin/users/{user_id}/clear-password` | 清除密碼（恢復 NAS 認證） |
+| PATCH | `/api/admin/users/{user_id}/status` | 停用/啟用帳號 |
+| DELETE | `/api/admin/users/{user_id}` | 永久刪除使用者 |
+| GET | `/api/admin/default-permissions` | 取得預設權限設定 |
 
 ### NAS 檔案操作
 
@@ -212,6 +237,14 @@ uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8089 --reload
 
 > Telegram 群組、用戶、訊息管理共用 Line Bot 的 `/api/bot/*` API，透過 `platform_type=telegram` 參數篩選。
 
+### AI Skills
+
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| GET | `/api/skills` | 列出可用 Skills |
+| POST | `/api/skills/{skill_id}/run` | 執行 Skill script |
+| GET | `/api/skills/{skill_id}/status/{run_id}` | 查詢執行狀態 |
+
 ### 終端機 (WebSocket)
 
 | 端點 | 說明 |
@@ -230,7 +263,9 @@ uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8089 --reload
 | CHING_TECH_DB_USER | ching_tech | 資料庫使用者 |
 | CHING_TECH_DB_PASSWORD | REMOVED_PASSWORD | 資料庫密碼 |
 | CHING_TECH_SESSION_TTL_HOURS | 8 | Session 有效時間（小時）|
+| ENABLE_NAS_AUTH | True | 是否啟用 NAS SMB 認證 |
 | BOT_SECRET_KEY | （無預設） | Bot 憑證加密金鑰（AES-256-GCM） |
+| SKILL_ROUTE_POLICY | script-first | Skills 路由策略（script-first / mcp-first） |
 
 ## 專案結構
 
@@ -239,47 +274,65 @@ backend/
 ├── pyproject.toml
 ├── alembic.ini
 ├── migrations/
-│   └── versions/         # Migration 檔案
+│   └── versions/           # Migration 檔案（001-007）
 ├── src/ching_tech_os/
-│   ├── main.py           # FastAPI 入口（含 Socket.IO）
-│   ├── config.py         # 設定檔
-│   ├── database.py       # 資料庫連線
-│   ├── mcp_cli.py        # MCP CLI 入口
+│   ├── main.py             # FastAPI 入口（含 Socket.IO）
+│   ├── config.py           # 設定檔
+│   ├── database.py         # 資料庫連線
+│   ├── mcp_cli.py          # MCP CLI 入口
 │   ├── api/
-│   │   ├── auth.py         # 認證 API
-│   │   ├── nas.py          # NAS 操作 API
-│   │   ├── knowledge.py    # 知識庫 API
-│   │   ├── ai_router.py    # AI 對話 API
-│   │   ├── ai_management.py # AI 管理 API (Prompts/Agents/Logs)
+│   │   ├── auth.py           # 認證 API
+│   │   ├── user.py           # 使用者管理 API（含管理員端點）
+│   │   ├── nas.py            # NAS 操作 API
+│   │   ├── knowledge.py      # 知識庫 API
+│   │   ├── ai_router.py      # AI 對話 API
+│   │   ├── ai_management.py  # AI 管理 API (Prompts/Agents/Logs)
 │   │   ├── linebot_router.py # Line Bot API
 │   │   ├── telegram_router.py # Telegram Bot API
-│   │   ├── inventory.py    # 物料/庫存 API
-│   │   ├── vendor.py       # 廠商主檔 API
-│   │   └── bot_settings.py # Bot 設定管理 API
+│   │   ├── inventory.py      # 物料/庫存 API
+│   │   ├── vendor.py         # 廠商主檔 API
+│   │   ├── bot_settings.py   # Bot 設定管理 API
+│   │   ├── skills.py         # AI Skills API
+│   │   ├── share.py          # 公開分享 API
+│   │   ├── messages.py       # 訊息中心 API
+│   │   └── config_public.py  # 公開設定 API
 │   ├── services/
-│   │   ├── session.py      # Session 管理
-│   │   ├── smb.py          # SMB 連線服務
-│   │   ├── user.py         # 使用者服務
-│   │   ├── terminal.py     # 終端機服務
-│   │   ├── claude_agent.py # Claude API 服務
-│   │   ├── ai_chat.py      # AI 對話服務
-│   │   ├── ai_manager.py   # AI 管理服務 (Prompts/Agents/Logs)
-│   │   ├── linebot.py      # Line Bot 服務
-│   │   ├── linebot_ai.py   # Line Bot AI 處理
-│   │   ├── bot_telegram/   # Telegram Bot 服務
-│   │   ├── mcp_server.py   # MCP Server（FastMCP）
-│   │   ├── inventory.py    # 物料/庫存服務
-│   │   ├── vendor.py       # 廠商主檔服務
-│   │   └── bot_settings.py # Bot 憑證管理服務
+│   │   ├── session.py        # Session 管理
+│   │   ├── smb.py            # SMB 連線服務
+│   │   ├── user.py           # 使用者服務（CRUD、密碼管理）
+│   │   ├── password.py       # 密碼雜湊與驗證
+│   │   ├── permissions.py    # 權限管理
+│   │   ├── terminal.py       # 終端機服務
+│   │   ├── claude_agent.py   # Claude API 服務
+│   │   ├── ai_chat.py        # AI 對話服務
+│   │   ├── ai_manager.py     # AI 管理服務
+│   │   ├── linebot.py        # Line Bot 服務
+│   │   ├── linebot_ai.py     # Line Bot AI 處理
+│   │   ├── linebot_agents.py # Line Bot Agent 定義
+│   │   ├── bot_telegram/     # Telegram Bot 服務
+│   │   ├── mcp_server.py     # MCP Server（FastMCP）
+│   │   ├── inventory.py      # 物料/庫存服務
+│   │   ├── vendor.py         # 廠商主檔服務
+│   │   ├── bot_settings.py   # Bot 憑證管理服務
+│   │   ├── presentation.py   # 簡報生成服務
+│   │   ├── share.py          # 分享服務
+│   │   ├── document_reader.py # 文件讀取（Word/Excel/PDF）
+│   │   └── scheduler.py      # 排程任務
+│   ├── skills/               # AI Skills 系統
+│   │   ├── script_runner.py    # Skill 腳本運行器
+│   │   ├── media-downloader/   # 影片/音訊下載
+│   │   └── media-transcription/ # 逐字稿轉錄
 │   ├── utils/
-│   │   └── crypto.py       # AES-256-GCM 加密
+│   │   └── crypto.py         # AES-256-GCM 加密
 │   └── models/
-│       ├── auth.py         # 認證模型
-│       ├── nas.py          # NAS 模型
-│       ├── ai.py           # AI 相關模型
-│       ├── linebot.py      # Line Bot 模型
-│       ├── inventory.py    # 物料/庫存模型
-│       └── vendor.py       # 廠商主檔模型
+│       ├── auth.py           # 認證模型
+│       ├── user.py           # 使用者模型（含管理員操作）
+│       ├── nas.py            # NAS 模型
+│       ├── ai.py             # AI 相關模型
+│       ├── linebot.py        # Line Bot 模型
+│       ├── inventory.py      # 物料/庫存模型
+│       ├── vendor.py         # 廠商主檔模型
+│       └── share.py          # 分享模型
 └── tests/
 ```
 

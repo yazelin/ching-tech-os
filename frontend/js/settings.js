@@ -315,18 +315,36 @@ const SettingsApp = (function () {
   }
 
   /**
+   * 取得認證方式顯示文字
+   * @param {boolean} hasPassword
+   * @returns {string}
+   */
+  function getAuthBadge(hasPassword) {
+    if (hasPassword) {
+      return '<span class="auth-badge auth-badge-password">密碼</span>';
+    }
+    return '<span class="auth-badge auth-badge-nas">NAS</span>';
+  }
+
+  /**
    * 渲染使用者列表
    * @param {HTMLElement} container
    * @param {Array} users
    */
   function renderUsersList(container, users) {
     container.innerHTML = `
+      <div class="users-toolbar">
+        <button class="btn btn-primary btn-sm users-add-btn">
+          <span class="icon">${getIcon('account-plus')}</span> 新增使用者
+        </button>
+      </div>
       <table class="users-table">
         <thead>
           <tr>
             <th>使用者</th>
             <th>顯示名稱</th>
             <th>角色</th>
+            <th>認證</th>
             <th>最後登入</th>
             <th>操作</th>
           </tr>
@@ -334,29 +352,30 @@ const SettingsApp = (function () {
         <tbody>
           ${users.map(user => {
             const userRole = user.role || 'user';
-            const canManage_ = canManageUser(userRole);
             const roleIcon = userRole === 'admin' ? 'shield-crown' : '';
             const roleClass = userRole === 'admin' ? 'user-admin-badge' : '';
+            const isInactive = !user.is_active;
 
             const safeUsername = escapeHtml(user.username);
             const safeDisplayName = escapeHtml(user.display_name || '-');
 
             return `
-              <tr data-user-id="${user.id}">
+              <tr data-user-id="${user.id}" class="${isInactive ? 'user-row-inactive' : ''}">
                 <td>
                   ${roleIcon ? `<span class="${roleClass} icon" title="${getRoleDisplay(userRole)}">${getIcon(roleIcon)}</span>` : ''}
                   ${safeUsername}
+                  ${isInactive ? '<span class="user-inactive-label">已停用</span>' : ''}
                 </td>
                 <td>${safeDisplayName}</td>
                 <td><span class="role-badge role-${userRole}">${getRoleDisplay(userRole)}</span></td>
+                <td>${getAuthBadge(user.has_password)}</td>
                 <td>${user.last_login_at ? new Date(user.last_login_at).toLocaleString('zh-TW') : '-'}</td>
                 <td>
-                  ${canManage_
-                    ? `<button class="btn btn-ghost btn-sm user-permissions-btn" data-user-id="${user.id}" data-username="${safeUsername}">
-                        <span class="icon">${getIcon('shield-edit')}</span> 設定權限
-                       </button>`
-                    : `<span class="user-admin-label">${getRoleDisplay(userRole)}</span>`
-                  }
+                  <div class="user-actions-wrapper">
+                    <button class="btn btn-ghost btn-sm user-actions-btn" data-user-id="${user.id}">
+                      <span class="icon">${getIcon('dots-vertical')}</span>
+                    </button>
+                  </div>
                 </td>
               </tr>
             `;
@@ -365,16 +384,471 @@ const SettingsApp = (function () {
       </table>
     `;
 
-    // 綁定權限設定按鈕事件
-    container.querySelectorAll('.user-permissions-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
+    // 綁定「新增使用者」按鈕
+    container.querySelector('.users-add-btn').addEventListener('click', () => {
+      openCreateUserDialog(container);
+    });
+
+    // 綁定操作下拉選單按鈕
+    container.querySelectorAll('.user-actions-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
         const userId = parseInt(btn.dataset.userId, 10);
-        const username = btn.dataset.username;
         const user = users.find(u => u.id === userId);
         if (user) {
-          openPermissionsDialog(container, user);
+          showUserActionsMenu(btn, container, user);
         }
       });
+    });
+  }
+
+  /**
+   * 顯示使用者操作下拉選單
+   */
+  function showUserActionsMenu(anchorBtn, container, user) {
+    // 關閉其他已開啟的選單
+    document.querySelectorAll('.user-actions-menu').forEach(m => m.remove());
+
+    const currentSession = LoginModule.getSession();
+    const isSelf = currentSession && currentSession.username === user.username;
+    const isInactive = !user.is_active;
+
+    const menuItems = [
+      { label: '設定權限', icon: 'shield-edit', action: 'permissions' },
+      { label: '編輯資訊', icon: 'account-edit', action: 'edit' },
+      { label: '重設密碼', icon: 'lock-reset', action: 'reset-password' },
+      {
+        label: isInactive ? '啟用帳號' : '停用帳號',
+        icon: isInactive ? 'account-check' : 'account-off',
+        action: 'toggle-status',
+        disabled: isSelf,
+      },
+      {
+        label: '清除密碼（恢復 NAS）',
+        icon: 'key-remove',
+        action: 'clear-password',
+        disabled: isSelf || !user.has_password,
+      },
+      {
+        label: '刪除使用者',
+        icon: 'delete',
+        action: 'delete',
+        disabled: isSelf,
+        danger: true,
+      },
+    ];
+
+    const menu = document.createElement('div');
+    menu.className = 'user-actions-menu';
+    menu.innerHTML = menuItems.map(item =>
+      `<button class="user-actions-menu-item ${item.disabled ? 'disabled' : ''} ${item.danger ? 'danger' : ''}" data-action="${item.action}" ${item.disabled ? 'disabled' : ''}>
+        <span class="icon">${getIcon(item.icon)}</span>
+        <span>${item.label}</span>
+      </button>`
+    ).join('');
+
+    // 定位選單
+    const wrapper = anchorBtn.closest('.user-actions-wrapper');
+    wrapper.appendChild(menu);
+
+    // 綁定選單項目事件
+    menu.querySelectorAll('.user-actions-menu-item:not(.disabled)').forEach(item => {
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        menu.remove();
+        const action = item.dataset.action;
+        handleUserAction(action, container, user);
+      });
+    });
+
+    // 點擊其他地方關閉選單
+    const closeMenu = (e) => {
+      if (!menu.contains(e.target)) {
+        menu.remove();
+        document.removeEventListener('click', closeMenu);
+      }
+    };
+    setTimeout(() => document.addEventListener('click', closeMenu), 0);
+  }
+
+  /**
+   * 處理使用者操作
+   */
+  function handleUserAction(action, container, user) {
+    switch (action) {
+      case 'permissions':
+        openPermissionsDialog(container, user);
+        break;
+      case 'edit':
+        openEditUserDialog(container, user);
+        break;
+      case 'reset-password':
+        openResetPasswordDialog(container, user);
+        break;
+      case 'toggle-status':
+        openToggleStatusDialog(container, user);
+        break;
+      case 'clear-password':
+        openClearPasswordDialog(container, user);
+        break;
+      case 'delete':
+        openDeleteUserDialog(container, user);
+        break;
+    }
+  }
+
+  /**
+   * 建立通用對話框
+   */
+  function createDialog(title, bodyHtml, footerHtml) {
+    const dialog = document.createElement('div');
+    dialog.className = 'permissions-dialog-overlay';
+    dialog.innerHTML = `
+      <div class="permissions-dialog">
+        <div class="permissions-dialog-header">
+          <h3>${title}</h3>
+          <button class="permissions-dialog-close">${getIcon('close')}</button>
+        </div>
+        <div class="permissions-dialog-body">
+          ${bodyHtml}
+        </div>
+        <div class="permissions-dialog-footer">
+          ${footerHtml}
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(dialog);
+
+    // 關閉按鈕
+    dialog.querySelector('.permissions-dialog-close').addEventListener('click', () => dialog.remove());
+    dialog.addEventListener('click', (e) => {
+      if (e.target === dialog) dialog.remove();
+    });
+
+    return dialog;
+  }
+
+  /**
+   * 重新載入使用者列表的輔助函數
+   */
+  function reloadUsersList(container) {
+    const windowEl = container.closest('.settings-container')?.querySelector('.settings-content')
+      || container.closest('[id^="window-"]');
+    if (windowEl) loadUsersList(windowEl);
+  }
+
+  /**
+   * 開啟「新增使用者」對話框
+   */
+  function openCreateUserDialog(container) {
+    const bodyHtml = `
+      <div class="dialog-form">
+        <div class="form-group">
+          <label>使用者名稱 <span class="required">*</span></label>
+          <input type="text" class="input" name="username" placeholder="請輸入帳號" required>
+        </div>
+        <div class="form-group">
+          <label>密碼 <span class="required">*</span></label>
+          <input type="password" class="input" name="password" placeholder="至少 8 個字元" required minlength="8">
+        </div>
+        <div class="form-group">
+          <label>顯示名稱</label>
+          <input type="text" class="input" name="display_name" placeholder="選填">
+        </div>
+        <div class="form-group">
+          <label>角色</label>
+          <select class="input" name="role">
+            <option value="user">一般使用者</option>
+            <option value="admin">管理員</option>
+          </select>
+        </div>
+        <p class="dialog-hint">新帳號首次登入時會要求變更密碼。<br>若 NAS 上已有同名帳號，該使用者將改為密碼認證。</p>
+        <div class="dialog-error" id="createUserError"></div>
+      </div>
+    `;
+    const footerHtml = `
+      <button class="btn btn-ghost dialog-cancel-btn">取消</button>
+      <button class="btn btn-primary dialog-submit-btn">建立</button>
+    `;
+
+    const dialog = createDialog('新增使用者', bodyHtml, footerHtml);
+    dialog.querySelector('.dialog-cancel-btn').addEventListener('click', () => dialog.remove());
+
+    dialog.querySelector('.dialog-submit-btn').addEventListener('click', async () => {
+      const username = dialog.querySelector('[name="username"]').value.trim();
+      const password = dialog.querySelector('[name="password"]').value;
+      const displayName = dialog.querySelector('[name="display_name"]').value.trim();
+      const role = dialog.querySelector('[name="role"]').value;
+      const errorDiv = dialog.querySelector('#createUserError');
+
+      if (!username || !password) {
+        errorDiv.textContent = '請填入帳號和密碼';
+        errorDiv.classList.add('show');
+        return;
+      }
+      if (password.length < 8) {
+        errorDiv.textContent = '密碼至少需要 8 個字元';
+        errorDiv.classList.add('show');
+        return;
+      }
+
+      try {
+        const token = LoginModule.getToken();
+        const resp = await fetch('/api/admin/users', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password, display_name: displayName || null, role }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || '建立失敗');
+
+        dialog.remove();
+        reloadUsersList(container);
+        if (typeof DesktopModule !== 'undefined') {
+          DesktopModule.showToast(`已建立使用者 ${username}`, 'check');
+        }
+      } catch (error) {
+        errorDiv.textContent = error.message;
+        errorDiv.classList.add('show');
+      }
+    });
+  }
+
+  /**
+   * 開啟「編輯使用者」對話框
+   */
+  function openEditUserDialog(container, user) {
+    const bodyHtml = `
+      <div class="dialog-form">
+        <div class="form-group">
+          <label>顯示名稱</label>
+          <input type="text" class="input" name="display_name" value="${escapeHtml(user.display_name || '')}">
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" class="input" name="email" value="${escapeHtml(user.email || '')}" placeholder="選填">
+        </div>
+        <div class="form-group">
+          <label>角色</label>
+          <select class="input" name="role">
+            <option value="user" ${user.role === 'user' ? 'selected' : ''}>一般使用者</option>
+            <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>管理員</option>
+          </select>
+        </div>
+        <div class="dialog-error" id="editUserError"></div>
+      </div>
+    `;
+    const footerHtml = `
+      <button class="btn btn-ghost dialog-cancel-btn">取消</button>
+      <button class="btn btn-primary dialog-submit-btn">儲存</button>
+    `;
+
+    const dialog = createDialog(`編輯 ${escapeHtml(user.username)}`, bodyHtml, footerHtml);
+    dialog.querySelector('.dialog-cancel-btn').addEventListener('click', () => dialog.remove());
+
+    dialog.querySelector('.dialog-submit-btn').addEventListener('click', async () => {
+      const displayName = dialog.querySelector('[name="display_name"]').value.trim();
+      const email = dialog.querySelector('[name="email"]').value.trim();
+      const role = dialog.querySelector('[name="role"]').value;
+      const errorDiv = dialog.querySelector('#editUserError');
+
+      try {
+        const token = LoginModule.getToken();
+        const resp = await fetch(`/api/admin/users/${user.id}`, {
+          method: 'PATCH',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ display_name: displayName || null, email: email || null, role }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || '更新失敗');
+
+        dialog.remove();
+        reloadUsersList(container);
+        if (typeof DesktopModule !== 'undefined') {
+          DesktopModule.showToast(`${user.username} 的資訊已更新`, 'check');
+        }
+      } catch (error) {
+        errorDiv.textContent = error.message;
+        errorDiv.classList.add('show');
+      }
+    });
+  }
+
+  /**
+   * 開啟「重設密碼」對話框
+   */
+  function openResetPasswordDialog(container, user) {
+    const bodyHtml = `
+      <div class="dialog-form">
+        <p>為 <strong>${escapeHtml(user.username)}</strong> 設定新密碼，使用者下次登入時需要變更密碼。</p>
+        <div class="form-group">
+          <label>新密碼 <span class="required">*</span></label>
+          <input type="password" class="input" name="new_password" placeholder="至少 8 個字元" required minlength="8">
+        </div>
+        <div class="dialog-error" id="resetPasswordError"></div>
+      </div>
+    `;
+    const footerHtml = `
+      <button class="btn btn-ghost dialog-cancel-btn">取消</button>
+      <button class="btn btn-primary dialog-submit-btn">重設密碼</button>
+    `;
+
+    const dialog = createDialog(`重設密碼 — ${escapeHtml(user.username)}`, bodyHtml, footerHtml);
+    dialog.querySelector('.dialog-cancel-btn').addEventListener('click', () => dialog.remove());
+
+    dialog.querySelector('.dialog-submit-btn').addEventListener('click', async () => {
+      const newPassword = dialog.querySelector('[name="new_password"]').value;
+      const errorDiv = dialog.querySelector('#resetPasswordError');
+
+      if (!newPassword || newPassword.length < 8) {
+        errorDiv.textContent = '密碼至少需要 8 個字元';
+        errorDiv.classList.add('show');
+        return;
+      }
+
+      try {
+        const token = LoginModule.getToken();
+        const resp = await fetch(`/api/admin/users/${user.id}/reset-password`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ new_password: newPassword }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || '重設失敗');
+
+        dialog.remove();
+        reloadUsersList(container);
+        if (typeof DesktopModule !== 'undefined') {
+          DesktopModule.showToast(`${user.username} 的密碼已重設`, 'check');
+        }
+      } catch (error) {
+        errorDiv.textContent = error.message;
+        errorDiv.classList.add('show');
+      }
+    });
+  }
+
+  /**
+   * 開啟「停用/啟用」確認對話框
+   */
+  function openToggleStatusDialog(container, user) {
+    const isInactive = !user.is_active;
+    const actionText = isInactive ? '啟用' : '停用';
+    const bodyHtml = `
+      <p>確定要${actionText}使用者 <strong>${escapeHtml(user.username)}</strong> 嗎？</p>
+      ${!isInactive ? '<p class="dialog-warning">停用後該使用者將無法登入系統。</p>' : ''}
+      <div class="dialog-error" id="toggleStatusError"></div>
+    `;
+    const footerHtml = `
+      <button class="btn btn-ghost dialog-cancel-btn">取消</button>
+      <button class="btn ${isInactive ? 'btn-primary' : 'btn-accent'} dialog-submit-btn">${actionText}</button>
+    `;
+
+    const dialog = createDialog(`${actionText}帳號 — ${escapeHtml(user.username)}`, bodyHtml, footerHtml);
+    dialog.querySelector('.dialog-cancel-btn').addEventListener('click', () => dialog.remove());
+
+    dialog.querySelector('.dialog-submit-btn').addEventListener('click', async () => {
+      const errorDiv = dialog.querySelector('#toggleStatusError');
+      try {
+        const token = LoginModule.getToken();
+        const resp = await fetch(`/api/admin/users/${user.id}/status`, {
+          method: 'PATCH',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_active: isInactive }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || '操作失敗');
+
+        dialog.remove();
+        reloadUsersList(container);
+        if (typeof DesktopModule !== 'undefined') {
+          DesktopModule.showToast(`${user.username} 已${actionText}`, 'check');
+        }
+      } catch (error) {
+        errorDiv.textContent = error.message;
+        errorDiv.classList.add('show');
+      }
+    });
+  }
+
+  /**
+   * 開啟「清除密碼」確認對話框
+   */
+  function openClearPasswordDialog(container, user) {
+    const bodyHtml = `
+      <p>確定要清除 <strong>${escapeHtml(user.username)}</strong> 的密碼嗎？</p>
+      <p class="dialog-warning">清除後該使用者將改為 NAS SMB 認證登入。如果 NAS 上沒有對應帳號，使用者將無法登入。</p>
+      <div class="dialog-error" id="clearPasswordError"></div>
+    `;
+    const footerHtml = `
+      <button class="btn btn-ghost dialog-cancel-btn">取消</button>
+      <button class="btn btn-accent dialog-submit-btn">清除密碼</button>
+    `;
+
+    const dialog = createDialog(`清除密碼 — ${escapeHtml(user.username)}`, bodyHtml, footerHtml);
+    dialog.querySelector('.dialog-cancel-btn').addEventListener('click', () => dialog.remove());
+
+    dialog.querySelector('.dialog-submit-btn').addEventListener('click', async () => {
+      const errorDiv = dialog.querySelector('#clearPasswordError');
+      try {
+        const token = LoginModule.getToken();
+        const resp = await fetch(`/api/admin/users/${user.id}/clear-password`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || '清除失敗');
+
+        dialog.remove();
+        reloadUsersList(container);
+        if (typeof DesktopModule !== 'undefined') {
+          DesktopModule.showToast(`${user.username} 的密碼已清除，改為 NAS 認證`, 'check');
+        }
+      } catch (error) {
+        errorDiv.textContent = error.message;
+        errorDiv.classList.add('show');
+      }
+    });
+  }
+
+  /**
+   * 開啟「刪除使用者」確認對話框
+   */
+  function openDeleteUserDialog(container, user) {
+    const bodyHtml = `
+      <p>確定要永久刪除使用者 <strong>${escapeHtml(user.username)}</strong> 嗎？</p>
+      <p class="dialog-warning">此操作無法復原，該使用者的所有資料將被永久移除。</p>
+      <div class="dialog-error" id="deleteUserError"></div>
+    `;
+    const footerHtml = `
+      <button class="btn btn-ghost dialog-cancel-btn">取消</button>
+      <button class="btn btn-accent dialog-submit-btn">永久刪除</button>
+    `;
+
+    const dialog = createDialog(`刪除使用者 — ${escapeHtml(user.username)}`, bodyHtml, footerHtml);
+    dialog.querySelector('.dialog-cancel-btn').addEventListener('click', () => dialog.remove());
+
+    dialog.querySelector('.dialog-submit-btn').addEventListener('click', async () => {
+      const errorDiv = dialog.querySelector('#deleteUserError');
+      try {
+        const token = LoginModule.getToken();
+        const resp = await fetch(`/api/admin/users/${user.id}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || '刪除失敗');
+
+        dialog.remove();
+        reloadUsersList(container);
+        if (typeof DesktopModule !== 'undefined') {
+          DesktopModule.showToast(`已刪除使用者 ${user.username}`, 'check');
+        }
+      } catch (error) {
+        errorDiv.textContent = error.message;
+        errorDiv.classList.add('show');
+      }
     });
   }
 

@@ -1,7 +1,7 @@
 """使用者相關資料模型"""
 
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class UserPermissions(BaseModel):
@@ -44,12 +44,61 @@ class AdminUserInfo(BaseModel):
     last_login_at: datetime | None
     is_active: bool = True
     role: str = "user"  # admin, user
+    has_password: bool = False  # 是否已設定密碼（密碼認證 vs NAS 認證）
 
 
 class AdminUserListResponse(BaseModel):
     """使用者列表回應"""
 
     users: list[AdminUserInfo]
+
+
+class CreateUserRequest(BaseModel):
+    """建立使用者請求"""
+
+    username: str = Field(..., min_length=1, max_length=100)
+    password: str = Field(..., min_length=8)
+    display_name: str | None = None
+    role: str = "user"
+
+
+class CreateUserResponse(BaseModel):
+    """建立使用者回應"""
+
+    success: bool
+    id: int | None = None
+    username: str | None = None
+    display_name: str | None = None
+    role: str | None = None
+    error: str | None = None
+
+
+class UpdateUserInfoRequest(BaseModel):
+    """編輯使用者資訊請求"""
+
+    display_name: str | None = None
+    email: str | None = None
+    role: str | None = None
+
+
+class UpdateUserStatusRequest(BaseModel):
+    """停用/啟用使用者請求"""
+
+    is_active: bool
+
+
+class ResetPasswordRequest(BaseModel):
+    """重設密碼請求"""
+
+    new_password: str = Field(..., min_length=8)
+
+
+class UserOperationResponse(BaseModel):
+    """通用使用者操作回應"""
+
+    success: bool
+    message: str | None = None
+    error: str | None = None
 
 
 class UpdatePermissionsRequest(BaseModel):
