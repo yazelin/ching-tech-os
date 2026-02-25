@@ -822,7 +822,7 @@ async def log_linebot_ai_call(
             input_prompt=full_input,
             system_prompt=system_prompt,
             allowed_tools=allowed_tools,
-            raw_response=response.message if response.success else None,
+            raw_response=response.message or None,
             parsed_response=parsed_response,
             model=model,
             success=response.success,
