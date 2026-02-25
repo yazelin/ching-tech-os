@@ -27,8 +27,8 @@ STATUS_LABELS = {
 
 def _get_stale_timeout_minutes() -> int:
     """取得 stale timeout 分鐘數（至少比 worker timeout 多 2 分鐘）。"""
-    stale_minutes = 25
-    worker_timeout_sec = 1200
+    stale_minutes = 10
+    worker_timeout_sec = 120
 
     try:
         from ching_tech_os.config import settings
@@ -56,7 +56,7 @@ def _get_stale_timeout_minutes() -> int:
         except ValueError:
             pass
 
-    minimum = max(20, worker_timeout_sec // 60 + 2)
+    minimum = max(8, worker_timeout_sec // 60 + 2)
     return max(stale_minutes, minimum)
 
 
@@ -207,6 +207,7 @@ def main() -> int:
 
     status_data = _mark_stale_if_needed(status_path, status_data)
     status = str(status_data.get("status") or "unknown")
+    job_dir = status_path.parent
 
     result = {
         "success": True,
@@ -223,6 +224,9 @@ def main() -> int:
         "sources": status_data.get("sources", []),
         "partial_results": status_data.get("partial_results", []),
         "error": status_data.get("error"),
+        "result_exists": (job_dir / "result.md").exists(),
+        "sources_exists": (job_dir / "sources.json").exists(),
+        "tool_trace_exists": (job_dir / "tool_trace.json").exists(),
     }
 
     if status == "completed":

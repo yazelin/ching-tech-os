@@ -36,7 +36,7 @@ MAX_SNIPPET_CHARS = 260
 USER_AGENT = "ChingTechOS-ResearchSkill/1.0"
 BRAVE_SEARCH_ENDPOINT = "https://api.search.brave.com/res/v1/web/search"
 DEFAULT_RESEARCH_MODEL = "claude-opus"
-DEFAULT_CLAUDE_WORKER_TIMEOUT_SEC = 1200
+DEFAULT_CLAUDE_WORKER_TIMEOUT_SEC = 120
 DEFAULT_LOCAL_SYNTHESIS_TIMEOUT_SEC = 240
 RESEARCH_RETENTION_DAYS = 7
 MAX_RESEARCH_WORKERS = 1
@@ -706,7 +706,7 @@ def _build_final_summary(query: str, fetched_results: list[dict]) -> str:
             "",
             "## 建議下一步",
             "- 針對上方重點逐項比對官方文件或規格書。",
-            "- 將可驗證資訊寫入知識庫，並保留來源 URL 以便追蹤。",
+            "- 若系統有知識庫功能，可手動將可驗證資訊寫入知識庫，並保留來源 URL 以便追蹤。",
         ]
     )
 
@@ -967,7 +967,11 @@ async def _call_claude_research(
         )
 
     if response.success is not True:
-        raise RuntimeError(str(response.error or "Claude 研究流程失敗"))
+        # 保留 partial tool trace 供 debug（即使失敗也有已完成的工具紀錄）
+        error = RuntimeError(str(response.error or "Claude 研究流程失敗"))
+        error.partial_tool_trace = tool_trace  # type: ignore[attr-defined]
+        error.partial_sources = list(sources_by_url.values())  # type: ignore[attr-defined]
+        raise error
 
     final_summary = str(response.message or "").strip()
     if not final_summary:
@@ -1131,7 +1135,15 @@ def _do_research(
         return
     except (RuntimeError, ValueError, OSError) as exc:
         provider_trace[0]["status"] = "failed"
-        provider_trace[0]["reason"] = _truncate(str(exc), 200)
+        provider_trace[0]["reason"] = _truncate(str(exc), 500)
+        # 保留 Claude worker 的 partial tool trace 供 debug
+        partial_trace = getattr(exc, "partial_tool_trace", None)
+        if partial_trace:
+            provider_trace[0]["partial_tool_count"] = len(partial_trace)
+            try:
+                _write_json_file(job_dir / "tool_trace_partial.json", partial_trace)
+            except OSError:
+                pass
         _write_status(
             status_path,
             {
@@ -1191,6 +1203,16 @@ def _do_research_local_pipeline(
         return
 
     base_provider_trace = list(pre_provider_trace or [])
+    created_at = datetime.now().isoformat()
+    try:
+        previous_status = json.loads(status_path.read_text(encoding="utf-8"))
+        if isinstance(previous_status, dict):
+            preserved_created_at = previous_status.get("created_at")
+            if isinstance(preserved_created_at, str) and preserved_created_at:
+                created_at = preserved_created_at
+    except (OSError, json.JSONDecodeError):
+        pass
+
     status_data = {
         "job_id": job_id,
         "status": "running",
@@ -1205,7 +1227,7 @@ def _do_research_local_pipeline(
         "partial_results": [],
         "final_summary": "",
         "error": None,
-        "created_at": datetime.now().isoformat(),
+        "created_at": created_at,
     }
     _write_status(status_path, status_data)
 

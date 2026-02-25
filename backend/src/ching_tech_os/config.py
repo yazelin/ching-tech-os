@@ -127,9 +127,9 @@ class Settings:
     # research-skill 背景 Claude 預設模型（建議 claude-opus）
     research_claude_model: str = _get_env("RESEARCH_CLAUDE_MODEL", "claude-opus")
     # research-skill 背景 Claude web tools timeout（秒）
-    research_claude_timeout_sec: int = _get_env_int("RESEARCH_CLAUDE_TIMEOUT_SEC", 1200)
-    # check-research stale 判定分鐘（建議大於 claude timeout）
-    research_stale_timeout_minutes: int = _get_env_int("RESEARCH_STALE_TIMEOUT_MINUTES", 25)
+    research_claude_timeout_sec: int = _get_env_int("RESEARCH_CLAUDE_TIMEOUT_SEC", 120)
+    # check-research stale 判定分鐘（建議大於 claude timeout + fallback pipeline）
+    research_stale_timeout_minutes: int = _get_env_int("RESEARCH_STALE_TIMEOUT_MINUTES", 10)
     # 單次 AI 回合中 nanobanana 工具最多可呼叫次數（0 表示不限制）
     nanobanana_max_calls_per_request: int = _get_env_int("NANOBANANA_MAX_CALLS_PER_REQUEST", 1)
 

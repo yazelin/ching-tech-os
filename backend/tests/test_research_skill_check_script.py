@@ -23,18 +23,28 @@ def _load_check_research_module():
 def test_stale_timeout_has_minimum_buffer(monkeypatch: pytest.MonkeyPatch) -> None:
     module = _load_check_research_module()
 
-    monkeypatch.setenv("RESEARCH_CLAUDE_TIMEOUT_SEC", "1200")
-    monkeypatch.setenv("RESEARCH_STALE_TIMEOUT_MINUTES", "20")
+    monkeypatch.setenv("RESEARCH_CLAUDE_TIMEOUT_SEC", "120")
+    monkeypatch.setenv("RESEARCH_STALE_TIMEOUT_MINUTES", "5")
 
-    # 20 分鐘 worker timeout 會自動要求 stale 至少 +2 分鐘緩衝
-    assert module._get_stale_timeout_minutes() == 22
+    # 2 分鐘 worker timeout → stale 至少 max(8, 2+2) = 8 分鐘
+    assert module._get_stale_timeout_minutes() == 8
 
 
 def test_stale_timeout_respects_larger_env_value(monkeypatch: pytest.MonkeyPatch) -> None:
     module = _load_check_research_module()
 
-    monkeypatch.setenv("RESEARCH_CLAUDE_TIMEOUT_SEC", "1200")
-    monkeypatch.setenv("RESEARCH_STALE_TIMEOUT_MINUTES", "30")
+    monkeypatch.setenv("RESEARCH_CLAUDE_TIMEOUT_SEC", "120")
+    monkeypatch.setenv("RESEARCH_STALE_TIMEOUT_MINUTES", "15")
 
-    assert module._get_stale_timeout_minutes() == 30
+    assert module._get_stale_timeout_minutes() == 15
+
+
+def test_stale_timeout_scales_with_large_worker_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    module = _load_check_research_module()
+
+    monkeypatch.setenv("RESEARCH_CLAUDE_TIMEOUT_SEC", "600")
+    monkeypatch.setenv("RESEARCH_STALE_TIMEOUT_MINUTES", "5")
+
+    # 10 分鐘 worker timeout → stale 至少 max(8, 10+2) = 12 分鐘
+    assert module._get_stale_timeout_minutes() == 12
 

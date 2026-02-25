@@ -273,6 +273,29 @@ async def call_claude(
 
     start_time = time.time()
 
+    def _summarize_pending_tool_input(tool_name: str, raw_input: dict) -> str:
+        """將 timeout 時仍在執行中的工具輸入壓成可讀摘要。"""
+        if not isinstance(raw_input, dict):
+            return tool_name
+
+        parts: list[str] = []
+        url = str(raw_input.get("url") or "").strip()
+        if url:
+            parts.append(f"url={url[:120]}")
+
+        query = str(raw_input.get("query") or "").strip()
+        if query:
+            parts.append(f"query={query[:80]}")
+
+        if not parts and raw_input:
+            keys = ", ".join(sorted(str(key) for key in raw_input.keys())[:4])
+            if keys:
+                parts.append(f"keys={keys}")
+
+        if not parts:
+            return tool_name
+        return f"{tool_name}({'; '.join(parts)})"
+
     # 建立 ClaudeClient（in-process，不走 subprocess）
     client = ClaudeClient(
         cwd=session_dir,
@@ -444,6 +467,15 @@ async def call_claude(
         if _active_tools:
             pending_names = [name for name, _, _ in _active_tools.values()]
             error_msg += f"，執行中的工具：{', '.join(pending_names)}"
+            pending_summaries = [
+                _summarize_pending_tool_input(name, tool_input)
+                for name, _, tool_input in _active_tools.values()
+            ]
+            if pending_summaries:
+                preview = " | ".join(pending_summaries[:3])
+                if len(pending_summaries) > 3:
+                    preview += f" | ... +{len(pending_summaries) - 3} 個"
+                error_msg += f"，參數摘要：{preview}"
 
         return ClaudeResponse(
             success=False,
