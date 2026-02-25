@@ -61,8 +61,8 @@ async def run_skill_script(
         input: 傳給 script 的輸入字串（透過 stdin 傳入）
         ctos_user_id: CTOS 用戶 ID（由 bot framework 注入，非 LLM 控制）
     """
-    # NOTE: ctos_user_id 由 bot framework 在呼叫時注入（見 agents.py），
-    # LLM 無法控制此參數。MCP tool 簽名包含它是因為 framework 需要傳入。
+    # NOTE: ctos_user_id 由 bot framework 透過 claude-code-acp 的
+    # on_tool_input_transform 自動注入（見 claude_agent.py），LLM 無法偽造此參數。
     await ensure_db_connection()
     from ...skills import get_skill_manager
     from ...config import settings
@@ -77,21 +77,20 @@ async def run_skill_script(
 
     # 權限檢查：驗證使用者有此 skill 的 requires_app 權限
     if skill_obj.requires_app:
-        from ..permissions import get_user_app_permissions
+        from ..permissions import get_effective_app_permissions, get_user_app_permissions
 
+        required_app = skill_obj.requires_app
         if ctos_user_id is None:
-            return json.dumps({
-                "success": False,
-                "error": f"無權限使用 skill '{skill}'（缺少使用者身分，需 {skill_obj.requires_app} 權限）",
-            }, ensure_ascii=False)
-
-        user_apps = await get_user_app_permissions(ctos_user_id)
-        allowed = user_apps.get(skill_obj.requires_app, False)
+            # 未綁定帳號時沿用系統預設 app 權限
+            allowed = get_effective_app_permissions().get(required_app, False)
+        else:
+            user_apps = await get_user_app_permissions(ctos_user_id)
+            allowed = user_apps.get(required_app, False)
 
         if not allowed:
             return json.dumps({
                 "success": False,
-                "error": f"無權限使用 skill '{skill}'（需要 {skill_obj.requires_app} 權限）",
+                "error": f"無權限使用 skill '{skill}'（需要 {required_app} 權限）",
             }, ensure_ascii=False)
 
     # 驗證 skill 有 scripts

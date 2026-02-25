@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
@@ -58,6 +59,60 @@ async def test_auto_prepare_generated_images_no_files_or_exception(monkeypatch: 
         AsyncMock(side_effect=RuntimeError("boom")),
     )
     assert await linebot_ai.auto_prepare_generated_images("hello", tool_calls=[]) == "hello"
+
+
+def test_extract_research_tool_feedback_start_and_completed() -> None:
+    start_output = json.dumps(
+        {
+            "success": True,
+            "output": json.dumps(
+                {"success": True, "job_id": "a1b2c3d4", "status": "started"},
+                ensure_ascii=False,
+            ),
+            "error": "",
+            "duration_ms": 32,
+        },
+        ensure_ascii=False,
+    )
+    start_call = SimpleNamespace(
+        name="mcp__ching-tech-os__run_skill_script",
+        input={"skill": "research-skill", "script": "start-research"},
+        output=start_output,
+    )
+    start_feedback = linebot_ai._extract_research_tool_feedback([start_call])
+    assert start_feedback is not None
+    assert start_feedback["script"] == "start-research"
+    assert start_feedback["job_id"] == "a1b2c3d4"
+    assert "a1b2c3d4" in start_feedback["message"]
+
+    check_output = json.dumps(
+        {
+            "success": True,
+            "output": json.dumps(
+                {
+                    "success": True,
+                    "job_id": "a1b2c3d4",
+                    "status": "completed",
+                    "final_summary": "研究完成摘要",
+                    "sources": [{"title": "來源 A", "url": "https://example.com/a"}],
+                },
+                ensure_ascii=False,
+            ),
+            "error": "",
+            "duration_ms": 45,
+        },
+        ensure_ascii=False,
+    )
+    check_call = SimpleNamespace(
+        name="mcp__ching-tech-os__run_skill_script",
+        input={"skill": "research-skill", "script": "check-research"},
+        output=check_output,
+    )
+    check_feedback = linebot_ai._extract_research_tool_feedback([check_call])
+    assert check_feedback is not None
+    assert check_feedback["script"] == "check-research"
+    assert "研究完成摘要" in check_feedback["message"]
+    assert "來源 A" in check_feedback["message"]
 
 
 def test_append_text_to_first_message_paths(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -556,6 +611,57 @@ async def test_process_message_with_ai_success_push_fallback_and_quote_text(monk
     tools_arg = linebot_ai.call_claude.await_args.kwargs["tools"]
     assert "mcp__ching-tech-os__create_share_link" not in tools_arg
     assert "mcp__erpnext__list_documents" in tools_arg
+
+
+@pytest.mark.asyncio
+async def test_process_message_with_ai_start_research_appends_job_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_process_base(monkeypatch)
+    monkeypatch.setattr(linebot_ai, "get_message_content_by_line_message_id", AsyncMock(return_value=None))
+
+    tool_output = json.dumps(
+        {
+            "success": True,
+            "output": json.dumps(
+                {"success": True, "job_id": "z9y8x7w6", "status": "started"},
+                ensure_ascii=False,
+            ),
+            "error": "",
+            "duration_ms": 12,
+        },
+        ensure_ascii=False,
+    )
+    tool_call = SimpleNamespace(
+        id="tc-research",
+        name="mcp__ching-tech-os__run_skill_script",
+        input={"skill": "research-skill", "script": "start-research"},
+        output=tool_output,
+    )
+    monkeypatch.setattr(
+        linebot_ai,
+        "call_claude",
+        AsyncMock(
+            return_value=_mock_claude_response(
+                success=True,
+                message="已開始處理研究需求。",
+                tool_calls=[tool_call],
+            )
+        ),
+    )
+    monkeypatch.setattr(linebot_ai, "parse_ai_response", lambda text: (text, []))
+    send_ai_response = AsyncMock(return_value=["mid"])
+    monkeypatch.setattr(linebot_ai, "send_ai_response", send_ai_response)
+
+    result = await linebot_ai.process_message_with_ai(
+        message_uuid=uuid4(),
+        content="幫我研究這個主題",
+        line_group_id=None,
+        line_user_id="U1",
+        reply_token="r1",
+    )
+
+    assert result is not None
+    assert "z9y8x7w6" in result
+    assert "job_id" in send_ai_response.await_args.kwargs["text"]
 
 
 @pytest.mark.asyncio

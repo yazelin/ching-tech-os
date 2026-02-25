@@ -230,6 +230,7 @@ async def call_claude(
     on_tool_start: ToolNotifyCallback | None = None,
     on_tool_end: ToolNotifyCallback | None = None,
     required_mcp_servers: set[str] | None = None,
+    ctos_user_id: int | None = None,
 ) -> ClaudeResponse:
     """非同步呼叫 Claude（透過 ClaudeClient in-process）
 
@@ -243,6 +244,7 @@ async def call_claude(
         on_tool_start: 工具開始回調
         on_tool_end: 工具結束回調
         required_mcp_servers: 需要載入的 MCP server 名稱集合（可選，None=全部）
+        ctos_user_id: CTOS 使用者 ID（自動注入至 ching-tech-os MCP 工具參數）
 
     Returns:
         ClaudeResponse: 包含成功狀態、回應訊息、工具調用記錄和 token 統計
@@ -323,6 +325,17 @@ async def call_claude(
             logger.warning(f"Permission DENIED for tool: {name} (not in whitelist)")
             return False
         return True
+
+    # Framework 級參數注入：自動為 ching-tech-os MCP 工具注入 ctos_user_id
+    # 這確保使用者身分由 framework 控制，LLM 無法偽造
+    if ctos_user_id is not None:
+        @client.on_tool_input_transform
+        async def inject_ctos_user_id(
+            tool_name: str, tool_input: dict,
+        ) -> dict | None:
+            if tool_name.startswith("mcp__ching-tech-os__"):
+                return {**tool_input, "ctos_user_id": ctos_user_id}
+            return None
 
     # Token 統計：透過 on_result callback 擷取 usage（claude-code-acp >= 0.4.2）
     _usage_data: dict[str, Any] = {}
