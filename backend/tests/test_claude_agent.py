@@ -207,6 +207,30 @@ class _SuccessClient(_BaseFakeClient):
         return "成功回覆\nuser: 不應出現"
 
 
+class _NanobananaLoopClient(_BaseFakeClient):
+    async def query(self, _prompt: str):
+        for idx in range(2):
+            if self._on_permission:
+                allowed = await self._on_permission(
+                    "mcp__nanobanana__generate_image",
+                    {"prompt": f"p{idx}"},
+                )
+            else:
+                allowed = True
+            if not allowed:
+                continue
+            tool_id = f"nb-{idx}"
+            if self._on_tool_start:
+                await self._on_tool_start(tool_id, "mcp__nanobanana__generate_image", {"prompt": f"p{idx}"})
+            if self._on_tool_end:
+                await self._on_tool_end(
+                    tool_id,
+                    "ok",
+                    {"generatedFiles": [f"/tmp/nanobanana-output/{idx}.jpg"]},
+                )
+        return "圖片完成"
+
+
 class _TimeoutClient(_BaseFakeClient):
     async def query(self, _prompt: str):
         if self._on_tool_start:
@@ -280,3 +304,25 @@ async def test_call_claude_success_timeout_and_error(monkeypatch: pytest.MonkeyP
     err_resp = await claude_agent.call_claude(prompt="hello")
     assert err_resp.success is False
     assert "呼叫 Claude 時發生錯誤" in (err_resp.error or "")
+
+
+@pytest.mark.asyncio
+async def test_call_claude_limits_nanobanana_calls(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    session_dir = tmp_path / "session"
+    session_dir.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(claude_agent, "_create_session_workdir", lambda: str(session_dir))
+    monkeypatch.setattr(claude_agent, "_cleanup_session_workdir", lambda _path: None)
+    monkeypatch.setattr(claude_agent, "_build_mcp_servers", lambda _session_dir, _required: [])
+    monkeypatch.setattr(claude_agent.settings, "nanobanana_max_calls_per_request", 1)
+    monkeypatch.setattr(claude_agent, "ClaudeClient", _NanobananaLoopClient)
+
+    result = await claude_agent.call_claude(
+        prompt="畫圖",
+        tools=["mcp__nanobanana__generate_image"],
+    )
+
+    assert result.success is True
+    # 第二次呼叫會被 permission guard 擋下，避免單回合重複扣費
+    assert len(result.tool_calls) == 1
+    assert result.tool_calls[0].name == "mcp__nanobanana__generate_image"

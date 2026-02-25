@@ -227,6 +227,7 @@ async def call_claude(
     system_prompt: str | None = None,
     timeout: int = DEFAULT_TIMEOUT,
     tools: list[str] | None = None,
+    tool_call_limits: dict[str, int] | None = None,
     on_tool_start: ToolNotifyCallback | None = None,
     on_tool_end: ToolNotifyCallback | None = None,
     required_mcp_servers: set[str] | None = None,
@@ -241,6 +242,7 @@ async def call_claude(
         system_prompt: System prompt 內容（可選）
         timeout: 超時秒數
         tools: 允許使用的工具列表（可選）
+        tool_call_limits: 單回合工具呼叫次數上限（可選，key=tool 名稱）
         on_tool_start: 工具開始回調
         on_tool_end: 工具結束回調
         required_mcp_servers: 需要載入的 MCP server 名稱集合（可選，None=全部）
@@ -318,12 +320,53 @@ async def call_claude(
 
     # 白名單模式 — 只允許已知安全的 MCP 工具，拒絕所有其他工具
     _ALLOWED_TOOLS = set(t.lower() for t in (tools or []))
+    _tool_call_counts: dict[str, int] = {}
+    _tool_call_limits: dict[str, int] = {}
+
+    # 全域保底：限制單回合 nanobanana 呼叫次數，避免模型迴圈式重試造成成本暴增
+    global_nanobanana_limit = max(0, int(getattr(settings, "nanobanana_max_calls_per_request", 0)))
+    if global_nanobanana_limit > 0:
+        for tool_name in (
+            "mcp__nanobanana__generate_image",
+            "mcp__nanobanana__edit_image",
+            "mcp__nanobanana__restore_image",
+        ):
+            normalized_name = tool_name.lower()
+            if normalized_name in _ALLOWED_TOOLS:
+                _tool_call_limits[normalized_name] = global_nanobanana_limit
+
+    # call-site 可覆蓋預設上限
+    if tool_call_limits:
+        for tool_name, limit in tool_call_limits.items():
+            normalized_name = str(tool_name).lower().strip()
+            try:
+                parsed_limit = int(limit)
+            except (TypeError, ValueError):
+                continue
+            if parsed_limit <= 0:
+                _tool_call_limits.pop(normalized_name, None)
+            else:
+                _tool_call_limits[normalized_name] = parsed_limit
 
     @client.on_permission
     async def handle_permission(name: str, raw_input: dict) -> bool:
-        if name.lower() not in _ALLOWED_TOOLS:
+        normalized_name = name.lower()
+        if normalized_name not in _ALLOWED_TOOLS:
             logger.warning(f"Permission DENIED for tool: {name} (not in whitelist)")
             return False
+
+        limit = _tool_call_limits.get(normalized_name)
+        if limit is not None:
+            current_calls = _tool_call_counts.get(normalized_name, 0)
+            if current_calls >= limit:
+                logger.warning(
+                    "Permission DENIED for tool: %s (call limit reached: %s/%s)",
+                    name,
+                    current_calls,
+                    limit,
+                )
+                return False
+            _tool_call_counts[normalized_name] = current_calls + 1
         return True
 
     # Framework 級參數注入：自動為 ching-tech-os MCP 工具注入 ctos_user_id

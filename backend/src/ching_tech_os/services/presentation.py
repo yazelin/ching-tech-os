@@ -219,6 +219,8 @@ async def generate_nanobanana_image(keyword: str) -> Optional[bytes]:
 
 圖片描述：Professional presentation slide image about {keyword}, clean modern style, high quality, suitable for business presentation
 
+重要：resolution 必須固定使用 "1K"，禁止使用 2K/4K。
+
 只需要呼叫工具生成圖片，不需要其他說明。"""
 
         response = await call_claude(
