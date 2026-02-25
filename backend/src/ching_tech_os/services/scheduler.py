@@ -208,6 +208,44 @@ async def cleanup_ai_images():
         logger.error(f"清理 AI 圖片失敗: {e}")
 
 
+async def cleanup_cli_temp_dirs():
+    """
+    清理 Claude CLI 的舊暫存目錄
+    每次伺服器重啟會在 /tmp 建立新的 ching-tech-os-cli-* base 目錄，
+    舊的不會自動清除。此排程刪除超過 1 天且非當前使用中的目錄。
+    """
+    import glob
+    import shutil
+    from .claude_agent import _WORKING_DIR_BASE
+
+    pattern = "/tmp/ching-tech-os-cli-*"
+    one_day_ago = time.time() - (24 * 3600)
+    deleted_count = 0
+
+    # 取得當前使用中的 base 目錄（排除）
+    current_base = os.path.realpath(_WORKING_DIR_BASE)
+
+    try:
+        for dirpath in glob.glob(pattern):
+            if not os.path.isdir(dirpath):
+                continue
+            # 跳過當前正在使用的目錄
+            if os.path.realpath(dirpath) == current_base:
+                continue
+            # 只刪除超過 1 天的
+            if os.path.getmtime(dirpath) < one_day_ago:
+                shutil.rmtree(dirpath, ignore_errors=True)
+                deleted_count += 1
+
+        if deleted_count > 0:
+            logger.info(f"清理 CLI 暫存目錄: 刪除 {deleted_count} 個舊目錄")
+        else:
+            logger.debug("CLI 暫存目錄清理: 無過期目錄")
+
+    except Exception as e:
+        logger.error(f"清理 CLI 暫存目錄失敗: {e}")
+
+
 async def cleanup_media_temp_folders():
     """
     清理影片下載和轉字幕的暫存資料夾

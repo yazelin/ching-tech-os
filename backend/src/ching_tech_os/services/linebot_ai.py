@@ -271,6 +271,47 @@ async def send_ai_response(
 
 
 # ============================================================
+# 超時 Fallback：從已完成的工具結果中組合回覆
+# ============================================================
+
+
+async def _fallback_summarize_from_tools(response) -> str:
+    """超時時，從已完成的工具結果中提取有用內容作為 fallback 回覆。
+
+    Claude CLI 多輪工具呼叫時，前幾輪可能已完成並有結果，
+    但最後一輪的工具（如 WebFetch）卡住導致整體超時。
+    此函數從已完成的 WebSearch/WebFetch 結果中組合出有用回覆。
+    """
+    # 收集 WebSearch/WebFetch 的 output
+    search_outputs = []
+    for tc in response.tool_calls:
+        if tc.name in ("WebSearch", "WebFetch") and tc.output:
+            search_outputs.append(tc.output)
+
+    if search_outputs:
+        # 取最後一個 WebSearch/WebFetch 的結果（通常是最詳細的）
+        # 截取前 1500 字元避免 Line 訊息太長
+        best_output = search_outputs[-1]
+        if len(best_output) > 1500:
+            best_output = best_output[:1500] + "..."
+
+        logger.info(
+            f"超時 fallback：從 {len(search_outputs)} 個搜尋結果中組合回覆"
+        )
+        return f"（處理過程較久，以下是目前查到的資料）\n\n{best_output}"
+
+    # 沒有搜尋結果，檢查是否有部分文字回應
+    if response.message and response.message.strip():
+        logger.info(
+            f"失敗但有部分文字回應（{len(response.message)} 字元），嘗試發送"
+        )
+        return response.message.strip()
+
+    # 完全沒有可用內容
+    return "⚠️ 抱歉，處理時間過長，請稍後再試一次。"
+
+
+# ============================================================
 # AI 處理主流程
 # ============================================================
 
@@ -619,9 +660,11 @@ async def process_message_with_ai(
                     )
                     # 繼續後續的發送流程（不 return）
                 else:
-                    return None
+                    # 超時但有已完成的工具結果，嘗試用結果做 fallback 總結
+                    ai_response = await _fallback_summarize_from_tools(response)
             else:
-                return None
+                # 沒有 tool_calls，用 fallback 處理部分文字或錯誤提示
+                ai_response = await _fallback_summarize_from_tools(response)
         else:
             ai_response = response.message
 
@@ -812,7 +855,7 @@ async def log_linebot_ai_call(
             input_prompt=full_input,
             system_prompt=system_prompt,
             allowed_tools=allowed_tools,
-            raw_response=response.message if response.success else None,
+            raw_response=response.message or None,
             parsed_response=parsed_response,
             model=model,
             success=response.success,

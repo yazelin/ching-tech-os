@@ -153,7 +153,7 @@ def test_start_and_stop_scheduler(monkeypatch: pytest.MonkeyPatch) -> None:
 
     scheduler.start_scheduler()
     assert dummy.running is True
-    assert len(dummy.jobs) == 6
+    assert len(dummy.jobs) == 7
     job_ids = {kwargs.get("id") for _, kwargs in dummy.jobs}
     assert "cleanup_old_messages" in job_ids
     assert "create_next_month_partitions" in job_ids
@@ -161,6 +161,7 @@ def test_start_and_stop_scheduler(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "file-manager:cleanup_linebot_temp_files" in job_ids
     assert "file-manager:cleanup_media_temp_folders" in job_ids
     assert "ai-agent:cleanup_ai_images" in job_ids
+    assert "ai-agent:cleanup_cli_temp_dirs" in job_ids
 
     scheduler.stop_scheduler()
     assert dummy.running is False

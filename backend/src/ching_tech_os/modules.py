@@ -96,6 +96,7 @@ BUILTIN_MODULES: dict[str, ModuleInfo] = {
         "mcp_module": ".services.mcp.media_tools",
         "scheduler_jobs": [
             {"fn": "cleanup_ai_images", "trigger": "cron", "hour": 4, "minute": 30},
+            {"fn": "cleanup_cli_temp_dirs", "trigger": "cron", "hour": 4, "minute": 0},
         ],
         "app_ids": ["ai-assistant", "prompt-editor", "agent-settings", "ai-log", "memory-manager"],
         "app_manifest": [
