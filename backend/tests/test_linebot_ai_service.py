@@ -115,6 +115,15 @@ def test_extract_research_tool_feedback_start_and_completed() -> None:
     assert "來源 A" in check_feedback["message"]
 
 
+def test_research_check_mode_detection_helpers() -> None:
+    assert linebot_ai._extract_research_job_id_from_text("查詢研究進度 c904b40d") == "c904b40d"
+    assert linebot_ai._should_force_research_check_mode("查詢研究進度 c904b40d")
+    assert not linebot_ai._should_force_research_check_mode("請幫我查今天天氣 c904b40d")
+
+    tool_calls = [SimpleNamespace(name="WebFetch"), SimpleNamespace(name="mcp__x__y")]
+    assert linebot_ai._contains_builtin_web_fetch_search(tool_calls) is True
+
+
 def test_append_text_to_first_message_paths(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         linebot_ai,
@@ -662,6 +671,94 @@ async def test_process_message_with_ai_start_research_appends_job_id(monkeypatch
     assert result is not None
     assert "z9y8x7w6" in result
     assert "job_id" in send_ai_response.await_args.kwargs["text"]
+
+
+@pytest.mark.asyncio
+async def test_process_message_with_ai_research_check_disables_web_tools(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_process_base(monkeypatch)
+    monkeypatch.setattr(linebot_ai, "get_message_content_by_line_message_id", AsyncMock(return_value=None))
+    call_claude = AsyncMock(return_value=_mock_claude_response(success=True, message="進度查詢完成"))
+    monkeypatch.setattr(linebot_ai, "call_claude", call_claude)
+    monkeypatch.setattr(linebot_ai, "parse_ai_response", lambda text: (text, []))
+    monkeypatch.setattr(linebot_ai, "send_ai_response", AsyncMock(return_value=["mid"]))
+
+    await linebot_ai.process_message_with_ai(
+        message_uuid=uuid4(),
+        content="請查詢研究進度 job_id c904b40d",
+        line_group_id=None,
+        line_user_id="U1",
+        reply_token="r1",
+    )
+
+    tools_arg = call_claude.await_args.kwargs["tools"]
+    assert "WebSearch" not in tools_arg
+    assert "WebFetch" not in tools_arg
+    assert "mcp__erpnext__list_documents" in tools_arg
+
+
+@pytest.mark.asyncio
+async def test_process_message_with_ai_check_research_feedback_overrides_model_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_process_base(monkeypatch)
+    monkeypatch.setattr(linebot_ai, "get_message_content_by_line_message_id", AsyncMock(return_value=None))
+
+    check_output = json.dumps(
+        {
+            "success": True,
+            "output": json.dumps(
+                {
+                    "success": True,
+                    "job_id": "c904b40d",
+                    "status": "completed",
+                    "final_summary": "研究完成摘要（來自 worker）",
+                    "sources": [{"title": "來源 A", "url": "https://example.com/a"}],
+                },
+                ensure_ascii=False,
+            ),
+            "error": "",
+            "duration_ms": 45,
+        },
+        ensure_ascii=False,
+    )
+    check_call = SimpleNamespace(
+        id="tc-check",
+        name="mcp__ching-tech-os__run_skill_script",
+        input={"skill": "research-skill", "script": "check-research"},
+        output=check_output,
+    )
+    webfetch_call = SimpleNamespace(
+        id="tc-webfetch",
+        name="WebFetch",
+        input={"url": "https://example.com"},
+        output="抓到更多內容",
+    )
+    monkeypatch.setattr(
+        linebot_ai,
+        "call_claude",
+        AsyncMock(
+            return_value=_mock_claude_response(
+                success=True,
+                message="研究報告太簡單，我再去抓網頁整理。",
+                tool_calls=[check_call, webfetch_call],
+            )
+        ),
+    )
+    monkeypatch.setattr(linebot_ai, "parse_ai_response", lambda text: (text, []))
+    send_ai_response = AsyncMock(return_value=["mid"])
+    monkeypatch.setattr(linebot_ai, "send_ai_response", send_ai_response)
+
+    result = await linebot_ai.process_message_with_ai(
+        message_uuid=uuid4(),
+        content="查詢研究進度 c904b40d",
+        line_group_id=None,
+        line_user_id="U1",
+        reply_token="r1",
+    )
+
+    assert "研究完成摘要（來自 worker）" in result
+    assert "研究報告太簡單" not in result
+    assert "來源 A" in send_ai_response.await_args.kwargs["text"]
 
 
 @pytest.mark.asyncio

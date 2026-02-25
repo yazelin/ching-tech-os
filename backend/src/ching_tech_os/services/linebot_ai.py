@@ -288,6 +288,35 @@ def _parse_json_object(text: str) -> dict | None:
     return None
 
 
+def _extract_research_job_id_from_text(text: str) -> str:
+    """從使用者文字中提取 research job_id（8 碼十六進位）。"""
+    if not text:
+        return ""
+    match = re.search(r"\b([0-9a-fA-F]{8})\b", text)
+    if not match:
+        return ""
+    return match.group(1).lower()
+
+
+def _should_force_research_check_mode(text: str) -> bool:
+    """判斷是否為研究進度查詢語意（需禁用同步 WebSearch/WebFetch）。"""
+    job_id = _extract_research_job_id_from_text(text)
+    if not job_id:
+        return False
+    lowered = (text or "").lower()
+    keywords = ("research", "check-research", "job_id", "研究", "進度")
+    return any(keyword in lowered for keyword in keywords)
+
+
+def _contains_builtin_web_fetch_search(tool_calls: list) -> bool:
+    """判斷是否有呼叫內建 WebSearch/WebFetch。"""
+    for tool_call in tool_calls or []:
+        name = str(getattr(tool_call, "name", "") or "")
+        if name in ("WebSearch", "WebFetch"):
+            return True
+    return False
+
+
 def _extract_research_tool_feedback(tool_calls: list) -> dict | None:
     """從 run_skill_script(research-skill) 的工具輸出組合可回覆訊息。"""
     for tool_call in reversed(tool_calls or []):
@@ -697,6 +726,11 @@ async def process_message_with_ai(
         skill_tools = await get_tools_for_user(app_permissions)
         all_tools = list(dict.fromkeys(agent_tools + mcp_tools + skill_tools))
 
+        # 研究進度查詢模式：避免模型在 check-research 後又切回同步網頁重抓
+        if _should_force_research_check_mode(content):
+            all_tools = [tool for tool in all_tools if tool not in {"WebSearch", "WebFetch"}]
+            logger.info("研究進度查詢模式：已禁用 WebSearch/WebFetch（避免重複抓網頁）")
+
         # 取得需要的 MCP server 集合（按需載入）
         required_mcp_servers = await get_mcp_servers_for_user(app_permissions)
 
@@ -829,7 +863,13 @@ async def process_message_with_ai(
                         ai_response = feedback_text
                     elif job_id and job_id not in ai_response:
                         ai_response = ai_response.rstrip() + "\n\n" + feedback_text
-                # check-research：若 AI 無文字內容，直接使用工具回傳摘要
+                # check-research：一律以工具回傳結果為準，避免模型再切回同步網頁抓取
+                elif script_name == "check-research" and feedback_text:
+                    if _contains_builtin_web_fetch_search(response.tool_calls):
+                        logger.warning(
+                            "check-research 後偵測到 WebSearch/WebFetch；改用工具摘要回覆，忽略模型二次抓取內容",
+                        )
+                    ai_response = feedback_text
                 elif feedback_text and not str(ai_response or "").strip():
                     ai_response = feedback_text
 
