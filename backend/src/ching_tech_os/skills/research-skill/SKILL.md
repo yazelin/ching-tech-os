@@ -12,9 +12,9 @@ metadata:
 
 當任務需要多來源搜尋、擷取內容並統整時，優先使用此 skill，避免在單一回合長時間同步呼叫 WebSearch/WebFetch 導致超時。
 
-**搜尋 provider：**
-- 優先使用 Brave Search API（需設定 `BRAVE_SEARCH_API_KEY`）
-- Brave 不可用時會先回退 DuckDuckGo，再回退 Brave 公開搜尋頁
+**研究執行策略：**
+- 背景 worker 會先用 Claude（`claude-sonnet`）+ 內建 `WebSearch`/`WebFetch` 產生完整研究結果
+- 若 Claude web tools 執行失敗，才降級到本地 provider fallback（Brave API → DuckDuckGo → Brave public）
 - Brave API 申請：https://brave.com/search/api/
 
 **可用 scripts：**
@@ -28,9 +28,9 @@ metadata:
    - 立即回傳 `job_id`，背景程序持續執行。
 
 2. **check-research** — 查詢研究進度與結果
-   - `run_skill_script(skill="research-skill", script="check-research", input='{"job_id":"之前取得的job_id"}')`
-   - 進行中：回傳 `status`、`progress`、`partial_results`
-   - 完成：回傳 `final_summary`、`sources`、`result_ctos_path`
+    - `run_skill_script(skill="research-skill", script="check-research", input='{"job_id":"之前取得的job_id"}')`
+    - 進行中：回傳 `status`、`stage`、`progress`、`partial_results`
+    - 完成：回傳 `final_summary`、`sources`、`result_ctos_path`、`sources_ctos_path`、`tool_trace_ctos_path`
 
 **典型流程：**
 1. 先呼叫 `start-research` 啟動任務並取得 `job_id`

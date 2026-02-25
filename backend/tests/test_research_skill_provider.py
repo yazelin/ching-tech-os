@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 
 import httpx
@@ -169,3 +170,109 @@ def test_provider_fallback_to_brave_public_when_ddg_empty(monkeypatch: pytest.Mo
     assert results[0]["url"] == "https://cupola360.com"
     assert any(item.get("provider") == "duckduckgo" and item.get("status") == "empty" for item in trace)
     assert any(item.get("provider") == "brave_public" and item.get("status") == "ok" for item in trace)
+
+
+def test_cleanup_old_research_dirs_removes_expired(tmp_path: Path) -> None:
+    module = _load_start_research_module()
+
+    old_dir = tmp_path / "2020-01-01" / "abcd1234"
+    old_dir.mkdir(parents=True)
+    (old_dir / "status.json").write_text("{}", encoding="utf-8")
+
+    today_dir = tmp_path / module.datetime.now().strftime("%Y-%m-%d") / "efgh5678"
+    today_dir.mkdir(parents=True)
+    (today_dir / "status.json").write_text("{}", encoding="utf-8")
+
+    module._cleanup_old_research_dirs(tmp_path, retention_days=7)
+
+    assert not (tmp_path / "2020-01-01").exists()
+    assert today_dir.exists()
+
+
+def test_do_research_fallback_to_local_pipeline(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    module = _load_start_research_module()
+    job_id = "abcd1234"
+    date_dir = tmp_path / module.datetime.now().strftime("%Y-%m-%d")
+    job_dir = date_dir / job_id
+    job_dir.mkdir(parents=True)
+    status_path = job_dir / "status.json"
+    status_path.write_text(json.dumps({"job_id": job_id, "status": "queued"}), encoding="utf-8")
+
+    monkeypatch.setattr(module, "_wait_for_worker_slot", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        module,
+        "_run_claude_research",
+        lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("claude down")),
+    )
+
+    captured_trace: list[dict] = []
+
+    def fake_local(**kwargs):
+        captured_trace.extend(kwargs.get("pre_provider_trace") or [])
+        module._write_status(
+            kwargs["status_path"],
+            {
+                "job_id": kwargs["job_id"],
+                "status": "completed",
+                "status_label": "完成",
+                "progress": 100,
+            },
+        )
+
+    monkeypatch.setattr(module, "_do_research_local_pipeline", fake_local)
+
+    module._do_research(
+        base_dir=tmp_path,
+        job_dir=job_dir,
+        status_path=status_path,
+        job_id=job_id,
+        query="test query",
+        seed_urls=[],
+        max_results=3,
+        max_fetch=2,
+    )
+
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    assert status["status"] == "completed"
+    assert captured_trace
+    assert captured_trace[0]["provider"] == "claude_webtools"
+    assert captured_trace[0]["status"] == "failed"
+
+
+def test_do_research_claude_success_writes_artifacts(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    module = _load_start_research_module()
+    job_id = "abcd1234"
+    date_dir = tmp_path / module.datetime.now().strftime("%Y-%m-%d")
+    job_dir = date_dir / job_id
+    job_dir.mkdir(parents=True)
+    status_path = job_dir / "status.json"
+    status_path.write_text(json.dumps({"job_id": job_id, "status": "queued"}), encoding="utf-8")
+
+    monkeypatch.setattr(module, "_wait_for_worker_slot", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        module,
+        "_run_claude_research",
+        lambda **_kwargs: (
+            "這是研究摘要",
+            [{"title": "Example", "url": "https://example.com", "snippet": "snippet"}],
+            [{"tool": "WebSearch", "input": {"query": "x"}, "output_preview": "ok"}],
+        ),
+    )
+
+    module._do_research(
+        base_dir=tmp_path,
+        job_dir=job_dir,
+        status_path=status_path,
+        job_id=job_id,
+        query="test query",
+        seed_urls=[],
+        max_results=3,
+        max_fetch=2,
+    )
+
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    assert status["status"] == "completed"
+    assert status["search_provider"] == "claude_webtools"
+    assert (job_dir / "result.md").exists()
+    assert (job_dir / "sources.json").exists()
+    assert (job_dir / "tool_trace.json").exists()

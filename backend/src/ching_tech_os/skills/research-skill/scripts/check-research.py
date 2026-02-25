@@ -12,14 +12,17 @@ from pathlib import Path
 STALE_TIMEOUT_MINUTES = 20
 SEARCH_DAYS = 7
 
-RUNNING_STATUSES = {"starting", "searching", "fetching", "synthesizing"}
+RUNNING_STATUSES = {"queued", "running", "starting", "searching", "fetching", "synthesizing"}
 STATUS_LABELS = {
+    "queued": "排隊中",
+    "running": "執行中",
     "starting": "啟動中",
     "searching": "搜尋中",
     "fetching": "擷取中",
     "synthesizing": "統整中",
     "completed": "完成",
     "failed": "失敗",
+    "canceled": "已取消",
 }
 
 
@@ -101,9 +104,40 @@ def _mark_stale_if_needed(status_path: Path, status_data: dict) -> dict:
 
     status_data["status"] = "failed"
     status_data["status_label"] = "失敗"
+    status_data["stage"] = "failed"
+    status_data["stage_label"] = "逾時失敗"
     status_data["error"] = f"研究逾時（超過 {STALE_TIMEOUT_MINUTES} 分鐘無進度）"
     _write_status(status_path, status_data)
     return status_data
+
+
+def _load_tool_trace_summary(status_data: dict) -> list[dict]:
+    """載入 tool trace 摘要（最多 5 筆）。"""
+    trace_path_raw = status_data.get("tool_trace_file_path")
+    if not isinstance(trace_path_raw, str) or not trace_path_raw:
+        return []
+    trace_path = Path(trace_path_raw)
+    if not trace_path.exists():
+        return []
+    try:
+        payload = json.loads(trace_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    if not isinstance(payload, list):
+        return []
+
+    summary: list[dict] = []
+    for item in payload[:5]:
+        if not isinstance(item, dict):
+            continue
+        summary.append(
+            {
+                "tool": item.get("tool") or item.get("phase") or "unknown",
+                "status": item.get("status") or "ok",
+                "url": item.get("url") or "",
+            }
+        )
+    return summary
 
 
 def main() -> int:
@@ -144,10 +178,13 @@ def main() -> int:
         "job_id": status_data.get("job_id", job_id),
         "status": status,
         "status_label": status_data.get("status_label") or STATUS_LABELS.get(status, status),
+        "stage": status_data.get("stage", ""),
+        "stage_label": status_data.get("stage_label", ""),
         "progress": status_data.get("progress", 0),
         "query": status_data.get("query", ""),
         "search_provider": status_data.get("search_provider", "none"),
         "provider_trace": status_data.get("provider_trace", []),
+        "tool_trace_summary": _load_tool_trace_summary(status_data),
         "sources": status_data.get("sources", []),
         "partial_results": status_data.get("partial_results", []),
         "error": status_data.get("error"),
@@ -157,6 +194,11 @@ def main() -> int:
         result["final_summary"] = status_data.get("final_summary", "")
         result["result_ctos_path"] = status_data.get("result_ctos_path", "")
         result["result_file_path"] = status_data.get("result_file_path", "")
+        result["sources_ctos_path"] = status_data.get("sources_ctos_path", "")
+        result["sources_file_path"] = status_data.get("sources_file_path", "")
+        result["tool_trace_ctos_path"] = status_data.get("tool_trace_ctos_path", "")
+        result["tool_trace_file_path"] = status_data.get("tool_trace_file_path", "")
+        result["knowledge_ready"] = bool(status_data.get("knowledge_ready"))
 
     print(json.dumps(result, ensure_ascii=False))
     return 0

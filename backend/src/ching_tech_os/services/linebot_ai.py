@@ -376,8 +376,15 @@ def _extract_research_tool_feedback(tool_calls: list) -> dict | None:
                     "job_id": job_id,
                     "message": f"⚠️ 研究任務失敗：{error}",
                 }
+            if status == "canceled":
+                return {
+                    "script": script_name,
+                    "job_id": job_id,
+                    "message": "⚠️ 研究任務已取消。",
+                }
 
             status_label = str(payload.get("status_label") or status or "進行中")
+            stage_label = str(payload.get("stage_label") or "").strip()
             progress = payload.get("progress")
             progress_text = ""
             if isinstance(progress, (int, float)):
@@ -394,7 +401,8 @@ def _extract_research_tool_feedback(tool_calls: list) -> dict | None:
                 title = str(item.get("title") or item.get("url") or "來源")
                 partial_lines.append(f"- {title}：{snippet[:120]}" + ("..." if len(snippet) > 120 else ""))
 
-            message = f"⏳ 研究任務進行中（{status_label}{progress_text}）。"
+            stage_text = f"｜{stage_label}" if stage_label else ""
+            message = f"⏳ 研究任務進行中（{status_label}{stage_text}{progress_text}）。"
             if job_id:
                 message += f"\njob_id: {job_id}"
             if partial_lines:

@@ -3,14 +3,17 @@
 
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import json
 import os
 import re
+import shutil
 import socket
 import sys
+import time
 import uuid as uuid_module
-from datetime import datetime
+from datetime import datetime, timedelta
 from html import unescape
 from pathlib import Path
 from urllib.parse import urlparse
@@ -32,6 +35,13 @@ MAX_SNIPPET_CHARS = 260
 
 USER_AGENT = "ChingTechOS-ResearchSkill/1.0"
 BRAVE_SEARCH_ENDPOINT = "https://api.search.brave.com/res/v1/web/search"
+DEFAULT_RESEARCH_MODEL = "claude-sonnet"
+CLAUDE_WORKER_TIMEOUT_SEC = 420
+RESEARCH_RETENTION_DAYS = 7
+MAX_RESEARCH_WORKERS = 1
+QUEUE_WAIT_TIMEOUT_SEC = 120
+QUEUE_POLL_INTERVAL_SEC = 2
+MAX_TOOL_TRACE_ITEMS = 80
 
 _SCRIPT_STYLE_RE = re.compile(r"(?is)<(script|style|noscript).*?>.*?</\1>")
 _TAG_RE = re.compile(r"(?is)<[^>]+>")
@@ -40,6 +50,7 @@ _BRAVE_PUBLIC_ANCHOR_RE = re.compile(
     r'<a[^>]+href="(?P<href>https?://[^"]+)"[^>]*>(?P<title>.*?)</a>',
     re.IGNORECASE | re.DOTALL,
 )
+_URL_RE = re.compile(r"https?://[^\s\]\)\"'<>]+", re.IGNORECASE)
 
 
 def _parse_stdin_json_object() -> tuple[dict | None, str | None]:
@@ -185,6 +196,109 @@ def _dedupe_sources(candidates: list[dict], max_results: int) -> list[dict]:
         if len(deduped) >= max_results:
             break
     return deduped
+
+
+def _extract_urls(text: str) -> list[str]:
+    """從文字中提取並正規化 URL。"""
+    if not text:
+        return []
+    urls: list[str] = []
+    for raw in _URL_RE.findall(text):
+        normalized = _normalize_url(raw.rstrip(".,;:!?)"))
+        if normalized:
+            urls.append(normalized)
+    return urls
+
+
+def _iter_dated_job_dirs(base_dir: Path) -> list[Path]:
+    """列出 research 根目錄下的日期資料夾。"""
+    if not base_dir.exists():
+        return []
+    dirs: list[Path] = []
+    for child in base_dir.iterdir():
+        if not child.is_dir():
+            continue
+        try:
+            datetime.strptime(child.name, "%Y-%m-%d")
+        except ValueError:
+            continue
+        dirs.append(child)
+    return sorted(dirs)
+
+
+def _cleanup_old_research_dirs(base_dir: Path, retention_days: int = RESEARCH_RETENTION_DAYS) -> None:
+    """清理超過保留天數的 research 暫存資料夾。"""
+    cutoff = datetime.now().date() - timedelta(days=retention_days)
+    for dated_dir in _iter_dated_job_dirs(base_dir):
+        try:
+            folder_date = datetime.strptime(dated_dir.name, "%Y-%m-%d").date()
+        except ValueError:
+            continue
+        if folder_date > cutoff:
+            continue
+        try:
+            shutil.rmtree(dated_dir, ignore_errors=True)
+        except OSError:
+            continue
+
+
+def _write_json_file(path: Path, payload: dict | list) -> None:
+    """寫入 JSON 檔案（UTF-8）。"""
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def _count_active_jobs(base_dir: Path, exclude_job_id: str = "") -> int:
+    """統計目前 queued/running 的任務數。"""
+    active = 0
+    for dated_dir in _iter_dated_job_dirs(base_dir):
+        for status_file in dated_dir.glob("*/status.json"):
+            try:
+                data = json.loads(status_file.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if str(data.get("job_id") or "") == exclude_job_id:
+                continue
+            if str(data.get("status") or "").strip() in {"queued", "running"}:
+                active += 1
+    return active
+
+
+def _wait_for_worker_slot(base_dir: Path, status_path: Path, job_id: str) -> None:
+    """等待 worker slot，避免同時大量研究任務互相拖累。"""
+    started_at = time.time()
+    while True:
+        active_jobs = _count_active_jobs(base_dir, exclude_job_id=job_id)
+        if active_jobs < MAX_RESEARCH_WORKERS:
+            return
+
+        status_data = {
+            "job_id": job_id,
+            "status": "queued",
+            "status_label": "排隊中",
+            "stage": "queue",
+            "stage_label": "等待執行資源",
+            "progress": 0,
+            "queue_size": active_jobs,
+            "updated_at": datetime.now().isoformat(),
+        }
+        _write_json_file(status_path, status_data)
+
+        if time.time() - started_at >= QUEUE_WAIT_TIMEOUT_SEC:
+            # 超過等待上限仍進入執行，避免永久卡住。
+            return
+        time.sleep(QUEUE_POLL_INTERVAL_SEC)
+
+
+def _is_job_canceled(status_path: Path) -> bool:
+    """檢查任務是否已被外部標記為 canceled。"""
+    try:
+        payload = json.loads(status_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return str(payload.get("status") or "").strip() == "canceled"
 
 
 def _get_brave_api_key() -> str:
@@ -579,7 +693,123 @@ def _write_result_markdown(
     result_path.write_text("\n".join(lines), encoding="utf-8")
 
 
+async def _call_claude_research(
+    query: str,
+    seed_urls: list[str],
+    max_results: int,
+) -> tuple[str, list[dict], list[dict]]:
+    """在背景 worker 內呼叫 Claude 進行 web research。"""
+    from ching_tech_os.services.claude_agent import call_claude
+
+    seed_url_block = "\n".join(f"- {url}" for url in seed_urls[:MAX_SEED_URLS]).strip()
+    prompt_lines = [
+        "你是資深研究助理，請使用 WebSearch 與 WebFetch 完成外部研究。",
+        f"研究主題：{query}",
+        "",
+        "請遵守：",
+        "1) 優先搜尋高品質來源（官方文件、新聞、技術文件）。",
+        "2) 需要引用來源，至少提供 3 個可追溯 URL。",
+        "3) 最後輸出繁體中文摘要，包含重點、風險、建議下一步。",
+    ]
+    if seed_url_block:
+        prompt_lines.extend(
+            [
+                "",
+                "請優先參考以下指定來源：",
+                seed_url_block,
+            ]
+        )
+    prompt = "\n".join(prompt_lines).strip()
+
+    response = await call_claude(
+        prompt=prompt,
+        model=DEFAULT_RESEARCH_MODEL,
+        tools=["WebSearch", "WebFetch"],
+        timeout=CLAUDE_WORKER_TIMEOUT_SEC,
+    )
+
+    tool_trace: list[dict] = []
+    collected_sources: list[dict] = []
+    seen_urls: set[str] = set()
+
+    for tool_call in (response.tool_calls or [])[:MAX_TOOL_TRACE_ITEMS]:
+        tool_name = str(getattr(tool_call, "name", "") or "")
+        tool_input = getattr(tool_call, "input", {}) or {}
+        output_text = str(getattr(tool_call, "output", "") or "")
+        tool_trace.append(
+            {
+                "tool": tool_name,
+                "input": tool_input,
+                "output_preview": _truncate(output_text, 1200),
+            }
+        )
+        for url in _extract_urls(output_text):
+            if url in seen_urls:
+                continue
+            seen_urls.add(url)
+            collected_sources.append(
+                {
+                    "title": urlparse(url).netloc or url,
+                    "url": url,
+                    "snippet": "",
+                }
+            )
+            if len(collected_sources) >= max_results:
+                break
+        if len(collected_sources) >= max_results:
+            break
+
+    for url in _extract_urls(str(response.message or "")):
+        if url in seen_urls:
+            continue
+        seen_urls.add(url)
+        collected_sources.append(
+            {
+                "title": urlparse(url).netloc or url,
+                "url": url,
+                "snippet": "",
+            }
+        )
+        if len(collected_sources) >= max_results:
+            break
+
+    for seed_url in seed_urls:
+        if seed_url in seen_urls:
+            continue
+        seen_urls.add(seed_url)
+        collected_sources.append(
+            {
+                "title": urlparse(seed_url).netloc or seed_url,
+                "url": seed_url,
+                "snippet": "",
+            }
+        )
+        if len(collected_sources) >= max_results:
+            break
+
+    if response.success is not True:
+        raise RuntimeError(str(response.error or "Claude 研究流程失敗"))
+
+    final_summary = str(response.message or "").strip()
+    if not final_summary:
+        raise RuntimeError("Claude 研究流程未回傳摘要")
+    if not collected_sources:
+        raise RuntimeError("Claude 研究流程未回傳可追溯來源")
+
+    return final_summary, collected_sources[:max_results], tool_trace
+
+
+def _run_claude_research(
+    query: str,
+    seed_urls: list[str],
+    max_results: int,
+) -> tuple[str, list[dict], list[dict]]:
+    """同步包裝器：在 worker 內執行 Claude research。"""
+    return asyncio.run(_call_claude_research(query=query, seed_urls=seed_urls, max_results=max_results))
+
+
 def _do_research(
+    base_dir: Path,
     job_dir: Path,
     status_path: Path,
     job_id: str,
@@ -588,15 +818,186 @@ def _do_research(
     max_results: int,
     max_fetch: int,
 ) -> None:
-    """背景程序：執行研究流程。"""
+    """背景程序主流程：優先走 Claude web tools，失敗再 fallback。"""
+    _wait_for_worker_slot(base_dir=base_dir, status_path=status_path, job_id=job_id)
+    if _is_job_canceled(status_path):
+        _write_status(
+            status_path,
+            {
+                "job_id": job_id,
+                "status": "canceled",
+                "status_label": "已取消",
+                "stage": "canceled",
+                "stage_label": "任務已取消",
+                "progress": 0,
+                "query": query,
+                "search_provider": "none",
+                "provider_trace": [],
+                "sources": [],
+                "partial_results": [],
+                "final_summary": "",
+                "error": None,
+            },
+        )
+        return
+
+    now = datetime.now().isoformat()
     status_data = {
         "job_id": job_id,
-        "status": "starting",
-        "status_label": "啟動中",
+        "status": "running",
+        "status_label": "執行中",
+        "stage": "claude_research",
+        "stage_label": "Claude Web 研究",
+        "progress": 10,
+        "query": query,
+        "search_provider": "claude_webtools",
+        "provider_trace": [],
+        "sources": [],
+        "partial_results": [],
+        "final_summary": "",
+        "error": None,
+        "created_at": now,
+        "updated_at": now,
+    }
+    _write_status(status_path, status_data)
+
+    provider_trace: list[dict] = [
+        {
+            "provider": "claude_webtools",
+            "status": "running",
+            "model": DEFAULT_RESEARCH_MODEL,
+        }
+    ]
+
+    try:
+        final_summary, sources, tool_trace = _run_claude_research(
+            query=query,
+            seed_urls=seed_urls,
+            max_results=max_results,
+        )
+        result_path = job_dir / "result.md"
+        sources_path = job_dir / "sources.json"
+        tool_trace_path = job_dir / "tool_trace.json"
+
+        fetched_results = [
+            {
+                "title": item.get("title") or item.get("url") or "來源",
+                "url": item.get("url") or "",
+                "fetch_status": "ok",
+                "snippet": _truncate(str(item.get("snippet") or ""), MAX_SNIPPET_CHARS),
+            }
+            for item in sources
+        ]
+        _write_result_markdown(
+            result_path=result_path,
+            query=query,
+            final_summary=final_summary,
+            fetched_results=fetched_results,
+        )
+        _write_json_file(sources_path, sources)
+        _write_json_file(tool_trace_path, tool_trace)
+
+        date_str = job_dir.parent.name
+        provider_trace[0]["status"] = "ok"
+        provider_trace[0]["tool_call_count"] = len(tool_trace)
+        provider_trace[0]["source_count"] = len(sources)
+        _write_status(
+            status_path,
+            {
+                **status_data,
+                "status": "completed",
+                "status_label": "完成",
+                "stage": "completed",
+                "stage_label": "完成",
+                "progress": 100,
+                "provider_trace": provider_trace,
+                "sources": sources,
+                "partial_results": fetched_results,
+                "final_summary": final_summary,
+                "error": None,
+                "result_file_path": str(result_path),
+                "sources_file_path": str(sources_path),
+                "tool_trace_file_path": str(tool_trace_path),
+                "result_ctos_path": f"ctos://linebot/research/{date_str}/{job_id}/result.md",
+                "sources_ctos_path": f"ctos://linebot/research/{date_str}/{job_id}/sources.json",
+                "tool_trace_ctos_path": f"ctos://linebot/research/{date_str}/{job_id}/tool_trace.json",
+                "knowledge_ready": True,
+                "updated_at": datetime.now().isoformat(),
+            },
+        )
+        return
+    except (RuntimeError, ValueError, OSError) as exc:
+        provider_trace[0]["status"] = "failed"
+        provider_trace[0]["reason"] = _truncate(str(exc), 200)
+        _write_status(
+            status_path,
+            {
+                **status_data,
+                "status": "running",
+                "status_label": "執行中",
+                "stage": "fallback",
+                "stage_label": "降級為內建備援流程",
+                "progress": 12,
+                "provider_trace": provider_trace,
+                "updated_at": datetime.now().isoformat(),
+            },
+        )
+
+    _do_research_local_pipeline(
+        job_dir=job_dir,
+        status_path=status_path,
+        job_id=job_id,
+        query=query,
+        seed_urls=seed_urls,
+        max_results=max_results,
+        max_fetch=max_fetch,
+        pre_provider_trace=provider_trace,
+    )
+
+
+def _do_research_local_pipeline(
+    job_dir: Path,
+    status_path: Path,
+    job_id: str,
+    query: str,
+    seed_urls: list[str],
+    max_results: int,
+    max_fetch: int,
+    pre_provider_trace: list[dict] | None = None,
+) -> None:
+    """背景程序：執行研究流程。"""
+    if _is_job_canceled(status_path):
+        _write_status(
+            status_path,
+            {
+                "job_id": job_id,
+                "status": "canceled",
+                "status_label": "已取消",
+                "stage": "canceled",
+                "stage_label": "任務已取消",
+                "progress": 0,
+                "query": query,
+                "search_provider": "none",
+                "provider_trace": pre_provider_trace or [],
+                "sources": [],
+                "partial_results": [],
+                "final_summary": "",
+                "error": None,
+            },
+        )
+        return
+
+    base_provider_trace = list(pre_provider_trace or [])
+    status_data = {
+        "job_id": job_id,
+        "status": "running",
+        "status_label": "執行中",
+        "stage": "searching",
+        "stage_label": "搜尋來源",
         "progress": 0,
         "query": query,
         "search_provider": "none",
-        "provider_trace": [],
+        "provider_trace": base_provider_trace,
         "sources": [],
         "partial_results": [],
         "final_summary": "",
@@ -609,8 +1010,10 @@ def _do_research(
         headers = {"User-Agent": USER_AGENT}
         with httpx.Client(timeout=HTTP_TIMEOUT_SEC, follow_redirects=True, headers=headers) as client:
             # 1) 搜尋來源
-            status_data["status"] = "searching"
-            status_data["status_label"] = "搜尋中"
+            status_data["status"] = "running"
+            status_data["status_label"] = "執行中"
+            status_data["stage"] = "searching"
+            status_data["stage_label"] = "搜尋來源"
             status_data["progress"] = 15
             _write_status(status_path, status_data)
 
@@ -636,7 +1039,7 @@ def _do_research(
                     max_results=max_results,
                 )
                 status_data["search_provider"] = search_provider
-                status_data["provider_trace"] = provider_trace
+                status_data["provider_trace"] = base_provider_trace + provider_trace
                 for item in search_results:
                     normalized_url = _normalize_url(str(item.get("url", "")))
                     if not normalized_url or normalized_url in seen:
@@ -653,7 +1056,7 @@ def _do_research(
                         break
             else:
                 status_data["search_provider"] = "seed_urls"
-                status_data["provider_trace"] = []
+                status_data["provider_trace"] = base_provider_trace
 
             if not candidate_sources:
                 diagnostics = []
@@ -676,8 +1079,10 @@ def _do_research(
             _write_status(status_path, status_data)
 
             # 2) 擷取內容
-            status_data["status"] = "fetching"
-            status_data["status_label"] = "擷取中"
+            status_data["status"] = "running"
+            status_data["status_label"] = "執行中"
+            status_data["stage"] = "fetching"
+            status_data["stage_label"] = "擷取來源內容"
             status_data["progress"] = 35
             _write_status(status_path, status_data)
 
@@ -686,6 +1091,20 @@ def _do_research(
             fetched_results: list[dict] = []
 
             for idx, source in enumerate(to_fetch, start=1):
+                if _is_job_canceled(status_path):
+                    _write_status(
+                        status_path,
+                        {
+                            **status_data,
+                            "status": "canceled",
+                            "status_label": "已取消",
+                            "stage": "canceled",
+                            "stage_label": "任務已取消",
+                            "progress": status_data.get("progress", 0),
+                            "updated_at": datetime.now().isoformat(),
+                        },
+                    )
+                    return
                 fetched = _fetch_source(client, source)
                 fetched_results.append(fetched)
                 status_data["partial_results"] = [
@@ -702,13 +1121,38 @@ def _do_research(
                 _write_status(status_path, status_data)
 
             # 3) 統整結果
-            status_data["status"] = "synthesizing"
-            status_data["status_label"] = "統整中"
+            status_data["status"] = "running"
+            status_data["status_label"] = "執行中"
+            status_data["stage"] = "synthesizing"
+            status_data["stage_label"] = "統整研究結果"
             status_data["progress"] = 90
             _write_status(status_path, status_data)
 
             final_summary = _build_final_summary(query, fetched_results)
             result_path = job_dir / "result.md"
+            sources_path = job_dir / "sources.json"
+            tool_trace_path = job_dir / "tool_trace.json"
+            sources_payload = [
+                {
+                    "title": item.get("title") or "來源",
+                    "url": item.get("url") or "",
+                    "snippet": item.get("snippet") or "",
+                }
+                for item in fetched_results
+            ]
+            _write_json_file(sources_path, sources_payload)
+            _write_json_file(
+                tool_trace_path,
+                [
+                    {
+                        "phase": "fetch",
+                        "url": item.get("url") or "",
+                        "status": item.get("fetch_status") or "failed",
+                        "error": item.get("error"),
+                    }
+                    for item in fetched_results
+                ],
+            )
             _write_result_markdown(
                 result_path=result_path,
                 query=query,
@@ -719,15 +1163,23 @@ def _do_research(
             date_str = job_dir.parent.name
             status_data["status"] = "completed"
             status_data["status_label"] = "完成"
+            status_data["stage"] = "completed"
+            status_data["stage_label"] = "完成"
             status_data["progress"] = 100
             status_data["final_summary"] = final_summary
             status_data["error"] = None
             status_data["result_file_path"] = str(result_path)
+            status_data["sources_file_path"] = str(sources_path)
+            status_data["tool_trace_file_path"] = str(tool_trace_path)
             status_data["result_ctos_path"] = f"ctos://linebot/research/{date_str}/{job_id}/result.md"
+            status_data["sources_ctos_path"] = f"ctos://linebot/research/{date_str}/{job_id}/sources.json"
+            status_data["tool_trace_ctos_path"] = f"ctos://linebot/research/{date_str}/{job_id}/tool_trace.json"
             _write_status(status_path, status_data)
     except (httpx.HTTPError, OSError, RuntimeError, ValueError) as exc:
         status_data["status"] = "failed"
         status_data["status_label"] = "失敗"
+        status_data["stage"] = "failed"
+        status_data["stage_label"] = "失敗"
         status_data["error"] = str(exc)
         status_data["progress"] = status_data.get("progress", 0)
         _write_status(status_path, status_data)
@@ -776,6 +1228,7 @@ def main() -> int:
     job_id = uuid_module.uuid4().hex[:8]
     date_str = datetime.now().strftime("%Y-%m-%d")
     base_dir = _get_research_base_dir()
+    _cleanup_old_research_dirs(base_dir=base_dir, retention_days=RESEARCH_RETENTION_DAYS)
     job_dir = base_dir / date_str / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
 
@@ -784,8 +1237,10 @@ def main() -> int:
         status_path,
         {
             "job_id": job_id,
-            "status": "starting",
-            "status_label": "啟動中",
+            "status": "queued",
+            "status_label": "排隊中",
+            "stage": "queued",
+            "stage_label": "等待背景程序啟動",
             "progress": 0,
             "query": query,
             "search_provider": "none",
@@ -805,7 +1260,7 @@ def main() -> int:
                 {
                     "success": True,
                     "job_id": job_id,
-                    "status": "started",
+                    "status": "queued",
                     "message": "研究任務已啟動，請使用 check-research 查詢進度",
                 },
                 ensure_ascii=False,
@@ -825,6 +1280,7 @@ def main() -> int:
         sys.stderr = open(os.devnull, "w")
 
         _do_research(
+            base_dir=base_dir,
             job_dir=job_dir,
             status_path=status_path,
             job_id=job_id,
