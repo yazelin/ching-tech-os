@@ -275,7 +275,7 @@ async def send_ai_response(
 # ============================================================
 
 
-async def _fallback_summarize_from_tools(response, user_message: str) -> str:
+async def _fallback_summarize_from_tools(response) -> str:
     """超時時，從已完成的工具結果中提取有用內容作為 fallback 回覆。
 
     Claude CLI 多輪工具呼叫時，前幾輪可能已完成並有結果，
@@ -661,16 +661,10 @@ async def process_message_with_ai(
                     # 繼續後續的發送流程（不 return）
                 else:
                     # 超時但有已完成的工具結果，嘗試用結果做 fallback 總結
-                    ai_response = await _fallback_summarize_from_tools(
-                        response, user_message
-                    )
-            elif response.message and response.message.strip():
-                # 沒有 tool_calls 但有部分文字回應
-                logger.info(f"失敗但有部分文字回應（{len(response.message)} 字元），嘗試發送")
-                ai_response = response.message.strip()
+                    ai_response = await _fallback_summarize_from_tools(response)
             else:
-                # 完全沒有回應，發送錯誤提示
-                ai_response = "⚠️ 抱歉，處理時間過長，請稍後再試一次。"
+                # 沒有 tool_calls，用 fallback 處理部分文字或錯誤提示
+                ai_response = await _fallback_summarize_from_tools(response)
         else:
             ai_response = response.message
 
