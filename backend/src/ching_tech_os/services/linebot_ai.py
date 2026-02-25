@@ -618,10 +618,20 @@ async def process_message_with_ai(
                         ai_response, response.tool_calls
                     )
                     # 繼續後續的發送流程（不 return）
+                elif response.message and response.message.strip():
+                    # 超時但有部分文字回應，發送已收集到的內容
+                    logger.info(f"失敗但有部分文字回應（{len(response.message)} 字元），嘗試發送")
+                    ai_response = response.message.strip()
                 else:
-                    return None
+                    # 完全沒有回應，發送錯誤提示
+                    ai_response = "⚠️ 抱歉，處理時間過長，請稍後再試一次。"
+            elif response.message and response.message.strip():
+                # 沒有 tool_calls 但有部分文字回應
+                logger.info(f"失敗但有部分文字回應（{len(response.message)} 字元），嘗試發送")
+                ai_response = response.message.strip()
             else:
-                return None
+                # 完全沒有回應，發送錯誤提示
+                ai_response = "⚠️ 抱歉，處理時間過長，請稍後再試一次。"
         else:
             ai_response = response.message
 
