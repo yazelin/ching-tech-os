@@ -9,7 +9,6 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-STALE_TIMEOUT_MINUTES = 20
 SEARCH_DAYS = 7
 
 RUNNING_STATUSES = {"queued", "running", "starting", "searching", "fetching", "synthesizing"}
@@ -24,6 +23,41 @@ STATUS_LABELS = {
     "failed": "失敗",
     "canceled": "已取消",
 }
+
+
+def _get_stale_timeout_minutes() -> int:
+    """取得 stale timeout 分鐘數（至少比 worker timeout 多 2 分鐘）。"""
+    stale_minutes = 25
+    worker_timeout_sec = 1200
+
+    try:
+        from ching_tech_os.config import settings
+
+        worker_timeout_sec = int(
+            getattr(settings, "research_claude_timeout_sec", worker_timeout_sec)
+        )
+        stale_minutes = int(
+            getattr(settings, "research_stale_timeout_minutes", stale_minutes)
+        )
+    except (ImportError, TypeError, ValueError):
+        pass
+
+    env_worker = os.environ.get("RESEARCH_CLAUDE_TIMEOUT_SEC")
+    if env_worker is not None:
+        try:
+            worker_timeout_sec = int(env_worker)
+        except ValueError:
+            pass
+
+    env_stale = os.environ.get("RESEARCH_STALE_TIMEOUT_MINUTES")
+    if env_stale is not None:
+        try:
+            stale_minutes = int(env_stale)
+        except ValueError:
+            pass
+
+    minimum = max(20, worker_timeout_sec // 60 + 2)
+    return max(stale_minutes, minimum)
 
 
 def _parse_stdin_json_object() -> tuple[dict | None, str | None]:
@@ -86,6 +120,7 @@ def _find_status_file(job_id: str) -> Path | None:
 
 def _mark_stale_if_needed(status_path: Path, status_data: dict) -> dict:
     """若任務長時間無更新，標記為 failed。"""
+    stale_timeout_minutes = _get_stale_timeout_minutes()
     status = str(status_data.get("status") or "")
     if status not in RUNNING_STATUSES:
         return status_data
@@ -99,14 +134,14 @@ def _mark_stale_if_needed(status_path: Path, status_data: dict) -> dict:
     except ValueError:
         return status_data
 
-    if elapsed <= STALE_TIMEOUT_MINUTES * 60:
+    if elapsed <= stale_timeout_minutes * 60:
         return status_data
 
     status_data["status"] = "failed"
     status_data["status_label"] = "失敗"
     status_data["stage"] = "failed"
     status_data["stage_label"] = "逾時失敗"
-    status_data["error"] = f"研究逾時（超過 {STALE_TIMEOUT_MINUTES} 分鐘無進度）"
+    status_data["error"] = f"研究逾時（超過 {stale_timeout_minutes} 分鐘無進度）"
     _write_status(status_path, status_data)
     return status_data
 

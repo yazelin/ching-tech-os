@@ -124,6 +124,10 @@ class Settings:
     enabled_modules: str = _get_env("ENABLED_MODULES", "*")
     # Brave Search API（金鑰留空時 research-skill 會 fallback 到既有 provider）
     brave_search_api_key: str = _get_env("BRAVE_SEARCH_API_KEY", "")
+    # research-skill 背景 Claude web tools timeout（秒）
+    research_claude_timeout_sec: int = _get_env_int("RESEARCH_CLAUDE_TIMEOUT_SEC", 1200)
+    # check-research stale 判定分鐘（建議大於 claude timeout）
+    research_stale_timeout_minutes: int = _get_env_int("RESEARCH_STALE_TIMEOUT_MINUTES", 25)
 
     # ===================
     # Line Bot 設定

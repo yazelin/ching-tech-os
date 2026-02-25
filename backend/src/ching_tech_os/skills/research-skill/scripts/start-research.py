@@ -36,7 +36,7 @@ MAX_SNIPPET_CHARS = 260
 USER_AGENT = "ChingTechOS-ResearchSkill/1.0"
 BRAVE_SEARCH_ENDPOINT = "https://api.search.brave.com/res/v1/web/search"
 DEFAULT_RESEARCH_MODEL = "claude-sonnet"
-CLAUDE_WORKER_TIMEOUT_SEC = 420
+DEFAULT_CLAUDE_WORKER_TIMEOUT_SEC = 1200
 RESEARCH_RETENTION_DAYS = 7
 MAX_RESEARCH_WORKERS = 1
 QUEUE_WAIT_TIMEOUT_SEC = 120
@@ -299,6 +299,25 @@ def _is_job_canceled(status_path: Path) -> bool:
     except (OSError, json.JSONDecodeError):
         return False
     return str(payload.get("status") or "").strip() == "canceled"
+
+
+def _get_research_claude_timeout_sec() -> int:
+    """取得 research worker 的 Claude timeout（秒）。"""
+    env_raw = os.environ.get("RESEARCH_CLAUDE_TIMEOUT_SEC")
+    if env_raw is not None:
+        try:
+            parsed = int(env_raw)
+            return max(120, min(3600, parsed))
+        except ValueError:
+            pass
+
+    try:
+        from ching_tech_os.config import settings
+
+        parsed = int(getattr(settings, "research_claude_timeout_sec", DEFAULT_CLAUDE_WORKER_TIMEOUT_SEC))
+        return max(120, min(3600, parsed))
+    except (ImportError, TypeError, ValueError):
+        return DEFAULT_CLAUDE_WORKER_TIMEOUT_SEC
 
 
 def _get_brave_api_key() -> str:
@@ -697,6 +716,7 @@ async def _call_claude_research(
     query: str,
     seed_urls: list[str],
     max_results: int,
+    timeout_sec: int,
 ) -> tuple[str, list[dict], list[dict]]:
     """在背景 worker 內呼叫 Claude 進行 web research。"""
     from ching_tech_os.services.claude_agent import call_claude
@@ -725,7 +745,7 @@ async def _call_claude_research(
         prompt=prompt,
         model=DEFAULT_RESEARCH_MODEL,
         tools=["WebSearch", "WebFetch"],
-        timeout=CLAUDE_WORKER_TIMEOUT_SEC,
+        timeout=timeout_sec,
     )
 
     tool_trace: list[dict] = []
@@ -803,9 +823,17 @@ def _run_claude_research(
     query: str,
     seed_urls: list[str],
     max_results: int,
+    timeout_sec: int,
 ) -> tuple[str, list[dict], list[dict]]:
     """同步包裝器：在 worker 內執行 Claude research。"""
-    return asyncio.run(_call_claude_research(query=query, seed_urls=seed_urls, max_results=max_results))
+    return asyncio.run(
+        _call_claude_research(
+            query=query,
+            seed_urls=seed_urls,
+            max_results=max_results,
+            timeout_sec=timeout_sec,
+        )
+    )
 
 
 def _do_research(
@@ -861,11 +889,13 @@ def _do_research(
     }
     _write_status(status_path, status_data)
 
+    claude_timeout_sec = _get_research_claude_timeout_sec()
     provider_trace: list[dict] = [
         {
             "provider": "claude_webtools",
             "status": "running",
             "model": DEFAULT_RESEARCH_MODEL,
+            "timeout_sec": claude_timeout_sec,
         }
     ]
 
@@ -874,6 +904,7 @@ def _do_research(
             query=query,
             seed_urls=seed_urls,
             max_results=max_results,
+            timeout_sec=claude_timeout_sec,
         )
         result_path = job_dir / "result.md"
         sources_path = job_dir / "sources.json"

@@ -172,6 +172,19 @@ def test_provider_fallback_to_brave_public_when_ddg_empty(monkeypatch: pytest.Mo
     assert any(item.get("provider") == "brave_public" and item.get("status") == "ok" for item in trace)
 
 
+def test_get_research_claude_timeout_sec_respects_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    module = _load_start_research_module()
+
+    monkeypatch.setenv("RESEARCH_CLAUDE_TIMEOUT_SEC", "1500")
+    assert module._get_research_claude_timeout_sec() == 1500
+
+    monkeypatch.setenv("RESEARCH_CLAUDE_TIMEOUT_SEC", "99999")
+    assert module._get_research_claude_timeout_sec() == 3600
+
+    monkeypatch.setenv("RESEARCH_CLAUDE_TIMEOUT_SEC", "30")
+    assert module._get_research_claude_timeout_sec() == 120
+
+
 def test_cleanup_old_research_dirs_removes_expired(tmp_path: Path) -> None:
     module = _load_start_research_module()
 
