@@ -379,7 +379,10 @@ def _extract_research_tool_feedback(tool_calls: list) -> dict | None:
             job_id = str(payload.get("job_id") or "").strip()
 
             if status == "completed":
-                summary = str(payload.get("final_summary") or "").strip() or "✅ 研究任務已完成。"
+                summary = str(payload.get("final_summary") or "").strip()
+                # 若 final_summary 是 API Error（合成階段失敗），改用來源摘要
+                if not summary or summary.startswith("API Error:"):
+                    summary = "✅ 研究任務已完成，以下是搜集到的來源資訊。"
                 sources = payload.get("sources") or []
                 source_lines = []
                 for source in sources[:5]:
@@ -388,6 +391,20 @@ def _extract_research_tool_feedback(tool_calls: list) -> dict | None:
                     title = str(source.get("title") or source.get("url") or "來源")
                     url = str(source.get("url") or "").strip()
                     source_lines.append(f"- {title}" + (f"（{url}）" if url else ""))
+
+                # 若 final_summary 失敗但有 partial_results 的 snippets，附上
+                if summary.startswith("✅ 研究任務已完成"):
+                    partial_results = payload.get("partial_results") or []
+                    snippet_lines = []
+                    for item in partial_results[:3]:
+                        if not isinstance(item, dict):
+                            continue
+                        snippet = str(item.get("snippet") or "").strip()
+                        if snippet:
+                            item_title = str(item.get("title") or item.get("url") or "來源")
+                            snippet_lines.append(f"- {item_title}：{snippet[:200]}")
+                    if snippet_lines:
+                        summary += "\n\n" + "\n".join(snippet_lines)
 
                 message = summary
                 if source_lines:

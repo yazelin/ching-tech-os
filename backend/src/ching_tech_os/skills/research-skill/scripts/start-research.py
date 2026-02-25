@@ -258,7 +258,7 @@ def _count_active_jobs(base_dir: Path, exclude_job_id: str = "") -> int:
         for status_file in dated_dir.glob("*/status.json"):
             try:
                 data = json.loads(status_file.read_text(encoding="utf-8"))
-            except Exception:
+            except (OSError, json.JSONDecodeError, UnicodeDecodeError):
                 continue
             if str(data.get("job_id") or "") == exclude_job_id:
                 continue
@@ -881,6 +881,9 @@ async def _call_claude_local_synthesis(query: str, fetched_results: list[dict]) 
     summary = str(response.message or "").strip()
     if not summary:
         raise RuntimeError("local synthesis empty response")
+    # 偵測 Claude CLI 將 API Error 作為成功回應回傳的異常情況
+    if summary.startswith("API Error:") or summary.startswith("Failed to authenticate"):
+        raise RuntimeError(f"local synthesis returned error: {summary[:200]}")
     return summary
 
 
@@ -976,6 +979,9 @@ async def _call_claude_research(
     final_summary = str(response.message or "").strip()
     if not final_summary:
         raise RuntimeError("Claude 研究流程未回傳摘要")
+    # 偵測 Claude CLI 將 API Error 作為成功回應回傳的異常情況
+    if final_summary.startswith("API Error:") or final_summary.startswith("Failed to authenticate"):
+        raise RuntimeError(f"Claude 研究流程回傳 API 錯誤：{final_summary[:200]}")
     if len(final_summary) < 280:
         final_summary = (
             final_summary
@@ -1144,6 +1150,20 @@ def _do_research(
                 _write_json_file(job_dir / "tool_trace_partial.json", partial_trace)
             except OSError:
                 pass
+        # 保留 Claude worker 的 partial sources（若 fallback 也失敗時不至於完全遺失）
+        partial_sources = getattr(exc, "partial_sources", None)
+        if isinstance(partial_sources, list) and partial_sources:
+            status_data["sources"] = partial_sources
+            status_data["partial_results"] = [
+                {
+                    "title": item.get("title") or item.get("url") or "來源",
+                    "url": item.get("url") or "",
+                    "fetch_status": "ok",
+                    "snippet": _truncate(str(item.get("snippet") or ""), MAX_SNIPPET_CHARS),
+                }
+                for item in partial_sources
+                if isinstance(item, dict)
+            ]
         _write_status(
             status_path,
             {
@@ -1203,28 +1223,33 @@ def _do_research_local_pipeline(
         return
 
     base_provider_trace = list(pre_provider_trace or [])
-    created_at = datetime.now().isoformat()
+
+    # 讀取先前狀態，保留 created_at 及 Claude worker 的 partial data
+    previous_status: dict = {}
     try:
         previous_status = json.loads(status_path.read_text(encoding="utf-8"))
-        if isinstance(previous_status, dict):
-            preserved_created_at = previous_status.get("created_at")
-            if isinstance(preserved_created_at, str) and preserved_created_at:
-                created_at = preserved_created_at
+        if not isinstance(previous_status, dict):
+            previous_status = {}
     except (OSError, json.JSONDecodeError):
         pass
+
+    created_at = previous_status.get("created_at") or datetime.now().isoformat()
+    # 保留 Claude worker 階段已蒐集到的部分來源
+    prev_sources = previous_status.get("sources") or []
+    prev_partial = previous_status.get("partial_results") or []
 
     status_data = {
         "job_id": job_id,
         "status": "running",
         "status_label": "執行中",
         "stage": "searching",
-        "stage_label": "搜尋來源",
-        "progress": 0,
+        "stage_label": "備援流程：搜尋來源",
+        "progress": 15,
         "query": query,
         "search_provider": "none",
         "provider_trace": base_provider_trace,
-        "sources": [],
-        "partial_results": [],
+        "sources": prev_sources if isinstance(prev_sources, list) else [],
+        "partial_results": prev_partial if isinstance(prev_partial, list) else [],
         "final_summary": "",
         "error": None,
         "created_at": created_at,
