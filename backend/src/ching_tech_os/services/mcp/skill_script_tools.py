@@ -61,8 +61,8 @@ async def run_skill_script(
         input: 傳給 script 的輸入字串（透過 stdin 傳入）
         ctos_user_id: CTOS 用戶 ID（由 bot framework 注入，非 LLM 控制）
     """
-    # NOTE: ctos_user_id 由 bot framework 在呼叫時注入（見 agents.py），
-    # LLM 無法控制此參數。MCP tool 簽名包含它是因為 framework 需要傳入。
+    # NOTE: ctos_user_id 由 bot framework 透過 claude-code-acp 的
+    # on_tool_input_transform 自動注入（見 claude_agent.py），LLM 無法偽造此參數。
     await ensure_db_connection()
     from ...skills import get_skill_manager
     from ...config import settings

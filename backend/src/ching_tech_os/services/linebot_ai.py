@@ -707,6 +707,7 @@ async def process_message_with_ai(
             timeout=480,  # 8 分鐘，支援複雜任務
             tools=all_tools,
             required_mcp_servers=required_mcp_servers,
+            ctos_user_id=ctos_user_id,
         )
 
         # 計算耗時
