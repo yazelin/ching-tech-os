@@ -271,6 +271,144 @@ async def send_ai_response(
 
 
 # ============================================================
+# research-skill 輔助
+# ============================================================
+
+
+def _parse_json_object(text: str) -> dict | None:
+    """解析 JSON 物件字串，失敗回傳 None。"""
+    if not text:
+        return None
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    if isinstance(parsed, dict):
+        return parsed
+    return None
+
+
+def _extract_research_tool_feedback(tool_calls: list) -> dict | None:
+    """從 run_skill_script(research-skill) 的工具輸出組合可回覆訊息。"""
+    for tool_call in reversed(tool_calls or []):
+        tool_name = getattr(tool_call, "name", "")
+        if tool_name != "mcp__ching-tech-os__run_skill_script":
+            continue
+
+        tool_input = getattr(tool_call, "input", {}) or {}
+        if tool_input.get("skill") != "research-skill":
+            continue
+
+        script_name = str(tool_input.get("script") or "")
+        raw_output = str(getattr(tool_call, "output", "") or "")
+        wrapper = _parse_json_object(raw_output)
+        if not wrapper:
+            continue
+
+        payload = wrapper
+        nested_output = wrapper.get("output")
+        if isinstance(nested_output, str):
+            parsed_nested = _parse_json_object(nested_output)
+            if parsed_nested:
+                payload = parsed_nested
+
+        # start-research: 確保 job_id 一定回到使用者
+        if script_name == "start-research":
+            if payload.get("success") is True:
+                job_id = str(payload.get("job_id") or "").strip()
+                if job_id:
+                    message = (
+                        f"✅ 研究任務已受理（job_id: {job_id}）。\n"
+                        f"請稍後提供 job_id 或輸入「查詢研究進度 {job_id}」，我會幫你查最新狀態。"
+                    )
+                else:
+                    message = "✅ 研究任務已受理，請稍後再查詢進度。"
+                return {
+                    "script": script_name,
+                    "job_id": job_id,
+                    "message": message,
+                }
+
+            error = payload.get("error") or wrapper.get("error") or "未知錯誤"
+            return {
+                "script": script_name,
+                "job_id": "",
+                "message": f"⚠️ 研究任務啟動失敗：{error}",
+            }
+
+        # check-research: 依狀態回覆進度/完成/失敗
+        if script_name == "check-research":
+            if payload.get("success") is False:
+                error = payload.get("error") or wrapper.get("error") or "未知錯誤"
+                return {
+                    "script": script_name,
+                    "job_id": str(payload.get("job_id") or ""),
+                    "message": f"⚠️ 查詢研究進度失敗：{error}",
+                }
+
+            status = str(payload.get("status") or "").strip()
+            job_id = str(payload.get("job_id") or "").strip()
+
+            if status == "completed":
+                summary = str(payload.get("final_summary") or "").strip() or "✅ 研究任務已完成。"
+                sources = payload.get("sources") or []
+                source_lines = []
+                for source in sources[:5]:
+                    if not isinstance(source, dict):
+                        continue
+                    title = str(source.get("title") or source.get("url") or "來源")
+                    url = str(source.get("url") or "").strip()
+                    source_lines.append(f"- {title}" + (f"（{url}）" if url else ""))
+
+                message = summary
+                if source_lines:
+                    message += "\n\n參考來源：\n" + "\n".join(source_lines)
+                return {
+                    "script": script_name,
+                    "job_id": job_id,
+                    "message": message,
+                }
+
+            if status == "failed":
+                error = payload.get("error") or "研究任務失敗"
+                return {
+                    "script": script_name,
+                    "job_id": job_id,
+                    "message": f"⚠️ 研究任務失敗：{error}",
+                }
+
+            status_label = str(payload.get("status_label") or status or "進行中")
+            progress = payload.get("progress")
+            progress_text = ""
+            if isinstance(progress, (int, float)):
+                progress_text = f" {int(progress)}%"
+
+            partial_lines = []
+            partial_results = payload.get("partial_results") or []
+            for item in partial_results[:2]:
+                if not isinstance(item, dict):
+                    continue
+                snippet = str(item.get("snippet") or "").strip()
+                if not snippet:
+                    continue
+                title = str(item.get("title") or item.get("url") or "來源")
+                partial_lines.append(f"- {title}：{snippet[:120]}" + ("..." if len(snippet) > 120 else ""))
+
+            message = f"⏳ 研究任務進行中（{status_label}{progress_text}）。"
+            if job_id:
+                message += f"\njob_id: {job_id}"
+            if partial_lines:
+                message += "\n\n目前已取得資料：\n" + "\n".join(partial_lines)
+            return {
+                "script": script_name,
+                "job_id": job_id,
+                "message": message,
+            }
+
+    return None
+
+
+# ============================================================
 # 超時 Fallback：從已完成的工具結果中組合回覆
 # ============================================================
 
@@ -592,6 +730,7 @@ async def process_message_with_ai(
         # 檢查 nanobanana 是否有錯誤（overloaded/timeout）
         nanobanana_error = extract_nanobanana_error(response.tool_calls)
         nanobanana_timeout = check_nanobanana_timeout(response.tool_calls)
+        research_feedback = _extract_research_tool_feedback(response.tool_calls)
 
         if nanobanana_error or nanobanana_timeout:
             # nanobanana MCP 完全失敗（timeout/錯誤），嘗試 FLUX fallback
@@ -647,9 +786,11 @@ async def process_message_with_ai(
         elif not response.success:
             logger.error(f"Claude CLI 失敗: {response.error}")
 
+            if research_feedback:
+                ai_response = research_feedback["message"]
             # 即使失敗（如 timeout），檢查是否有已完成的圖片生成
             # streaming 讀取讓我們能在 timeout 時保留已完成的 tool_calls
-            if response.tool_calls:
+            elif response.tool_calls:
                 generated_images = extract_generated_images_from_tool_calls(response.tool_calls)
                 if generated_images:
                     logger.info(f"失敗但有已生成的圖片: {generated_images}")
@@ -667,6 +808,21 @@ async def process_message_with_ai(
                 ai_response = await _fallback_summarize_from_tools(response)
         else:
             ai_response = response.message
+
+            if research_feedback:
+                script_name = research_feedback.get("script")
+                feedback_text = str(research_feedback.get("message") or "").strip()
+                job_id = str(research_feedback.get("job_id") or "").strip()
+
+                # start-research：確保回覆一定包含 job_id
+                if script_name == "start-research" and feedback_text:
+                    if not ai_response:
+                        ai_response = feedback_text
+                    elif job_id and job_id not in ai_response:
+                        ai_response = ai_response.rstrip() + "\n\n" + feedback_text
+                # check-research：若 AI 無文字內容，直接使用工具回傳摘要
+                elif feedback_text and not str(ai_response or "").strip():
+                    ai_response = feedback_text
 
             # 自動處理 AI 生成的圖片（如果 AI 沒有呼叫 prepare_file_message）
             ai_response = await auto_prepare_generated_images(
@@ -1097,6 +1253,15 @@ async def build_system_prompt(
     if "WebSearch" in all_tools:
         tool_sections.append("""【網路搜尋】
 - WebSearch - 搜尋網路資訊，可用於查詢天氣、新聞、公司資訊等""")
+
+    # 長時外部研究建議（避免同步多輪超時）
+    if app_permissions and app_permissions.get("file-manager", False):
+        tool_sections.append("""【長時外部研究（建議）】
+- 需要「搜尋 + 擷取 + 統整」多個來源時，優先使用 research-skill（start/check）：
+  · run_skill_script(skill="research-skill", script="start-research", input='{"query":"..."}')
+  · run_skill_script(skill="research-skill", script="check-research", input='{"job_id":"..."}')
+- 啟動後先回覆 job_id，稍後再查詢結果。
+- 不要在同一回合反覆 sleep + WebFetch/查詢，避免整體超時。""")
 
     # Read 工具說明（用戶上傳內容處理）
     if "Read" in all_tools:

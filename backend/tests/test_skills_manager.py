@@ -171,7 +171,7 @@ async def test_skill_manager_end_to_end(monkeypatch: pytest.MonkeyPatch, tmp_pat
 
 @pytest.mark.asyncio
 async def test_native_base_file_manager_script_first(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """native base/file-manager 應為 script-first 並具備 fallback mapping。"""
+    """native base/file-manager/research-skill 應為 script-first。"""
     external = tmp_path / "external"
     external.mkdir(parents=True, exist_ok=True)
 
@@ -183,15 +183,21 @@ async def test_native_base_file_manager_script_first(monkeypatch: pytest.MonkeyP
 
     base = await mgr.get_skill("base")
     file_manager = await mgr.get_skill("file-manager")
+    research_skill = await mgr.get_skill("research-skill")
     assert base is not None
     assert file_manager is not None
+    assert research_skill is not None
     assert base.allowed_tools == ["mcp__ching-tech-os__run_skill_script"]
     assert file_manager.allowed_tools == ["mcp__ching-tech-os__run_skill_script"]
+    assert research_skill.allowed_tools == ["mcp__ching-tech-os__run_skill_script"]
+    assert research_skill.requires_app == "file-manager"
     assert await mgr.has_scripts("base") is True
     assert await mgr.has_scripts("file-manager") is True
+    assert await mgr.has_scripts("research-skill") is True
 
     base_map = await mgr.get_script_fallback_map("base")
     fm_map = await mgr.get_script_fallback_map("file-manager")
+    research_map = await mgr.get_script_fallback_map("research-skill")
     assert base_map["get_message_attachments"] == "get_message_attachments"
     assert base_map["summarize_chat"] == "summarize_chat"
     assert base_map["create_share_link"] == "create_share_link"
@@ -199,3 +205,6 @@ async def test_native_base_file_manager_script_first(monkeypatch: pytest.MonkeyP
     assert fm_map["get_nas_file_info"] == "get_nas_file_info"
     assert fm_map["prepare_file_message"] == "prepare_file_message"
     assert fm_map["convert_pdf_to_images"] == "convert_pdf_to_images"
+    assert research_map == {}
+    assert await mgr.get_script_path("research-skill", "start-research") is not None
+    assert await mgr.get_script_path("research-skill", "check-research") is not None
