@@ -14,7 +14,7 @@ metadata:
 
 **搜尋 provider：**
 - 優先使用 Brave Search API（需設定 `BRAVE_SEARCH_API_KEY`）
-- Brave 不可用時自動回退 DuckDuckGo provider
+- Brave 不可用時會先回退 DuckDuckGo，再回退 Brave 公開搜尋頁
 - Brave API 申請：https://brave.com/search/api/
 
 **可用 scripts：**
@@ -41,4 +41,5 @@ metadata:
 **AI 行為指引：**
 - 嚴禁在同一回合反覆 `sleep + check` 等待完成，避免超時。
 - 研究未完成時回覆目前進度與 `job_id`，引導用戶稍後查詢。
+- `check-research` 若回傳失敗，應以同主題重新 `start-research` 建立新任務，不要改用 WebSearch/WebFetch 重做。
 - 完成時請附上來源重點，避免無來源的結論式回覆。

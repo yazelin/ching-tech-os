@@ -634,7 +634,7 @@ requires-dist = [
     { name = "apscheduler", specifier = ">=3.11.1" },
     { name = "asyncpg", specifier = ">=0.29.0" },
     { name = "bcrypt", specifier = ">=4.0.0" },
-    { name = "claude-code-acp", specifier = ">=0.4.4" },
+    { name = "claude-code-acp", specifier = ">=0.5.0" },
     { name = "email-validator", specifier = ">=2.0.0" },
     { name = "fastapi", specifier = ">=0.109.0" },
     { name = "faster-whisper", specifier = ">=1.0.0" },
@@ -697,15 +697,15 @@ wheels = [
 
 [[package]]
 name = "claude-code-acp"
-version = "0.4.4"
+version = "0.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "agent-client-protocol" },
     { name = "claude-agent-sdk" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/15/2a/e8a2fadbca5f9e524d678505ea770200c492c3874c6dc79667abc628bd4a/claude_code_acp-0.4.4.tar.gz", hash = "sha256:a43b45b70f81e8763a77234acff1ff55b97286cf0fcc644886e55e804b76a1da", size = 176921, upload-time = "2026-02-11T09:37:08.309Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ce/e9/85d1a6722530c8ac35ba5860f166e16ddfb30812d8287cc62aff6681f3f9/claude_code_acp-0.5.0.tar.gz", hash = "sha256:dca0a7abc782821a80d6d7c7a8906a05b5164290b299c0b7c427e7df4089a439", size = 177535, upload-time = "2026-02-25T07:04:06.583Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/88/85/f8c95c74d33669cfb22523a107482ff068c4fe89f7bacf50f07f529ddfca/claude_code_acp-0.4.4-py3-none-any.whl", hash = "sha256:136288b861324883e6334965bd44c13cbc890ea34f8f4ae5e7e6a9b1b8bff2cf", size = 37478, upload-time = "2026-02-11T09:37:06.752Z" },
+    { url = "https://files.pythonhosted.org/packages/e5/8d/f7350d578e60a0b1a41dfbab427595ab5f44cb32430bb1677c3cd06047ce/claude_code_acp-0.5.0-py3-none-any.whl", hash = "sha256:0d35cb62f924fb72b6ab97df0f2e28922e5afb13691756080d16815368834d25", size = 38125, upload-time = "2026-02-25T07:04:05.027Z" },
 ]
 
 [[package]]

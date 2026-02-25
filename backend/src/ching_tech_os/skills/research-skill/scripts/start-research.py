@@ -36,6 +36,10 @@ BRAVE_SEARCH_ENDPOINT = "https://api.search.brave.com/res/v1/web/search"
 _SCRIPT_STYLE_RE = re.compile(r"(?is)<(script|style|noscript).*?>.*?</\1>")
 _TAG_RE = re.compile(r"(?is)<[^>]+>")
 _WHITESPACE_RE = re.compile(r"\s+")
+_BRAVE_PUBLIC_ANCHOR_RE = re.compile(
+    r'<a[^>]+href="(?P<href>https?://[^"]+)"[^>]*>(?P<title>.*?)</a>',
+    re.IGNORECASE | re.DOTALL,
+)
 
 
 def _parse_stdin_json_object() -> tuple[dict | None, str | None]:
@@ -246,6 +250,74 @@ def _search_brave(
     return _dedupe_sources(candidates, max_results=max_results)
 
 
+def _search_brave_public(
+    client: httpx.Client,
+    query: str,
+    max_results: int,
+) -> list[dict]:
+    """使用 Brave 公開搜尋頁（無 API key 備援）。"""
+    response = client.get(
+        "https://search.brave.com/search",
+        params={
+            "q": query,
+            "source": "web",
+        },
+    )
+    response.raise_for_status()
+
+    html = response.text[:MAX_RAW_HTML_CHARS]
+    candidates: list[dict] = []
+    for match in _BRAVE_PUBLIC_ANCHOR_RE.finditer(html):
+        href = unescape(match.group("href") or "")
+        if "search.brave.com" in href:
+            continue
+        title = _strip_html(match.group("title") or "")
+        if len(title) < 3:
+            continue
+        candidates.append(
+            {
+                "title": _truncate(title, 120),
+                "url": href,
+                "snippet": "",
+            }
+        )
+        if len(candidates) >= max_results * 5:
+            break
+    return _dedupe_sources(candidates, max_results=max_results)
+
+
+def _build_ddg_retry_queries(query: str) -> list[str]:
+    """產生 DuckDuckGo 重試查詢（長查詢逐步縮短）。"""
+    normalized = _WHITESPACE_RE.sub(" ", query or "").strip()
+    if not normalized:
+        return []
+
+    queries: list[str] = [normalized]
+    tokens = [token for token in normalized.split(" ") if token]
+
+    if len(tokens) > 10:
+        queries.append(" ".join(tokens[:10]))
+
+    compact_tokens: list[str] = []
+    for token in tokens:
+        compact = re.sub(r"[^A-Za-z0-9._-]+", "", token)
+        if compact:
+            compact_tokens.append(compact)
+    if compact_tokens:
+        queries.append(" ".join(compact_tokens[:6]))
+
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for text in queries:
+        candidate = text[:MAX_QUERY_LENGTH].strip()
+        key = candidate.lower()
+        if not candidate or key in seen:
+            continue
+        seen.add(key)
+        deduped.append(candidate)
+    return deduped[:3]
+
+
 def _search_with_provider_fallback(
     client: httpx.Client,
     query: str,
@@ -280,23 +352,90 @@ def _search_with_provider_fallback(
             {"provider": "brave", "status": "skipped", "reason": "missing_api_key"}
         )
 
-    try:
-        ddg_results = _search_duckduckgo(client, query, max_results=max_results)
-    except (httpx.HTTPError, RuntimeError, ValueError) as exc:
-        provider_trace.append(
-            {"provider": "duckduckgo", "status": "failed", "reason": _truncate(str(exc), 180)}
-        )
-        return [], "none", provider_trace
+    ddg_queries = _build_ddg_retry_queries(query)
+    for attempt, ddg_query in enumerate(ddg_queries, start=1):
+        try:
+            ddg_results = _search_duckduckgo(client, ddg_query, max_results=max_results)
+        except (httpx.HTTPError, RuntimeError, ValueError) as exc:
+            provider_trace.append(
+                {
+                    "provider": "duckduckgo",
+                    "status": "failed",
+                    "attempt": attempt,
+                    "query": _truncate(ddg_query, 80),
+                    "reason": _truncate(str(exc), 180),
+                }
+            )
+            continue
 
-    if ddg_results:
-        provider_trace.append(
-            {"provider": "duckduckgo", "status": "ok", "result_count": len(ddg_results)}
-        )
-        return ddg_results, "duckduckgo", provider_trace
+        if ddg_results:
+            provider_trace.append(
+                {
+                    "provider": "duckduckgo",
+                    "status": "ok",
+                    "attempt": attempt,
+                    "query": _truncate(ddg_query, 80),
+                    "result_count": len(ddg_results),
+                }
+            )
+            return ddg_results, "duckduckgo", provider_trace
 
-    provider_trace.append(
-        {"provider": "duckduckgo", "status": "empty", "reason": "no_results"}
-    )
+        provider_trace.append(
+            {
+                "provider": "duckduckgo",
+                "status": "empty",
+                "attempt": attempt,
+                "query": _truncate(ddg_query, 80),
+                "reason": "no_results",
+            }
+        )
+
+    if not ddg_queries:
+        provider_trace.append(
+            {"provider": "duckduckgo", "status": "skipped", "reason": "invalid_query"}
+        )
+
+    for attempt, brave_query in enumerate(ddg_queries, start=1):
+        try:
+            brave_public_results = _search_brave_public(
+                client,
+                query=brave_query,
+                max_results=max_results,
+            )
+        except (httpx.HTTPError, RuntimeError, ValueError) as exc:
+            provider_trace.append(
+                {
+                    "provider": "brave_public",
+                    "status": "failed",
+                    "attempt": attempt,
+                    "query": _truncate(brave_query, 80),
+                    "reason": _truncate(str(exc), 180),
+                }
+            )
+            continue
+
+        if brave_public_results:
+            provider_trace.append(
+                {
+                    "provider": "brave_public",
+                    "status": "ok",
+                    "attempt": attempt,
+                    "query": _truncate(brave_query, 80),
+                    "result_count": len(brave_public_results),
+                }
+            )
+            return brave_public_results, "brave_public", provider_trace
+
+        provider_trace.append(
+            {
+                "provider": "brave_public",
+                "status": "empty",
+                "attempt": attempt,
+                "query": _truncate(brave_query, 80),
+                "reason": "no_results",
+            }
+        )
+
     return [], "duckduckgo", provider_trace
 
 

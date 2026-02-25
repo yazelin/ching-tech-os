@@ -570,8 +570,9 @@ def generate_usage_tips_prompt(
         tips.extend([
             f"{len(tips)+1}. 用戶要求找專案檔案時，用 search_nas_files 搜尋，找到後用 prepare_file_message 準備發送",
             f"{len(tips)+1}. 用戶要求「存到圖書館」或「歸檔」時，先找到檔案、讀取內容判斷分類，再用 archive_to_library 歸檔",
-            f"{len(tips)+1}. 需要外部研究（搜尋多個網站並統整）時，優先用 run_skill_script(skill='research-skill', script='start-research', input='{{\"query\":\"...\"}}') 啟動任務",
-            f"{len(tips)+1}. 取得 job_id 後用 check-research 查詢進度，不要在同一回合反覆 sleep + 查詢，避免超時",
+            f"{len(tips)+1}. 需要外部研究（搜尋多個網站並統整）時，必須用 run_skill_script(skill='research-skill', script='start-research', input='{{\"query\":\"...\"}}') 啟動任務",
+            f"{len(tips)+1}. 取得 job_id 後用 check-research 查詢進度；若 check 回傳 failed，請重新 start-research，不要改用 WebSearch/WebFetch 重做同主題",
+            f"{len(tips)+1}. WebSearch/WebFetch 僅用於單一簡短查詢，不要在已啟動 research-skill 後切回同步抓取流程",
         ])
 
     if not tips:

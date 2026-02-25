@@ -100,3 +100,72 @@ def test_provider_fallback_to_duckduckgo_when_brave_key_missing(
     assert trace[0]["provider"] == "brave"
     assert trace[0]["status"] == "skipped"
     assert trace[0]["reason"] == "missing_api_key"
+
+
+def test_duckduckgo_retries_with_shorter_query(monkeypatch: pytest.MonkeyPatch) -> None:
+    module = _load_start_research_module()
+    calls: list[str] = []
+
+    monkeypatch.setattr(module, "_get_brave_api_key", lambda: "")
+    monkeypatch.setattr(
+        module,
+        "_build_ddg_retry_queries",
+        lambda _query: [
+            "Cupola360 camera complete product lineup specifications RX1000P RX1000F AST1220",
+            "Cupola360 camera RX1000P",
+        ],
+    )
+
+    def fake_search_ddg(_client, query: str, max_results: int):
+        calls.append(query)
+        if len(calls) == 1:
+            return []
+        return [{"title": "DDG retry hit", "url": "https://ddg.example/retry", "snippet": "ok"}]
+
+    monkeypatch.setattr(module, "_search_duckduckgo", fake_search_ddg)
+
+    results, provider, trace = module._search_with_provider_fallback(None, "q", 5)
+
+    assert provider == "duckduckgo"
+    assert results[0]["url"] == "https://ddg.example/retry"
+    assert calls == [
+        "Cupola360 camera complete product lineup specifications RX1000P RX1000F AST1220",
+        "Cupola360 camera RX1000P",
+    ]
+    assert trace[1]["provider"] == "duckduckgo"
+    assert trace[1]["status"] == "empty"
+    assert trace[1]["attempt"] == 1
+    assert trace[2]["status"] == "ok"
+    assert trace[2]["attempt"] == 2
+
+
+def test_build_ddg_retry_queries_generates_compact_variants() -> None:
+    module = _load_start_research_module()
+    queries = module._build_ddg_retry_queries(
+        "Cupola360 camera complete product lineup specifications RX1000P RX1000F AST1220 AST1230 AST1235 RRM software platform ASPEED Technology"
+    )
+    assert len(queries) >= 2
+    assert queries[0].startswith("Cupola360 camera")
+    assert len(set(q.lower() for q in queries)) == len(queries)
+
+
+def test_provider_fallback_to_brave_public_when_ddg_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    module = _load_start_research_module()
+
+    monkeypatch.setattr(module, "_get_brave_api_key", lambda: "")
+    monkeypatch.setattr(module, "_build_ddg_retry_queries", lambda _query: ["q1"])
+    monkeypatch.setattr(module, "_search_duckduckgo", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(
+        module,
+        "_search_brave_public",
+        lambda *_args, **_kwargs: [
+            {"title": "Brave Public", "url": "https://cupola360.com", "snippet": ""}
+        ],
+    )
+
+    results, provider, trace = module._search_with_provider_fallback(None, "cupola360", 5)
+
+    assert provider == "brave_public"
+    assert results[0]["url"] == "https://cupola360.com"
+    assert any(item.get("provider") == "duckduckgo" and item.get("status") == "empty" for item in trace)
+    assert any(item.get("provider") == "brave_public" and item.get("status") == "ok" for item in trace)

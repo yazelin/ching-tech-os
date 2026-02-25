@@ -145,7 +145,7 @@ async def test_build_system_prompt_group(monkeypatch: pytest.MonkeyPatch) -> Non
         line_user_id="U1",
         base_prompt="BASE",
         builtin_tools=["WebFetch", "WebSearch"],
-        app_permissions={"knowledge-base": True},
+        app_permissions={"knowledge-base": True, "file-manager": True},
         platform_type="telegram",
     )
 
@@ -154,6 +154,9 @@ async def test_build_system_prompt_group(monkeypatch: pytest.MonkeyPatch) -> Non
     assert "【網路搜尋】" in prompt
     assert "【用戶上傳內容處理】" in prompt
     assert "【公開分享連結】" in prompt
+    assert "【長時外部研究（規則）】" in prompt
+    assert "check-research 若回傳 failed" in prompt
+    assert "禁止改用 WebSearch/WebFetch 重做" in prompt
     assert "TOOL_PROMPT" in prompt
     assert "USAGE_TIPS" in prompt
     assert "【自訂記憶】" in prompt

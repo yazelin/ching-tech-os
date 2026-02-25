@@ -1255,14 +1255,23 @@ async def build_system_prompt(
         tool_sections.append("""【網路搜尋】
 - WebSearch - 搜尋網路資訊，可用於查詢天氣、新聞、公司資訊等""")
 
-    # 長時外部研究建議（避免同步多輪超時）
+    # 非同步任務通用規則 + 長時外部研究規則（避免同步多輪超時）
     if app_permissions and app_permissions.get("file-manager", False):
-        tool_sections.append("""【長時外部研究（建議）】
-- 需要「搜尋 + 擷取 + 統整」多個來源時，優先使用 research-skill（start/check）：
+        tool_sections.append("""【非同步任務通用規則（嚴格遵守）】
+所有 start/check 兩段式 skill（research-skill、media-transcription、media-downloader 等）：
+- 啟動後回覆 job_id 給使用者，然後結束本次回應。
+- 查詢一次若未完成 → 告知使用者目前進度，請稍後再問，結束回應。
+- 嚴禁使用 sleep 等待任務完成，嚴禁在同一回應中反覆 sleep + check。
+- 這些任務可能需要數分鐘，反覆等待必定導致整體超時。
+
+【長時外部研究（規則）】
+- 需要「搜尋 + 擷取 + 統整」多個來源時，必須使用 research-skill（start/check）：
   · run_skill_script(skill="research-skill", script="start-research", input='{"query":"..."}')
   · run_skill_script(skill="research-skill", script="check-research", input='{"job_id":"..."}')
 - 啟動後先回覆 job_id，稍後再查詢結果。
-- 不要在同一回合反覆 sleep + WebFetch/查詢，避免整體超時。""")
+- check-research 若回傳 failed：同主題應重新 start-research 建立新 job_id。
+- 已啟動 research-skill 的同主題，禁止改用 WebSearch/WebFetch 重做。
+- WebSearch/WebFetch 僅可用於單一簡短查詢（例如天氣、即時單點資訊）。""")
 
     # Read 工具說明（用戶上傳內容處理）
     if "Read" in all_tools:

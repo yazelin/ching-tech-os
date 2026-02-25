@@ -112,6 +112,7 @@ async def test_generate_script_tools_prompt_exception(monkeypatch: pytest.Monkey
 def test_generate_usage_tips_with_file_manager():
     tips = bot_agents.generate_usage_tips_prompt({"file-manager": True})
     assert "search_nas_files" in tips
+    assert "若 check 回傳 failed" in tips
 
 
 @pytest.mark.asyncio
