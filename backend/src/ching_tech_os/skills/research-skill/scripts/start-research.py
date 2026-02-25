@@ -3,9 +3,11 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 import re
+import socket
 import sys
 import uuid as uuid_module
 from datetime import datetime
@@ -31,9 +33,9 @@ MAX_SNIPPET_CHARS = 260
 USER_AGENT = "ChingTechOS-ResearchSkill/1.0"
 BRAVE_SEARCH_ENDPOINT = "https://api.search.brave.com/res/v1/web/search"
 
-_SCRIPT_STYLE_RE = re.compile(r"(?is)<(script|style|noscript).*?>.*?</\\1>")
+_SCRIPT_STYLE_RE = re.compile(r"(?is)<(script|style|noscript).*?>.*?</\1>")
 _TAG_RE = re.compile(r"(?is)<[^>]+>")
-_WHITESPACE_RE = re.compile(r"\\s+")
+_WHITESPACE_RE = re.compile(r"\s+")
 
 
 def _parse_stdin_json_object() -> tuple[dict | None, str | None]:
@@ -81,8 +83,32 @@ def _clamp_int(value: object, default: int, min_value: int, max_value: int) -> i
     return max(min_value, min(max_value, parsed))
 
 
+def _is_private_host(hostname: str) -> bool:
+    """檢查主機名稱是否解析到私有/保留 IP 位址（防止 SSRF）。"""
+    try:
+        # 先檢查是否直接是 IP 位址
+        addr = ipaddress.ip_address(hostname)
+        return addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved
+    except ValueError:
+        pass
+
+    # 解析域名為 IP 並檢查
+    try:
+        infos = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        for _family, _type, _proto, _canonname, sockaddr in infos:
+            ip_str = sockaddr[0]
+            addr = ipaddress.ip_address(ip_str)
+            if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
+                return True
+    except (socket.gaierror, OSError):
+        # 無法解析的域名視為安全（後續 HTTP 請求會自行失敗）
+        pass
+
+    return False
+
+
 def _normalize_url(url: str) -> str:
-    """正規化 URL，僅允許 http/https。"""
+    """正規化 URL，僅允許 http/https，並阻擋私有/內部網路位址。"""
     text = (url or "").strip()
     if not text:
         return ""
@@ -90,6 +116,10 @@ def _normalize_url(url: str) -> str:
     if parsed.scheme not in ("http", "https"):
         return ""
     if not parsed.netloc:
+        return ""
+    # SSRF 防護：阻擋私有/保留 IP 位址
+    hostname = parsed.hostname or ""
+    if _is_private_host(hostname):
         return ""
     return text
 
