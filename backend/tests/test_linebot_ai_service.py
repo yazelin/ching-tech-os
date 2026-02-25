@@ -651,4 +651,5 @@ async def test_process_message_with_ai_failed_response_without_tool_calls(monkey
         line_user_id="U1",
         reply_token="r1",
     )
-    assert result is None
+    # 超時/失敗時現在會回覆錯誤提示，不再 return None
+    assert result == "AI回覆"
