@@ -122,6 +122,8 @@ class Settings:
     )
     # 啟用模組清單（* = 全部啟用）
     enabled_modules: str = _get_env("ENABLED_MODULES", "*")
+    # Brave Search API（金鑰留空時 research-skill 會 fallback 到既有 provider）
+    brave_search_api_key: str = _get_env("BRAVE_SEARCH_API_KEY", "")
 
     # ===================
     # Line Bot 設定

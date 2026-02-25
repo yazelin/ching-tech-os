@@ -77,21 +77,20 @@ async def run_skill_script(
 
     # 權限檢查：驗證使用者有此 skill 的 requires_app 權限
     if skill_obj.requires_app:
-        from ..permissions import get_user_app_permissions
+        from ..permissions import get_effective_app_permissions, get_user_app_permissions
 
+        required_app = skill_obj.requires_app
         if ctos_user_id is None:
-            return json.dumps({
-                "success": False,
-                "error": f"無權限使用 skill '{skill}'（缺少使用者身分，需 {skill_obj.requires_app} 權限）",
-            }, ensure_ascii=False)
-
-        user_apps = await get_user_app_permissions(ctos_user_id)
-        allowed = user_apps.get(skill_obj.requires_app, False)
+            # 未綁定帳號時沿用系統預設 app 權限
+            allowed = get_effective_app_permissions().get(required_app, False)
+        else:
+            user_apps = await get_user_app_permissions(ctos_user_id)
+            allowed = user_apps.get(required_app, False)
 
         if not allowed:
             return json.dumps({
                 "success": False,
-                "error": f"無權限使用 skill '{skill}'（需要 {skill_obj.requires_app} 權限）",
+                "error": f"無權限使用 skill '{skill}'（需要 {required_app} 權限）",
             }, ensure_ascii=False)
 
     # 驗證 skill 有 scripts

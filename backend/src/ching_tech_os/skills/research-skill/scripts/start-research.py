@@ -29,6 +29,7 @@ MAX_RAW_HTML_CHARS = 300_000
 MAX_SNIPPET_CHARS = 260
 
 USER_AGENT = "ChingTechOS-ResearchSkill/1.0"
+BRAVE_SEARCH_ENDPOINT = "https://api.search.brave.com/res/v1/web/search"
 
 _SCRIPT_STYLE_RE = re.compile(r"(?is)<(script|style|noscript).*?>.*?</\\1>")
 _TAG_RE = re.compile(r"(?is)<[^>]+>")
@@ -131,6 +132,144 @@ def _collect_related_topics(related_topics: list, collector: list[dict]) -> None
             )
 
 
+def _dedupe_sources(candidates: list[dict], max_results: int) -> list[dict]:
+    """來源去重與標準化。"""
+    deduped: list[dict] = []
+    seen: set[str] = set()
+    for item in candidates:
+        normalized = _normalize_url(str(item.get("url", "")))
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        deduped.append(
+            {
+                "title": str(item.get("title", "來源")),
+                "url": normalized,
+                "snippet": _truncate(str(item.get("snippet", "")), 180),
+            }
+        )
+        if len(deduped) >= max_results:
+            break
+    return deduped
+
+
+def _get_brave_api_key() -> str:
+    """取得 Brave Search API key。"""
+    try:
+        from ching_tech_os.config import settings
+
+        api_key = settings.brave_search_api_key
+    except ImportError:
+        api_key = os.environ.get("BRAVE_SEARCH_API_KEY", "")
+    return (api_key or "").strip()
+
+
+def _search_brave(
+    client: httpx.Client,
+    query: str,
+    max_results: int,
+    api_key: str,
+) -> list[dict]:
+    """使用 Brave Search API 取得候選來源。"""
+    response = client.get(
+        BRAVE_SEARCH_ENDPOINT,
+        params={
+            "q": query,
+            "count": max_results,
+        },
+        headers={
+            "Accept": "application/json",
+            "X-Subscription-Token": api_key,
+        },
+    )
+    response.raise_for_status()
+    data = response.json()
+
+    candidates: list[dict] = []
+    raw_results: list[dict] = []
+    if isinstance(data, dict):
+        web_payload = data.get("web")
+        if isinstance(web_payload, dict) and isinstance(web_payload.get("results"), list):
+            raw_results = web_payload["results"]
+        elif isinstance(data.get("results"), list):
+            raw_results = data["results"]
+
+    for item in raw_results:
+        if not isinstance(item, dict):
+            continue
+        description = item.get("description")
+        if not isinstance(description, str):
+            description = ""
+        extra_snippets = item.get("extra_snippets")
+        if isinstance(extra_snippets, list):
+            parts = [part.strip() for part in extra_snippets if isinstance(part, str) and part.strip()]
+            if parts and not description:
+                description = " ".join(parts[:2])
+        candidates.append(
+            {
+                "title": _truncate(str(item.get("title") or item.get("url") or "來源"), 120),
+                "url": str(item.get("url") or ""),
+                "snippet": _truncate(description, 180),
+            }
+        )
+
+    return _dedupe_sources(candidates, max_results=max_results)
+
+
+def _search_with_provider_fallback(
+    client: httpx.Client,
+    query: str,
+    max_results: int,
+) -> tuple[list[dict], str, list[dict]]:
+    """依 provider 優先序搜尋（Brave -> DuckDuckGo）。"""
+    provider_trace: list[dict] = []
+    brave_api_key = _get_brave_api_key()
+
+    if brave_api_key:
+        try:
+            brave_results = _search_brave(
+                client,
+                query=query,
+                max_results=max_results,
+                api_key=brave_api_key,
+            )
+            if brave_results:
+                provider_trace.append(
+                    {"provider": "brave", "status": "ok", "result_count": len(brave_results)}
+                )
+                return brave_results, "brave", provider_trace
+            provider_trace.append(
+                {"provider": "brave", "status": "empty", "reason": "no_results"}
+            )
+        except (httpx.HTTPError, RuntimeError, ValueError) as exc:
+            provider_trace.append(
+                {"provider": "brave", "status": "failed", "reason": _truncate(str(exc), 180)}
+            )
+    else:
+        provider_trace.append(
+            {"provider": "brave", "status": "skipped", "reason": "missing_api_key"}
+        )
+
+    try:
+        ddg_results = _search_duckduckgo(client, query, max_results=max_results)
+    except (httpx.HTTPError, RuntimeError, ValueError) as exc:
+        provider_trace.append(
+            {"provider": "duckduckgo", "status": "failed", "reason": _truncate(str(exc), 180)}
+        )
+        return [], "none", provider_trace
+
+    if ddg_results:
+        provider_trace.append(
+            {"provider": "duckduckgo", "status": "ok", "result_count": len(ddg_results)}
+        )
+        return ddg_results, "duckduckgo", provider_trace
+
+    provider_trace.append(
+        {"provider": "duckduckgo", "status": "empty", "reason": "no_results"}
+    )
+    return [], "duckduckgo", provider_trace
+
+
 def _search_duckduckgo(client: httpx.Client, query: str, max_results: int) -> list[dict]:
     """使用 DuckDuckGo Instant Answer API 取得候選來源。"""
     response = client.get(
@@ -164,24 +303,7 @@ def _search_duckduckgo(client: httpx.Client, query: str, max_results: int) -> li
         if isinstance(related_topics, list):
             _collect_related_topics(related_topics, candidates)
 
-    # 去重
-    deduped: list[dict] = []
-    seen: set[str] = set()
-    for item in candidates:
-        normalized = _normalize_url(str(item.get("url", "")))
-        if not normalized or normalized in seen:
-            continue
-        seen.add(normalized)
-        deduped.append(
-            {
-                "title": str(item.get("title", "來源")),
-                "url": normalized,
-                "snippet": str(item.get("snippet", "")),
-            }
-        )
-        if len(deduped) >= max_results:
-            break
-    return deduped
+    return _dedupe_sources(candidates, max_results=max_results)
 
 
 def _fetch_source(client: httpx.Client, source: dict) -> dict:
@@ -304,6 +426,8 @@ def _do_research(
         "status_label": "啟動中",
         "progress": 0,
         "query": query,
+        "search_provider": "none",
+        "provider_trace": [],
         "sources": [],
         "partial_results": [],
         "final_summary": "",
@@ -337,7 +461,13 @@ def _do_research(
                 )
 
             if len(candidate_sources) < max_results:
-                search_results = _search_duckduckgo(client, query, max_results=max_results)
+                search_results, search_provider, provider_trace = _search_with_provider_fallback(
+                    client,
+                    query=query,
+                    max_results=max_results,
+                )
+                status_data["search_provider"] = search_provider
+                status_data["provider_trace"] = provider_trace
                 for item in search_results:
                     normalized_url = _normalize_url(str(item.get("url", "")))
                     if not normalized_url or normalized_url in seen:
@@ -352,8 +482,24 @@ def _do_research(
                     )
                     if len(candidate_sources) >= max_results:
                         break
+            else:
+                status_data["search_provider"] = "seed_urls"
+                status_data["provider_trace"] = []
 
             if not candidate_sources:
+                diagnostics = []
+                for item in status_data.get("provider_trace", []):
+                    if not isinstance(item, dict):
+                        continue
+                    provider = str(item.get("provider") or "")
+                    reason = str(item.get("reason") or "")
+                    status = str(item.get("status") or "")
+                    if provider and reason:
+                        diagnostics.append(f"{provider}:{status}:{reason}")
+                    elif provider and status:
+                        diagnostics.append(f"{provider}:{status}")
+                if diagnostics:
+                    raise RuntimeError(f"找不到可用的研究來源（{'; '.join(diagnostics[:3])}）")
                 raise RuntimeError("找不到可用的研究來源")
 
             status_data["sources"] = candidate_sources
@@ -473,6 +619,8 @@ def main() -> int:
             "status_label": "啟動中",
             "progress": 0,
             "query": query,
+            "search_provider": "none",
+            "provider_trace": [],
             "sources": [],
             "partial_results": [],
             "final_summary": "",

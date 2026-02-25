@@ -265,8 +265,81 @@ async def test_run_skill_script_invalid_input_no_fallback(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_run_skill_script_denies_when_requires_app_without_user_id(monkeypatch):
-    """requires_app 的 skill 若缺少 ctos_user_id，應直接拒絕。"""
+async def test_run_skill_script_allows_requires_app_without_user_id_when_default_enabled(monkeypatch):
+    """requires_app 的 skill 在預設權限開啟時，未綁定使用者也可執行。"""
+
+    skill_obj = SimpleNamespace(
+        name="secure-skill",
+        requires_app="file-manager",
+        metadata={"ctos": {}},
+    )
+
+    class FakeSkillManager:
+        async def get_skill(self, _name):
+            return skill_obj
+
+        async def has_scripts(self, _name):
+            return True
+
+        async def get_script_path(self, _skill, _script):
+            return Path("/tmp/fake.py")
+
+        async def get_skill_dir(self, _name):
+            return Path("/tmp/secure-skill")
+
+        def get_skill_env_overrides(self, _skill):
+            return {}
+
+        async def get_script_fallback_map(self, _skill_name):
+            return {}
+
+    class FakeScriptRunner:
+        def __init__(self, _skills_dir):
+            pass
+
+        async def execute_path(self, _script_path, _skill_name, input="", env_overrides=None):
+            return {
+                "success": True,
+                "output": "ok",
+                "error": "",
+                "duration_ms": 3,
+            }
+
+    async def fake_create_log(_data):
+        return {"id": "fake"}
+
+    monkeypatch.setattr(
+        "ching_tech_os.skills.script_runner.ScriptRunner",
+        FakeScriptRunner,
+    )
+    monkeypatch.setattr(
+        "ching_tech_os.skills.get_skill_manager",
+        lambda: FakeSkillManager(),
+    )
+    monkeypatch.setattr(
+        "ching_tech_os.services.permissions.get_effective_app_permissions",
+        lambda: {"file-manager": True},
+    )
+    monkeypatch.setattr(
+        "ching_tech_os.services.ai_manager.create_log",
+        fake_create_log,
+    )
+    _mock_ensure_db(monkeypatch)
+
+    raw = await skill_script_tools.run_skill_script(
+        skill="secure-skill",
+        script="read_secret",
+        input="{}",
+        ctos_user_id=None,
+    )
+    payload = json.loads(raw)
+    assert payload["success"] is True
+    assert payload["output"] == "ok"
+
+
+@pytest.mark.asyncio
+async def test_run_skill_script_denies_when_default_requires_app_disabled(monkeypatch):
+    """requires_app 的 skill 若預設權限關閉，未綁定使用者應拒絕。"""
 
     skill_obj = SimpleNamespace(
         name="secure-skill",
@@ -282,6 +355,10 @@ async def test_run_skill_script_denies_when_requires_app_without_user_id(monkeyp
         "ching_tech_os.skills.get_skill_manager",
         lambda: FakeSkillManager(),
     )
+    monkeypatch.setattr(
+        "ching_tech_os.services.permissions.get_effective_app_permissions",
+        lambda: {"file-manager": False},
+    )
     _mock_ensure_db(monkeypatch)
 
     raw = await skill_script_tools.run_skill_script(
@@ -292,4 +369,4 @@ async def test_run_skill_script_denies_when_requires_app_without_user_id(monkeyp
     )
     payload = json.loads(raw)
     assert payload["success"] is False
-    assert "缺少使用者身分" in payload["error"]
+    assert "需要 file-manager 權限" in payload["error"]

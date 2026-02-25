@@ -146,6 +146,8 @@ def main() -> int:
         "status_label": status_data.get("status_label") or STATUS_LABELS.get(status, status),
         "progress": status_data.get("progress", 0),
         "query": status_data.get("query", ""),
+        "search_provider": status_data.get("search_provider", "none"),
+        "provider_trace": status_data.get("provider_trace", []),
         "sources": status_data.get("sources", []),
         "partial_results": status_data.get("partial_results", []),
         "error": status_data.get("error"),

@@ -12,6 +12,11 @@ metadata:
 
 當任務需要多來源搜尋、擷取內容並統整時，優先使用此 skill，避免在單一回合長時間同步呼叫 WebSearch/WebFetch 導致超時。
 
+**搜尋 provider：**
+- 優先使用 Brave Search API（需設定 `BRAVE_SEARCH_API_KEY`）
+- Brave 不可用時自動回退 DuckDuckGo provider
+- Brave API 申請：https://brave.com/search/api/
+
 **可用 scripts：**
 
 1. **start-research** — 啟動研究任務（非同步，立即回傳 job ID）
