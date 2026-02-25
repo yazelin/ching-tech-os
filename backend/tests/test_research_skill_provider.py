@@ -185,6 +185,16 @@ def test_get_research_claude_timeout_sec_respects_env(monkeypatch: pytest.Monkey
     assert module._get_research_claude_timeout_sec() == 120
 
 
+def test_get_research_claude_model_respects_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    module = _load_start_research_module()
+
+    monkeypatch.setenv("RESEARCH_CLAUDE_MODEL", "claude-opus")
+    assert module._get_research_claude_model() == "claude-opus"
+
+    monkeypatch.setenv("RESEARCH_CLAUDE_MODEL", "claude-sonnet")
+    assert module._get_research_claude_model() == "claude-sonnet"
+
+
 def test_cleanup_old_research_dirs_removes_expired(tmp_path: Path) -> None:
     module = _load_start_research_module()
 

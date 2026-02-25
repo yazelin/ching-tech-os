@@ -35,8 +35,9 @@ MAX_SNIPPET_CHARS = 260
 
 USER_AGENT = "ChingTechOS-ResearchSkill/1.0"
 BRAVE_SEARCH_ENDPOINT = "https://api.search.brave.com/res/v1/web/search"
-DEFAULT_RESEARCH_MODEL = "claude-sonnet"
+DEFAULT_RESEARCH_MODEL = "claude-opus"
 DEFAULT_CLAUDE_WORKER_TIMEOUT_SEC = 1200
+DEFAULT_LOCAL_SYNTHESIS_TIMEOUT_SEC = 240
 RESEARCH_RETENTION_DAYS = 7
 MAX_RESEARCH_WORKERS = 1
 QUEUE_WAIT_TIMEOUT_SEC = 120
@@ -318,6 +319,21 @@ def _get_research_claude_timeout_sec() -> int:
         return max(120, min(3600, parsed))
     except (ImportError, TypeError, ValueError):
         return DEFAULT_CLAUDE_WORKER_TIMEOUT_SEC
+
+
+def _get_research_claude_model() -> str:
+    """取得 research worker 使用的 Claude 模型。"""
+    env_model = (os.environ.get("RESEARCH_CLAUDE_MODEL") or "").strip()
+    if env_model:
+        return env_model
+
+    try:
+        from ching_tech_os.config import settings
+
+        configured = str(getattr(settings, "research_claude_model", DEFAULT_RESEARCH_MODEL)).strip()
+        return configured or DEFAULT_RESEARCH_MODEL
+    except (ImportError, TypeError, ValueError):
+        return DEFAULT_RESEARCH_MODEL
 
 
 def _get_brave_api_key() -> str:
@@ -666,14 +682,33 @@ def _build_final_summary(query: str, fetched_results: list[dict]) -> str:
             return f"針對「{query}」目前未取得可用內容，共有 {failed_count} 個來源擷取失敗。"
         return f"針對「{query}」目前未取得可用內容。"
 
-    lines = [f"研究主題：{query}", "", "重點整理："]
-    for idx, item in enumerate(ok_results[:4], start=1):
-        lines.append(f"{idx}. {item['title']}")
-        lines.append(f"   {_truncate(item['content'], 320)}")
+    lines = [
+        "## 一句話結論",
+        f"針對「{query}」已完成多來源擷取，以下為可驗證的重點整理與待確認事項。",
+        "",
+        "## 核心重點",
+    ]
+    for idx, item in enumerate(ok_results[:5], start=1):
+        lines.append(f"{idx}. **{item['title']}**：{_truncate(item['content'], 240)}")
 
+    lines.extend(["", "## 風險與待確認事項"])
     if failed_results:
-        lines.append("")
-        lines.append(f"備註：另有 {len(failed_results)} 個來源擷取失敗。")
+        lines.append(f"- 另有 {len(failed_results)} 個來源擷取失敗，建議後續補抓或人工查核。")
+        for item in failed_results[:3]:
+            lines.append(
+                f"- 失敗來源：{item.get('title') or item.get('url') or '來源'}（{item.get('error') or '未知錯誤'}）"
+            )
+    else:
+        lines.append("- 目前所有已選來源皆成功擷取。")
+
+    lines.extend(
+        [
+            "",
+            "## 建議下一步",
+            "- 針對上方重點逐項比對官方文件或規格書。",
+            "- 將可驗證資訊寫入知識庫，並保留來源 URL 以便追蹤。",
+        ]
+    )
 
     return "\n".join(lines).strip()
 
@@ -712,6 +747,148 @@ def _write_result_markdown(
     result_path.write_text("\n".join(lines), encoding="utf-8")
 
 
+def _upsert_source(
+    sources_by_url: dict[str, dict],
+    *,
+    url: str,
+    title: str = "",
+    snippet: str = "",
+    origin: str = "",
+) -> None:
+    """合併來源資訊（以 URL 去重）。"""
+    normalized = _normalize_url(url)
+    if not normalized:
+        return
+
+    existing = sources_by_url.get(normalized)
+    if existing is None:
+        existing = {
+            "title": title or (urlparse(normalized).netloc or normalized),
+            "url": normalized,
+            "snippet": _truncate(snippet, 420) if snippet else "",
+            "origins": [origin] if origin else [],
+        }
+        sources_by_url[normalized] = existing
+        return
+
+    if title and (not existing.get("title") or existing.get("title") == normalized):
+        existing["title"] = title
+    if snippet:
+        current = str(existing.get("snippet") or "")
+        if len(snippet) > len(current):
+            existing["snippet"] = _truncate(snippet, 420)
+    if origin:
+        origins = existing.get("origins") or []
+        if origin not in origins:
+            existing["origins"] = origins + [origin]
+
+
+def _build_deep_research_prompt(query: str, seed_urls: list[str], min_sources: int) -> str:
+    """建立深度研究 prompt。"""
+    seed_url_block = "\n".join(f"- {url}" for url in seed_urls[:MAX_SEED_URLS]).strip()
+    lines = [
+        "你是資深產業研究員，請使用 WebSearch + WebFetch 完成「可交付的深度研究報告」。",
+        f"研究主題：{query}",
+        "",
+        "研究要求（必須全部滿足）：",
+        f"1) 至少引用 {min_sources} 個可追溯來源 URL，且至少 3 個是官方/一手來源。",
+        "2) 若資料不足，必須主動再搜尋補齊，不可只給簡短摘要。",
+        "3) 必須同時涵蓋：產品定位、型號/規格、功能差異、應用場景、價格/採購線索、風險與不確定性。",
+        "4) 找不到的資訊要明確標示「未查得」，並說明已嘗試的方向。",
+        "5) 僅輸出繁體中文 markdown，不要輸出其它對話。",
+        "",
+        "輸出格式（固定章節）：",
+        "## 一句話結論",
+        "## 核心重點（5-8 點）",
+        "## 詳細研究",
+        "### 產品與定位",
+        "### 規格與功能比較",
+        "### 使用場景與導入價值",
+        "### 價格/供應與採購建議",
+        "### 風險與待確認事項",
+        "## 建議下一步",
+        "## 參考來源（編號清單）",
+    ]
+    if seed_url_block:
+        lines.extend(["", "請優先參考以下指定來源：", seed_url_block])
+    return "\n".join(lines).strip()
+
+
+def _build_local_synthesis_prompt(query: str, fetched_results: list[dict]) -> str:
+    """把 fallback 擷取結果整理成可供 Claude 二次統整的 prompt。"""
+    source_blocks: list[str] = []
+    for idx, item in enumerate(fetched_results[:6], start=1):
+        if item.get("fetch_status") != "ok":
+            continue
+        content = _truncate(str(item.get("content") or ""), 2200)
+        if not content:
+            continue
+        source_blocks.append(
+            "\n".join(
+                [
+                    f"[來源 {idx}] {item.get('title') or '來源'}",
+                    f"URL: {item.get('url') or 'N/A'}",
+                    f"摘錄: {content}",
+                ]
+            )
+        )
+
+    source_text = "\n\n".join(source_blocks).strip()
+    if not source_text:
+        raise RuntimeError("缺少可供統整的來源內容")
+
+    return "\n".join(
+        [
+            "請根據下列已擷取的來源內容，產出完整且可讀的研究報告。",
+            f"研究主題：{query}",
+            "",
+            "要求：",
+            "- 報告要具體，不可只列一句總結。",
+            "- 必須交代：產品定位、規格差異、使用情境、價格/採購線索、風險與不確定性。",
+            "- 找不到的資料明確標示「未查得」。",
+            "- 以繁體中文 markdown 回覆。",
+            "",
+            "輸出章節：",
+            "## 一句話結論",
+            "## 核心重點",
+            "## 詳細研究",
+            "## 風險與待補資訊",
+            "## 建議下一步",
+            "## 參考來源",
+            "",
+            "來源資料：",
+            source_text,
+        ]
+    ).strip()
+
+
+async def _call_claude_local_synthesis(query: str, fetched_results: list[dict]) -> str:
+    """使用 Claude 對 fallback 來源做二次深度統整。"""
+    from ching_tech_os.services.claude_agent import call_claude
+
+    prompt = _build_local_synthesis_prompt(query=query, fetched_results=fetched_results)
+    timeout_sec = max(
+        120,
+        min(DEFAULT_LOCAL_SYNTHESIS_TIMEOUT_SEC, _get_research_claude_timeout_sec() // 3),
+    )
+    response = await call_claude(
+        prompt=prompt,
+        model=_get_research_claude_model(),
+        timeout=timeout_sec,
+    )
+    if response.success is not True:
+        raise RuntimeError(str(response.error or "local synthesis failed"))
+    summary = str(response.message or "").strip()
+    if not summary:
+        raise RuntimeError("local synthesis empty response")
+    return summary
+
+
+def _run_claude_local_synthesis(query: str, fetched_results: list[dict]) -> str:
+    """同步包裝器：fallback 統整時呼叫 Claude。"""
+    return asyncio.run(_call_claude_local_synthesis(query=query, fetched_results=fetched_results))
+
+
 async def _call_claude_research(
     query: str,
     seed_urls: list[str],
@@ -721,36 +898,22 @@ async def _call_claude_research(
     """在背景 worker 內呼叫 Claude 進行 web research。"""
     from ching_tech_os.services.claude_agent import call_claude
 
-    seed_url_block = "\n".join(f"- {url}" for url in seed_urls[:MAX_SEED_URLS]).strip()
-    prompt_lines = [
-        "你是資深研究助理，請使用 WebSearch 與 WebFetch 完成外部研究。",
-        f"研究主題：{query}",
-        "",
-        "請遵守：",
-        "1) 優先搜尋高品質來源（官方文件、新聞、技術文件）。",
-        "2) 需要引用來源，至少提供 3 個可追溯 URL。",
-        "3) 最後輸出繁體中文摘要，包含重點、風險、建議下一步。",
-    ]
-    if seed_url_block:
-        prompt_lines.extend(
-            [
-                "",
-                "請優先參考以下指定來源：",
-                seed_url_block,
-            ]
-        )
-    prompt = "\n".join(prompt_lines).strip()
+    model_name = _get_research_claude_model()
+    prompt = _build_deep_research_prompt(
+        query=query,
+        seed_urls=seed_urls,
+        min_sources=max(4, max_results),
+    )
 
     response = await call_claude(
         prompt=prompt,
-        model=DEFAULT_RESEARCH_MODEL,
+        model=model_name,
         tools=["WebSearch", "WebFetch"],
         timeout=timeout_sec,
     )
 
     tool_trace: list[dict] = []
-    collected_sources: list[dict] = []
-    seen_urls: set[str] = set()
+    sources_by_url: dict[str, dict] = {}
 
     for tool_call in (response.tool_calls or [])[:MAX_TOOL_TRACE_ITEMS]:
         tool_name = str(getattr(tool_call, "name", "") or "")
@@ -763,49 +926,45 @@ async def _call_claude_research(
                 "output_preview": _truncate(output_text, 1200),
             }
         )
-        for url in _extract_urls(output_text):
-            if url in seen_urls:
-                continue
-            seen_urls.add(url)
-            collected_sources.append(
-                {
-                    "title": urlparse(url).netloc or url,
-                    "url": url,
-                    "snippet": "",
-                }
+
+        input_url = _normalize_url(str(tool_input.get("url") or ""))
+        if input_url:
+            source_title = urlparse(input_url).netloc or input_url
+            source_snippet = _truncate(output_text, 420) if tool_name == "WebFetch" else ""
+            _upsert_source(
+                sources_by_url,
+                url=input_url,
+                title=source_title,
+                snippet=source_snippet,
+                origin=tool_name.lower() or "tool",
             )
-            if len(collected_sources) >= max_results:
-                break
-        if len(collected_sources) >= max_results:
-            break
+
+        for url in _extract_urls(output_text):
+            _upsert_source(
+                sources_by_url,
+                url=url,
+                title=urlparse(url).netloc or url,
+                snippet=_truncate(output_text, 260),
+                origin=tool_name.lower() or "tool",
+            )
 
     for url in _extract_urls(str(response.message or "")):
-        if url in seen_urls:
-            continue
-        seen_urls.add(url)
-        collected_sources.append(
-            {
-                "title": urlparse(url).netloc or url,
-                "url": url,
-                "snippet": "",
-            }
+        _upsert_source(
+            sources_by_url,
+            url=url,
+            title=urlparse(url).netloc or url,
+            snippet="",
+            origin="final_message",
         )
-        if len(collected_sources) >= max_results:
-            break
 
     for seed_url in seed_urls:
-        if seed_url in seen_urls:
-            continue
-        seen_urls.add(seed_url)
-        collected_sources.append(
-            {
-                "title": urlparse(seed_url).netloc or seed_url,
-                "url": seed_url,
-                "snippet": "",
-            }
+        _upsert_source(
+            sources_by_url,
+            url=seed_url,
+            title=urlparse(seed_url).netloc or seed_url,
+            snippet="",
+            origin="seed_url",
         )
-        if len(collected_sources) >= max_results:
-            break
 
     if response.success is not True:
         raise RuntimeError(str(response.error or "Claude 研究流程失敗"))
@@ -813,10 +972,22 @@ async def _call_claude_research(
     final_summary = str(response.message or "").strip()
     if not final_summary:
         raise RuntimeError("Claude 研究流程未回傳摘要")
+    if len(final_summary) < 280:
+        final_summary = (
+            final_summary
+            + "\n\n## 補充說明\n"
+            + "- 本回覆內容偏短，建議以來源清單做進一步人工複核。"
+            + "\n- 已保留工具軌跡與來源摘要供後續追查。"
+        )
+
+    collected_sources = list(sources_by_url.values())
     if not collected_sources:
         raise RuntimeError("Claude 研究流程未回傳可追溯來源")
+    if len(collected_sources) > max_results:
+        # 保留前段來源，同時允許略多於 max_results 以提高可追溯性
+        collected_sources = collected_sources[: max_results + 3]
 
-    return final_summary, collected_sources[:max_results], tool_trace
+    return final_summary, collected_sources, tool_trace
 
 
 def _run_claude_research(
@@ -890,11 +1061,12 @@ def _do_research(
     _write_status(status_path, status_data)
 
     claude_timeout_sec = _get_research_claude_timeout_sec()
+    claude_model = _get_research_claude_model()
     provider_trace: list[dict] = [
         {
             "provider": "claude_webtools",
             "status": "running",
-            "model": DEFAULT_RESEARCH_MODEL,
+            "model": claude_model,
             "timeout_sec": claude_timeout_sec,
         }
     ]
@@ -1159,7 +1331,22 @@ def _do_research_local_pipeline(
             status_data["progress"] = 90
             _write_status(status_path, status_data)
 
-            final_summary = _build_final_summary(query, fetched_results)
+            synthesis_trace = {
+                "provider": "local_synthesis_claude",
+                "status": "running",
+                "model": _get_research_claude_model(),
+            }
+            status_data["provider_trace"] = list(status_data.get("provider_trace") or []) + [synthesis_trace]
+            _write_status(status_path, status_data)
+
+            try:
+                final_summary = _run_claude_local_synthesis(query=query, fetched_results=fetched_results)
+                synthesis_trace["status"] = "ok"
+            except (RuntimeError, ValueError, OSError) as exc:
+                synthesis_trace["status"] = "failed"
+                synthesis_trace["reason"] = _truncate(str(exc), 180)
+                final_summary = _build_final_summary(query, fetched_results)
+
             result_path = job_dir / "result.md"
             sources_path = job_dir / "sources.json"
             tool_trace_path = job_dir / "tool_trace.json"
@@ -1168,6 +1355,10 @@ def _do_research_local_pipeline(
                     "title": item.get("title") or "來源",
                     "url": item.get("url") or "",
                     "snippet": item.get("snippet") or "",
+                    "fetch_status": item.get("fetch_status") or "failed",
+                    "error": item.get("error"),
+                    "content_excerpt": _truncate(str(item.get("content") or ""), 1000),
+                    "content_chars": len(str(item.get("content") or "")),
                 }
                 for item in fetched_results
             ]
@@ -1197,6 +1388,7 @@ def _do_research_local_pipeline(
             status_data["stage"] = "completed"
             status_data["stage_label"] = "完成"
             status_data["progress"] = 100
+            status_data["provider_trace"] = list(status_data.get("provider_trace") or [])
             status_data["final_summary"] = final_summary
             status_data["error"] = None
             status_data["result_file_path"] = str(result_path)

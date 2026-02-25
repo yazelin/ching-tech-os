@@ -124,6 +124,8 @@ class Settings:
     enabled_modules: str = _get_env("ENABLED_MODULES", "*")
     # Brave Search API（金鑰留空時 research-skill 會 fallback 到既有 provider）
     brave_search_api_key: str = _get_env("BRAVE_SEARCH_API_KEY", "")
+    # research-skill 背景 Claude 預設模型（建議 claude-opus）
+    research_claude_model: str = _get_env("RESEARCH_CLAUDE_MODEL", "claude-opus")
     # research-skill 背景 Claude web tools timeout（秒）
     research_claude_timeout_sec: int = _get_env_int("RESEARCH_CLAUDE_TIMEOUT_SEC", 1200)
     # check-research stale 判定分鐘（建議大於 claude timeout）
