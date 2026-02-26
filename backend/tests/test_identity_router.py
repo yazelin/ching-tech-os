@@ -236,7 +236,7 @@ class TestHandleRestrictedMode:
             ),
             patch(
                 "ching_tech_os.services.bot.ai.parse_ai_response",
-                return_value={"text": "你好！有什麼可以幫你的？"},
+                return_value=("你好！有什麼可以幫你的？", []),
             ),
         ):
             result = await handle_restricted_mode(
@@ -292,9 +292,9 @@ class TestHandleRestrictedMode:
             ),
             patch(
                 "ching_tech_os.services.bot.ai.parse_ai_response",
-                return_value={
-                    "text": "這是結果 [FILE_MESSAGE:path/to/file] 完畢"
-                },
+                return_value=(
+                    "這是結果 [FILE_MESSAGE:path/to/file] 完畢", []
+                ),
             ),
         ):
             result = await handle_restricted_mode(
@@ -352,7 +352,7 @@ class TestHandleRestrictedMode:
             ),
             patch(
                 "ching_tech_os.services.bot.ai.parse_ai_response",
-                return_value={"text": ""},
+                return_value=("", []),
             ),
         ):
             result = await handle_restricted_mode(

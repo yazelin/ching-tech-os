@@ -73,7 +73,7 @@ class TestDebugCommand:
             ),
             patch(
                 "ching_tech_os.services.bot.ai.parse_ai_response",
-                return_value={"text": "系統狀態正常，無異常。"},
+                return_value=("系統狀態正常，無異常。", []),
             ),
         ):
             ctx = _make_ctx(is_admin=True, raw_args="系統有什麼問題嗎")
@@ -102,7 +102,7 @@ class TestDebugCommand:
             ) as mock_call,
             patch(
                 "ching_tech_os.services.bot.ai.parse_ai_response",
-                return_value={"text": "健檢結果正常"},
+                return_value=("健檢結果正常", []),
             ),
         ):
             ctx = _make_ctx(is_admin=True, raw_args="")

@@ -71,16 +71,15 @@ async def _handle_debug(ctx: CommandContext) -> str | None:
             tools=agent_tools,
             ctos_user_id=ctx.ctos_user_id,
         )
-    except Exception as e:
+    except Exception:
         logger.exception("Debug 指令 AI 呼叫失敗")
-        return f"⚠️ 診斷執行失敗：{e}"
+        return "⚠️ 診斷執行失敗，請查看系統日誌。"
 
     duration_ms = int((time.time() - start_time) * 1000)
     logger.info(f"/debug 診斷完成，耗時 {duration_ms}ms")
 
     # 解析回應
-    result = parse_ai_response(response)
-    reply_text = result.get("text", "")
+    reply_text, _files = parse_ai_response(response.message)
 
     if not reply_text:
         return "診斷完成，但未產生回報內容。"

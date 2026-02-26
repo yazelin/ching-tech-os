@@ -122,7 +122,7 @@ async def handle_restricted_mode(
     """
     # Rate limit 檢查（在 AI 處理之前）
     if bot_user_id:
-        from .rate_limiter import check_rate_limit, record_usage
+        from .rate_limiter import check_rate_limit
 
         allowed, deny_msg = await check_rate_limit(bot_user_id)
         if not allowed:
@@ -222,16 +222,20 @@ async def handle_restricted_mode(
     # 8. 呼叫 Claude CLI
     start_time = time.time()
 
-    response = await call_claude(
-        prompt=user_message,
-        model=model,
-        history=history,
-        system_prompt=system_prompt,
-        timeout=120,  # 受限模式超時較短（2 分鐘）
-        tools=all_tools,
-        required_mcp_servers=required_mcp_servers,
-        ctos_user_id=None,  # 未綁定用戶
-    )
+    try:
+        response = await call_claude(
+            prompt=user_message,
+            model=model,
+            history=history,
+            system_prompt=system_prompt,
+            timeout=120,  # 受限模式超時較短（2 分鐘）
+            tools=all_tools,
+            required_mcp_servers=required_mcp_servers,
+            ctos_user_id=None,  # 未綁定用戶
+        )
+    except Exception:
+        logger.exception("受限模式 AI 呼叫失敗")
+        return "抱歉，處理您的訊息時發生錯誤，請稍後再試。"
 
     duration_ms = int((time.time() - start_time) * 1000)
 
@@ -251,8 +255,7 @@ async def handle_restricted_mode(
         )
 
     # 10. 解析回應（受限模式僅支援文字，不處理 FILE_MESSAGE）
-    result = parse_ai_response(response)
-    reply_text = result.get("text", "")
+    reply_text, _files = parse_ai_response(response.message)
 
     if not reply_text:
         return "抱歉，我目前無法回答您的問題。"
