@@ -299,10 +299,11 @@ async def test_handle_text_command_and_access_paths(monkeypatch: pytest.MonkeyPa
 
 @pytest.mark.asyncio
 async def test_restricted_mode_routing(monkeypatch: pytest.MonkeyPatch) -> None:
-    """測試 Telegram 受限模式：斜線指令攔截 + AI 處理 + 錯誤處理"""
+    """測試 Telegram 受限模式：指令攔截（頂層）+ AI 處理 + 錯誤處理"""
     conn = AsyncMock()
     monkeypatch.setattr(handler, "get_connection", lambda: _CM(conn))
     monkeypatch.setattr(handler, "_ensure_bot_user", AsyncMock(return_value="u1"))
+    monkeypatch.setattr(handler, "_save_message", AsyncMock(return_value="msg-r1"))
     monkeypatch.setattr(handler, "is_binding_code_format", AsyncMock(return_value=False))
 
     # 未綁定用戶，restricted 策略
@@ -322,7 +323,7 @@ async def test_restricted_mode_routing(monkeypatch: pytest.MonkeyPatch) -> None:
     register_builtin_commands()
     monkeypatch.setattr(command_handlers, "reset_conversation", AsyncMock())
 
-    # --- 1. 受限模式下攔截斜線指令 (/reset) ---
+    # --- 1. 斜線指令由頂層 CommandRouter 攔截（不到 restricted 分支）---
     from ching_tech_os.services.bot.identity_router import UnboundRouteResult
     monkeypatch.setattr(
         "ching_tech_os.services.bot.identity_router.route_unbound",
@@ -333,14 +334,19 @@ async def test_restricted_mode_routing(monkeypatch: pytest.MonkeyPatch) -> None:
     adapter.send_text.assert_awaited_once()
     assert "對話" in adapter.send_text.await_args.args[1]
 
-    # --- 2. 受限模式 AI 處理成功 ---
+    # --- 2. 受限模式 AI 處理成功（含 message_uuid 傳遞）---
+    mock_restricted = AsyncMock(return_value="受限模式回覆")
     monkeypatch.setattr(
         "ching_tech_os.services.bot.identity_router.handle_restricted_mode",
-        AsyncMock(return_value="受限模式回覆"),
+        mock_restricted,
     )
     adapter.send_text.reset_mock()
     await handler._handle_text(message, "你好", "100", chat, user, False, adapter)
     adapter.send_text.assert_awaited_with("100", "受限模式回覆")
+    # 確認 message_uuid 和 str(bot_user_id) 有傳入
+    call_kwargs = mock_restricted.call_args.kwargs
+    assert call_kwargs["message_uuid"] == "msg-r1"
+    assert call_kwargs["bot_user_id"] == "u1"
 
     # --- 3. 受限模式 AI 回傳 None → 不送訊息 ---
     monkeypatch.setattr(

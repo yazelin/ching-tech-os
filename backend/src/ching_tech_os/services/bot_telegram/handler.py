@@ -506,39 +506,39 @@ async def _handle_text(
                             chat_id, route_result.reply_text + extra
                         )
                 elif route_result.action == "restricted":
-                    # 受限模式：先攔截斜線指令（與 Line 側一致）
-                    parsed = command_router.parse(text)
-                    if parsed is not None:
-                        command, args = parsed
-                        cmd_ctx = CommandContext(
-                            platform_type="telegram",
-                            platform_user_id=str(user.id) if user else chat_id,
-                            bot_user_id=bot_user_id,
-                            ctos_user_id=None,
-                            is_admin=False,
-                            is_group=is_group,
-                            group_id=bot_group_id,
-                            reply_token=None,
-                            raw_args=args,
-                        )
-                        cmd_reply = await command_router.dispatch(
-                            command, args, cmd_ctx
-                        )
-                        if cmd_reply:
-                            await adapter.send_text(chat_id, cmd_reply)
-                        return
+                    # 斜線指令已在上方 L431 由 CommandRouter 統一處理並 return，
+                    # 到此處的文字一定不是已註冊指令，直接進入 AI 流程。
 
                     # 受限模式 AI 處理
                     try:
                         display_name = None
                         if user:
                             display_name = user.full_name or user.username
+
+                        # 儲存訊息以取得 message_uuid（用於 AI log）
+                        restricted_msg_uuid = None
+                        if bot_user_id:
+                            try:
+                                async with get_connection() as conn:
+                                    restricted_msg_uuid = await _save_message(
+                                        conn,
+                                        message_id=f"tg_{message.message_id}",
+                                        bot_user_id=bot_user_id,
+                                        bot_group_id=bot_group_id,
+                                        message_type="text",
+                                        content=text,
+                                        is_from_bot=False,
+                                    )
+                            except Exception as e:
+                                logger.warning(f"受限模式儲存訊息失敗: {e}")
+
                         reply = await handle_restricted_mode(
                             content=text,
                             platform_user_id=str(user.id) if user else chat_id,
-                            bot_user_id=bot_user_id,
+                            bot_user_id=str(bot_user_id) if bot_user_id else None,
                             is_group=is_group,
                             line_group_id=None,
+                            message_uuid=restricted_msg_uuid,
                             user_display_name=display_name,
                         )
                         if reply:

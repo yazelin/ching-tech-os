@@ -17,9 +17,7 @@ logger = logging.getLogger(__name__)
 
 async def _handle_reset(ctx: CommandContext) -> str | None:
     """重置對話歷史"""
-    if ctx.is_group:
-        return None  # 群組靜默忽略
-
+    # 群組檢查已由 CommandRouter.dispatch() 的 private_only 處理
     await reset_conversation(ctx.platform_user_id)
     return "已清除對話歷史，開始新對話！有什麼可以幫你的嗎？"
 

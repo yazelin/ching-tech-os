@@ -15,6 +15,10 @@ from ...database import get_connection
 logger = logging.getLogger(__name__)
 
 
+class _RateLimitExceeded(Exception):
+    """內部例外：頻率超限，用於觸發 transaction rollback"""
+
+
 def _current_hourly_key() -> str:
     """取得當前小時的 period_key（如 '2026-02-26-14'）"""
     now = datetime.now(timezone.utc)
@@ -48,7 +52,8 @@ async def check_and_increment(bot_user_id: str) -> tuple[bool, str | None]:
 
     try:
         async with get_connection() as conn:
-            # 使用交易確保原子性
+            # 使用交易確保原子性：先遞增再檢查，
+            # 若超限則拋出例外觸發 rollback，避免被拒絕的請求虛增計數器
             async with conn.transaction():
                 # 先 UPSERT 計數器（+1），再檢查是否超限
                 # 這避免了 check-then-act 的 TOCTOU 問題
@@ -82,19 +87,23 @@ async def check_and_increment(bot_user_id: str) -> tuple[bool, str | None]:
 
                 # 檢查每小時限額（已遞增後的值）
                 if hourly_count > settings.bot_rate_limit_hourly:
-                    return False, (
+                    raise _RateLimitExceeded(
                         f"您已達到每小時使用上限（{settings.bot_rate_limit_hourly} 則訊息）。\n"
                         "請稍後再試，或綁定帳號以獲得完整服務。"
                     )
 
                 # 檢查每日限額
                 if daily_count > settings.bot_rate_limit_daily:
-                    return False, (
+                    raise _RateLimitExceeded(
                         f"您已達到每日使用上限（{settings.bot_rate_limit_daily} 則訊息）。\n"
                         "請明天再試，或綁定帳號以獲得完整服務。"
                     )
 
                 return True, None
+
+    except _RateLimitExceeded as e:
+        # 超限：transaction 已 rollback，計數器未遞增
+        return False, str(e)
 
     except Exception:
         logger.exception("頻率限制檢查失敗，允許通過（fail-open）")
