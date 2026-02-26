@@ -52,12 +52,14 @@ services/linebot_ai.py             ← AI 回應（與 Line Bot 共用）
 ### Bot 共用層（跨平台）
 
 ```
-services/bot/adapter.py    ← BotAdapter 協定定義
-services/bot/agents.py     ← 平台無關的 prompt 模板（758 行）
-services/bot/ai.py         ← parse_ai_response()
-services/bot/media.py      ← 媒體處理
-services/bot/message.py    ← 訊息處理
-services/claude_agent.py   ← call_claude() AI 推論
+services/bot/adapter.py            ← BotAdapter 協定定義
+services/bot/agents.py             ← 平台無關的 prompt 模板（758 行）
+services/bot/ai.py                 ← parse_ai_response()
+services/bot/commands.py           ← CommandRouter 斜線指令路由框架
+services/bot/command_handlers.py   ← 內建指令（/start、/help、/reset、/debug）
+services/bot/media.py              ← 媒體處理
+services/bot/message.py            ← 訊息處理
+services/claude_agent.py           ← call_claude() AI 推論
 ```
 
 ### AI Agent / AI 管理
@@ -315,6 +317,12 @@ services/scheduler.py      ← APScheduler 任務定義
 3. `services/xxx.py`（業務邏輯）
 4. `models/xxx.py`（資料模型）
 5. `migrations/versions/`（如需新表格）
+
+### 「新增/修改 Bot 斜線指令」
+1. `services/bot/command_handlers.py`（新增 handler 函式 + 註冊 SlashCommand）
+2. `services/bot/commands.py`（如需修改 CommandRouter 框架）
+3. `config.py`（如需新增環境變數控制）
+4. `docs/linebot.md` 和 `docs/telegram-bot.md`（更新指令表）
 
 ### 「修改 Bot AI 行為」
 1. `services/bot/agents.py`（prompt 模板）

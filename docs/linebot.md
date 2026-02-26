@@ -77,6 +77,9 @@ Line Platform
 | 公開分享 | 建立知識庫/專案/檔案的公開連結分享給外部人員 |
 | 群組 Mention | 群組對話回覆時 @ 提及發問用戶，讓用戶收到通知 |
 | 回覆引用 | 回覆文字訊息時自動帶入被回覆的內容 |
+| 歡迎訊息 | 加好友（FollowEvent）時自動推送歡迎訊息，引導帳號綁定 |
+| 統一斜線指令 | /start、/help、/reset、/debug，與 Telegram 共用 CommandRouter |
+| 管理員診斷 | /debug 指令透過 AI Agent 分析系統日誌（僅管理員） |
 
 ## 資料表
 
@@ -185,6 +188,20 @@ GET /api/bot/messages?group_id=xxx&page=1&page_size=50
 | `linebot-group` | claude-haiku | 群組對話，精簡 prompt |
 
 Prompt 內容可透過「AI 管理」應用程式修改。
+
+### 斜線指令
+
+LINE 和 Telegram 共用 `CommandRouter` 框架（`services/bot/commands.py`），所有指令統一定義在 `services/bot/command_handlers.py`。
+
+| 指令 | 說明 | 別名 | 權限 |
+|------|------|------|------|
+| `/start` | 歡迎訊息（功能介紹 + 帳號綁定步驟） | - | 不需綁定 |
+| `/help` | 動態列出所有已註冊的可用指令 | `/說明` | 不需綁定 |
+| `/reset` | 重置對話歷史 | `/新對話`、`/清除對話`、`/忘記` 等 | 不需綁定 |
+| `/debug` | 管理員系統診斷（AI 分析 logs） | `/診斷`、`/diag` | 需綁定 + 管理員 |
+
+> **指令開關**：可透過環境變數 `BOT_CMD_DISABLED`（逗號分隔）停用特定指令。
+> **歡迎訊息**：用戶加好友（FollowEvent）時自動推送歡迎訊息，內容與 `/start` 指令相同。
 
 ### 對話歷史
 

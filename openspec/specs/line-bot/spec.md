@@ -51,6 +51,13 @@ Line Bot SHALL 接收並處理 Line Messaging API 的 Webhook 事件，使用 bo
 - **WHEN** 收到 LeaveEvent
 - **THEN** 系統更新群組狀態為 inactive
 
+#### Scenario: 處理加好友事件發送歡迎訊息
+- **WHEN** 收到 FollowEvent（用戶加好友）
+- **THEN** 系統建立或更新用戶記錄
+- **AND** 設定 `is_friend = true`
+- **AND** 系統 SHALL 使用 push message 發送歡迎訊息
+- **AND** 歡迎訊息內容與 `/start` 指令回覆相同
+
 ---
 
 ### Requirement: 群組訊息記錄
