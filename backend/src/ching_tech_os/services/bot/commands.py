@@ -67,9 +67,11 @@ class SlashCommand:
     handler: Callable[[CommandContext], Coroutine[Any, Any, str | None]] = field(
         default=None  # type: ignore — 註冊時必須提供 handler
     )
+    description: str = ""  # 指令說明（供 /help 顯示）
     require_bound: bool = False  # 是否要求已綁定 CTOS 帳號
     require_admin: bool = False  # 是否要求管理員
     private_only: bool = False  # 是否僅限個人對話
+    enabled: bool = True  # 是否啟用（False 時 parse 不匹配）
     platforms: set[str] = field(default_factory=lambda: {"line", "telegram"})
 
 
@@ -109,7 +111,7 @@ class CommandRouter:
         args = parts[1] if len(parts) > 1 else ""
 
         command = self._commands.get(cmd_name)
-        if command is None:
+        if command is None or not command.enabled:
             return None
 
         return (command, args)
