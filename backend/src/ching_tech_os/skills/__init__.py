@@ -17,7 +17,6 @@ from typing import Optional
 import yaml
 
 from ..config import settings
-from ..services.hub_meta import parse_skill_md as parse_skill_md_frontmatter
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +25,8 @@ SKILLS_DIR = Path(__file__).parent
 
 def _parse_skill_md(text: str, skill_name: str = "") -> tuple[dict, str]:
     """解析 SKILL.md frontmatter（含 contributes 驗證）。"""
+    # 延遲 import 避免 skills ↔ services 循環引用
+    from ..services.hub_meta import parse_skill_md as parse_skill_md_frontmatter
     return parse_skill_md_frontmatter(text, skill_name=skill_name)
 
 

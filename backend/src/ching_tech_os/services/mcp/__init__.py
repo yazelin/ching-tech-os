@@ -7,8 +7,6 @@ import importlib.util
 import logging
 import sys
 
-from ...modules import get_module_registry, is_module_enabled
-
 # 匯入共用元件
 from .server import (  # noqa: F401
     mcp,
@@ -44,6 +42,7 @@ def _load_skill_mcp_tools(module_id: str, file_path: str) -> None:
 
 def _load_enabled_mcp_tools() -> None:
     """依啟用模組動態載入 MCP 工具。"""
+    from ...modules import get_module_registry, is_module_enabled
 
     for module_id, info in get_module_registry().items():
         if not is_module_enabled(module_id):
