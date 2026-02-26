@@ -99,7 +99,7 @@ async def _ensure_bot_user(user, conn) -> str:
                 display_name,
                 row["id"],
             )
-        return row["id"]
+        return str(row["id"])
 
     # 新建用戶
     row = await conn.fetchrow(
@@ -113,7 +113,7 @@ async def _ensure_bot_user(user, conn) -> str:
         display_name,
     )
     logger.info(f"建立 Telegram 用戶: {display_name} ({platform_user_id})")
-    return row["id"]
+    return str(row["id"])
 
 
 async def _ensure_bot_group(chat, conn) -> str:
@@ -137,7 +137,7 @@ async def _ensure_bot_group(chat, conn) -> str:
                 group_name,
                 row["id"],
             )
-        return row["id"]
+        return str(row["id"])
 
     # 新建群組（預設 allow_ai_response = false）
     row = await conn.fetchrow(
@@ -151,7 +151,7 @@ async def _ensure_bot_group(chat, conn) -> str:
         group_name,
     )
     logger.info(f"建立 Telegram 群組: {group_name} ({platform_group_id})")
-    return row["id"]
+    return str(row["id"])
 
 
 async def _save_message(
@@ -535,7 +535,7 @@ async def _handle_text(
                         reply = await handle_restricted_mode(
                             content=text,
                             platform_user_id=str(user.id) if user else chat_id,
-                            bot_user_id=str(bot_user_id) if bot_user_id else None,
+                            bot_user_id=bot_user_id,
                             is_group=is_group,
                             line_group_id=None,
                             message_uuid=restricted_msg_uuid,
