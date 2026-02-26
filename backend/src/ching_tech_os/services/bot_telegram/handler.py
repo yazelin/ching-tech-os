@@ -487,20 +487,46 @@ async def _handle_text(
         )
         if not has_access:
             if deny_reason == "user_not_bound":
-                if not is_group:
-                    # 私訊：回覆綁定提示
-                    await adapter.send_text(
-                        chat_id,
-                        "請先在 CTOS 系統綁定您的 Telegram 帳號才能使用此服務。\n\n"
-                        "步驟：\n"
-                        "1. 登入 CTOS 系統\n"
-                        "2. 進入 Bot 管理頁面\n"
-                        "3. 點擊「綁定帳號」產生驗證碼\n"
-                        "4. 將 6 位數驗證碼發送給我完成綁定\n\n"
-                        f"📋 您的 Telegram ID：{chat_id}\n"
-                        "（設定 Admin Chat ID 時可使用此 ID）",
-                    )
-                # 群組：未綁定用戶靜默忽略
+                # 身份分流：根據策略決定拒絕或進入受限模式
+                from ..bot.identity_router import (
+                    route_unbound,
+                    handle_restricted_mode,
+                )
+
+                route_result = route_unbound(
+                    platform_type="telegram", is_group=is_group
+                )
+                if route_result.action == "reject":
+                    if not is_group and route_result.reply_text:
+                        extra = (
+                            f"\n\n📋 您的 Telegram ID：{chat_id}\n"
+                            "（設定 Admin Chat ID 時可使用此 ID）"
+                        )
+                        await adapter.send_text(
+                            chat_id, route_result.reply_text + extra
+                        )
+                elif route_result.action == "restricted":
+                    # 受限模式 AI 處理
+                    try:
+                        display_name = None
+                        if user:
+                            display_name = user.full_name or user.username
+                        reply = await handle_restricted_mode(
+                            content=text,
+                            platform_user_id=str(user.id) if user else chat_id,
+                            bot_user_id=bot_user_id,
+                            is_group=is_group,
+                            line_group_id=None,
+                            user_display_name=display_name,
+                        )
+                        if reply:
+                            await adapter.send_text(chat_id, reply)
+                    except Exception as e:
+                        logger.error(f"受限模式 AI 處理失敗: {e}", exc_info=True)
+                        await adapter.send_text(
+                            chat_id, "抱歉，處理訊息時發生錯誤，請稍後再試。"
+                        )
+                # silent: 群組靜默忽略
             # group_not_allowed：靜默忽略
             return
 

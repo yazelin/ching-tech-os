@@ -13,11 +13,11 @@
 
 ## 3. 身份分流路由器
 
-- [ ] 3.1 建立 `services/bot/identity_router.py`：`route_unbound()` 函式，根據 `BOT_UNBOUND_USER_POLICY` 決定 reject 或 restricted 路徑
-- [ ] 3.2 在 `linebot_ai.py` 的 `process_message_with_ai()` 中，查詢用戶綁定狀態後、Agent 選擇前，插入身份分流呼叫
-- [ ] 3.3 實作受限模式 AI 流程：選擇 `bot-restricted` Agent、組裝簡化 system prompt、對話歷史（limit=10）、call_claude、純文字回覆
-- [ ] 3.4 確保綁定驗證碼（6 位數字）在分流之前優先處理，不受策略影響
-- [ ] 3.5 撰寫身份分流的單元測試：reject 策略回覆綁定提示、restricted 策略走受限模式、已綁定用戶不受影響、群組未綁定用戶靜默忽略
+- [x] 3.1 建立 `services/bot/identity_router.py`：`route_unbound()` 函式，根據 `BOT_UNBOUND_USER_POLICY` 決定 reject 或 restricted 路徑
+- [x] 3.2 在 `linebot_ai.py` 的 `process_message_with_ai()` 中，查詢用戶綁定狀態後、Agent 選擇前，插入身份分流呼叫
+- [x] 3.3 實作受限模式 AI 流程：選擇 `bot-restricted` Agent、組裝簡化 system prompt、對話歷史（limit=10）、call_claude、純文字回覆
+- [x] 3.4 確保綁定驗證碼（6 位數字）在分流之前優先處理，不受策略影響
+- [x] 3.5 撰寫身份分流的單元測試：reject 策略回覆綁定提示、restricted 策略走受限模式、已綁定用戶不受影響、群組未綁定用戶靜默忽略
 
 ## 4. Agent 預設初始化
 
