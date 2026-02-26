@@ -56,7 +56,7 @@ services/bot/adapter.py            ← BotAdapter 協定定義
 services/bot/agents.py             ← 平台無關的 prompt 模板（758 行）
 services/bot/ai.py                 ← parse_ai_response()
 services/bot/commands.py           ← CommandRouter 斜線指令路由框架
-services/bot/command_handlers.py   ← 內建指令（/start、/help、/reset、/debug）
+services/bot/command_handlers.py   ← 內建指令（/start、/help、/reset、/debug、/agent）
 services/bot/identity_router.py    ← 未綁定用戶身份分流（reject / restricted）
 services/bot/rate_limiter.py       ← 受限模式頻率限制（bot_usage_tracking）
 services/bot/media.py              ← 媒體處理
@@ -69,7 +69,7 @@ services/claude_agent.py           ← call_claude() AI 推論
 ```
 api/ai_management.py               ← AI prompt/agent CRUD API
 api/ai_router.py                   ← AI 對話 API（chats）
-services/linebot_agents.py         ← agent 定義、prompt 生成、工具分配
+services/linebot_agents.py         ← agent 定義、prompt 生成、工具分配、Agent 偏好持久化
 services/bot/agents.py             ← prompt 模板（按功能分類）
 services/claude_agent.py           ← Claude API 呼叫
 services/linebot_ai.py             ← AI 訊息處理流程
