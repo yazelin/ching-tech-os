@@ -350,6 +350,24 @@ async def get_agent_by_name(name: str) -> dict | None:
         return result
 
 
+async def get_selectable_agents() -> list[dict]:
+    """取得可供 /agent 指令切換的 Agent 清單
+
+    查詢 is_active=true 且 settings.user_selectable='true' 的 Agent，按 name 排序。
+    """
+    async with get_connection() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT id, name, display_name, description, model
+            FROM ai_agents
+            WHERE is_active = true
+              AND settings->>'user_selectable' = 'true'
+            ORDER BY name
+            """,
+        )
+        return [dict(row) for row in rows]
+
+
 async def create_agent(data: AiAgentCreate) -> dict:
     """建立 Agent"""
     settings_json = json.dumps(data.settings) if data.settings else None

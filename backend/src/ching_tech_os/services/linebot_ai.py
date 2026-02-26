@@ -600,6 +600,7 @@ async def process_message_with_ai(
     reply_token: str | None,
     user_display_name: str | None = None,
     quoted_message_id: str | None = None,
+    bot_user_id: str | None = None,
 ) -> str | None:
     """
     使用 AI 處理訊息
@@ -637,15 +638,24 @@ async def process_message_with_ai(
 
     try:
         # 取得 Agent 設定
-        agent = await get_linebot_agent(is_group)
-        agent_name = AGENT_LINEBOT_GROUP if is_group else AGENT_LINEBOT_PERSONAL
+        # 群組 ID 轉換為字串（bot_groups.id 是 UUID）
+        bot_group_id_str = str(line_group_id) if line_group_id else None
+        agent = await get_linebot_agent(
+            is_group,
+            bot_user_id=bot_user_id,
+            bot_group_id=bot_group_id_str,
+        )
 
         if not agent:
-            error_msg = f"⚠️ AI 設定錯誤：Agent '{agent_name}' 不存在"
+            fallback_name = AGENT_LINEBOT_GROUP if is_group else AGENT_LINEBOT_PERSONAL
+            error_msg = f"⚠️ AI 設定錯誤：Agent '{fallback_name}' 不存在"
             logger.error(error_msg)
             if reply_token:
                 await reply_text(reply_token, error_msg)
             return error_msg
+
+        # agent 保證非 None
+        agent_name = agent.get("name", "")
 
         # 從 Agent 取得 model 和基礎 prompt
         model = agent.get("model", "opus").replace("claude-", "")  # claude-sonnet -> sonnet
@@ -1590,4 +1600,5 @@ async def handle_text_message(
         reply_token=reply_token,
         user_display_name=user_display_name,
         quoted_message_id=quoted_message_id,
+        bot_user_id=bot_user_id,
     )

@@ -4,6 +4,7 @@ FastMCP 實例和共用輔助函數。
 """
 
 import logging
+import os
 from datetime import datetime, timedelta, timezone
 
 from mcp.server.fastmcp import FastMCP
@@ -49,6 +50,29 @@ async def ensure_db_connection():
 
 
 # ============================================================
+# 使用者身份輔助函數
+# ============================================================
+
+
+def resolve_ctos_user_id(ctos_user_id: int | None) -> int | None:
+    """解析 ctos_user_id，參數為 None 時 fallback 讀取環境變數。
+
+    bypassPermissions 模式下 on_tool_input_transform 不會被呼叫，
+    AI 可能不會在工具參數中傳入 ctos_user_id。此時由 framework
+    注入的 CTOS_USER_ID 環境變數提供 fallback。
+    """
+    if ctos_user_id is not None:
+        return ctos_user_id
+    env_val = os.environ.get("CTOS_USER_ID")
+    if env_val:
+        try:
+            return int(env_val)
+        except ValueError:
+            pass
+    return None
+
+
+# ============================================================
 # 權限檢查輔助函數
 # ============================================================
 
@@ -64,11 +88,14 @@ async def check_mcp_tool_permission(
 
     Args:
         tool_name: 工具名稱（不含 mcp__ching-tech-os__ 前綴）
-        ctos_user_id: CTOS 用戶 ID（None 表示未關聯帳號）
+        ctos_user_id: CTOS 用戶 ID（None 表示未關聯帳號，會自動 fallback 環境變數）
 
     Returns:
         (allowed, error_message): allowed=True 表示允許，False 表示拒絕並回傳錯誤訊息
     """
+    # bypassPermissions 模式下 AI 可能不傳 ctos_user_id，fallback 環境變數
+    ctos_user_id = resolve_ctos_user_id(ctos_user_id)
+
     from ..permissions import (
         check_tool_permission,
         TOOL_APP_MAPPING,

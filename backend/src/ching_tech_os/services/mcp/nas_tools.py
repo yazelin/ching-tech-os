@@ -28,6 +28,10 @@ _MAX_IMAGE_SIZE = 10 * 1024 * 1024
 async def _get_user_shared_mounts(ctos_user_id: int | None) -> dict[str, str]:
     """取得使用者可存取的 shared 掛載點。"""
     from ..path_manager import path_manager
+    from .server import resolve_ctos_user_id
+
+    # bypassPermissions 模式下 AI 可能不傳 ctos_user_id，fallback 環境變數
+    ctos_user_id = resolve_ctos_user_id(ctos_user_id)
 
     return await get_allowed_shared_mounts_for_user(
         path_manager.get_shared_mounts(),

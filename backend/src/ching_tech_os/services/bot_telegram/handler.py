@@ -680,7 +680,11 @@ async def _handle_text_with_ai(
         logger.error(f"取得對話歷史失敗: {e}", exc_info=True)
 
     # 1. 取得 Agent 設定
-    agent = await get_linebot_agent(is_group=is_group)
+    agent = await get_linebot_agent(
+        is_group=is_group,
+        bot_user_id=bot_user_id,
+        bot_group_id=bot_group_id,
+    )
     if not agent:
         logger.error("找不到 Agent 設定")
         await adapter.send_text(chat_id, "系統尚未設定 AI Agent，請聯繫管理員。")
