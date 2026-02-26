@@ -73,8 +73,8 @@ def main() -> int:
     except subprocess.TimeoutExpired:
         print(json.dumps({"success": False, "error": "指令執行逾時"}, ensure_ascii=False))
         return 1
-    except Exception as e:
-        print(json.dumps({"success": False, "error": str(e)}, ensure_ascii=False))
+    except Exception:
+        print(json.dumps({"success": False, "error": "查詢資料庫狀態失敗"}, ensure_ascii=False))
         return 1
 
 

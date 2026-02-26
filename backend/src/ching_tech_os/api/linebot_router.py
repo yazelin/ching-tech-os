@@ -277,6 +277,33 @@ async def process_message_event(event: MessageEvent) -> None:
                         except Exception as e:
                             logger.warning(f"回覆未綁定訊息失敗: {e}")
                 elif route_result.action == "restricted":
+                    # 受限模式：先攔截斜線指令
+                    from ..services.bot.commands import router as cmd_router
+
+                    parsed_cmd = cmd_router.parse(content)
+                    if parsed_cmd:
+                        cmd, cmd_args = parsed_cmd
+                        from ..services.bot.commands import CommandContext
+
+                        cmd_ctx = CommandContext(
+                            platform_type="line",
+                            platform_user_id=line_user_id,
+                            bot_user_id=str(user_uuid),
+                            ctos_user_id=None,  # 未綁定
+                            is_admin=False,
+                            is_group=is_group,
+                            group_id=str(group_uuid) if group_uuid else None,
+                            reply_token=event.reply_token,
+                            raw_args=cmd_args,
+                        )
+                        cmd_reply = await cmd_router.dispatch(cmd, cmd_args, cmd_ctx)
+                        if cmd_reply and event.reply_token:
+                            try:
+                                await reply_text(event.reply_token, cmd_reply)
+                            except Exception:
+                                await push_text(line_user_id, cmd_reply)
+                        return
+
                     # 受限模式 AI 處理
                     try:
                         # 取得使用者顯示名稱
@@ -296,19 +323,22 @@ async def process_message_event(event: MessageEvent) -> None:
                             message_uuid=message_uuid,
                             user_display_name=display_name,
                         )
-                        if reply and event.reply_token:
-                            await reply_text(event.reply_token, reply)
-                        elif reply:
-                            await push_text(line_user_id, reply)
+                        if reply:
+                            # reply_token 可能在長時間 AI 處理後過期，
+                            # 先嘗試 reply，失敗則 fallback 到 push
+                            if event.reply_token:
+                                try:
+                                    await reply_text(event.reply_token, reply)
+                                except Exception:
+                                    await push_text(line_user_id, reply)
+                            else:
+                                await push_text(line_user_id, reply)
                     except Exception as e:
                         logger.error(f"受限模式 AI 處理失敗: {e}", exc_info=True)
-                        if event.reply_token:
-                            try:
-                                await reply_text(
-                                    event.reply_token, "抱歉，處理訊息時發生錯誤，請稍後再試。"
-                                )
-                            except Exception:
-                                pass
+                        try:
+                            await push_text(line_user_id, "抱歉，處理訊息時發生錯誤，請稍後再試。")
+                        except Exception:
+                            pass
                 # silent: 群組靜默忽略
             elif deny_reason == "group_not_allowed":
                 # 群組未開啟 AI 回應，靜默不回應

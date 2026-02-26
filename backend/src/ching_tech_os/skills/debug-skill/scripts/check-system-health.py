@@ -17,8 +17,8 @@ def _run_cmd(cmd: list[str], timeout: int = 10) -> tuple[str, bool]:
         return output.strip(), result.returncode == 0
     except subprocess.TimeoutExpired:
         return "（指令逾時）", False
-    except Exception as e:
-        return str(e), False
+    except Exception:
+        return "（指令執行失敗）", False
 
 
 def _run_sql(sql: str) -> tuple[str, bool]:

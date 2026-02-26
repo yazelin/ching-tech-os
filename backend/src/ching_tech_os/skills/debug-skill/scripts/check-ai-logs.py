@@ -7,6 +7,14 @@ import subprocess
 from ching_tech_os.skills.script_utils import parse_stdin_json_object
 
 
+def _safe_int(value, default: int, min_val: int = 1, max_val: int = 50) -> int:
+    """安全的整數轉換，帶範圍限制"""
+    try:
+        return max(min_val, min(int(value), max_val))
+    except (ValueError, TypeError):
+        return default
+
+
 def main() -> int:
     payload, error = parse_stdin_json_object()
     if error:
@@ -14,10 +22,10 @@ def main() -> int:
         return 1
     payload = payload or {}
 
-    limit = min(int(payload.get("limit", 10)), 50)  # 最多 50 筆
-    errors_only = payload.get("errors_only", False)
+    limit = _safe_int(payload.get("limit", 10), default=10, max_val=50)
+    errors_only = payload.get("errors_only", False) is True  # 嚴格布林驗證
 
-    # 建構 SQL 查詢
+    # 建構 SQL 查詢（使用參數化的 LIMIT，errors_only 為固定值）
     where_clause = "WHERE success = false" if errors_only else ""
     sql = (
         f"SELECT id, context_type, model, success, duration_ms, "
@@ -54,8 +62,8 @@ def main() -> int:
     except subprocess.TimeoutExpired:
         print(json.dumps({"success": False, "error": "指令執行逾時"}, ensure_ascii=False))
         return 1
-    except Exception as e:
-        print(json.dumps({"success": False, "error": str(e)}, ensure_ascii=False))
+    except Exception:
+        print(json.dumps({"success": False, "error": "查詢 AI 日誌失敗"}, ensure_ascii=False))
         return 1
 
 

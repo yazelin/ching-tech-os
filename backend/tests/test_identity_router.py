@@ -135,13 +135,9 @@ def _rate_limit_patches():
     """建立 rate limiter mock patches（避免 DB 連線）"""
     return (
         patch(
-            "ching_tech_os.services.bot.rate_limiter.check_rate_limit",
+            "ching_tech_os.services.bot.rate_limiter.check_and_increment",
             new_callable=AsyncMock,
             return_value=(True, None),
-        ),
-        patch(
-            "ching_tech_os.services.bot.rate_limiter.record_usage",
-            new_callable=AsyncMock,
         ),
     )
 
@@ -152,10 +148,9 @@ class TestHandleRestrictedMode:
     @pytest.mark.asyncio
     async def test_agent_not_found(self):
         """bot-restricted Agent 不存在 → 回傳錯誤訊息"""
-        rl, ru = _rate_limit_patches()
+        (rl,) = _rate_limit_patches()
         with (
             rl,
-            ru,
             patch(
                 "ching_tech_os.services.ai_manager.get_agent_by_name",
                 new_callable=AsyncMock,
@@ -173,10 +168,9 @@ class TestHandleRestrictedMode:
     @pytest.mark.asyncio
     async def test_agent_no_prompt(self):
         """bot-restricted Agent 無 system_prompt → 回傳錯誤"""
-        rl, ru = _rate_limit_patches()
+        (rl,) = _rate_limit_patches()
         with (
             rl,
-            ru,
             patch(
                 "ching_tech_os.services.ai_manager.get_agent_by_name",
                 new_callable=AsyncMock,
@@ -196,11 +190,10 @@ class TestHandleRestrictedMode:
         """成功的受限模式 AI 流程"""
         mock_response = MagicMock()
         mock_response.tool_calls = []
-        rl, ru = _rate_limit_patches()
+        (rl,) = _rate_limit_patches()
 
         with (
             rl,
-            ru,
             patch(
                 "ching_tech_os.services.ai_manager.get_agent_by_name",
                 new_callable=AsyncMock,
@@ -252,11 +245,10 @@ class TestHandleRestrictedMode:
         """受限模式過濾 FILE_MESSAGE 標記"""
         mock_response = MagicMock()
         mock_response.tool_calls = []
-        rl, ru = _rate_limit_patches()
+        (rl,) = _rate_limit_patches()
 
         with (
             rl,
-            ru,
             patch(
                 "ching_tech_os.services.ai_manager.get_agent_by_name",
                 new_callable=AsyncMock,
@@ -312,11 +304,10 @@ class TestHandleRestrictedMode:
         """空回應 → 預設訊息"""
         mock_response = MagicMock()
         mock_response.tool_calls = []
-        rl, ru = _rate_limit_patches()
+        (rl,) = _rate_limit_patches()
 
         with (
             rl,
-            ru,
             patch(
                 "ching_tech_os.services.ai_manager.get_agent_by_name",
                 new_callable=AsyncMock,

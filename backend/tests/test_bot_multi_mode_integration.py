@@ -119,13 +119,9 @@ class TestRestrictedPolicy:
 
         with (
             patch(
-                "ching_tech_os.services.bot.rate_limiter.check_rate_limit",
+                "ching_tech_os.services.bot.rate_limiter.check_and_increment",
                 new_callable=AsyncMock,
                 return_value=(True, None),
-            ),
-            patch(
-                "ching_tech_os.services.bot.rate_limiter.record_usage",
-                new_callable=AsyncMock,
             ),
             patch(
                 "ching_tech_os.services.ai_manager.get_agent_by_name",
@@ -450,7 +446,7 @@ class TestRateLimiterIntegration:
         deny_msg = "您今日的使用次數已達上限，請明天再試。"
 
         with patch(
-            "ching_tech_os.services.bot.rate_limiter.check_rate_limit",
+            "ching_tech_os.services.bot.rate_limiter.check_and_increment",
             new_callable=AsyncMock,
             return_value=(False, deny_msg),
         ):

@@ -5,7 +5,7 @@ allowed-tools: mcp__ching-tech-os__run_skill_script
 metadata:
   ctos:
     mcp_servers: ching-tech-os
-    requires_app: null
+    requires_app: admin
 ---
 
 【系統診斷工具】

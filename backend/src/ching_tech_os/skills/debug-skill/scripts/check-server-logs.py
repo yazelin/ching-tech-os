@@ -7,6 +7,14 @@ import subprocess
 from ching_tech_os.skills.script_utils import parse_stdin_json_object
 
 
+def _safe_int(value, default: int, min_val: int = 1, max_val: int = 500) -> int:
+    """安全的整數轉換，帶範圍限制"""
+    try:
+        return max(min_val, min(int(value), max_val))
+    except (ValueError, TypeError):
+        return default
+
+
 def main() -> int:
     payload, error = parse_stdin_json_object()
     if error:
@@ -14,7 +22,7 @@ def main() -> int:
         return 1
     payload = payload or {}
 
-    lines = min(int(payload.get("lines", 50)), 500)  # 最多 500 行
+    lines = _safe_int(payload.get("lines", 50), default=50, max_val=500)
     keyword = payload.get("keyword", "")
 
     try:
@@ -51,8 +59,8 @@ def main() -> int:
     except subprocess.TimeoutExpired:
         print(json.dumps({"success": False, "error": "指令執行逾時"}, ensure_ascii=False))
         return 1
-    except Exception as e:
-        print(json.dumps({"success": False, "error": str(e)}, ensure_ascii=False))
+    except Exception:
+        print(json.dumps({"success": False, "error": "查詢伺服器日誌失敗"}, ensure_ascii=False))
         return 1
 
 

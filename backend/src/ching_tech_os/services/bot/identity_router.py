@@ -120,11 +120,11 @@ async def handle_restricted_mode(
     Returns:
         AI 回應文字，或 None
     """
-    # Rate limit 檢查（在 AI 處理之前）
+    # 原子性頻率限制檢查+計數（在 AI 處理之前）
     if bot_user_id:
-        from .rate_limiter import check_rate_limit
+        from .rate_limiter import check_and_increment
 
-        allowed, deny_msg = await check_rate_limit(bot_user_id)
+        allowed, deny_msg = await check_and_increment(bot_user_id)
         if not allowed:
             return deny_msg
 
@@ -264,9 +264,6 @@ async def handle_restricted_mode(
     import re
     reply_text = re.sub(r"\[FILE_MESSAGE:[^\]]+\]", "", reply_text).strip()
 
-    # 記錄使用量（成功處理後）
-    if bot_user_id:
-        from .rate_limiter import record_usage
-        await record_usage(bot_user_id)
+    # 使用量已在 check_and_increment 中原子性計數，無需再次記錄
 
     return reply_text or "抱歉，我目前無法回答您的問題。"

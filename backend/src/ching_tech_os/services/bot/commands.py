@@ -35,7 +35,7 @@ class SlashCommand:
     name: str  # 指令名稱（如 "debug"）
     aliases: list[str] = field(default_factory=list)  # 別名
     handler: Callable[[CommandContext], Coroutine[Any, Any, str | None]] = field(
-        default=lambda ctx: None  # type: ignore
+        default=None  # type: ignore — 註冊時必須提供 handler
     )
     require_bound: bool = False  # 是否要求已綁定 CTOS 帳號
     require_admin: bool = False  # 是否要求管理員
@@ -111,6 +111,10 @@ class CommandRouter:
 
         # 設定參數
         context.raw_args = args
+
+        if command.handler is None:
+            logger.error(f"指令 /{command.name} 未設定 handler")
+            return "指令設定錯誤，請聯繫管理員"
 
         try:
             return await command.handler(context)

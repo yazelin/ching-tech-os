@@ -6,6 +6,17 @@ import subprocess
 
 from ching_tech_os.skills.script_utils import parse_stdin_json_object
 
+# 允許的 log_type 白名單
+_VALID_LOG_TYPES = {"access", "error"}
+
+
+def _safe_int(value, default: int, min_val: int = 1, max_val: int = 500) -> int:
+    """安全的整數轉換，帶範圍限制"""
+    try:
+        return max(min_val, min(int(value), max_val))
+    except (ValueError, TypeError):
+        return default
+
 
 def main() -> int:
     payload, error = parse_stdin_json_object()
@@ -14,8 +25,11 @@ def main() -> int:
         return 1
     payload = payload or {}
 
-    lines = min(int(payload.get("lines", 50)), 500)  # 最多 500 行
-    log_type = payload.get("type", "error")  # "access" 或 "error"
+    lines = _safe_int(payload.get("lines", 50), default=50, max_val=500)
+    log_type = payload.get("type", "error")
+    # 白名單驗證：非法值預設為 error
+    if log_type not in _VALID_LOG_TYPES:
+        log_type = "error"
 
     try:
         # docker logs 的 stdout = access log, stderr = error log
@@ -29,17 +43,8 @@ def main() -> int:
 
         if log_type == "access":
             output = result.stdout or "（無 access log）"
-        elif log_type == "error":
-            output = result.stderr or "（無 error log）"
         else:
-            # 兩者都顯示
-            output = ""
-            if result.stdout:
-                output += f"=== Access Log ===\n{result.stdout}\n"
-            if result.stderr:
-                output += f"=== Error Log ===\n{result.stderr}\n"
-            if not output:
-                output = "（無日誌）"
+            output = result.stderr or "（無 error log）"
 
         print(json.dumps({
             "success": True,
@@ -52,8 +57,8 @@ def main() -> int:
     except subprocess.TimeoutExpired:
         print(json.dumps({"success": False, "error": "指令執行逾時"}, ensure_ascii=False))
         return 1
-    except Exception as e:
-        print(json.dumps({"success": False, "error": str(e)}, ensure_ascii=False))
+    except Exception:
+        print(json.dumps({"success": False, "error": "查詢 Nginx 日誌失敗"}, ensure_ascii=False))
         return 1
 
 
