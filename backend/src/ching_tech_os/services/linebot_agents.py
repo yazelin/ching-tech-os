@@ -8,6 +8,7 @@ import logging
 from . import ai_manager
 from ..config import settings
 from ..models.ai import AiPromptCreate, AiAgentCreate
+from .bot.command_handlers import DEFAULT_WELCOME_MESSAGE
 from .permissions import get_effective_app_permissions
 
 # 從平台無關的 bot.agents 模組匯入工具 Prompt 與函式（向後相容）
@@ -510,6 +511,14 @@ DEFAULT_BOT_MODE_AGENTS = [
         "description": "未綁定用戶的受限模式 Agent，prompt 和工具可由部署方自訂",
         "model": f"claude-{settings.bot_restricted_model}",
         "tools": ["search_knowledge"],
+        "settings": {
+            "welcome_message": DEFAULT_WELCOME_MESSAGE,
+            "binding_prompt": "",
+            "rate_limit_hourly_msg": "",
+            "rate_limit_daily_msg": "",
+            "disclaimer": "",
+            "error_message": "",
+        },
         "prompt": {
             "name": AGENT_BOT_RESTRICTED,
             "display_name": "受限模式助理 Prompt",

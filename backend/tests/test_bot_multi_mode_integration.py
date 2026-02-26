@@ -19,33 +19,50 @@ import pytest
 class TestRejectPolicyRegression:
     """確認 reject 策略下行為與現有系統一致"""
 
-    def test_reject_policy_line_private(self):
+    @pytest.mark.asyncio
+    async def test_reject_policy_line_private(self):
         """Line 個人對話 — 回覆綁定提示"""
         from ching_tech_os.services.bot.identity_router import route_unbound
 
-        with patch(
-            "ching_tech_os.services.bot.identity_router.settings"
-        ) as mock_settings:
+        with (
+            patch(
+                "ching_tech_os.services.bot.identity_router.settings"
+            ) as mock_settings,
+            patch(
+                "ching_tech_os.services.ai_manager.get_agent_by_name",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+        ):
             mock_settings.bot_unbound_user_policy = "reject"
-            result = route_unbound(platform_type="line", is_group=False)
+            result = await route_unbound(platform_type="line", is_group=False)
             assert result.action == "reject"
             assert result.reply_text is not None
             assert "CTOS" in result.reply_text
             assert "綁定" in result.reply_text
 
-    def test_reject_policy_telegram_private(self):
+    @pytest.mark.asyncio
+    async def test_reject_policy_telegram_private(self):
         """Telegram 個人對話 — 回覆綁定提示（含 Telegram 字樣）"""
         from ching_tech_os.services.bot.identity_router import route_unbound
 
-        with patch(
-            "ching_tech_os.services.bot.identity_router.settings"
-        ) as mock_settings:
+        with (
+            patch(
+                "ching_tech_os.services.bot.identity_router.settings"
+            ) as mock_settings,
+            patch(
+                "ching_tech_os.services.ai_manager.get_agent_by_name",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+        ):
             mock_settings.bot_unbound_user_policy = "reject"
-            result = route_unbound(platform_type="telegram", is_group=False)
+            result = await route_unbound(platform_type="telegram", is_group=False)
             assert result.action == "reject"
             assert "Telegram" in result.reply_text
 
-    def test_reject_policy_group_silent(self):
+    @pytest.mark.asyncio
+    async def test_reject_policy_group_silent(self):
         """群組中未綁定用戶 — 靜默忽略（不受策略影響）"""
         from ching_tech_os.services.bot.identity_router import route_unbound
 
@@ -53,7 +70,7 @@ class TestRejectPolicyRegression:
             "ching_tech_os.services.bot.identity_router.settings"
         ) as mock_settings:
             mock_settings.bot_unbound_user_policy = "reject"
-            result = route_unbound(platform_type="line", is_group=True)
+            result = await route_unbound(platform_type="line", is_group=True)
             assert result.action == "silent"
             assert result.reply_text is None
 
@@ -86,7 +103,8 @@ class TestRejectPolicyRegression:
 class TestRestrictedPolicy:
     """確認 restricted 策略下未綁定用戶可使用受限模式對話"""
 
-    def test_restricted_policy_route(self):
+    @pytest.mark.asyncio
+    async def test_restricted_policy_route(self):
         """restricted 策略 — 路由到受限模式"""
         from ching_tech_os.services.bot.identity_router import route_unbound
 
@@ -94,11 +112,12 @@ class TestRestrictedPolicy:
             "ching_tech_os.services.bot.identity_router.settings"
         ) as mock_settings:
             mock_settings.bot_unbound_user_policy = "restricted"
-            result = route_unbound(platform_type="line", is_group=False)
+            result = await route_unbound(platform_type="line", is_group=False)
             assert result.action == "restricted"
             assert result.reply_text is None  # 不回覆拒絕訊息
 
-    def test_restricted_policy_group_still_silent(self):
+    @pytest.mark.asyncio
+    async def test_restricted_policy_group_still_silent(self):
         """restricted 策略 — 群組中仍然靜默忽略"""
         from ching_tech_os.services.bot.identity_router import route_unbound
 
@@ -106,7 +125,7 @@ class TestRestrictedPolicy:
             "ching_tech_os.services.bot.identity_router.settings"
         ) as mock_settings:
             mock_settings.bot_unbound_user_policy = "restricted"
-            result = route_unbound(platform_type="line", is_group=True)
+            result = await route_unbound(platform_type="line", is_group=True)
             assert result.action == "silent"
 
     @pytest.mark.asyncio
@@ -445,10 +464,20 @@ class TestRateLimiterIntegration:
 
         deny_msg = "您今日的使用次數已達上限，請明天再試。"
 
-        with patch(
-            "ching_tech_os.services.bot.rate_limiter.check_and_increment",
-            new_callable=AsyncMock,
-            return_value=(False, deny_msg),
+        with (
+            patch(
+                "ching_tech_os.services.ai_manager.get_agent_by_name",
+                new_callable=AsyncMock,
+                return_value={
+                    "system_prompt": {"content": "AI"},
+                    "tools": [],
+                },
+            ),
+            patch(
+                "ching_tech_os.services.bot.rate_limiter.check_and_increment",
+                new_callable=AsyncMock,
+                return_value=(False, deny_msg),
+            ),
         ):
             result = await handle_restricted_mode(
                 content="你好",

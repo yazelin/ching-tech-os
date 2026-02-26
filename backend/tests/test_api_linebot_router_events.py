@@ -276,6 +276,12 @@ async def test_process_message_event_paths(monkeypatch: pytest.MonkeyPatch) -> N
     save_message.reset_mock()
     monkeypatch.setattr(linebot_router, "is_binding_code_format", AsyncMock(return_value=False))
     monkeypatch.setattr(linebot_router, "check_line_access", AsyncMock(return_value=(False, "user_not_bound")))
+    # mock route_unbound 避免 DB 連線
+    from ching_tech_os.services.bot.identity_router import UnboundRouteResult
+    monkeypatch.setattr(
+        "ching_tech_os.services.bot.identity_router.route_unbound",
+        AsyncMock(return_value=UnboundRouteResult(action="reject", reply_text="請先綁定帳號")),
+    )
     await linebot_router.process_message_event(
         _Event(
             message=_TextMessage("m-deny", "hello"),
@@ -454,6 +460,12 @@ async def test_webhook_and_message_event_extra_paths(monkeypatch: pytest.MonkeyP
     assert linebot_router.handle_text_message.await_count == 0
 
     monkeypatch.setattr(linebot_router, "check_line_access", AsyncMock(return_value=(False, "user_not_bound")))
+    # mock route_unbound 避免 DB 連線
+    from ching_tech_os.services.bot.identity_router import UnboundRouteResult as _UBR
+    monkeypatch.setattr(
+        "ching_tech_os.services.bot.identity_router.route_unbound",
+        AsyncMock(return_value=_UBR(action="reject", reply_text="請先綁定帳號")),
+    )
     await linebot_router.process_message_event(
         _Event(
             message=_TextMessage("m-deny-personal", "hello"),
@@ -533,7 +545,7 @@ async def test_restricted_mode_routing(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(
         "ching_tech_os.services.bot.identity_router.route_unbound",
-        lambda **kw: UnboundRouteResult(action="restricted"),
+        AsyncMock(return_value=UnboundRouteResult(action="restricted")),
     )
     # mock handle_restricted_mode 避免呼叫
     handle_restricted_mock = AsyncMock(return_value="AI 回覆")

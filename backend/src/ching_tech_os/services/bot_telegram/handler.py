@@ -437,7 +437,7 @@ async def _handle_text(
                     handle_restricted_mode,
                 )
 
-                route_result = route_unbound(
+                route_result = await route_unbound(
                     platform_type="telegram", is_group=is_group
                 )
                 if route_result.action == "reject":

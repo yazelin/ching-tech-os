@@ -122,6 +122,7 @@ Telegram 帳號綁定流程與 Line Bot 相同：
 - 群組需要在前端管理介面開啟 `allow_ai_response` 才會回覆
 - 用戶需要綁定 CTOS 帳號才能使用 AI 功能
 - 未綁定用戶行為由 `BOT_UNBOUND_USER_POLICY` 控制：`reject`（預設，回覆綁定提示）或 `restricted`（受限模式 AI 對話，有頻率限制）
+- 受限模式的歡迎訊息、綁定提示、頻率限制訊息等可透過 `bot-restricted` Agent 的 `settings` 自訂，詳見 [Line Bot 文件 - 受限模式設定](linebot.md#受限模式設定)
 
 ## 檔案儲存
 

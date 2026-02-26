@@ -255,9 +255,14 @@ async def test_handle_text_command_and_access_paths(monkeypatch: pytest.MonkeyPa
     # mock get_command_user_context 避免 DB 查詢
     monkeypatch.setattr(bot_commands, "get_command_user_context", AsyncMock(return_value=(None, False)))
 
+    # mock ai_manager.get_agent_by_name 避免 DB 查詢（get_welcome_message 需要）
+    from ching_tech_os.services import ai_manager
+    monkeypatch.setattr(ai_manager, "get_agent_by_name", AsyncMock(return_value=None))
+
     # /start（現在走 CommandRouter）
     await handler._handle_text(message, "/start", "100", chat, user, False, adapter)
-    adapter.send_text.assert_awaited_with("100", get_welcome_message())
+    welcome = await get_welcome_message()
+    adapter.send_text.assert_awaited_with("100", welcome)
 
     # /help（現在走 CommandRouter）
     adapter.send_text.reset_mock()
@@ -332,7 +337,7 @@ async def test_restricted_mode_routing(monkeypatch: pytest.MonkeyPatch) -> None:
     from ching_tech_os.services.bot.identity_router import UnboundRouteResult
     monkeypatch.setattr(
         "ching_tech_os.services.bot.identity_router.route_unbound",
-        lambda **kw: UnboundRouteResult(action="restricted"),
+        AsyncMock(return_value=UnboundRouteResult(action="restricted")),
     )
     adapter.send_text.reset_mock()
     await handler._handle_text(message, "/reset", "100", chat, user, False, adapter)
@@ -374,7 +379,7 @@ async def test_restricted_mode_routing(monkeypatch: pytest.MonkeyPatch) -> None:
     # --- 5. silent 路由（群組）→ 不送訊息 ---
     monkeypatch.setattr(
         "ching_tech_os.services.bot.identity_router.route_unbound",
-        lambda **kw: UnboundRouteResult(action="silent"),
+        AsyncMock(return_value=UnboundRouteResult(action="silent")),
     )
     adapter.send_text.reset_mock()
     await handler._handle_text(message, "你好", "100", chat, user, True, adapter)

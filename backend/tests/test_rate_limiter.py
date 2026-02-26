@@ -183,6 +183,93 @@ class TestCheckAndIncrement:
             assert msg is None
 
     @pytest.mark.asyncio
+    async def test_hourly_custom_message(self):
+        """自訂每小時超限訊息 + 變數替換"""
+        mock_conn = _make_conn_mock(hourly_count=21, daily_count=30)
+
+        with (
+            patch(
+                "ching_tech_os.services.bot.rate_limiter.settings"
+            ) as mock_settings,
+            _make_get_conn_patch(mock_conn),
+        ):
+            mock_settings.bot_rate_limit_enabled = True
+            mock_settings.bot_rate_limit_hourly = 20
+            mock_settings.bot_rate_limit_daily = 50
+
+            allowed, msg = await check_and_increment(
+                "uuid-123",
+                custom_messages={"hourly": "每小時最多 {hourly_limit} 則，請稍後再試。"},
+            )
+            assert allowed is False
+            assert msg == "每小時最多 20 則，請稍後再試。"
+
+    @pytest.mark.asyncio
+    async def test_daily_custom_message(self):
+        """自訂每日超限訊息 + 變數替換"""
+        mock_conn = _make_conn_mock(hourly_count=5, daily_count=51)
+
+        with (
+            patch(
+                "ching_tech_os.services.bot.rate_limiter.settings"
+            ) as mock_settings,
+            _make_get_conn_patch(mock_conn),
+        ):
+            mock_settings.bot_rate_limit_enabled = True
+            mock_settings.bot_rate_limit_hourly = 20
+            mock_settings.bot_rate_limit_daily = 50
+
+            allowed, msg = await check_and_increment(
+                "uuid-123",
+                custom_messages={"daily": "今日已達 {daily_limit} 則上限，明天再來！"},
+            )
+            assert allowed is False
+            assert msg == "今日已達 50 則上限，明天再來！"
+
+    @pytest.mark.asyncio
+    async def test_custom_message_unknown_variable_safe(self):
+        """自訂訊息含未知變數 → 不拋出 KeyError，變數替換為空字串"""
+        mock_conn = _make_conn_mock(hourly_count=21, daily_count=30)
+
+        with (
+            patch(
+                "ching_tech_os.services.bot.rate_limiter.settings"
+            ) as mock_settings,
+            _make_get_conn_patch(mock_conn),
+        ):
+            mock_settings.bot_rate_limit_enabled = True
+            mock_settings.bot_rate_limit_hourly = 20
+            mock_settings.bot_rate_limit_daily = 50
+
+            allowed, msg = await check_and_increment(
+                "uuid-123",
+                custom_messages={"hourly": "上限 {hourly_limit}，{unknown_var} 再試"},
+            )
+            assert allowed is False
+            assert "上限 20" in msg
+            assert "{unknown_var}" not in msg
+
+    @pytest.mark.asyncio
+    async def test_custom_messages_none_uses_default(self):
+        """custom_messages=None → 使用預設訊息"""
+        mock_conn = _make_conn_mock(hourly_count=21, daily_count=30)
+
+        with (
+            patch(
+                "ching_tech_os.services.bot.rate_limiter.settings"
+            ) as mock_settings,
+            _make_get_conn_patch(mock_conn),
+        ):
+            mock_settings.bot_rate_limit_enabled = True
+            mock_settings.bot_rate_limit_hourly = 20
+            mock_settings.bot_rate_limit_daily = 50
+
+            allowed, msg = await check_and_increment("uuid-123", custom_messages=None)
+            assert allowed is False
+            assert "每小時" in msg
+            assert "20" in msg
+
+    @pytest.mark.asyncio
     async def test_db_error_fail_open(self):
         """DB 錯誤 → fail-open（允許通過）"""
         mock_ctx = MagicMock()
