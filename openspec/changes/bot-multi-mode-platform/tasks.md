@@ -57,8 +57,8 @@
 
 ## 9. 整合測試與驗證
 
-- [ ] 9.1 端對端測試：`BOT_UNBOUND_USER_POLICY=reject` 時行為與現有系統一致（回歸測試）
-- [ ] 9.2 端對端測試：`BOT_UNBOUND_USER_POLICY=restricted` 時未綁定用戶可使用受限模式對話
-- [ ] 9.3 端對端測試：受限模式的 `search_knowledge` 只回傳公開知識
-- [ ] 9.4 端對端測試：`/debug` 管理員可執行診斷、非管理員被拒絕
-- [ ] 9.5 端對端測試：rate limiter 超過限額時回覆使用上限提示
+- [x] 9.1 端對端測試：`BOT_UNBOUND_USER_POLICY=reject` 時行為與現有系統一致（回歸測試）
+- [x] 9.2 端對端測試：`BOT_UNBOUND_USER_POLICY=restricted` 時未綁定用戶可使用受限模式對話
+- [x] 9.3 端對端測試：受限模式的 `search_knowledge` 只回傳公開知識
+- [x] 9.4 端對端測試：`/debug` 管理員可執行診斷、非管理員被拒絕
+- [x] 9.5 端對端測試：rate limiter 超過限額時回覆使用上限提示
