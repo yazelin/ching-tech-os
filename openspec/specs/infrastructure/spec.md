@@ -1,119 +1,22 @@
-# infrastructure Specification
+## ADDED Requirements
 
-## Purpose
-TBD - created by archiving change mount-nas-storage. Update Purpose after archive.
-## Requirements
+### Requirement: Brave Search API 環境變數設定
+系統設定層 SHALL 提供 Brave Search API key 設定欄位供搜尋 provider 使用。
 
-### Requirement: NAS 系統掛載
-系統 SHALL 使用 systemd mount unit 掛載 NAS 共享資料夾，包含多個唯讀共用區掛載點。
+#### Scenario: 設定層讀取 Brave API key
+- **WHEN** 應用程式啟動並載入環境變數
+- **THEN** 設定物件可取得 `BRAVE_SEARCH_API_KEY`
+- **AND** `research-skill` 可透過設定物件或環境讀取該值
 
-#### Scenario: 服務啟動前自動掛載
-- **GIVEN** 系統設定了 NAS 掛載
-- **WHEN** `ching-tech-os.service` 啟動
-- **THEN** `mnt-nas.mount` 先啟動並掛載 NAS
-- **AND** 掛載點為 `/mnt/nas`（可透過環境變數配置）
+#### Scenario: 未設定 API key
+- **WHEN** `BRAVE_SEARCH_API_KEY` 未設定
+- **THEN** 系統不應崩潰
+- **AND** research 流程可回退到既有 provider
 
-#### Scenario: 掛載使用憑證檔案
-- **GIVEN** 系統需要掛載 NAS
-- **WHEN** mount unit 執行掛載
-- **THEN** 使用 `/etc/nas-credentials` 檔案中的帳密
-- **AND** 憑證檔案權限為 600
+### Requirement: .env 範例需包含 Brave 設定
+專案環境變數範例檔 SHALL 包含 Brave Search API key 欄位與註解。
 
-#### Scenario: 服務依賴掛載
-- **GIVEN** `ching-tech-os.service` 設定了 `Requires=mnt-nas.mount`
-- **WHEN** 掛載失敗
-- **THEN** 服務不會啟動
-- **AND** systemd 日誌顯示掛載失敗原因
-
-#### Scenario: 卸載服務時清理掛載
-- **GIVEN** 執行 `uninstall-service.sh`
-- **WHEN** 腳本完成
-- **THEN** mount unit 被停用並移除
-- **AND** 憑證檔案被刪除
-- **AND** 掛載點目錄被移除
-
-#### Scenario: circuits 掛載點建立
-- **GIVEN** 安裝腳本執行
-- **WHEN** 建立 systemd mount units
-- **THEN** 建立 `mnt-nas-circuits.mount` 掛載 `//NAS_HOST/擎添線路圖/圖檔` 到 `/mnt/nas/circuits`
-- **AND** 使用唯讀模式（ro）
-- **AND** 使用與其他掛載相同的憑證檔案
-
-#### Scenario: 服務依賴 circuits 掛載
-- **GIVEN** `ching-tech-os.service` 設定
-- **WHEN** 服務啟動
-- **THEN** service unit 包含 `Wants=mnt-nas-circuits.mount`
-- **AND** circuits 掛載失敗不阻止服務啟動（Wants 而非 Requires）
-
-#### Scenario: circuits 掛載環境變數
-- **GIVEN** 系統設定
-- **WHEN** 讀取環境變數
-- **THEN** `CIRCUITS_MOUNT_PATH` 預設為 `/mnt/nas/circuits`
-- **AND** 可透過 `.env` 覆蓋
-
----
-
-### Requirement: 本機檔案服務
-系統功能 SHALL 透過本機路徑存取 NAS 檔案，取代直接 SMB 連線。
-
-#### Scenario: 知識庫使用本機路徑
-- **GIVEN** NAS 已掛載於 `/mnt/nas`
-- **WHEN** 知識庫服務存取附件
-- **THEN** 使用 `/mnt/nas/ching-tech-os/knowledge/` 路徑
-- **AND** 不建立 SMB 連線
-
-#### Scenario: 專案使用本機路徑
-- **GIVEN** NAS 已掛載於 `/mnt/nas`
-- **WHEN** 專案服務存取附件
-- **THEN** 使用 `/mnt/nas/ching-tech-os/projects/` 路徑
-- **AND** 不建立 SMB 連線
-
-#### Scenario: Line Bot 使用本機路徑
-- **GIVEN** NAS 已掛載於 `/mnt/nas`
-- **WHEN** Line Bot 服務存取檔案
-- **THEN** 使用 `/mnt/nas/ching-tech-os/linebot/files/` 路徑
-- **AND** 不建立 SMB 連線
-
-#### Scenario: 檔案總管保持 SMB 存取
-- **GIVEN** 用戶使用檔案總管
-- **WHEN** 瀏覽或操作 NAS 檔案
-- **THEN** 繼續使用 SMBService 與用戶帳密
-- **AND** 保留多用戶權限機制
-
-### Requirement: ENABLED_MODULES 環境變數
-`config.py` SHALL 提供 `enabled_modules` 設定欄位，由 `ENABLED_MODULES` 環境變數驅動。
-
-#### Scenario: 預設值
-- **WHEN** `ENABLED_MODULES` 環境變數未設定
-- **THEN** `settings.enabled_modules` SHALL 為 `"*"`（代表啟用全部模組）
-
-#### Scenario: 自訂模組清單
-- **WHEN** `ENABLED_MODULES` 設為 `"core,knowledge-base,line-bot"`
-- **THEN** `settings.enabled_modules` SHALL 為該字串值
-
-### Requirement: main.py 條件路由註冊
-`main.py` SHALL 使用 `importlib` 動態載入啟用模組的 router，取代頂層靜態 import。
-
-#### Scenario: 移除頂層靜態 import
-- **WHEN** 系統啟動
-- **THEN** `main.py` SHALL 不再有 `from .api import linebot_router, telegram_router, ...` 的頂層 import
-- **THEN** 路由註冊 SHALL 改為遍歷 `get_module_registry()` 動態載入
-
-#### Scenario: lifespan 條件初始化
-- **WHEN** 模組定義了 `lifespan_startup`
-- **THEN** 只有啟用的模組的 startup 函式 SHALL 被呼叫
-- **THEN** 停用模組的 startup SHALL 跳過
-
----
-
-### Requirement: Script 化後的 MCP 預設載入最小化
-系統部署設定 SHALL 支援在 script-first 場景下降低預設外部 MCP server 載入數量。
-
-#### Scenario: script-first 低依賴部署
-- **WHEN** 部署以 `base`、`file-manager` script 化能力為主
-- **THEN** 系統 SHALL 可在不啟用 `erpnext`、`printer`、`nanobanana` 的情況下維持 base/file-manager 主要能力可用
-
-#### Scenario: 設定文件同步
-- **WHEN** script 化能力上線
-- **THEN** README 與運維文件 SHALL 提供 MCP 載入最小化建議
-- **AND** 指出哪些 skills 仍依賴外部 MCP server
+#### Scenario: 新部署者查看範例檔
+- **WHEN** 開發者查看 `.env.example`
+- **THEN** 可看到 `BRAVE_SEARCH_API_KEY=` 欄位
+- **AND** 可理解該變數用途與填寫方式

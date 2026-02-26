@@ -16,6 +16,25 @@ from ...config import settings
 
 logger = logging.getLogger(__name__)
 
+
+def _get_restricted_setting(agent: dict | None, key: str, default: str) -> str:
+    """從 bot-restricted Agent 的 settings JSONB 讀取文字模板
+
+    Args:
+        agent: Agent 字典（含 settings 欄位），或 None
+        key: settings 中的 key 名稱
+        default: 未設定時的預設值
+
+    Returns:
+        設定值，或 default
+    """
+    if not agent:
+        return default
+    settings_data = agent.get("settings") or {}
+    value = settings_data.get(key)
+    return value if value else default
+
+
 # 各平台的綁定提示訊息
 BINDING_PROMPT_LINE = (
     "請先在 CTOS 系統綁定您的 Line 帳號才能使用此服務。\n\n"
@@ -66,7 +85,7 @@ class UnboundRouteResult:
         self.reply_text = reply_text
 
 
-def route_unbound(
+async def route_unbound(
     *,
     platform_type: str,
     is_group: bool,
@@ -89,7 +108,16 @@ def route_unbound(
     if policy == "restricted":
         return UnboundRouteResult(action="restricted")
 
-    # reject 策略：回覆綁定提示
+    # reject 策略：嘗試從 agent settings 讀取自訂綁定提示
+    from .. import ai_manager
+
+    agent = await ai_manager.get_agent_by_name("bot-restricted")
+    custom_binding = _get_restricted_setting(agent, "binding_prompt", "")
+
+    if custom_binding:
+        return UnboundRouteResult(action="reject", reply_text=custom_binding)
+
+    # fallback 到平台特定的預設值
     if platform_type == "telegram":
         return UnboundRouteResult(action="reject", reply_text=BINDING_PROMPT_TELEGRAM)
     return UnboundRouteResult(action="reject", reply_text=BINDING_PROMPT_LINE)
@@ -121,14 +149,6 @@ async def handle_restricted_mode(
     Returns:
         AI 回應文字，或 None
     """
-    # 原子性頻率限制檢查+計數（在 AI 處理之前）
-    if bot_user_id:
-        from .rate_limiter import check_and_increment
-
-        allowed, deny_msg = await check_and_increment(bot_user_id)
-        if not allowed:
-            return deny_msg
-
     from .. import ai_manager
     from ..claude_agent import call_claude
     from ..linebot_ai import (
@@ -145,6 +165,28 @@ async def handle_restricted_mode(
     if not agent:
         logger.error("bot-restricted Agent 不存在，無法進行受限模式 AI 處理")
         return "系統設定錯誤，請聯繫管理員。"
+
+    # 原子性頻率限制檢查+計數（在 AI 處理之前）
+    if bot_user_id:
+        from .rate_limiter import check_and_increment
+
+        # 從 agent settings 讀取自訂超限訊息
+        agent_settings = agent.get("settings") or {}
+        hourly_msg = agent_settings.get("rate_limit_hourly_msg")
+        daily_msg = agent_settings.get("rate_limit_daily_msg")
+        custom_rate_msgs: dict[str, str] | None = None
+        if hourly_msg or daily_msg:
+            custom_rate_msgs = {}
+            if hourly_msg:
+                custom_rate_msgs["hourly"] = hourly_msg
+            if daily_msg:
+                custom_rate_msgs["daily"] = daily_msg
+
+        allowed, deny_msg = await check_and_increment(
+            bot_user_id, custom_messages=custom_rate_msgs,
+        )
+        if not allowed:
+            return deny_msg
 
     # 2. 取得 model（優先使用環境變數設定）
     model = settings.bot_restricted_model
@@ -232,7 +274,10 @@ async def handle_restricted_mode(
         )
     except Exception:
         logger.exception("受限模式 AI 呼叫失敗")
-        return "抱歉，處理您的訊息時發生錯誤，請稍後再試。"
+        return _get_restricted_setting(
+            agent, "error_message",
+            "抱歉，處理您的訊息時發生錯誤，請稍後再試。",
+        )
 
     duration_ms = int((time.time() - start_time) * 1000)
 
@@ -260,6 +305,12 @@ async def handle_restricted_mode(
     # 過濾 FILE_MESSAGE 標記（受限模式不支援檔案發送）
     reply_text = re.sub(r"\[FILE_MESSAGE:[^\]]+\]", "", reply_text).strip()
 
-    # 使用量已在 check_and_increment 中原子性計數，無需再次記錄
+    if not reply_text:
+        return "抱歉，我目前無法回答您的問題。"
 
-    return reply_text or "抱歉，我目前無法回答您的問題。"
+    # 附加免責聲明（若 agent settings 有設定）
+    disclaimer = _get_restricted_setting(agent, "disclaimer", "")
+    if disclaimer:
+        reply_text = reply_text + disclaimer
+
+    return reply_text

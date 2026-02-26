@@ -80,6 +80,7 @@ Line Platform
 | 歡迎訊息 | 加好友（FollowEvent）時自動推送歡迎訊息，引導帳號綁定 |
 | 統一斜線指令 | /start、/help、/reset、/debug，與 Telegram 共用 CommandRouter |
 | 管理員診斷 | /debug 指令透過 AI Agent 分析系統日誌（僅管理員） |
+| 受限模式設定 | 未綁定用戶的歡迎訊息、綁定提示、頻率限制訊息等可自訂 |
 
 ## 資料表
 
@@ -188,6 +189,21 @@ GET /api/bot/messages?group_id=xxx&page=1&page_size=50
 | `linebot-group` | claude-haiku | 群組對話，精簡 prompt |
 
 Prompt 內容可透過「AI 管理」應用程式修改。
+
+### 受限模式設定
+
+未綁定用戶在 `restricted` 模式下的所有面向用戶文字，皆可透過 `bot-restricted` Agent 的 `settings` JSONB 欄位自訂，在「AI 管理」介面中修改。
+
+| Settings Key | 說明 | 支援變數 |
+|-------------|------|---------|
+| `welcome_message` | `/start` 指令與加好友歡迎訊息 | 無 |
+| `binding_prompt` | `reject` 模式拒絕時的綁定提示 | 無 |
+| `rate_limit_hourly_msg` | 每小時頻率超限訊息 | `{limit}`、`{count}` |
+| `rate_limit_daily_msg` | 每日頻率超限訊息 | `{limit}`、`{count}` |
+| `disclaimer` | 附加在受限模式 AI 回應後的免責聲明 | 無 |
+| `error_message` | AI 處理失敗時的錯誤訊息 | 無 |
+
+> **變數替換**：訊息模板支援 `{variable}` 格式變數，未知變數會保留原文不會報錯。空字串或未設定時使用程式碼中的預設值。
 
 ### 斜線指令
 

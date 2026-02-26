@@ -15,8 +15,31 @@ from ...database import get_connection
 logger = logging.getLogger(__name__)
 
 
+class _SafeFormatMap(dict):
+    """format_map 用的安全字典，未知 key 回傳空字串避免 KeyError"""
+
+    def __missing__(self, key: str) -> str:
+        return ""
+
+
 class _RateLimitExceeded(Exception):
     """內部例外：頻率超限，用於觸發 transaction rollback"""
+
+
+def _format_limit_msg(
+    custom_messages: dict[str, str] | None,
+    period: str,
+    *,
+    limit: int,
+    count: int,
+    default_msg: str,
+) -> str:
+    """格式化超限訊息，支援 {limit}、{count} 變數"""
+    if custom_messages and custom_messages.get(period):
+        return custom_messages[period].format_map(
+            _SafeFormatMap(limit=str(limit), count=str(count))
+        )
+    return default_msg
 
 
 def _current_hourly_key() -> str:
@@ -31,13 +54,19 @@ def _current_daily_key() -> str:
     return now.strftime("%Y-%m-%d")
 
 
-async def check_and_increment(bot_user_id: str) -> tuple[bool, str | None]:
+async def check_and_increment(
+    bot_user_id: str,
+    custom_messages: dict[str, str] | None = None,
+) -> tuple[bool, str | None]:
     """原子性地檢查頻率限制並遞增計數器
 
     在同一個交易中執行 SELECT + UPDATE，避免 TOCTOU 競爭條件。
 
     Args:
         bot_user_id: bot_users.id (UUID 字串)
+        custom_messages: 自訂超限訊息模板，支援的 key：
+            - "hourly": 每小時超限訊息（支援 {limit}、{count} 變數）
+            - "daily": 每日超限訊息（支援 {limit}、{count} 變數）
 
     Returns:
         (是否允許, 拒絕訊息) - 允許時拒絕訊息為 None
@@ -88,15 +117,29 @@ async def check_and_increment(bot_user_id: str) -> tuple[bool, str | None]:
                 # 檢查每小時限額（已遞增後的值）
                 if hourly_count > settings.bot_rate_limit_hourly:
                     raise _RateLimitExceeded(
-                        f"您已達到每小時使用上限（{settings.bot_rate_limit_hourly} 則訊息）。\n"
-                        "請稍後再試，或綁定帳號以獲得完整服務。"
+                        _format_limit_msg(
+                            custom_messages, "hourly",
+                            limit=settings.bot_rate_limit_hourly,
+                            count=hourly_count,
+                            default_msg=(
+                                f"您已達到每小時使用上限（{settings.bot_rate_limit_hourly} 則訊息）。\n"
+                                "請稍後再試，或綁定帳號以獲得完整服務。"
+                            ),
+                        )
                     )
 
                 # 檢查每日限額
                 if daily_count > settings.bot_rate_limit_daily:
                     raise _RateLimitExceeded(
-                        f"您已達到每日使用上限（{settings.bot_rate_limit_daily} 則訊息）。\n"
-                        "請明天再試，或綁定帳號以獲得完整服務。"
+                        _format_limit_msg(
+                            custom_messages, "daily",
+                            limit=settings.bot_rate_limit_daily,
+                            count=daily_count,
+                            default_msg=(
+                                f"您已達到每日使用上限（{settings.bot_rate_limit_daily} 則訊息）。\n"
+                                "請明天再試，或綁定帳號以獲得完整服務。"
+                            ),
+                        )
                     )
 
                 return True, None

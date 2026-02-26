@@ -267,7 +267,7 @@ async def process_message_event(event: MessageEvent) -> None:
                     handle_restricted_mode,
                 )
 
-                route_result = route_unbound(
+                route_result = await route_unbound(
                     platform_type="line", is_group=is_group
                 )
                 if route_result.action == "reject":
@@ -471,7 +471,7 @@ async def process_follow_event(event: FollowEvent) -> None:
             from ..services.bot.command_handlers import get_welcome_message
             from ..services.bot_line.messaging import push_text
 
-            welcome = get_welcome_message()
+            welcome = await get_welcome_message()
             await push_text(line_user_id, welcome)
         except Exception:
             logger.warning("發送 FollowEvent 歡迎訊息失敗", exc_info=True)

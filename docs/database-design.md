@@ -17,7 +17,10 @@ backend/
 │       ├── 004_remove_tenant_id_partitioned_tables.py  # 移除分區表 tenant_id
 │       ├── 005_sessions_table.py              # 建立 sessions 表
 │       ├── 006_add_username_unique_constraint.py  # username 唯一約束
-│       └── 007_seed_admin_user.py             # 預設管理員帳號
+│       ├── 007_seed_admin_user.py             # 預設管理員帳號
+│       ├── 008_update_bot_prompt_platform.py  # Bot Prompt 加入 Telegram 平台說明
+│       ├── 009_add_bot_usage_tracking.py      # 未綁定用戶使用量追蹤表
+│       └── 010_add_bot_restricted_settings.py # bot-restricted Agent 預設 settings
 ```
 
 ## 資料庫連線設定
@@ -157,6 +160,38 @@ CREATE TABLE bot_settings (
 | telegram | `bot_token` | Bot Token（加密） |
 | telegram | `webhook_secret` | Webhook Secret（加密） |
 | telegram | `admin_chat_id` | 管理員 Chat ID |
+
+### bot_usage_tracking 表
+
+追蹤未綁定用戶的訊息使用量，用於受限模式頻率限制（migration 009）。
+
+```sql
+CREATE TABLE bot_usage_tracking (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    bot_user_id UUID NOT NULL REFERENCES bot_users(id) ON DELETE CASCADE,
+    period_type VARCHAR(10) NOT NULL,   -- 'hourly' 或 'daily'
+    period_key VARCHAR(20) NOT NULL,    -- 如 '2026-02-27-14'、'2026-02-27'
+    message_count INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(bot_user_id, period_type, period_key)
+);
+```
+
+### ai_agents.settings JSONB（bot-restricted）
+
+`ai_agents` 表的 `settings` JSONB 欄位用於儲存 Agent 的可自訂設定。`bot-restricted` Agent 使用此欄位存放面向用戶的文字模板（migration 010）：
+
+| Key | 說明 |
+|-----|------|
+| `welcome_message` | `/start` 指令與加好友歡迎訊息 |
+| `binding_prompt` | `reject` 模式拒絕時的綁定提示 |
+| `rate_limit_hourly_msg` | 每小時頻率超限訊息（支援 `{limit}`、`{count}` 變數） |
+| `rate_limit_daily_msg` | 每日頻率超限訊息（支援 `{limit}`、`{count}` 變數） |
+| `disclaimer` | 附加在受限模式 AI 回應後的免責聲明 |
+| `error_message` | AI 處理失敗時的錯誤訊息 |
+
+> Migration 010 使用 JSONB merge（`defaults || COALESCE(settings, '{}')`）寫入預設值，已存在的 key 不會被覆蓋。
 
 > **v0.3.0 變更**：移除多租戶架構（`tenants`、`tenant_admins` 表），所有資料表的 `tenant_id` 欄位已移除。使用者角色簡化為 `admin` / `user`。
 >

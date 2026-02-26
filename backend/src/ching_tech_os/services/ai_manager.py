@@ -269,7 +269,7 @@ async def get_agent(agent_id: UUID) -> dict | None:
 
         result = dict(row)
         if result.get("settings"):
-            result["settings"] = json.loads(result["settings"])
+            result["settings"] = json.loads(result["settings"]) if isinstance(result["settings"], str) else result["settings"]
         if result.get("tools"):
             result["tools"] = json.loads(result["tools"]) if isinstance(result["tools"], str) else result["tools"]
 
@@ -321,7 +321,7 @@ async def get_agent_by_name(name: str) -> dict | None:
 
         result = dict(row)
         if result.get("settings"):
-            result["settings"] = json.loads(result["settings"])
+            result["settings"] = json.loads(result["settings"]) if isinstance(result["settings"], str) else result["settings"]
         if result.get("tools"):
             result["tools"] = json.loads(result["tools"]) if isinstance(result["tools"], str) else result["tools"]
 
@@ -375,7 +375,7 @@ async def create_agent(data: AiAgentCreate) -> dict:
         )
         result = dict(row)
         if result.get("settings"):
-            result["settings"] = json.loads(result["settings"])
+            result["settings"] = json.loads(result["settings"]) if isinstance(result["settings"], str) else result["settings"]
         if result.get("tools"):
             result["tools"] = json.loads(result["tools"]) if isinstance(result["tools"], str) else result["tools"]
         return result
@@ -450,7 +450,7 @@ async def update_agent(agent_id: UUID, data: AiAgentUpdate) -> dict | None:
         if result.get("tools"):
             result["tools"] = json.loads(result["tools"]) if isinstance(result["tools"], str) else result["tools"]
         if result.get("settings"):
-            result["settings"] = json.loads(result["settings"])
+            result["settings"] = json.loads(result["settings"]) if isinstance(result["settings"], str) else result["settings"]
         return result
 
 

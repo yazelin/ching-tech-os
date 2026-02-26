@@ -15,26 +15,45 @@ from ..bot_line.trigger import reset_conversation
 logger = logging.getLogger(__name__)
 
 
-def get_welcome_message() -> str:
-    """回傳歡迎訊息文字（/start 和 LINE FollowEvent 共用）"""
-    return (
-        "歡迎使用 CTOS Bot！\n\n"
-        "我是 Ching Tech OS 的 AI 助手，可以幫你：\n"
-        "• 回答問題和對話\n"
-        "• 管理專案和筆記\n"
-        "• 生成和編輯圖片\n\n"
-        "首次使用請先綁定帳號：\n"
-        "1. 登入 CTOS 系統\n"
-        "2. 進入 Bot 管理頁面\n"
-        "3. 點擊「綁定帳號」產生驗證碼\n"
-        "4. 將 6 位數驗證碼發送給我\n\n"
-        "輸入 /help 查看更多功能"
-    )
+DEFAULT_WELCOME_MESSAGE = (
+    "歡迎使用 CTOS Bot！\n\n"
+    "我是 Ching Tech OS 的 AI 助手，可以幫你：\n"
+    "• 回答問題和對話\n"
+    "• 管理專案和筆記\n"
+    "• 生成和編輯圖片\n\n"
+    "首次使用請先綁定帳號：\n"
+    "1. 登入 CTOS 系統\n"
+    "2. 進入 Bot 管理頁面\n"
+    "3. 點擊「綁定帳號」產生驗證碼\n"
+    "4. 將 6 位數驗證碼發送給我\n\n"
+    "輸入 /help 查看更多功能"
+)
+
+
+async def get_welcome_message() -> str:
+    """回傳歡迎訊息文字（/start 和 LINE FollowEvent 共用）
+
+    優先從 bot-restricted Agent 的 settings.welcome_message 讀取，
+    未設定時 fallback 到預設歡迎訊息。
+    """
+    try:
+        from .. import ai_manager
+
+        agent = await ai_manager.get_agent_by_name("bot-restricted")
+        if agent:
+            agent_settings = agent.get("settings") or {}
+            custom = agent_settings.get("welcome_message")
+            if custom:
+                return custom
+    except Exception:
+        logger.debug("讀取 agent settings 失敗，使用預設歡迎訊息", exc_info=True)
+
+    return DEFAULT_WELCOME_MESSAGE
 
 
 async def _handle_start(ctx: CommandContext) -> str | None:
     """歡迎訊息"""
-    return get_welcome_message()
+    return await get_welcome_message()
 
 
 async def _handle_help(ctx: CommandContext) -> str | None:
