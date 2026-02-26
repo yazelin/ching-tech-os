@@ -303,7 +303,7 @@ async def test_handle_text_message(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         linebot_ai,
         "get_line_user_record",
-        AsyncMock(side_effect=[{"display_name": "小明"}, None]),
+        AsyncMock(side_effect=[{"id": "bot-user-1", "user_id": None, "display_name": "小明"}, None]),
     )
 
     message_uuid = uuid4()

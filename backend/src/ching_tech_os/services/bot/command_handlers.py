@@ -77,6 +77,26 @@ async def _handle_debug(ctx: CommandContext) -> str | None:
     duration_ms = int((time.time() - start_time) * 1000)
     logger.info(f"/debug 診斷完成，耗時 {duration_ms}ms")
 
+    # 記錄 AI Log
+    try:
+        from ..linebot_ai import log_linebot_ai_call
+
+        await log_linebot_ai_call(
+            message_uuid=None,
+            line_group_id=None,
+            is_group=False,
+            input_prompt=prompt,
+            history=None,
+            system_prompt=system_prompt,
+            allowed_tools=agent_tools,
+            model=model,
+            response=response,
+            duration_ms=duration_ms,
+            context_type_override="bot-debug",
+        )
+    except Exception:
+        logger.warning("記錄 /debug AI Log 失敗", exc_info=True)
+
     # 解析回應
     reply_text, _files = parse_ai_response(response.message)
 

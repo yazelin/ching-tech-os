@@ -908,7 +908,7 @@ async def process_message_with_ai(
 
 
 async def log_linebot_ai_call(
-    message_uuid: UUID,
+    message_uuid: UUID | None,
     line_group_id: UUID | None,
     is_group: bool,
     input_prompt: str,
@@ -974,7 +974,7 @@ async def log_linebot_ai_call(
             agent_id=agent_id,
             prompt_id=prompt_id,
             context_type=context_type_override or ("linebot-group" if is_group else "linebot-personal"),
-            context_id=str(message_uuid),
+            context_id=str(message_uuid) if message_uuid else None,
             input_prompt=full_input,
             system_prompt=system_prompt,
             allowed_tools=allowed_tools,
@@ -1379,22 +1379,26 @@ async def handle_text_message(
     # === 斜線指令攔截（在 AI 處理之前） ===
     from .bot.commands import CommandContext, router as command_router
 
+    # 查詢用戶資訊（指令和一般訊息都需要，只查一次）
+    user_row = await get_line_user_record(
+        line_user_id, "id, user_id, display_name"
+    )
+    ctos_user_id = None
+    is_admin = False
+    bot_user_id = None
+    user_display_name = None
+    if user_row:
+        bot_user_id = str(user_row["id"]) if user_row["id"] else None
+        user_display_name = user_row.get("display_name")
+        if user_row["user_id"]:
+            ctos_user_id = user_row["user_id"]
+            from .user import get_user_role_and_permissions
+            user_info = await get_user_role_and_permissions(ctos_user_id)
+            is_admin = user_info["role"] == "admin"
+
     parsed = command_router.parse(content)
     if parsed is not None:
         command, args = parsed
-        # 建構指令上下文（需要查詢綁定狀態和管理員身份）
-        ctos_user_id = None
-        is_admin = False
-        bot_user_id = None
-        user_row = await get_line_user_record(line_user_id, "id, user_id")
-        if user_row:
-            bot_user_id = str(user_row["id"]) if user_row["id"] else None
-            if user_row["user_id"]:
-                ctos_user_id = user_row["user_id"]
-                from .user import get_user_role_and_permissions
-                user_info = await get_user_role_and_permissions(ctos_user_id)
-                is_admin = user_info["role"] == "admin"
-
         ctx = CommandContext(
             platform_type="line",
             platform_user_id=line_user_id,
@@ -1408,21 +1412,19 @@ async def handle_text_message(
         )
         reply = await command_router.dispatch(command, args, ctx)
         if reply is not None:
-            # 有回覆文字，發送給用戶
+            # reply_token 可能在長時間指令（如 /debug 3 分鐘）後過期，
+            # 先嘗試 reply，失敗則 fallback 到 push
             if reply_token:
-                await reply_text(reply_token, reply)
+                try:
+                    await reply_text(reply_token, reply)
+                except Exception:
+                    await push_text(line_user_id, reply)
             else:
                 await push_text(line_user_id, reply)
         # 指令已處理，不進入 AI 流程
         return
 
     # === 一般訊息，進入 AI 處理 ===
-    # 取得用戶顯示名稱
-    user_display_name = None
-    user_row = await get_line_user_record(line_user_id, "display_name")
-    if user_row:
-        user_display_name = user_row["display_name"]
-
     # 處理訊息
     await process_message_with_ai(
         message_uuid=message_uuid,
