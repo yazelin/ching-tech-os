@@ -27,8 +27,8 @@ STATUS_LABELS = {
 
 def _get_stale_timeout_minutes() -> int:
     """取得 stale timeout 分鐘數（至少比 worker timeout 多 2 分鐘）。"""
-    stale_minutes = 10
-    worker_timeout_sec = 120
+    stale_minutes = 15
+    worker_timeout_sec = 300
 
     try:
         from ching_tech_os.config import settings

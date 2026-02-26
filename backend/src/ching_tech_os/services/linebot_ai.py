@@ -219,7 +219,7 @@ def _split_long_text(text: str, max_chars: int = LINE_TEXT_MAX_CHARS) -> list[st
             # 都沒有，硬切
             cut = max_chars
         chunks.append(remaining[:cut].rstrip())
-        remaining = remaining[cut:].lstrip("\n")
+        remaining = remaining[cut:].lstrip("\n ")
     return chunks
 
 

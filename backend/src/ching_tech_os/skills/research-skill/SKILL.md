@@ -15,7 +15,7 @@ metadata:
 **研究執行策略：**
 - 背景 worker 會先用 Claude（預設 `claude-opus`，可用 `RESEARCH_CLAUDE_MODEL` 覆寫）+ 內建 `WebSearch`/`WebFetch` 產生完整研究結果
 - 若 Claude web tools 執行失敗，才降級到本地 provider fallback（Brave API → DuckDuckGo → Brave public）
-- Claude research timeout 預設 1200 秒（20 分鐘，可用 `RESEARCH_CLAUDE_TIMEOUT_SEC` 調整）
+- Claude research timeout 預設 300 秒（5 分鐘，可用 `RESEARCH_CLAUDE_TIMEOUT_SEC` 調整）
 - Brave API 申請：https://brave.com/search/api/
 
 **可用 scripts：**
