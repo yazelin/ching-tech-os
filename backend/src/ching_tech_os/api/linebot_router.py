@@ -337,8 +337,8 @@ async def process_message_event(event: MessageEvent) -> None:
                         logger.error(f"受限模式 AI 處理失敗: {e}", exc_info=True)
                         try:
                             await push_text(line_user_id, "抱歉，處理訊息時發生錯誤，請稍後再試。")
-                        except Exception:
-                            pass
+                        except Exception as push_e:
+                            logger.warning(f"推送錯誤訊息失敗: {push_e}")
                 # silent: 群組靜默忽略
             elif deny_reason == "group_not_allowed":
                 # 群組未開啟 AI 回應，靜默不回應

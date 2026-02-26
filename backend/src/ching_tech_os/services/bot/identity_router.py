@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 from uuid import UUID
 
@@ -136,11 +137,7 @@ async def handle_restricted_mode(
         log_linebot_ai_call,
     )
     from ..mcp import get_mcp_tool_names
-    from ..linebot_agents import (
-        get_mcp_servers_for_user,
-        get_tools_for_user,
-        get_tool_routing_for_user,
-    )
+    from ..linebot_agents import get_mcp_servers_for_user
     from ..bot.ai import parse_ai_response
 
     # 1. 取得 bot-restricted Agent
@@ -261,7 +258,6 @@ async def handle_restricted_mode(
         return "抱歉，我目前無法回答您的問題。"
 
     # 過濾 FILE_MESSAGE 標記（受限模式不支援檔案發送）
-    import re
     reply_text = re.sub(r"\[FILE_MESSAGE:[^\]]+\]", "", reply_text).strip()
 
     # 使用量已在 check_and_increment 中原子性計數，無需再次記錄

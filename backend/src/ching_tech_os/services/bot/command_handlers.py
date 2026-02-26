@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 
 from .commands import CommandContext, SlashCommand, router
@@ -85,7 +86,6 @@ async def _handle_debug(ctx: CommandContext) -> str | None:
         return "診斷完成，但未產生回報內容。"
 
     # 過濾 FILE_MESSAGE（debug 不需要檔案傳送）
-    import re
     reply_text = re.sub(r"\[FILE_MESSAGE:[^\]]+\]", "", reply_text).strip()
 
     return reply_text or "診斷完成，但未產生回報內容。"

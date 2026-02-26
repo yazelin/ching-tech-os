@@ -506,6 +506,28 @@ async def _handle_text(
                             chat_id, route_result.reply_text + extra
                         )
                 elif route_result.action == "restricted":
+                    # 受限模式：先攔截斜線指令（與 Line 側一致）
+                    parsed = command_router.parse(text)
+                    if parsed is not None:
+                        command, args = parsed
+                        cmd_ctx = CommandContext(
+                            platform_type="telegram",
+                            platform_user_id=str(user.id) if user else chat_id,
+                            bot_user_id=bot_user_id,
+                            ctos_user_id=None,
+                            is_admin=False,
+                            is_group=is_group,
+                            group_id=bot_group_id,
+                            reply_token=None,
+                            raw_args=args,
+                        )
+                        cmd_reply = await command_router.dispatch(
+                            command, args, cmd_ctx
+                        )
+                        if cmd_reply:
+                            await adapter.send_text(chat_id, cmd_reply)
+                        return
+
                     # 受限模式 AI 處理
                     try:
                         display_name = None

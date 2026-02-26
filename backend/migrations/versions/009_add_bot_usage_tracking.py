@@ -26,10 +26,7 @@ def upgrade() -> None:
             UNIQUE(bot_user_id, period_type, period_key)
         )
     """)
-    op.execute("""
-        CREATE INDEX idx_bot_usage_tracking_user_period
-        ON bot_usage_tracking(bot_user_id, period_type, period_key)
-    """)
+    # UNIQUE 約束已隱含建立唯一索引，無需額外 CREATE INDEX
 
 
 def downgrade() -> None:
