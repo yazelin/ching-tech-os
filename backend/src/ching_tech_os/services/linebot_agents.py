@@ -6,6 +6,7 @@
 import logging
 
 from . import ai_manager
+from ..config import settings
 from ..models.ai import AiPromptCreate, AiAgentCreate
 from .permissions import get_effective_app_permissions
 
@@ -32,6 +33,8 @@ logger = logging.getLogger("linebot_agents")
 # Agent 名稱常數
 AGENT_LINEBOT_PERSONAL = "linebot-personal"
 AGENT_LINEBOT_GROUP = "linebot-group"
+AGENT_BOT_RESTRICTED = "bot-restricted"
+AGENT_BOT_DEBUG = "bot-debug"
 
 # 完整的 linebot-personal prompt
 LINEBOT_PERSONAL_PROMPT = """你是擎添工業的 AI 助理，透過 Line 或 Telegram 與用戶進行個人對話。
@@ -399,6 +402,76 @@ LINEBOT_GROUP_PROMPT = """你是擎添工業的 AI 助理，在 Line 或 Telegra
 - 列表用「・」或數字編號
 - 分隔用空行，不要用分隔線"""
 
+# 受限模式 prompt（未綁定用戶使用）
+BOT_RESTRICTED_PROMPT = """你是 AI 助理，僅能回答特定範圍的問題。請根據可用工具和知識範圍提供協助。
+
+你的能力範圍：
+- 回答一般性問題
+- 搜尋公開的知識庫內容（使用 search_knowledge 工具）
+- 提供基本資訊查詢
+
+限制：
+- 你無法存取內部系統資料
+- 你無法執行任何修改操作
+- 你只能回覆純文字訊息
+
+回應原則：
+- 使用繁體中文
+- 語氣親切專業
+- 如果無法回答，請誠實告知並建議綁定帳號以獲得完整功能
+
+格式規則（極重要，必須遵守）：
+- 絕對禁止使用任何 Markdown 格式
+- 禁止：### 標題、**粗體**、*斜體*、`程式碼`、[連結](url)、- 列表
+- 只能使用純文字、emoji、全形標點符號
+- 列表用「・」或數字編號
+- 分隔用空行，不要用分隔線"""
+
+# Debug 模式 prompt（管理員診斷用）
+BOT_DEBUG_PROMPT = """你是 CTOS 系統診斷助理，專門協助管理員分析和診斷系統問題。
+
+你可以使用 run_skill_script 工具執行以下診斷腳本（skill: debug-skill）：
+
+1. check-server-logs - 查詢伺服器日誌
+   · 參數：lines（行數，預設 50）、keyword（關鍵字過濾）
+   · 用途：查看 CTOS 後端服務的運行日誌
+
+2. check-ai-logs - 查詢 AI 對話記錄
+   · 參數：limit（筆數，預設 10）、errors_only（僅顯示錯誤，預設 false）
+   · 用途：檢查 AI 呼叫記錄、失敗原因
+
+3. check-nginx-logs - 查詢 Nginx 日誌
+   · 參數：lines（行數，預設 50）、type（access 或 error，預設 error）
+   · 用途：查看 HTTP 請求日誌和錯誤
+
+4. check-db-status - 查詢資料庫狀態
+   · 參數：無
+   · 用途：查看資料庫連線數、表大小、磁碟使用量
+
+5. check-system-health - 綜合健康檢查
+   · 參數：無
+   · 用途：一次檢查所有項目，產生摘要報告
+
+診斷流程建議：
+1. 如果用戶描述了具體問題，針對性地選擇相關的診斷腳本
+2. 如果用戶沒有描述具體問題，先執行 check-system-health 取得整體狀態
+3. 根據初步結果，深入調查可疑的項目
+
+輸出格式：
+- 問題摘要：簡述發現的問題
+- 嚴重程度：正常 / 注意 / 警告 / 嚴重
+- 可能原因：列出最可能的原因
+- 建議處理方式：具體的處理步驟
+
+安全限制：
+- 僅使用 debug-skill 提供的腳本，不要執行其他操作
+- 所有操作都是唯讀的，不會修改系統狀態
+
+格式規則（極重要，必須遵守）：
+- 絕對禁止使用任何 Markdown 格式
+- 只能使用純文字、emoji、全形標點符號
+- 列表用「・」或數字編號"""
+
 # 預設 Agent 設定
 DEFAULT_LINEBOT_AGENTS = [
     {
@@ -429,6 +502,38 @@ DEFAULT_LINEBOT_AGENTS = [
     },
 ]
 
+# 受限模式 + Debug 模式 Agent 設定
+DEFAULT_BOT_MODE_AGENTS = [
+    {
+        "name": AGENT_BOT_RESTRICTED,
+        "display_name": "受限模式助理",
+        "description": "未綁定用戶的受限模式 Agent，prompt 和工具可由部署方自訂",
+        "model": f"claude-{settings.bot_restricted_model}",
+        "tools": ["search_knowledge"],
+        "prompt": {
+            "name": AGENT_BOT_RESTRICTED,
+            "display_name": "受限模式助理 Prompt",
+            "category": "bot",
+            "content": BOT_RESTRICTED_PROMPT,
+            "description": "未綁定用戶使用，受限的 AI 回覆功能",
+        },
+    },
+    {
+        "name": AGENT_BOT_DEBUG,
+        "display_name": "系統診斷助理",
+        "description": "管理員專用的系統診斷 Agent",
+        "model": f"claude-{settings.bot_debug_model}",
+        "tools": ["run_skill_script"],
+        "prompt": {
+            "name": AGENT_BOT_DEBUG,
+            "display_name": "系統診斷助理 Prompt",
+            "category": "bot",
+            "content": BOT_DEBUG_PROMPT,
+            "description": "管理員診斷系統問題使用，搭配 debug-skill",
+        },
+    },
+]
+
 
 async def _build_seed_prompt(is_group: bool) -> str:
     """建立預設 Agent 的動態工具 prompt（僅首次建立時使用）。"""
@@ -453,14 +558,14 @@ async def _build_seed_prompt(is_group: bool) -> str:
     return "\n\n".join(sections)
 
 
-async def ensure_default_linebot_agents() -> None:
-    """
-    確保預設的 Line Bot Agent 存在。
+async def _ensure_agents(agent_configs: list[dict], *, use_dynamic_prompt: bool = False) -> None:
+    """確保指定的 Agent 存在（不覆蓋已存在的設定）。
 
-    如果 Agent 已存在則跳過（保留使用者修改）。
-    如果不存在則建立 Agent 和對應的 Prompt。
+    Args:
+        agent_configs: Agent 設定列表
+        use_dynamic_prompt: 是否使用動態生成的工具 prompt（僅 linebot agents 使用）
     """
-    for agent_config in DEFAULT_LINEBOT_AGENTS:
+    for agent_config in agent_configs:
         agent_name = agent_config["name"]
 
         # 檢查 Agent 是否存在
@@ -477,14 +582,17 @@ async def ensure_default_linebot_agents() -> None:
             prompt_id = existing_prompt["id"]
             logger.debug(f"Prompt '{prompt_config['name']}' 已存在，使用現有 Prompt")
         else:
-            is_group = agent_name == AGENT_LINEBOT_GROUP
-            dynamic_content = await _build_seed_prompt(is_group)
+            content = prompt_config["content"]
+            if use_dynamic_prompt:
+                is_group = agent_name == AGENT_LINEBOT_GROUP
+                dynamic_content = await _build_seed_prompt(is_group)
+                content = dynamic_content or content
             # 建立 Prompt
             prompt_data = AiPromptCreate(
                 name=prompt_config["name"],
                 display_name=prompt_config["display_name"],
                 category=prompt_config["category"],
-                content=dynamic_content or prompt_config["content"],
+                content=content,
                 description=prompt_config["description"],
             )
             new_prompt = await ai_manager.create_prompt(prompt_data)
@@ -499,9 +607,23 @@ async def ensure_default_linebot_agents() -> None:
             model=agent_config["model"],
             system_prompt_id=prompt_id,
             is_active=True,
+            tools=agent_config.get("tools"),
         )
         await ai_manager.create_agent(agent_data)
         logger.info(f"已建立 Agent: {agent_name}")
+
+
+async def ensure_default_linebot_agents() -> None:
+    """
+    確保預設的 Line Bot Agent 和模式 Agent 存在。
+
+    如果 Agent 已存在則跳過（保留使用者修改）。
+    如果不存在則建立 Agent 和對應的 Prompt。
+    """
+    # 原有的 linebot agents（使用動態 prompt）
+    await _ensure_agents(DEFAULT_LINEBOT_AGENTS, use_dynamic_prompt=True)
+    # 受限模式 + Debug 模式 agents（使用靜態 prompt）
+    await _ensure_agents(DEFAULT_BOT_MODE_AGENTS, use_dynamic_prompt=False)
 
 
 async def get_linebot_agent(is_group: bool) -> dict | None:

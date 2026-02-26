@@ -21,10 +21,10 @@
 
 ## 4. Agent 預設初始化
 
-- [ ] 4.1 在 `linebot_agents.py` 中新增 `bot-restricted` Agent 的預設 prompt 和 tools 定義
-- [ ] 4.2 在 `linebot_agents.py` 中新增 `bot-debug` Agent 的預設 prompt 定義（含 debug-skill scripts 說明、輸出格式規範）
-- [ ] 4.3 在 `ensure_default_agents()` 中新增 `bot-restricted` 和 `bot-debug` 的初始化邏輯（存在則不覆蓋）
-- [ ] 4.4 建立 Alembic migration：在 DB 中插入 `bot-restricted` 和 `bot-debug` Agent 預設資料
+- [x] 4.1 在 `linebot_agents.py` 中新增 `bot-restricted` Agent 的預設 prompt 和 tools 定義
+- [x] 4.2 在 `linebot_agents.py` 中新增 `bot-debug` Agent 的預設 prompt 定義（含 debug-skill scripts 說明、輸出格式規範）
+- [x] 4.3 在 `ensure_default_agents()` 中新增 `bot-restricted` 和 `bot-debug` 的初始化邏輯（存在則不覆蓋）
+- [x] 4.4 建立 Alembic migration：在 DB 中插入 `bot-restricted` 和 `bot-debug` Agent 預設資料
 
 ## 5. Rate Limiter
 
