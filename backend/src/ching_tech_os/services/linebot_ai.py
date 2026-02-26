@@ -338,14 +338,6 @@ def _should_force_research_check_mode(text: str) -> bool:
     return any(keyword in lowered for keyword in keywords)
 
 
-def _contains_builtin_web_fetch_search(tool_calls: list) -> bool:
-    """判斷是否有呼叫內建 WebSearch/WebFetch。"""
-    for tool_call in tool_calls or []:
-        name = str(getattr(tool_call, "name", "") or "")
-        if name in ("WebSearch", "WebFetch"):
-            return True
-    return False
-
 
 def _summarize_for_line(
     final_summary: str,

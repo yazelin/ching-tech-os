@@ -120,9 +120,6 @@ def test_research_check_mode_detection_helpers() -> None:
     assert linebot_ai._should_force_research_check_mode("查詢研究進度 c904b40d")
     assert not linebot_ai._should_force_research_check_mode("請幫我查今天天氣 c904b40d")
 
-    tool_calls = [SimpleNamespace(name="WebFetch"), SimpleNamespace(name="mcp__x__y")]
-    assert linebot_ai._contains_builtin_web_fetch_search(tool_calls) is True
-
 
 def test_append_text_to_first_message_paths(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
