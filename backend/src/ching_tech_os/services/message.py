@@ -2,7 +2,7 @@
 
 import json
 import math
-from datetime import datetime, date
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from ..database import get_connection
@@ -326,7 +326,7 @@ async def get_messages_grouped_by_date(
             )
 
     today = date.today()
-    yesterday = date.today().replace(day=today.day - 1) if today.day > 1 else today
+    yesterday = today - timedelta(days=1)
 
     groups = {"today": [], "yesterday": [], "earlier": []}
 
@@ -340,7 +340,12 @@ async def get_messages_grouped_by_date(
             title=row["title"],
             is_read=row["is_read"],
         )
-        msg_date = row["created_at"].date()
+        created_at = row["created_at"]
+        # 若 datetime 帶時區資訊，轉換為本地時間再取日期
+        if hasattr(created_at, 'tzinfo') and created_at.tzinfo is not None:
+            import zoneinfo
+            created_at = created_at.astimezone(zoneinfo.ZoneInfo("Asia/Taipei"))
+        msg_date = created_at.date()
         if msg_date == today:
             groups["today"].append(item)
         elif msg_date == yesterday:
