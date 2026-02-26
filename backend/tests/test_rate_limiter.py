@@ -199,10 +199,10 @@ class TestCheckAndIncrement:
 
             allowed, msg = await check_and_increment(
                 "uuid-123",
-                custom_messages={"hourly": "每小時最多 {hourly_limit} 則，請稍後再試。"},
+                custom_messages={"hourly": "每小時最多 {limit} 則（已用 {count}），請稍後再試。"},
             )
             assert allowed is False
-            assert msg == "每小時最多 20 則，請稍後再試。"
+            assert msg == "每小時最多 20 則（已用 21），請稍後再試。"
 
     @pytest.mark.asyncio
     async def test_daily_custom_message(self):
@@ -221,10 +221,10 @@ class TestCheckAndIncrement:
 
             allowed, msg = await check_and_increment(
                 "uuid-123",
-                custom_messages={"daily": "今日已達 {daily_limit} 則上限，明天再來！"},
+                custom_messages={"daily": "今日已達 {limit} 則上限（已用 {count}），明天再來！"},
             )
             assert allowed is False
-            assert msg == "今日已達 50 則上限，明天再來！"
+            assert msg == "今日已達 50 則上限（已用 51），明天再來！"
 
     @pytest.mark.asyncio
     async def test_custom_message_unknown_variable_safe(self):
@@ -243,7 +243,7 @@ class TestCheckAndIncrement:
 
             allowed, msg = await check_and_increment(
                 "uuid-123",
-                custom_messages={"hourly": "上限 {hourly_limit}，{unknown_var} 再試"},
+                custom_messages={"hourly": "上限 {limit}，{unknown_var} 再試"},
             )
             assert allowed is False
             assert "上限 20" in msg

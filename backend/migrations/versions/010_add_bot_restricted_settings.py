@@ -38,16 +38,20 @@ _DEFAULT_SETTINGS = {
 
 
 def upgrade() -> None:
+    from sqlalchemy import text
+
     defaults_json = json.dumps(_DEFAULT_SETTINGS)
     # 用預設值 || 現有值的方式 merge：
     # 已有的 key 會覆蓋預設值，未設定的 key 則使用預設值
     op.execute(
-        f"""
-        UPDATE ai_agents
-        SET settings = '{defaults_json}'::jsonb || COALESCE(settings, '{{}}'::jsonb),
-            updated_at = NOW()
-        WHERE name = 'bot-restricted'
-        """
+        text(
+            """
+            UPDATE ai_agents
+            SET settings = :defaults::jsonb || COALESCE(settings, '{}'::jsonb),
+                updated_at = NOW()
+            WHERE name = 'bot-restricted'
+            """
+        ).bindparams(defaults=defaults_json)
     )
 
 
