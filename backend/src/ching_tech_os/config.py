@@ -159,6 +159,12 @@ class Settings:
     bot_restricted_model: str = _get_env("BOT_RESTRICTED_MODEL", "haiku")
     # Debug 模式使用的 AI 模型
     bot_debug_model: str = _get_env("BOT_DEBUG_MODEL", "sonnet")
+    # 停用的斜線指令（逗號分隔，大小寫不敏感，如 "debug,start"）
+    bot_cmd_disabled: list[str] = [
+        s.strip().lower()
+        for s in _get_env("BOT_CMD_DISABLED", "").split(",")
+        if s.strip()
+    ]
     # 頻率限制開關（僅在 restricted 模式下生效）
     bot_rate_limit_enabled: bool = _get_env_bool("BOT_RATE_LIMIT_ENABLED", True)
     # 每小時訊息上限（未綁定用戶）

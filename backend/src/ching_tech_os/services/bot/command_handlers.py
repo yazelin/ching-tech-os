@@ -15,6 +15,70 @@ from ..bot_line.trigger import reset_conversation
 logger = logging.getLogger(__name__)
 
 
+def get_welcome_message() -> str:
+    """回傳歡迎訊息文字（/start 和 LINE FollowEvent 共用）"""
+    return (
+        "歡迎使用 CTOS Bot！\n\n"
+        "我是 Ching Tech OS 的 AI 助手，可以幫你：\n"
+        "• 回答問題和對話\n"
+        "• 管理專案和筆記\n"
+        "• 生成和編輯圖片\n\n"
+        "首次使用請先綁定帳號：\n"
+        "1. 登入 CTOS 系統\n"
+        "2. 進入 Bot 管理頁面\n"
+        "3. 點擊「綁定帳號」產生驗證碼\n"
+        "4. 將 6 位數驗證碼發送給我\n\n"
+        "輸入 /help 查看更多功能"
+    )
+
+
+async def _handle_start(ctx: CommandContext) -> str | None:
+    """歡迎訊息"""
+    return get_welcome_message()
+
+
+async def _handle_help(ctx: CommandContext) -> str | None:
+    """動態列出所有已註冊的指令"""
+    # 收集不重複的指令（alias 會指向同一個 SlashCommand）
+    seen_ids: set[int] = set()
+    commands: list[SlashCommand] = []
+    for cmd in router._commands.values():
+        cmd_id = id(cmd)
+        if cmd_id in seen_ids:
+            continue
+        seen_ids.add(cmd_id)
+        # 過濾：未啟用、不支援當前平台
+        if not cmd.enabled or ctx.platform_type not in cmd.platforms:
+            continue
+        # 非管理員看不到管理員指令
+        if cmd.require_admin and not ctx.is_admin:
+            continue
+        commands.append(cmd)
+
+    lines = [
+        "CTOS Bot 使用說明\n",
+        "直接傳送文字即可與 AI 對話",
+        "在群組中 @Bot 或回覆 Bot 訊息即可觸發\n",
+        "指令列表",
+    ]
+
+    for cmd in commands:
+        desc = cmd.description or cmd.name
+        # 顯示主要別名（最多 1 個）
+        alias_hint = ""
+        if cmd.aliases:
+            alias_hint = f"（/{cmd.aliases[0]}）"
+        # 標註管理員指令
+        admin_tag = "（管理員）" if cmd.require_admin else ""
+        lines.append(f"/{cmd.name} — {desc}{alias_hint}{admin_tag}")
+
+    lines.append("")
+    lines.append("帳號綁定")
+    lines.append("發送 6 位數驗證碼完成綁定")
+
+    return "\n".join(lines)
+
+
 async def _handle_reset(ctx: CommandContext) -> str | None:
     """重置對話歷史"""
     # 群組檢查已由 CommandRouter.dispatch() 的 private_only 處理
@@ -110,31 +174,62 @@ async def _handle_debug(ctx: CommandContext) -> str | None:
     return reply_text or "診斷完成，但未產生回報內容。"
 
 
-def register_builtin_commands() -> None:
-    """註冊所有內建指令"""
+_registered = False
 
-    # /reset 指令（包含所有別名）
-    router.register(
+
+def register_builtin_commands() -> None:
+    """註冊所有內建指令（冪等，重複呼叫不會重複註冊）"""
+    global _registered
+    if _registered:
+        return
+    _registered = True
+
+    from ...config import settings
+
+    disabled = set(settings.bot_cmd_disabled)
+
+    all_commands = [
+        SlashCommand(
+            name="start",
+            handler=_handle_start,
+            description="歡迎訊息",
+            require_bound=False,
+            require_admin=False,
+            private_only=True,
+        ),
+        SlashCommand(
+            name="help",
+            aliases=["說明"],
+            handler=_handle_help,
+            description="查看指令說明",
+            require_bound=False,
+            require_admin=False,
+            private_only=True,
+        ),
         SlashCommand(
             name="reset",
             aliases=["新對話", "新对话", "清除對話", "清除对话", "忘記", "忘记"],
             handler=_handle_reset,
-            require_bound=False,  # 受限模式用戶也可以重置
+            description="重置對話歷史",
+            require_bound=False,
             require_admin=False,
             private_only=True,
-        )
-    )
-
-    # /debug 指令（管理員專用，僅限個人對話）
-    router.register(
+        ),
         SlashCommand(
             name="debug",
             aliases=["診斷", "diag"],
             handler=_handle_debug,
+            description="系統診斷",
             require_bound=True,
             require_admin=True,
             private_only=True,
-        )
-    )
+        ),
+    ]
 
-    logger.info(f"已註冊 {len({id(v) for v in router._commands.values()})} 個內建指令")
+    for cmd in all_commands:
+        if cmd.name in disabled:
+            cmd.enabled = False
+        router.register(cmd)
+
+    enabled_count = sum(1 for cmd in all_commands if cmd.enabled)
+    logger.info(f"已註冊 {len(all_commands)} 個內建指令（{enabled_count} 個啟用）")

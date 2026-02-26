@@ -246,20 +246,25 @@ async def test_handle_text_command_and_access_paths(monkeypatch: pytest.MonkeyPa
     chat = SimpleNamespace(id=100, type="private")
     user = SimpleNamespace(id=9, full_name="小明")
 
-    # /start
-    await handler._handle_text(message, "/start", "100", chat, user, False, adapter)
-    adapter.send_text.assert_awaited_with("100", handler.START_MESSAGE)
-
-    # /help
-    adapter.send_text.reset_mock()
-    await handler._handle_text(message, "/help", "100", chat, user, False, adapter)
-    adapter.send_text.assert_awaited_with("100", handler.HELP_MESSAGE)
-
-    # reset 指令（透過 CommandRouter 處理）
+    # 確保 CommandRouter 已註冊指令
+    from ching_tech_os.services.bot import commands as bot_commands
     from ching_tech_os.services.bot import command_handlers
-    from ching_tech_os.services.bot.command_handlers import register_builtin_commands
+    from ching_tech_os.services.bot.command_handlers import register_builtin_commands, get_welcome_message
 
     register_builtin_commands()
+    # mock get_command_user_context 避免 DB 查詢
+    monkeypatch.setattr(bot_commands, "get_command_user_context", AsyncMock(return_value=(None, False)))
+
+    # /start（現在走 CommandRouter）
+    await handler._handle_text(message, "/start", "100", chat, user, False, adapter)
+    adapter.send_text.assert_awaited_with("100", get_welcome_message())
+
+    # /help（現在走 CommandRouter）
+    adapter.send_text.reset_mock()
+    await handler._handle_text(message, "/help", "100", chat, user, False, adapter)
+    help_text = adapter.send_text.await_args.args[1]
+    assert "指令列表" in help_text
+    assert "/start" in help_text
     monkeypatch.setattr(command_handlers, "reset_conversation", AsyncMock())
     # mock get_user_role_and_permissions 避免 DB 查詢
     monkeypatch.setattr(

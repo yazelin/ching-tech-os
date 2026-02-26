@@ -466,6 +466,16 @@ async def process_follow_event(event: FollowEvent) -> None:
         await update_user_friend_status(line_user_id, is_friend=True)
         logger.info(f"用戶加好友: {line_user_id}")
 
+        # 發送歡迎訊息
+        try:
+            from ..services.bot.command_handlers import get_welcome_message
+            from ..services.bot_line.messaging import push_text
+
+            welcome = get_welcome_message()
+            await push_text(line_user_id, welcome)
+        except Exception:
+            logger.warning("發送 FollowEvent 歡迎訊息失敗", exc_info=True)
+
 
 async def process_unfollow_event(event: UnfollowEvent) -> None:
     """處理用戶封鎖/取消好友事件
