@@ -573,7 +573,7 @@ def generate_usage_tips_prompt(
             f"{len(tips)+1}. 需要外部研究（搜尋多個網站並統整）時，必須用 run_skill_script(skill='research-skill', script='start-research', input='{{\"query\":\"...\"}}') 啟動任務",
             f"{len(tips)+1}. 取得 job_id 後用 check-research 查詢進度；若 check 回傳 failed，請重新 start-research，不要改用 WebSearch/WebFetch 重做同主題",
             f"{len(tips)+1}. WebSearch/WebFetch 僅用於單一簡短查詢，不要在已啟動 research-skill 後切回同步抓取流程",
-            f"{len(tips)+1}. 使用者回覆「存知識庫」時，代表要把最近的研究完整報告存入知識庫。流程：(1) 用 check-research 取得 result_ctos_path (2) 用 read_document 讀取完整 result.md 內容 (3) 用 add_note 存入知識庫（傳入 line_user_id、ctos_user_id）(4) 用 create_share_link(resource_type='knowledge', resource_id=kb_id) 建立 24h 分享連結 (5) 回覆使用者知識庫 ID 和分享連結",
+            f"{len(tips)+1}. 使用者回覆「存知識庫」時，代表要把最近的研究完整報告存入知識庫。若對話中有 [result_path:...] 標記，直接用該路徑；否則先用 check-research 取得 result_ctos_path。流程：(1) 用 read_document 讀取完整 result.md 內容 (2) 用 add_note 存入知識庫（傳入 line_user_id、ctos_user_id）(3) 用 create_share_link(resource_type='knowledge', resource_id=kb_id) 建立 24h 分享連結 (4) 回覆使用者知識庫 ID 和分享連結",
         ])
 
     if not tips:

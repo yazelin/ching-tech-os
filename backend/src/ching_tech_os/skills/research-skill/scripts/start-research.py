@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import ipaddress
 import json
 import os
@@ -156,28 +157,6 @@ def _strip_html(html_text: str) -> str:
     plain = _TAG_RE.sub(" ", no_nav)
     plain = unescape(plain)
     return _WHITESPACE_RE.sub(" ", plain).strip()
-
-
-def _collect_related_topics(related_topics: list, collector: list[dict]) -> None:
-    """展開 DuckDuckGo RelatedTopics。"""
-    for item in related_topics:
-        if not isinstance(item, dict):
-            continue
-        nested = item.get("Topics")
-        if isinstance(nested, list):
-            _collect_related_topics(nested, collector)
-            continue
-
-        url = item.get("FirstURL")
-        text = item.get("Text")
-        if isinstance(url, str) and isinstance(text, str):
-            collector.append(
-                {
-                    "title": _truncate(text, 120),
-                    "url": url,
-                    "snippet": _truncate(text, 180),
-                }
-            )
 
 
 def _dedupe_sources(candidates: list[dict], max_results: int) -> list[dict]:
@@ -437,8 +416,8 @@ def _search_brave_public(
     return _dedupe_sources(candidates, max_results=max_results)
 
 
-def _build_ddg_retry_queries(query: str) -> list[str]:
-    """產生 DuckDuckGo 重試查詢（長查詢逐步縮短）。"""
+def _build_retry_queries(query: str) -> list[str]:
+    """產生重試查詢變體（長查詢逐步縮短）。"""
     normalized = _WHITESPACE_RE.sub(" ", query or "").strip()
     if not normalized:
         return []
@@ -474,156 +453,79 @@ def _search_with_provider_fallback(
     query: str,
     max_results: int,
 ) -> tuple[list[dict], str, list[dict]]:
-    """依 provider 優先序搜尋（Brave -> DuckDuckGo）。"""
+    """並行執行所有可用搜尋 provider，合併去重後回傳。"""
     provider_trace: list[dict] = []
     brave_api_key = _get_brave_api_key()
+    retry_queries = _build_retry_queries(query)
+    if not retry_queries:
+        provider_trace.append({"provider": "none", "status": "skipped", "reason": "invalid_query"})
+        return [], "none", provider_trace
 
-    if brave_api_key:
-        try:
-            brave_results = _search_brave(
-                client,
-                query=query,
-                max_results=max_results,
-                api_key=brave_api_key,
-            )
-            if brave_results:
-                provider_trace.append(
-                    {"provider": "brave", "status": "ok", "result_count": len(brave_results)}
-                )
-                return brave_results, "brave", provider_trace
-            provider_trace.append(
-                {"provider": "brave", "status": "empty", "reason": "no_results"}
-            )
-        except (httpx.HTTPError, RuntimeError, ValueError) as exc:
-            provider_trace.append(
-                {"provider": "brave", "status": "failed", "reason": _truncate(str(exc), 180)}
-            )
-    else:
-        provider_trace.append(
-            {"provider": "brave", "status": "skipped", "reason": "missing_api_key"}
-        )
+    all_candidates: list[dict] = []
+    providers_used: list[str] = []
 
-    ddg_queries = _build_ddg_retry_queries(query)
-    for attempt, ddg_query in enumerate(ddg_queries, start=1):
+    def _run_brave_api() -> tuple[list[dict], dict]:
+        """執行 Brave Search API。"""
+        if not brave_api_key:
+            return [], {"provider": "brave", "status": "skipped", "reason": "missing_api_key"}
         try:
-            ddg_results = _search_duckduckgo(client, ddg_query, max_results=max_results)
+            results = _search_brave(client, query=query, max_results=max_results, api_key=brave_api_key)
+            if results:
+                return results, {"provider": "brave", "status": "ok", "result_count": len(results)}
+            return [], {"provider": "brave", "status": "empty", "reason": "no_results"}
         except (httpx.HTTPError, RuntimeError, ValueError) as exc:
-            provider_trace.append(
-                {
-                    "provider": "duckduckgo",
-                    "status": "failed",
-                    "attempt": attempt,
-                    "query": _truncate(ddg_query, 80),
+            return [], {"provider": "brave", "status": "failed", "reason": _truncate(str(exc), 180)}
+
+    def _run_brave_public() -> tuple[list[dict], list[dict]]:
+        """執行 Brave Public 搜尋（嘗試多個查詢變體）。"""
+        traces: list[dict] = []
+        for attempt, q in enumerate(retry_queries, start=1):
+            try:
+                results = _search_brave_public(client, query=q, max_results=max_results)
+                if results:
+                    traces.append({
+                        "provider": "brave_public", "status": "ok",
+                        "attempt": attempt, "query": _truncate(q, 80),
+                        "result_count": len(results),
+                    })
+                    return results, traces
+                traces.append({
+                    "provider": "brave_public", "status": "empty",
+                    "attempt": attempt, "query": _truncate(q, 80),
+                    "reason": "no_results",
+                })
+            except (httpx.HTTPError, RuntimeError, ValueError) as exc:
+                traces.append({
+                    "provider": "brave_public", "status": "failed",
+                    "attempt": attempt, "query": _truncate(q, 80),
                     "reason": _truncate(str(exc), 180),
-                }
-            )
-            continue
+                })
+        return [], traces
 
-        if ddg_results:
-            provider_trace.append(
-                {
-                    "provider": "duckduckgo",
-                    "status": "ok",
-                    "attempt": attempt,
-                    "query": _truncate(ddg_query, 80),
-                    "result_count": len(ddg_results),
-                }
-            )
-            return ddg_results, "duckduckgo", provider_trace
+    # 並行執行所有 provider
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        future_brave = executor.submit(_run_brave_api)
+        future_public = executor.submit(_run_brave_public)
 
-        provider_trace.append(
-            {
-                "provider": "duckduckgo",
-                "status": "empty",
-                "attempt": attempt,
-                "query": _truncate(ddg_query, 80),
-                "reason": "no_results",
-            }
-        )
+        brave_results, brave_trace = future_brave.result()
+        provider_trace.append(brave_trace)
+        if brave_results:
+            all_candidates.extend(brave_results)
+            providers_used.append("brave")
 
-    if not ddg_queries:
-        provider_trace.append(
-            {"provider": "duckduckgo", "status": "skipped", "reason": "invalid_query"}
-        )
+        public_results, public_traces = future_public.result()
+        provider_trace.extend(public_traces)
+        if public_results:
+            all_candidates.extend(public_results)
+            providers_used.append("brave_public")
 
-    for attempt, brave_query in enumerate(ddg_queries, start=1):
-        try:
-            brave_public_results = _search_brave_public(
-                client,
-                query=brave_query,
-                max_results=max_results,
-            )
-        except (httpx.HTTPError, RuntimeError, ValueError) as exc:
-            provider_trace.append(
-                {
-                    "provider": "brave_public",
-                    "status": "failed",
-                    "attempt": attempt,
-                    "query": _truncate(brave_query, 80),
-                    "reason": _truncate(str(exc), 180),
-                }
-            )
-            continue
+    if not all_candidates:
+        return [], "none", provider_trace
 
-        if brave_public_results:
-            provider_trace.append(
-                {
-                    "provider": "brave_public",
-                    "status": "ok",
-                    "attempt": attempt,
-                    "query": _truncate(brave_query, 80),
-                    "result_count": len(brave_public_results),
-                }
-            )
-            return brave_public_results, "brave_public", provider_trace
-
-        provider_trace.append(
-            {
-                "provider": "brave_public",
-                "status": "empty",
-                "attempt": attempt,
-                "query": _truncate(brave_query, 80),
-                "reason": "no_results",
-            }
-        )
-
-    return [], "duckduckgo", provider_trace
-
-
-def _search_duckduckgo(client: httpx.Client, query: str, max_results: int) -> list[dict]:
-    """使用 DuckDuckGo Instant Answer API 取得候選來源。"""
-    response = client.get(
-        "https://api.duckduckgo.com/",
-        params={
-            "q": query,
-            "format": "json",
-            "no_html": "1",
-            "skip_disambig": "1",
-        },
-    )
-    response.raise_for_status()
-    data = response.json()
-
-    candidates: list[dict] = []
-
-    if isinstance(data, dict):
-        abstract_url = data.get("AbstractURL")
-        abstract_text = data.get("AbstractText")
-        heading = data.get("Heading")
-        if isinstance(abstract_url, str) and isinstance(abstract_text, str):
-            candidates.append(
-                {
-                    "title": _truncate(heading or abstract_text, 120),
-                    "url": abstract_url,
-                    "snippet": _truncate(abstract_text, 180),
-                }
-            )
-
-        related_topics = data.get("RelatedTopics")
-        if isinstance(related_topics, list):
-            _collect_related_topics(related_topics, candidates)
-
-    return _dedupe_sources(candidates, max_results=max_results)
+    # 合併去重
+    merged = _dedupe_sources(all_candidates, max_results=max_results)
+    provider_name = "+".join(providers_used) if len(providers_used) > 1 else providers_used[0]
+    return merged, provider_name, provider_trace
 
 
 def _fetch_source(client: httpx.Client, source: dict) -> dict:

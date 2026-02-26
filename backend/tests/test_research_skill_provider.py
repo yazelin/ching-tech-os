@@ -1,4 +1,4 @@
-"""research-skill provider 選擇與 fallback 測試。"""
+"""research-skill provider 搜尋與並行合併測試。"""
 
 from __future__ import annotations
 
@@ -22,7 +22,8 @@ def _load_start_research_module():
     return module
 
 
-def test_provider_prefers_brave_when_available(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_provider_includes_brave_api_when_available(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Brave API 有 key 時應回傳結果。"""
     module = _load_start_research_module()
     captured_headers: dict[str, str] = {}
 
@@ -44,105 +45,125 @@ def test_provider_prefers_brave_when_available(monkeypatch: pytest.MonkeyPatch) 
         )
 
     monkeypatch.setattr(module, "_get_brave_api_key", lambda: "brave-test-key")
+    # 讓 brave_public 不回傳結果，確認 brave API 結果有被納入
+    monkeypatch.setattr(module, "_search_brave_public", lambda *_a, **_kw: [])
     client = httpx.Client(transport=httpx.MockTransport(handler))
     results, provider, trace = module._search_with_provider_fallback(client, "cupola360", 5)
 
-    assert provider == "brave"
+    assert "brave" in provider
     assert captured_headers["token"] == "brave-test-key"
-    assert results[0]["url"] == "https://example.com/cupola360"
-    assert trace[0]["provider"] == "brave"
-    assert trace[0]["status"] == "ok"
+    assert any(r["url"] == "https://example.com/cupola360" for r in results)
+    assert any(t["provider"] == "brave" and t["status"] == "ok" for t in trace)
 
 
-def test_provider_fallback_to_duckduckgo_when_brave_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_provider_brave_public_used_when_no_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """沒有 Brave API key 時，應使用 Brave Public。"""
+    module = _load_start_research_module()
+
+    monkeypatch.setattr(module, "_get_brave_api_key", lambda: "")
+    monkeypatch.setattr(
+        module,
+        "_search_brave_public",
+        lambda *_a, **_kw: [
+            {"title": "Brave Public Result", "url": "https://cupola360.com", "snippet": ""}
+        ],
+    )
+
+    results, provider, trace = module._search_with_provider_fallback(None, "cupola360", 5)
+
+    assert "brave_public" in provider
+    assert results[0]["url"] == "https://cupola360.com"
+    assert any(t["provider"] == "brave" and t["status"] == "skipped" for t in trace)
+    assert any(t["provider"] == "brave_public" and t["status"] == "ok" for t in trace)
+
+
+def test_provider_merges_brave_api_and_public(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Brave API 和 Public 都有結果時，應合併去重。"""
     module = _load_start_research_module()
 
     monkeypatch.setattr(module, "_get_brave_api_key", lambda: "brave-test-key")
     monkeypatch.setattr(
         module,
         "_search_brave",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("brave down")),
+        lambda *_a, **_kw: [
+            {"title": "API Result", "url": "https://example.com/a", "snippet": "from api"},
+        ],
     )
     monkeypatch.setattr(
         module,
-        "_search_duckduckgo",
-        lambda *_args, **_kwargs: [
-            {"title": "DDG result", "url": "https://ddg.example/result", "snippet": "fallback"}
+        "_search_brave_public",
+        lambda *_a, **_kw: [
+            {"title": "Public Result", "url": "https://example.com/b", "snippet": "from public"},
+            # 與 API 重複的 URL，應被去重
+            {"title": "API Result Dup", "url": "https://example.com/a", "snippet": "dup"},
         ],
     )
 
-    results, provider, trace = module._search_with_provider_fallback(None, "cupola360", 5)
+    results, provider, trace = module._search_with_provider_fallback(None, "cupola360", 10)
 
-    assert provider == "duckduckgo"
-    assert results[0]["url"] == "https://ddg.example/result"
-    assert trace[0]["provider"] == "brave"
-    assert trace[0]["status"] == "failed"
-    assert "brave down" in trace[0]["reason"]
+    assert "brave+brave_public" == provider
+    urls = [r["url"] for r in results]
+    assert "https://example.com/a" in urls
+    assert "https://example.com/b" in urls
+    # 去重後應只有 2 個
+    assert len(results) == 2
 
 
-def test_provider_fallback_to_duckduckgo_when_brave_key_missing(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_provider_returns_none_when_all_fail(monkeypatch: pytest.MonkeyPatch) -> None:
+    """所有 provider 都失敗時回傳空結果。"""
     module = _load_start_research_module()
 
-    monkeypatch.setattr(module, "_get_brave_api_key", lambda: "")
+    monkeypatch.setattr(module, "_get_brave_api_key", lambda: "brave-test-key")
     monkeypatch.setattr(
         module,
-        "_search_duckduckgo",
-        lambda *_args, **_kwargs: [
-            {"title": "DDG result", "url": "https://ddg.example/result", "snippet": "fallback"}
-        ],
+        "_search_brave",
+        lambda *_a, **_kw: (_ for _ in ()).throw(RuntimeError("brave down")),
+    )
+    monkeypatch.setattr(
+        module,
+        "_search_brave_public",
+        lambda *_a, **_kw: (_ for _ in ()).throw(RuntimeError("public down")),
     )
 
     results, provider, trace = module._search_with_provider_fallback(None, "cupola360", 5)
 
-    assert provider == "duckduckgo"
-    assert results[0]["url"] == "https://ddg.example/result"
-    assert trace[0]["provider"] == "brave"
-    assert trace[0]["status"] == "skipped"
-    assert trace[0]["reason"] == "missing_api_key"
+    assert results == []
+    assert provider == "none"
+    assert any(t["provider"] == "brave" and t["status"] == "failed" for t in trace)
+    assert any(t["provider"] == "brave_public" and t["status"] == "failed" for t in trace)
 
 
-def test_duckduckgo_retries_with_shorter_query(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_provider_brave_public_retries_with_shorter_query(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Brave Public 在第一個查詢失敗時會嘗試縮短的查詢。"""
     module = _load_start_research_module()
     calls: list[str] = []
 
     monkeypatch.setattr(module, "_get_brave_api_key", lambda: "")
     monkeypatch.setattr(
         module,
-        "_build_ddg_retry_queries",
-        lambda _query: [
-            "Cupola360 camera complete product lineup specifications RX1000P RX1000F AST1220",
-            "Cupola360 camera RX1000P",
-        ],
+        "_build_retry_queries",
+        lambda _query: ["very long query that fails", "short query"],
     )
 
-    def fake_search_ddg(_client, query: str, max_results: int):
+    def fake_brave_public(_client, query: str, max_results: int):
         calls.append(query)
         if len(calls) == 1:
             return []
-        return [{"title": "DDG retry hit", "url": "https://ddg.example/retry", "snippet": "ok"}]
+        return [{"title": "Retry hit", "url": "https://example.com/retry", "snippet": "ok"}]
 
-    monkeypatch.setattr(module, "_search_duckduckgo", fake_search_ddg)
+    monkeypatch.setattr(module, "_search_brave_public", fake_brave_public)
 
     results, provider, trace = module._search_with_provider_fallback(None, "q", 5)
 
-    assert provider == "duckduckgo"
-    assert results[0]["url"] == "https://ddg.example/retry"
-    assert calls == [
-        "Cupola360 camera complete product lineup specifications RX1000P RX1000F AST1220",
-        "Cupola360 camera RX1000P",
-    ]
-    assert trace[1]["provider"] == "duckduckgo"
-    assert trace[1]["status"] == "empty"
-    assert trace[1]["attempt"] == 1
-    assert trace[2]["status"] == "ok"
-    assert trace[2]["attempt"] == 2
+    assert "brave_public" in provider
+    assert results[0]["url"] == "https://example.com/retry"
+    assert len(calls) == 2
 
 
-def test_build_ddg_retry_queries_generates_compact_variants() -> None:
+def test_build_retry_queries_generates_compact_variants() -> None:
+    """_build_retry_queries 應產生多個查詢變體。"""
     module = _load_start_research_module()
-    queries = module._build_ddg_retry_queries(
+    queries = module._build_retry_queries(
         "Cupola360 camera complete product lineup specifications RX1000P RX1000F AST1220 AST1230 AST1235 RRM software platform ASPEED Technology"
     )
     assert len(queries) >= 2
@@ -150,26 +171,16 @@ def test_build_ddg_retry_queries_generates_compact_variants() -> None:
     assert len(set(q.lower() for q in queries)) == len(queries)
 
 
-def test_provider_fallback_to_brave_public_when_ddg_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_provider_returns_none_for_empty_query(monkeypatch: pytest.MonkeyPatch) -> None:
+    """空白查詢應直接回傳空結果。"""
     module = _load_start_research_module()
-
     monkeypatch.setattr(module, "_get_brave_api_key", lambda: "")
-    monkeypatch.setattr(module, "_build_ddg_retry_queries", lambda _query: ["q1"])
-    monkeypatch.setattr(module, "_search_duckduckgo", lambda *_args, **_kwargs: [])
-    monkeypatch.setattr(
-        module,
-        "_search_brave_public",
-        lambda *_args, **_kwargs: [
-            {"title": "Brave Public", "url": "https://cupola360.com", "snippet": ""}
-        ],
-    )
 
-    results, provider, trace = module._search_with_provider_fallback(None, "cupola360", 5)
+    results, provider, trace = module._search_with_provider_fallback(None, "   ", 5)
 
-    assert provider == "brave_public"
-    assert results[0]["url"] == "https://cupola360.com"
-    assert any(item.get("provider") == "duckduckgo" and item.get("status") == "empty" for item in trace)
-    assert any(item.get("provider") == "brave_public" and item.get("status") == "ok" for item in trace)
+    assert results == []
+    assert provider == "none"
+    assert any(t["status"] == "skipped" for t in trace)
 
 
 def test_get_research_claude_timeout_sec_respects_env(monkeypatch: pytest.MonkeyPatch) -> None:

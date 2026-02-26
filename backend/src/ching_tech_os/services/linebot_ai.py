@@ -484,18 +484,20 @@ def _extract_research_tool_feedback(tool_calls: list) -> dict | None:
                 # 組合訊息：重點摘要 + 詢問是否存知識庫
                 message = f"✅ 研究完成\n\n{key_points}"
                 if full_len > 0:
-                    message += (
+                    save_hint = (
                         f"\n\n---\n"
                         f"以上為重點摘要（完整報告約 {full_len} 字）。\n"
                         f"如需保存完整報告，請回覆「存知識庫」，"
                         f"我會將完整內容存入知識庫並產生 24 小時暫存連結。"
                     )
+                    if result_ctos_path:
+                        save_hint += f"\n[result_path:{result_ctos_path}]"
+                    message += save_hint
 
                 return {
                     "script": script_name,
                     "job_id": job_id,
                     "message": message,
-                    "result_ctos_path": result_ctos_path,
                 }
 
             if status == "failed":
