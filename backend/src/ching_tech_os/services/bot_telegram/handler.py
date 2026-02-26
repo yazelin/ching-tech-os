@@ -423,27 +423,12 @@ async def _handle_text(
         logger.error(f"確保用戶/群組失敗: {e}", exc_info=True)
 
     # === 斜線指令攔截（統一使用 CommandRouter） ===
-    from ..bot.commands import CommandContext, router as command_router
+    from ..bot.commands import CommandContext, get_command_user_context, router as command_router
 
     parsed = command_router.parse(text)
     if parsed is not None:
         command, args = parsed
-        # 查詢綁定狀態和管理員身份
-        ctos_user_id = None
-        is_admin = False
-        if bot_user_id:
-            try:
-                async with get_connection() as conn:
-                    row = await conn.fetchrow(
-                        "SELECT user_id FROM bot_users WHERE id = $1",
-                        bot_user_id,
-                    )
-                    if row and row["user_id"]:
-                        ctos_user_id = row["user_id"]
-                        user_info = await get_user_role_and_permissions(ctos_user_id)
-                        is_admin = user_info["role"] == "admin"
-            except Exception as e:
-                logger.error(f"查詢用戶綁定狀態失敗: {e}", exc_info=True)
+        ctos_user_id, is_admin = await get_command_user_context(bot_user_id)
 
         ctx = CommandContext(
             platform_type="telegram",

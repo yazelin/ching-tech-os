@@ -10,7 +10,37 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Callable, Coroutine
 
+from ...database import get_connection
+
 logger = logging.getLogger(__name__)
+
+
+async def get_command_user_context(
+    bot_user_id: str | None,
+) -> tuple[int | None, bool]:
+    """從 bot_user_id 查詢 CTOS 帳號綁定狀態和管理員身份
+
+    Line 和 Telegram 共用的查詢邏輯。
+
+    Returns:
+        (ctos_user_id, is_admin)
+    """
+    if not bot_user_id:
+        return None, False
+    try:
+        async with get_connection() as conn:
+            row = await conn.fetchrow(
+                "SELECT user_id FROM bot_users WHERE id = $1",
+                bot_user_id,
+            )
+            if row and row["user_id"]:
+                from ..user import get_user_role_and_permissions
+
+                user_info = await get_user_role_and_permissions(row["user_id"])
+                return row["user_id"], user_info["role"] == "admin"
+    except Exception:
+        logger.exception("查詢用戶綁定狀態失敗")
+    return None, False
 
 
 @dataclass
