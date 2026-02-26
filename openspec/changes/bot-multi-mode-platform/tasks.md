@@ -43,9 +43,9 @@
 
 ## 7. /debug 指令
 
-- [ ] 7.1 在 `CommandRouter` 中註冊 `/debug` 指令：`require_bound=true`、`require_admin=true`、`private_only=true`
-- [ ] 7.2 實作 `/debug` handler：取得 `bot-debug` Agent、使用 `BOT_DEBUG_MODEL`、呼叫 `call_claude(tools=["run_skill_script"])`、回覆診斷結果
-- [ ] 7.3 測試 `/debug` 指令：管理員可執行、非管理員被拒絕、群組中靜默忽略、無問題描述時使用預設 prompt
+- [x] 7.1 在 `CommandRouter` 中註冊 `/debug` 指令：`require_bound=true`、`require_admin=true`、`private_only=true`
+- [x] 7.2 實作 `/debug` handler：取得 `bot-debug` Agent、使用 `BOT_DEBUG_MODEL`、呼叫 `call_claude(tools=["run_skill_script"])`、回覆診斷結果
+- [x] 7.3 測試 `/debug` 指令：管理員可執行、非管理員被拒絕、群組中靜默忽略、無問題描述時使用預設 prompt
 
 ## 8. 知識庫公開存取
 
