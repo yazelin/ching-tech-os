@@ -18,7 +18,6 @@ from typing import Any, Optional
 from claude_code_acp import ClaudeClient
 
 from ..config import settings
-from . import ai_manager
 
 logger = logging.getLogger(__name__)
 
@@ -168,6 +167,8 @@ def _build_mcp_servers(
 
 async def get_prompt_content(prompt_name: str) -> str | None:
     """從資料庫取得 prompt 內容"""
+    from . import ai_manager
+
     prompt = await ai_manager.get_prompt_by_name(prompt_name)
     if prompt is None:
         return None

@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from ching_tech_os.services import claude_agent
+from ching_tech_os.services import ai_manager, claude_agent
 
 
 def test_workdir_and_prompt_helpers(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -126,11 +126,11 @@ def test_load_mcp_servers_and_build(monkeypatch: pytest.MonkeyPatch, tmp_path: P
 
 @pytest.mark.asyncio
 async def test_get_prompt_content_and_summary(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(claude_agent.ai_manager, "get_prompt_by_name", AsyncMock(return_value=None))
+    monkeypatch.setattr(ai_manager, "get_prompt_by_name", AsyncMock(return_value=None))
     assert await claude_agent.get_prompt_content("missing") is None
 
     monkeypatch.setattr(
-        claude_agent.ai_manager,
+        ai_manager,
         "get_prompt_by_name",
         AsyncMock(return_value={"content": "prompt-body"}),
     )
