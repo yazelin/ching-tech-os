@@ -120,6 +120,14 @@ async def handle_restricted_mode(
     Returns:
         AI 回應文字，或 None
     """
+    # Rate limit 檢查（在 AI 處理之前）
+    if bot_user_id:
+        from .rate_limiter import check_rate_limit, record_usage
+
+        allowed, deny_msg = await check_rate_limit(bot_user_id)
+        if not allowed:
+            return deny_msg
+
     from .. import ai_manager
     from ..claude_agent import call_claude
     from ..linebot_ai import (
@@ -252,5 +260,10 @@ async def handle_restricted_mode(
     # 過濾 FILE_MESSAGE 標記（受限模式不支援檔案發送）
     import re
     reply_text = re.sub(r"\[FILE_MESSAGE:[^\]]+\]", "", reply_text).strip()
+
+    # 記錄使用量（成功處理後）
+    if bot_user_id:
+        from .rate_limiter import record_usage
+        await record_usage(bot_user_id)
 
     return reply_text or "抱歉，我目前無法回答您的問題。"

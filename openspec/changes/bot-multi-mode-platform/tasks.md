@@ -28,9 +28,9 @@
 
 ## 5. Rate Limiter
 
-- [ ] 5.1 建立 `services/bot/rate_limiter.py`：`check_rate_limit()` 查詢使用量、`record_usage()` UPSERT 計數
-- [ ] 5.2 在受限模式 AI 流程入口（`identity_router.py` 的 restricted 路徑）插入 rate limit 檢查
-- [ ] 5.3 撰寫 rate limiter 的單元測試：未超限通過、超過每小時限額拒絕、超過每日限額拒絕、已綁定用戶不檢查、停用 rate limit 時仍記錄使用量
+- [x] 5.1 建立 `services/bot/rate_limiter.py`：`check_rate_limit()` 查詢使用量、`record_usage()` UPSERT 計數
+- [x] 5.2 在受限模式 AI 流程入口（`identity_router.py` 的 restricted 路徑）插入 rate limit 檢查
+- [x] 5.3 撰寫 rate limiter 的單元測試：未超限通過、超過每小時限額拒絕、超過每日限額拒絕、已綁定用戶不檢查、停用 rate limit 時仍記錄使用量
 
 ## 6. debug-skill 診斷腳本
 
