@@ -59,6 +59,7 @@ async def _handle_debug(ctx: CommandContext) -> str | None:
 
     # 呼叫 Claude CLI
     model = settings.bot_debug_model
+    logger.info(f"/debug ctos_user_id={ctx.ctos_user_id}, is_admin={ctx.is_admin}, bot_user_id={ctx.bot_user_id}")
     start_time = time.time()
 
     try:

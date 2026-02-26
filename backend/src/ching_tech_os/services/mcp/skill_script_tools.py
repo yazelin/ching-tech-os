@@ -78,14 +78,20 @@ async def run_skill_script(
     # 權限檢查：驗證使用者有此 skill 的 requires_app 權限
     if skill_obj.requires_app:
         from ..permissions import get_effective_app_permissions, get_user_app_permissions
+        from ..user import get_user_role_and_permissions
 
         required_app = skill_obj.requires_app
         if ctos_user_id is None:
             # 未綁定帳號時沿用系統預設 app 權限
             allowed = get_effective_app_permissions().get(required_app, False)
         else:
-            user_apps = await get_user_app_permissions(ctos_user_id)
-            allowed = user_apps.get(required_app, False)
+            # 管理員對所有 requires_app（包含 "admin"）都放行
+            user_info = await get_user_role_and_permissions(ctos_user_id)
+            if user_info["role"] == "admin":
+                allowed = True
+            else:
+                user_apps = await get_user_app_permissions(ctos_user_id)
+                allowed = user_apps.get(required_app, False)
 
         if not allowed:
             return json.dumps({
