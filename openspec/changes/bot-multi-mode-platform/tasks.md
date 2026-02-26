@@ -34,12 +34,12 @@
 
 ## 6. debug-skill 診斷腳本
 
-- [ ] 6.1 建立 `skills/debug-skill/` 目錄結構和 `skill.yaml` 定義檔
-- [ ] 6.2 實作 `check-server-logs` 腳本：`journalctl -u ching-tech-os`，支援 `lines` 和 `keyword` 參數
-- [ ] 6.3 實作 `check-ai-logs` 腳本：查詢 `ai_logs` 資料表，支援 `limit` 和 `errors_only` 參數
-- [ ] 6.4 實作 `check-nginx-logs` 腳本：`docker logs ching-tech-os-nginx`，支援 `lines` 和 `type`（access/error）參數
-- [ ] 6.5 實作 `check-db-status` 腳本：查詢連線數、主要資料表行數、資料庫大小
-- [ ] 6.6 實作 `check-system-health` 腳本：綜合執行所有診斷項目，回傳摘要報告（健康狀態標記）
+- [x] 6.1 建立 `skills/debug-skill/` 目錄結構和 `skill.yaml` 定義檔
+- [x] 6.2 實作 `check-server-logs` 腳本：`journalctl -u ching-tech-os`，支援 `lines` 和 `keyword` 參數
+- [x] 6.3 實作 `check-ai-logs` 腳本：查詢 `ai_logs` 資料表，支援 `limit` 和 `errors_only` 參數
+- [x] 6.4 實作 `check-nginx-logs` 腳本：`docker logs ching-tech-os-nginx`，支援 `lines` 和 `type`（access/error）參數
+- [x] 6.5 實作 `check-db-status` 腳本：查詢連線數、主要資料表行數、資料庫大小
+- [x] 6.6 實作 `check-system-health` 腳本：綜合執行所有診斷項目，回傳摘要報告（健康狀態標記）
 
 ## 7. /debug 指令
 
