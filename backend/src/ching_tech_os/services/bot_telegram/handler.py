@@ -38,9 +38,6 @@ from .media import download_telegram_document, download_telegram_photo
 
 logger = logging.getLogger("bot_telegram.handler")
 
-# 重置對話指令
-RESET_COMMANDS = {"/新對話", "/reset"}
-
 # /start 歡迎訊息
 START_MESSAGE = (
     "👋 歡迎使用 CTOS Bot！\n\n"
@@ -99,7 +96,7 @@ async def _ensure_bot_user(user, conn) -> str:
                 display_name,
                 row["id"],
             )
-        return row["id"]
+        return str(row["id"])
 
     # 新建用戶
     row = await conn.fetchrow(
@@ -113,7 +110,7 @@ async def _ensure_bot_user(user, conn) -> str:
         display_name,
     )
     logger.info(f"建立 Telegram 用戶: {display_name} ({platform_user_id})")
-    return row["id"]
+    return str(row["id"])
 
 
 async def _ensure_bot_group(chat, conn) -> str:
@@ -137,7 +134,7 @@ async def _ensure_bot_group(chat, conn) -> str:
                 group_name,
                 row["id"],
             )
-        return row["id"]
+        return str(row["id"])
 
     # 新建群組（預設 allow_ai_response = false）
     row = await conn.fetchrow(
@@ -151,7 +148,7 @@ async def _ensure_bot_group(chat, conn) -> str:
         group_name,
     )
     logger.info(f"建立 Telegram 群組: {group_name} ({platform_group_id})")
-    return row["id"]
+    return str(row["id"])
 
 
 async def _save_message(
@@ -425,29 +422,38 @@ async def _handle_text(
     except Exception as e:
         logger.error(f"確保用戶/群組失敗: {e}", exc_info=True)
 
-    # 私訊才處理指令和綁定驗證碼
+    # === 斜線指令攔截（統一使用 CommandRouter） ===
+    from ..bot.commands import CommandContext, get_command_user_context, router as command_router
+
+    parsed = command_router.parse(text)
+    if parsed is not None:
+        command, args = parsed
+        ctos_user_id, is_admin = await get_command_user_context(bot_user_id)
+
+        ctx = CommandContext(
+            platform_type="telegram",
+            platform_user_id=str(user.id) if user else "",
+            bot_user_id=bot_user_id,
+            ctos_user_id=ctos_user_id,
+            is_admin=is_admin,
+            is_group=is_group,
+            group_id=bot_group_id,
+            reply_token=None,
+            raw_args=args,
+        )
+        reply = await command_router.dispatch(command, args, ctx)
+        if reply is not None:
+            await adapter.send_text(chat_id, reply)
+        return
+
+    # Telegram 專屬指令（不在 CommandRouter 中的）
     if not is_group:
-        # /start 和 /help 指令（不需綁定即可使用）
-        cmd = text.strip().split("@")[0]  # 處理 /start@botname 格式
+        cmd = text.strip().split("@")[0]
         if cmd == "/start":
             await adapter.send_text(chat_id, START_MESSAGE)
             return
         if cmd == "/help":
             await adapter.send_text(chat_id, HELP_MESSAGE)
-            return
-
-        # 檢查重置指令
-        if text.strip() in RESET_COMMANDS:
-            if bot_user_id:
-                try:
-                    async with get_connection() as conn:
-                        await conn.execute(
-                            "UPDATE bot_users SET conversation_reset_at = NOW() WHERE id = $1",
-                            bot_user_id,
-                        )
-                except Exception as e:
-                    logger.error(f"重置對話失敗: {e}", exc_info=True)
-            await adapter.send_text(chat_id, "對話已重置 ✨")
             return
 
         # 檢查是否為綁定驗證碼（6 位數字）
@@ -463,20 +469,68 @@ async def _handle_text(
         )
         if not has_access:
             if deny_reason == "user_not_bound":
-                if not is_group:
-                    # 私訊：回覆綁定提示
-                    await adapter.send_text(
-                        chat_id,
-                        "請先在 CTOS 系統綁定您的 Telegram 帳號才能使用此服務。\n\n"
-                        "步驟：\n"
-                        "1. 登入 CTOS 系統\n"
-                        "2. 進入 Bot 管理頁面\n"
-                        "3. 點擊「綁定帳號」產生驗證碼\n"
-                        "4. 將 6 位數驗證碼發送給我完成綁定\n\n"
-                        f"📋 您的 Telegram ID：{chat_id}\n"
-                        "（設定 Admin Chat ID 時可使用此 ID）",
-                    )
-                # 群組：未綁定用戶靜默忽略
+                # 身份分流：根據策略決定拒絕或進入受限模式
+                from ..bot.identity_router import (
+                    route_unbound,
+                    handle_restricted_mode,
+                )
+
+                route_result = route_unbound(
+                    platform_type="telegram", is_group=is_group
+                )
+                if route_result.action == "reject":
+                    if not is_group and route_result.reply_text:
+                        extra = (
+                            f"\n\n📋 您的 Telegram ID：{chat_id}\n"
+                            "（設定 Admin Chat ID 時可使用此 ID）"
+                        )
+                        await adapter.send_text(
+                            chat_id, route_result.reply_text + extra
+                        )
+                elif route_result.action == "restricted":
+                    # 斜線指令已在上方 L431 由 CommandRouter 統一處理並 return，
+                    # 到此處的文字一定不是已註冊指令，直接進入 AI 流程。
+
+                    # 受限模式 AI 處理
+                    try:
+                        display_name = None
+                        if user:
+                            display_name = user.full_name or user.username
+
+                        # 儲存訊息以取得 message_uuid（用於 AI log）
+                        restricted_msg_uuid = None
+                        if bot_user_id:
+                            try:
+                                async with get_connection() as conn:
+                                    restricted_msg_uuid = await _save_message(
+                                        conn,
+                                        message_id=f"tg_{message.message_id}",
+                                        bot_user_id=bot_user_id,
+                                        bot_group_id=bot_group_id,
+                                        message_type="text",
+                                        content=text,
+                                        is_from_bot=False,
+                                    )
+                            except Exception as e:
+                                logger.warning(f"受限模式儲存訊息失敗: {e}")
+
+                        reply = await handle_restricted_mode(
+                            content=text,
+                            platform_user_id=str(user.id) if user else chat_id,
+                            bot_user_id=bot_user_id,
+                            is_group=is_group,
+                            line_group_id=None,
+                            message_uuid=restricted_msg_uuid,
+                            user_display_name=display_name,
+                        )
+                        if reply:
+                            await adapter.send_text(chat_id, reply)
+                    except Exception as e:
+                        logger.error(f"受限模式 AI 處理失敗: {e}", exc_info=True)
+                        await adapter.send_text(
+                            chat_id, "抱歉，處理訊息時發生錯誤，請稍後再試。"
+                        )
+                # silent: 群組靜默忽略
             # group_not_allowed：靜默忽略
             return
 

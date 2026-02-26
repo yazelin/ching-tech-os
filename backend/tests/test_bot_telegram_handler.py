@@ -255,10 +255,21 @@ async def test_handle_text_command_and_access_paths(monkeypatch: pytest.MonkeyPa
     await handler._handle_text(message, "/help", "100", chat, user, False, adapter)
     adapter.send_text.assert_awaited_with("100", handler.HELP_MESSAGE)
 
-    # reset 指令
+    # reset 指令（透過 CommandRouter 處理）
+    from ching_tech_os.services.bot import command_handlers
+    from ching_tech_os.services.bot.command_handlers import register_builtin_commands
+
+    register_builtin_commands()
+    monkeypatch.setattr(command_handlers, "reset_conversation", AsyncMock())
+    # mock get_user_role_and_permissions 避免 DB 查詢
+    monkeypatch.setattr(
+        handler, "get_user_role_and_permissions",
+        AsyncMock(return_value={"role": "user"}),
+    )
     adapter.send_text.reset_mock()
     await handler._handle_text(message, "/reset", "100", chat, user, False, adapter)
-    adapter.send_text.assert_awaited_with("100", "對話已重置 ✨")
+    adapter.send_text.assert_awaited_once()
+    assert "對話" in adapter.send_text.await_args.args[1] or "清除" in adapter.send_text.await_args.args[1]
 
     # 綁定碼
     monkeypatch.setattr(handler, "is_binding_code_format", AsyncMock(return_value=True))
@@ -284,6 +295,85 @@ async def test_handle_text_command_and_access_paths(monkeypatch: pytest.MonkeyPa
     adapter.send_text.reset_mock()
     await handler._handle_text(message, "hello", "100", chat, user, False, adapter)
     adapter.send_text.assert_awaited_with("100", "抱歉，處理訊息時發生錯誤，請稍後再試。")
+
+
+@pytest.mark.asyncio
+async def test_restricted_mode_routing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """測試 Telegram 受限模式：指令攔截（頂層）+ AI 處理 + 錯誤處理"""
+    conn = AsyncMock()
+    monkeypatch.setattr(handler, "get_connection", lambda: _CM(conn))
+    monkeypatch.setattr(handler, "_ensure_bot_user", AsyncMock(return_value="u1"))
+    monkeypatch.setattr(handler, "_save_message", AsyncMock(return_value="msg-r1"))
+    monkeypatch.setattr(handler, "is_binding_code_format", AsyncMock(return_value=False))
+
+    # 未綁定用戶，restricted 策略
+    monkeypatch.setattr(
+        handler, "check_line_access",
+        AsyncMock(return_value=(False, "user_not_bound")),
+    )
+
+    adapter = SimpleNamespace(send_text=AsyncMock(), bot=SimpleNamespace())
+    message = SimpleNamespace(message_id=1)
+    chat = SimpleNamespace(id=100, type="private")
+    user = SimpleNamespace(id=9, full_name="小明", username="xm")
+
+    # 註冊內建指令
+    from ching_tech_os.services.bot import command_handlers
+    from ching_tech_os.services.bot.command_handlers import register_builtin_commands
+    register_builtin_commands()
+    monkeypatch.setattr(command_handlers, "reset_conversation", AsyncMock())
+
+    # --- 1. 斜線指令由頂層 CommandRouter 攔截（不到 restricted 分支）---
+    from ching_tech_os.services.bot.identity_router import UnboundRouteResult
+    monkeypatch.setattr(
+        "ching_tech_os.services.bot.identity_router.route_unbound",
+        lambda **kw: UnboundRouteResult(action="restricted"),
+    )
+    adapter.send_text.reset_mock()
+    await handler._handle_text(message, "/reset", "100", chat, user, False, adapter)
+    adapter.send_text.assert_awaited_once()
+    assert "對話" in adapter.send_text.await_args.args[1]
+
+    # --- 2. 受限模式 AI 處理成功（含 message_uuid 傳遞）---
+    mock_restricted = AsyncMock(return_value="受限模式回覆")
+    monkeypatch.setattr(
+        "ching_tech_os.services.bot.identity_router.handle_restricted_mode",
+        mock_restricted,
+    )
+    adapter.send_text.reset_mock()
+    await handler._handle_text(message, "你好", "100", chat, user, False, adapter)
+    adapter.send_text.assert_awaited_with("100", "受限模式回覆")
+    # 確認 message_uuid 和 str(bot_user_id) 有傳入
+    call_kwargs = mock_restricted.call_args.kwargs
+    assert call_kwargs["message_uuid"] == "msg-r1"
+    assert call_kwargs["bot_user_id"] == "u1"
+
+    # --- 3. 受限模式 AI 回傳 None → 不送訊息 ---
+    monkeypatch.setattr(
+        "ching_tech_os.services.bot.identity_router.handle_restricted_mode",
+        AsyncMock(return_value=None),
+    )
+    adapter.send_text.reset_mock()
+    await handler._handle_text(message, "你好", "100", chat, user, False, adapter)
+    adapter.send_text.assert_not_awaited()
+
+    # --- 4. 受限模式 AI 拋出例外 → 錯誤訊息 ---
+    monkeypatch.setattr(
+        "ching_tech_os.services.bot.identity_router.handle_restricted_mode",
+        AsyncMock(side_effect=RuntimeError("AI boom")),
+    )
+    adapter.send_text.reset_mock()
+    await handler._handle_text(message, "你好", "100", chat, user, False, adapter)
+    assert "發生錯誤" in adapter.send_text.await_args.args[1]
+
+    # --- 5. silent 路由（群組）→ 不送訊息 ---
+    monkeypatch.setattr(
+        "ching_tech_os.services.bot.identity_router.route_unbound",
+        lambda **kw: UnboundRouteResult(action="silent"),
+    )
+    adapter.send_text.reset_mock()
+    await handler._handle_text(message, "你好", "100", chat, user, True, adapter)
+    adapter.send_text.assert_not_awaited()
 
 
 @pytest.mark.asyncio

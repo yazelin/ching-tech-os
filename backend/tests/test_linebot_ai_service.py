@@ -309,7 +309,7 @@ async def test_handle_text_message(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         linebot_ai,
         "get_line_user_record",
-        AsyncMock(side_effect=[{"display_name": "小明"}, None]),
+        AsyncMock(side_effect=[{"id": "bot-user-1", "user_id": None, "display_name": "小明"}, None]),
     )
 
     message_uuid = uuid4()
@@ -336,81 +336,7 @@ async def test_handle_text_message(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_process_message_with_ai_reset_group_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(linebot_ai, "is_reset_command", lambda _content: True)
-    result = await linebot_ai.process_message_with_ai(
-        message_uuid=uuid4(),
-        content="/reset",
-        line_group_id=uuid4(),
-        line_user_id="U1",
-        reply_token="r1",
-    )
-    assert result is None
-
-
-@pytest.mark.asyncio
-async def test_process_message_with_ai_reset_reply_success(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(linebot_ai, "is_reset_command", lambda _content: True)
-    monkeypatch.setattr(linebot_ai, "reset_conversation", AsyncMock(return_value=True))
-    monkeypatch.setattr(linebot_ai, "save_bot_response", AsyncMock(return_value=uuid4()))
-    reply_text = AsyncMock(return_value="m1")
-    push_text = AsyncMock(return_value=("m2", None))
-    monkeypatch.setattr(linebot_ai, "reply_text", reply_text)
-    monkeypatch.setattr(linebot_ai, "push_text", push_text)
-
-    result = await linebot_ai.process_message_with_ai(
-        message_uuid=uuid4(),
-        content="/reset",
-        line_group_id=None,
-        line_user_id="U1",
-        reply_token="r1",
-    )
-    assert "已清除對話歷史" in (result or "")
-    reply_text.assert_awaited_once()
-    push_text.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_process_message_with_ai_reset_push_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(linebot_ai, "is_reset_command", lambda _content: True)
-    monkeypatch.setattr(linebot_ai, "reset_conversation", AsyncMock(return_value=True))
-    monkeypatch.setattr(linebot_ai, "save_bot_response", AsyncMock(return_value=uuid4()))
-    monkeypatch.setattr(linebot_ai, "reply_text", AsyncMock(side_effect=RuntimeError("expired")))
-    push_text = AsyncMock(return_value=("m2", None))
-    monkeypatch.setattr(linebot_ai, "push_text", push_text)
-
-    result = await linebot_ai.process_message_with_ai(
-        message_uuid=uuid4(),
-        content="/新對話",
-        line_group_id=None,
-        line_user_id="U1",
-        reply_token="r1",
-    )
-    assert "已清除對話歷史" in (result or "")
-    push_text.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_process_message_with_ai_reset_push_also_fail(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(linebot_ai, "is_reset_command", lambda _content: True)
-    monkeypatch.setattr(linebot_ai, "reset_conversation", AsyncMock(return_value=True))
-    monkeypatch.setattr(linebot_ai, "save_bot_response", AsyncMock(return_value=uuid4()))
-    monkeypatch.setattr(linebot_ai, "reply_text", AsyncMock(side_effect=RuntimeError("expired")))
-    monkeypatch.setattr(linebot_ai, "push_text", AsyncMock(side_effect=RuntimeError("push failed")))
-
-    result = await linebot_ai.process_message_with_ai(
-        message_uuid=uuid4(),
-        content="/新對話",
-        line_group_id=None,
-        line_user_id="U1",
-        reply_token="r1",
-    )
-    assert "已清除對話歷史" in (result or "")
-
-
-@pytest.mark.asyncio
 async def test_process_message_with_ai_not_triggered(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(linebot_ai, "is_reset_command", lambda _content: False)
     is_bot_message = AsyncMock(return_value=False)
     monkeypatch.setattr(linebot_ai, "is_bot_message", is_bot_message)
     monkeypatch.setattr(linebot_ai, "should_trigger_ai", lambda *_args, **_kwargs: False)
@@ -429,7 +355,6 @@ async def test_process_message_with_ai_not_triggered(monkeypatch: pytest.MonkeyP
 
 @pytest.mark.asyncio
 async def test_process_message_with_ai_agent_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(linebot_ai, "is_reset_command", lambda _content: False)
     monkeypatch.setattr(linebot_ai, "should_trigger_ai", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(linebot_ai, "get_linebot_agent", AsyncMock(return_value=None))
     reply_text = AsyncMock()
@@ -448,7 +373,6 @@ async def test_process_message_with_ai_agent_not_found(monkeypatch: pytest.Monke
 
 @pytest.mark.asyncio
 async def test_process_message_with_ai_missing_system_prompt(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(linebot_ai, "is_reset_command", lambda _content: False)
     monkeypatch.setattr(linebot_ai, "should_trigger_ai", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(
         linebot_ai,
@@ -496,7 +420,6 @@ def _patch_process_base(monkeypatch: pytest.MonkeyPatch) -> dict:
     linebot_agents_module = importlib.import_module("ching_tech_os.services.linebot_agents")
     mcp_module = importlib.import_module("ching_tech_os.services.mcp")
 
-    monkeypatch.setattr(linebot_ai, "is_reset_command", lambda _content: False)
     monkeypatch.setattr(linebot_ai, "is_bot_message", AsyncMock(return_value=True))
     monkeypatch.setattr(linebot_ai, "should_trigger_ai", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(

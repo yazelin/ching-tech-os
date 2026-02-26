@@ -153,11 +153,12 @@ def test_start_and_stop_scheduler(monkeypatch: pytest.MonkeyPatch) -> None:
 
     scheduler.start_scheduler()
     assert dummy.running is True
-    assert len(dummy.jobs) == 7
+    assert len(dummy.jobs) == 8
     job_ids = {kwargs.get("id") for _, kwargs in dummy.jobs}
     assert "cleanup_old_messages" in job_ids
     assert "create_next_month_partitions" in job_ids
     assert "cleanup_expired_share_links" in job_ids
+    assert "cleanup_old_bot_tracking" in job_ids
     assert "file-manager:cleanup_linebot_temp_files" in job_ids
     assert "file-manager:cleanup_media_temp_folders" in job_ids
     assert "ai-agent:cleanup_ai_images" in job_ids

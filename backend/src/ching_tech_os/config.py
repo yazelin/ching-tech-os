@@ -151,6 +151,38 @@ class Settings:
     ]
 
     # ===================
+    # Bot 多模式平台設定
+    # ===================
+    # 未綁定用戶策略：reject（預設，拒絕並提示綁定）/ restricted（走受限模式 Agent）
+    bot_unbound_user_policy: str = _get_env("BOT_UNBOUND_USER_POLICY", "reject")
+    # 受限模式使用的 AI 模型（控制成本，預設用較輕量的 haiku）
+    bot_restricted_model: str = _get_env("BOT_RESTRICTED_MODEL", "haiku")
+    # Debug 模式使用的 AI 模型
+    bot_debug_model: str = _get_env("BOT_DEBUG_MODEL", "sonnet")
+    # 頻率限制開關（僅在 restricted 模式下生效）
+    bot_rate_limit_enabled: bool = _get_env_bool("BOT_RATE_LIMIT_ENABLED", True)
+    # 每小時訊息上限（未綁定用戶）
+    bot_rate_limit_hourly: int = _get_env_int("BOT_RATE_LIMIT_HOURLY", 20)
+    # 每日訊息上限（未綁定用戶）
+    bot_rate_limit_daily: int = _get_env_int("BOT_RATE_LIMIT_DAILY", 50)
+    # 驗證 hourly <= daily（若設定不合理則修正）
+    if bot_rate_limit_hourly > bot_rate_limit_daily:
+        logger.warning(
+            "BOT_RATE_LIMIT_HOURLY (%d) > BOT_RATE_LIMIT_DAILY (%d)，"
+            "將 hourly 限制調整為與 daily 相同",
+            bot_rate_limit_hourly,
+            bot_rate_limit_daily,
+        )
+        bot_rate_limit_hourly = bot_rate_limit_daily
+
+    # 圖書館公開資料夾（逗號分隔，未綁定用戶只能看到這些資料夾）
+    library_public_folders: list[str] = [
+        f.strip()
+        for f in _get_env("LIBRARY_PUBLIC_FOLDERS", "產品資料,教育訓練").split(",")
+        if f.strip()
+    ]
+
+    # ===================
     # Telegram Bot 設定
     # ===================
     telegram_bot_token: str = _get_env("TELEGRAM_BOT_TOKEN", "")

@@ -66,6 +66,7 @@ class KnowledgeCreate(BaseModel):
     category: str = "technical"
     scope: str = "personal"  # 預設為個人知識（global、personal 或 project）
     project_id: str | None = None  # 關聯專案 UUID（scope=project 時使用）
+    is_public: bool = False  # 是否允許未綁定用戶查詢
     tags: KnowledgeTags = Field(default_factory=KnowledgeTags)
     source: KnowledgeSource | None = None
     related: list[str] = Field(default_factory=list)
@@ -81,6 +82,7 @@ class KnowledgeUpdate(BaseModel):
     category: str | None = None
     scope: str | None = None  # global, personal, project
     owner: str | None = None  # 擁有者帳號（設為空字串可清除）
+    is_public: bool | None = None  # 是否允許未綁定用戶查詢
     tags: KnowledgeTags | None = None
     source: KnowledgeSource | None = None
     related: list[str] | None = None
@@ -96,6 +98,7 @@ class KnowledgeResponse(BaseModel):
     scope: str = "global"  # global、personal 或 project
     owner: str | None = None  # 擁有者帳號（個人知識用）
     project_id: str | None = None  # 關聯專案 UUID（專案知識用）
+    is_public: bool = False  # 是否允許未綁定用戶查詢
     tags: KnowledgeTags
     source: KnowledgeSource
     related: list[str]
@@ -116,6 +119,7 @@ class KnowledgeListItem(BaseModel):
     scope: str = "global"  # global、personal 或 project
     owner: str | None = None  # 擁有者帳號（個人知識用）
     project_id: str | None = None  # 關聯專案 UUID（專案知識用）
+    is_public: bool = False  # 是否允許未綁定用戶查詢
     tags: KnowledgeTags
     author: str
     updated_at: date
@@ -176,6 +180,7 @@ class IndexEntry(BaseModel):
     scope: str = "global"  # global、personal 或 project
     owner: str | None = None  # 擁有者帳號（個人知識用）
     project_id: str | None = None  # 關聯專案 UUID（專案知識用）
+    is_public: bool = False  # 是否允許未綁定用戶查詢
     tags: KnowledgeTags
     author: str
     created_at: str

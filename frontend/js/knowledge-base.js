@@ -1146,6 +1146,7 @@ const KnowledgeBaseModule = (function() {
       type: selectedKnowledge.type,
       category: selectedKnowledge.category,
       scope: selectedKnowledge.scope || 'global',
+      is_public: selectedKnowledge.is_public || false,
       tags: { ...selectedKnowledge.tags },
     };
 
@@ -1221,6 +1222,12 @@ const KnowledgeBaseModule = (function() {
               ${tags?.projects.map(p => `<option value="${p}" ${editingData.tags.projects.includes(p) ? 'selected' : ''}>${p}</option>`).join('')}
             </select>
           </div>
+          <div class="kb-editor-field">
+            <label class="kb-editor-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+              <input type="checkbox" id="kbEditorIsPublic" ${editingData.is_public ? 'checked' : ''}>
+              公開（允許未綁定用戶查詢）
+            </label>
+          </div>
         </div>
       </div>
       <div class="kb-editor-body">
@@ -1278,6 +1285,8 @@ const KnowledgeBaseModule = (function() {
     const level = windowEl.querySelector('#kbEditorLevel').value;
     const projectSelect = windowEl.querySelector('#kbEditorProject');
     const projects = Array.from(projectSelect.selectedOptions).map(o => o.value);
+    const isPublicCheckbox = windowEl.querySelector('#kbEditorIsPublic');
+    const isPublic = isPublicCheckbox ? isPublicCheckbox.checked : false;
 
     // 讀取 scope（只有新增時才有選擇器）
     const scopeSelect = windowEl.querySelector('#kbEditorScope');
@@ -1294,6 +1303,7 @@ const KnowledgeBaseModule = (function() {
         content,
         type,
         category,
+        is_public: isPublic,
         tags: {
           projects,
           roles: editingData.tags.roles || [],

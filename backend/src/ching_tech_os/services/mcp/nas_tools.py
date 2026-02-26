@@ -892,21 +892,38 @@ async def list_library_folders(
         max_depth: 瀏覽深度，預設 2
         ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
     """
+    from ...config import settings
+
     await ensure_db_connection()
 
-    # 權限檢查
-    allowed, error_msg = await check_mcp_tool_permission("list_library_folders", ctos_user_id)
-    if not allowed:
-        return f"❌ {error_msg}"
+    # 未綁定用戶：判斷公開資料夾過濾
+    is_unbound = ctos_user_id is None
 
-    lib_allowed, lib_result = await _check_library_permission(ctos_user_id)
-    if not lib_allowed:
-        return f"錯誤：{lib_result}"
-    library_root = lib_result
+    # 權限檢查（未綁定用戶走公開資料夾路徑，跳過完整權限檢查）
+    if is_unbound:
+        library_root = settings.library_mount_path
+        public_folders = settings.library_public_folders
+    else:
+        allowed, error_msg = await check_mcp_tool_permission("list_library_folders", ctos_user_id)
+        if not allowed:
+            return f"❌ {error_msg}"
+        lib_allowed, lib_result = await _check_library_permission(ctos_user_id)
+        if not lib_allowed:
+            return f"錯誤：{lib_result}"
+        library_root = lib_result
+        public_folders = []
 
     # 組合目標路徑
     if path:
-        clean_path = _sanitize_path_segment(path)
+        # 分段清理路徑（支援多層路徑如「產品資料/子目錄」）
+        segments = [_sanitize_path_segment(s) for s in path.split("/") if s.strip()]
+        segments = [s for s in segments if s]
+        if not segments:
+            return f"路徑無效：{path}"
+        # 未綁定用戶：檢查第一層目錄是否在公開列表中
+        if is_unbound and segments[0] not in public_folders:
+            return "❌ 此資料夾不對外開放"
+        clean_path = "/".join(segments)
         target_dir = FsPath(library_root) / clean_path
     else:
         target_dir = FsPath(library_root)
@@ -916,9 +933,12 @@ async def list_library_folders(
     if not target_dir.is_dir():
         return f"路徑不是資料夾：{path}"
 
-    # 遍歷資料夾結構
+    # 遍歷資料夾結構（未綁定用戶只顯示公開資料夾）
     lines = ["擎添圖書館/" + (f"{path}/" if path else "")]
-    _walk_tree(target_dir, lines, prefix="", current_depth=0, max_depth=max_depth)
+    _walk_tree(
+        target_dir, lines, prefix="", current_depth=0, max_depth=max_depth,
+        allowed_names=public_folders if is_unbound and not path else None,
+    )
 
     if len(lines) == 1:
         lines.append("  (空)")
@@ -932,8 +952,13 @@ def _walk_tree(
     prefix: str,
     current_depth: int,
     max_depth: int,
+    allowed_names: list[str] | None = None,
 ) -> None:
-    """遞迴建立樹狀結構文字"""
+    """遞迴建立樹狀結構文字
+
+    Args:
+        allowed_names: 若指定，只顯示名稱在列表中的第一層子目錄（用於公開資料夾過濾）
+    """
     if current_depth >= max_depth:
         return
 
@@ -944,7 +969,10 @@ def _walk_tree(
         return
 
     dirs = [e for e in entries if e.is_dir()]
-    files = [e for e in entries if e.is_file()]
+    # 根目錄層級過濾：只保留公開資料夾
+    if allowed_names is not None:
+        dirs = [d for d in dirs if d.name in allowed_names]
+    files = [e for e in entries if e.is_file()] if allowed_names is None else []
 
     for i, d in enumerate(dirs):
         is_last = (i == len(dirs) - 1) and not files

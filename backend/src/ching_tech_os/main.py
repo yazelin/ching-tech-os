@@ -117,6 +117,10 @@ async def lifespan(app: FastAPI):
         app.state.skillhub_client = SkillHubClient()
     await init_db_pool()
 
+    # 註冊 Bot 斜線指令
+    from .services.bot.command_handlers import register_builtin_commands
+    register_builtin_commands()
+
     # 啟動模組初始化（依啟停狀態）
     for module_id, info in get_module_registry().items():
         if not is_module_enabled(module_id):

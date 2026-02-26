@@ -310,6 +310,20 @@ async def cleanup_media_temp_folders():
         logger.debug("媒體暫存清理: 無過期資料夾")
 
 
+async def cleanup_old_bot_tracking():
+    """清理過期的 bot 使用量追蹤資料（保留 30 天）"""
+    from .bot.rate_limiter import cleanup_old_tracking
+
+    try:
+        deleted = await cleanup_old_tracking(days=30)
+        if deleted > 0:
+            logger.info(f"清理 Bot 使用量追蹤: 刪除 {deleted} 筆")
+        else:
+            logger.debug("Bot 使用量追蹤清理: 無過期資料")
+    except Exception as e:
+        logger.error(f"清理 Bot 使用量追蹤失敗: {e}")
+
+
 async def check_telegram_webhook_health():
     """
     檢查 Telegram Webhook 健康狀態
@@ -420,6 +434,15 @@ def start_scheduler():
         id='cleanup_expired_share_links',
         name='清理過期分享連結',
         replace_existing=True
+    )
+
+    # 每天凌晨 4:30 清理過期的 bot 使用量追蹤資料
+    scheduler.add_job(
+        cleanup_old_bot_tracking,
+        CronTrigger(hour=4, minute=30),
+        id='cleanup_old_bot_tracking',
+        name='清理過期 Bot 使用量追蹤',
+        replace_existing=True,
     )
 
     # 依啟用模組註冊排程任務

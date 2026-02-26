@@ -61,15 +61,17 @@ async def is_bot_message(line_message_id: str) -> bool:
 
 
 async def reset_conversation(
-    line_user_id: str,
+    platform_user_id: str,
 ) -> bool:
     """重置用戶的對話歷史
 
     設定 conversation_reset_at 為當前時間，
     之後查詢對話歷史時會忽略這個時間之前的訊息。
 
+    支援 Line 和 Telegram 平台（以 platform_user_id 查詢）。
+
     Args:
-        line_user_id: Line 用戶 ID
+        platform_user_id: 平台用戶 ID（Line user ID 或 Telegram user ID）
 
     Returns:
         是否成功
@@ -81,11 +83,11 @@ async def reset_conversation(
             SET conversation_reset_at = NOW()
             WHERE platform_user_id = $1
             """,
-            line_user_id,
+            platform_user_id,
         )
         success = result == "UPDATE 1"
         if success:
-            logger.info(f"已重置對話歷史: {line_user_id}")
+            logger.info(f"已重置對話歷史: {platform_user_id}")
         return success
 
 

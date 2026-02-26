@@ -34,7 +34,6 @@ from .bot_line import (
     save_bot_response,
     save_file_record,
     reset_conversation,
-    is_reset_command,
     ensure_temp_image,
     get_image_info_by_line_message_id,
     get_temp_image_path,
@@ -619,40 +618,7 @@ async def process_message_with_ai(
     """
     is_group = line_group_id is not None
 
-    # 檢查是否為重置對話指令（僅限個人對話）
-    if is_reset_command(content):
-        if is_group:
-            # 群組不支援重置，靜默忽略
-            return None
-        elif line_user_id:
-            # 個人對話：執行重置
-            await reset_conversation(line_user_id)
-            reset_msg = "已清除對話歷史，開始新對話！有什麼可以幫你的嗎？"
-            # 儲存 Bot 回應
-            await save_bot_response(
-                group_uuid=None,
-                content=reset_msg,
-                responding_to_line_user_id=line_user_id,
-            )
-            # 回覆訊息（reply token 可能過期，失敗時改用 push message）
-            reply_success = False
-            if reply_token:
-                try:
-                    await reply_text(reply_token, reset_msg)
-                    reply_success = True
-                except Exception as e:
-                    logger.warning(f"回覆重置訊息失敗（reply token 可能過期）: {e}")
-
-            # 如果沒有 reply_token 或回覆失敗，改用 push message
-            if not reply_success and line_user_id:
-                try:
-                    await push_text(line_user_id, reset_msg)
-                    logger.info(f"使用 push message 發送重置訊息給 {line_user_id}")
-                except Exception as e:
-                    logger.error(f"Push 重置訊息也失敗: {e}")
-
-            return reset_msg
-        return None
+    # 重置對話指令已由 CommandRouter 在 handle_text_message 中攔截處理
 
     # 檢查是否回覆機器人訊息（群組對話用）
     is_reply_to_bot = False
@@ -1089,7 +1055,7 @@ async def process_message_with_ai(
 
 
 async def log_linebot_ai_call(
-    message_uuid: UUID,
+    message_uuid: UUID | None,
     line_group_id: UUID | None,
     is_group: bool,
     input_prompt: str,
@@ -1155,7 +1121,7 @@ async def log_linebot_ai_call(
             agent_id=agent_id,
             prompt_id=prompt_id,
             context_type=context_type_override or ("linebot-group" if is_group else "linebot-personal"),
-            context_id=str(message_uuid),
+            context_id=str(message_uuid) if message_uuid else None,
             input_prompt=full_input,
             system_prompt=system_prompt,
             allowed_tools=allowed_tools,
@@ -1566,12 +1532,55 @@ async def handle_text_message(
         reply_token: Line 回覆 token
         quoted_message_id: 被回覆的訊息 ID（用戶回覆舊訊息時）
     """
-    # 取得用戶顯示名稱
-    user_display_name = None
-    user_row = await get_line_user_record(line_user_id, "display_name")
-    if user_row:
-        user_display_name = user_row["display_name"]
+    # === 斜線指令攔截（在 AI 處理之前） ===
+    from .bot.commands import CommandContext, router as command_router
 
+    # 查詢用戶資訊（指令和一般訊息都需要，只查一次）
+    user_row = await get_line_user_record(
+        line_user_id, "id, user_id, display_name"
+    )
+    ctos_user_id = None
+    is_admin = False
+    bot_user_id = None
+    user_display_name = None
+    if user_row:
+        bot_user_id = str(user_row["id"]) if user_row["id"] else None
+        user_display_name = user_row.get("display_name")
+        if user_row["user_id"]:
+            ctos_user_id = user_row["user_id"]
+            from .user import get_user_role_and_permissions
+            user_info = await get_user_role_and_permissions(ctos_user_id)
+            is_admin = user_info["role"] == "admin"
+
+    parsed = command_router.parse(content)
+    if parsed is not None:
+        command, args = parsed
+        ctx = CommandContext(
+            platform_type="line",
+            platform_user_id=line_user_id,
+            bot_user_id=bot_user_id,
+            ctos_user_id=ctos_user_id,
+            is_admin=is_admin,
+            is_group=line_group_id is not None,
+            group_id=str(line_group_id) if line_group_id else None,
+            reply_token=reply_token,
+            raw_args=args,
+        )
+        reply = await command_router.dispatch(command, args, ctx)
+        if reply is not None:
+            # reply_token 可能在長時間指令（如 /debug 3 分鐘）後過期，
+            # 先嘗試 reply，失敗則 fallback 到 push
+            if reply_token:
+                try:
+                    await reply_text(reply_token, reply)
+                except Exception:
+                    await push_text(line_user_id, reply)
+            else:
+                await push_text(line_user_id, reply)
+        # 指令已處理，不進入 AI 流程
+        return
+
+    # === 一般訊息，進入 AI 處理 ===
     # 處理訊息
     await process_message_with_ai(
         message_uuid=message_uuid,

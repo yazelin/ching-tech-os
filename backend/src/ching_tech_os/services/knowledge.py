@@ -212,6 +212,7 @@ def _metadata_to_response(
         scope=metadata.get("scope", "global"),
         owner=metadata.get("owner"),
         project_id=metadata.get("project_id"),
+        is_public=bool(metadata.get("is_public", False)),
         tags=tags,
         source=source,
         related=metadata.get("related", []),
@@ -258,6 +259,7 @@ def search_knowledge(
     topics: list[str] | None = None,
     scope: str | None = None,
     current_username: str | None = None,
+    public_only: bool = False,
 ) -> KnowledgeListResponse:
     """搜尋知識
 
@@ -271,6 +273,7 @@ def search_knowledge(
         topics: 主題過濾
         scope: 範圍過濾（global、personal、all）
         current_username: 目前使用者帳號（用於過濾個人知識）
+        public_only: 僅回傳公開知識（受限模式用）
 
     Returns:
         符合條件的知識列表
@@ -361,6 +364,13 @@ def search_knowledge(
         if matching_files is not None and entry.filename not in matching_files:
             continue
 
+        # 公開存取過濾（受限模式：僅回傳 scope=global 且 is_public=true 的項目）
+        if public_only:
+            entry_is_public = getattr(entry, "is_public", False)
+            entry_scope_val = getattr(entry, "scope", "global")
+            if entry_scope_val != "global" or not entry_is_public:
+                continue
+
         # Scope 過濾
         entry_scope = getattr(entry, "scope", "global")
         entry_owner = getattr(entry, "owner", None)
@@ -410,6 +420,7 @@ def search_knowledge(
             updated_at = date.fromisoformat(updated_at)
 
         entry_project_id = getattr(entry, "project_id", None)
+        entry_is_public = getattr(entry, "is_public", False)
         results.append(
             KnowledgeListItem(
                 id=entry.id,
@@ -419,6 +430,7 @@ def search_knowledge(
                 scope=entry_scope,
                 owner=entry_owner,
                 project_id=entry_project_id,
+                is_public=entry_is_public,
                 tags=entry.tags,
                 author=entry.author,
                 updated_at=updated_at,
@@ -487,6 +499,7 @@ def create_knowledge(
         "scope": knowledge_scope,
         "owner": knowledge_owner,
         "project_id": knowledge_project_id,
+        "is_public": data.is_public,
         "tags": {
             "projects": data.tags.projects,
             "roles": data.tags.roles,
@@ -600,6 +613,8 @@ def update_knowledge(
         }
     if data.related is not None:
         metadata["related"] = data.related
+    if data.is_public is not None:
+        metadata["is_public"] = data.is_public
 
     # 更新內容
     if data.content is not None:
