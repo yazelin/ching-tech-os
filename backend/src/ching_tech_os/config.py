@@ -157,6 +157,12 @@ class Settings:
     bot_rate_limit_hourly: int = _get_env_int("BOT_RATE_LIMIT_HOURLY", 20)
     # 每日訊息上限（未綁定用戶）
     bot_rate_limit_daily: int = _get_env_int("BOT_RATE_LIMIT_DAILY", 50)
+    # 圖書館公開資料夾（逗號分隔，未綁定用戶只能看到這些資料夾）
+    library_public_folders: list[str] = [
+        f.strip()
+        for f in _get_env("LIBRARY_PUBLIC_FOLDERS", "產品資料,教育訓練").split(",")
+        if f.strip()
+    ]
 
     # ===================
     # Telegram Bot 設定

@@ -255,10 +255,21 @@ async def test_handle_text_command_and_access_paths(monkeypatch: pytest.MonkeyPa
     await handler._handle_text(message, "/help", "100", chat, user, False, adapter)
     adapter.send_text.assert_awaited_with("100", handler.HELP_MESSAGE)
 
-    # reset 指令
+    # reset 指令（透過 CommandRouter 處理）
+    from ching_tech_os.services.bot import command_handlers
+    from ching_tech_os.services.bot.command_handlers import register_builtin_commands
+
+    register_builtin_commands()
+    monkeypatch.setattr(command_handlers, "reset_conversation", AsyncMock())
+    # mock get_user_role_and_permissions 避免 DB 查詢
+    monkeypatch.setattr(
+        handler, "get_user_role_and_permissions",
+        AsyncMock(return_value={"role": "user"}),
+    )
     adapter.send_text.reset_mock()
     await handler._handle_text(message, "/reset", "100", chat, user, False, adapter)
-    adapter.send_text.assert_awaited_with("100", "對話已重置 ✨")
+    adapter.send_text.assert_awaited_once()
+    assert "對話" in adapter.send_text.await_args.args[1] or "清除" in adapter.send_text.await_args.args[1]
 
     # 綁定碼
     monkeypatch.setattr(handler, "is_binding_code_format", AsyncMock(return_value=True))

@@ -49,11 +49,11 @@
 
 ## 8. 知識庫公開存取
 
-- [ ] 8.1 在知識庫 `index.json` 和 Front Matter schema 中新增 `is_public` 布林欄位（預設 `false`）
-- [ ] 8.2 修改 `services/knowledge.py` 的 `search_knowledge()`：新增 `public_only` 參數，為 `true` 時僅回傳 `scope=global` 且 `is_public=true` 的項目
-- [ ] 8.3 修改 `services/mcp/knowledge_tools.py` 的 `search_knowledge` MCP 工具：當 `ctos_user_id` 為 NULL 時自動設定 `public_only=true`
-- [ ] 8.4 在知識庫 API 和前端介面中支援設定 `is_public` 欄位（知識項目編輯表單新增「公開」勾選框）
-- [ ] 8.5 圖書館資料夾公開標記：在 `list_library_folders` 中根據呼叫者身份過濾非公開資料夾
+- [x] 8.1 在知識庫 `index.json` 和 Front Matter schema 中新增 `is_public` 布林欄位（預設 `false`）
+- [x] 8.2 修改 `services/knowledge.py` 的 `search_knowledge()`：新增 `public_only` 參數，為 `true` 時僅回傳 `scope=global` 且 `is_public=true` 的項目
+- [x] 8.3 修改 `services/mcp/knowledge_tools.py` 的 `search_knowledge` MCP 工具：當 `ctos_user_id` 為 NULL 時自動設定 `public_only=true`
+- [x] 8.4 在知識庫 API 和前端介面中支援設定 `is_public` 欄位（知識項目編輯表單新增「公開」勾選框）
+- [x] 8.5 圖書館資料夾公開標記：在 `list_library_folders` 中根據呼叫者身份過濾非公開資料夾
 
 ## 9. 整合測試與驗證
 

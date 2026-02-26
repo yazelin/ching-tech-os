@@ -119,4 +119,4 @@ def register_builtin_commands() -> None:
         )
     )
 
-    logger.info(f"已註冊 {len(set(router._commands.values()))} 個內建指令")
+    logger.info(f"已註冊 {len({id(v) for v in router._commands.values()})} 個內建指令")

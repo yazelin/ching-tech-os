@@ -120,12 +120,16 @@ async def search_knowledge(
         except Exception as e:
             logger.warning(f"取得使用者名稱失敗: {e}")
 
+    # 未綁定用戶（ctos_user_id 為 None）僅能搜尋公開知識
+    public_only = ctos_user_id is None
+
     try:
         result = kb_service.search_knowledge(
             query=search_query,
             project=project,
             category=category,
             current_username=current_username,
+            public_only=public_only,
         )
 
         if not result.items:
