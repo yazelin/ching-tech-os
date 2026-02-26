@@ -136,10 +136,14 @@ def main() -> int:
         "detail": f"失敗次數: {ai_errors}",
     })
 
-    # 7. Nginx 狀態
+    # 7. Nginx 狀態（嘗試常見容器名稱）
     output, ok = _run_cmd([
-        "docker", "inspect", "--format", "{{.State.Status}}", "ching-tech-os-nginx"
+        "docker", "inspect", "--format", "{{.State.Status}}", "nginx"
     ])
+    if not ok:
+        output, ok = _run_cmd([
+            "docker", "inspect", "--format", "{{.State.Status}}", "ching-tech-os-nginx"
+        ])
     nginx_status = output.strip() if ok else "未知"
     status = "正常" if nginx_status == "running" else "異常"
     if status == "異常" and overall_status != "嚴重":
