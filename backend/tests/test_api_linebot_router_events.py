@@ -504,6 +504,135 @@ async def test_process_media_audio_and_image_reclassify(monkeypatch: pytest.Monk
 
 
 @pytest.mark.asyncio
+async def test_restricted_mode_routing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """受限模式路由：斜線指令攔截、AI 處理、reply_token fallback"""
+    monkeypatch.setattr(linebot_router, "TextMessageContent", _TextMessage)
+    monkeypatch.setattr(linebot_router, "ImageMessageContent", _ImageMessage)
+
+    get_user_profile = AsyncMock(return_value={"displayName": "U"})
+    get_or_create_user = AsyncMock(return_value=uuid4())
+    save_message = AsyncMock(return_value=uuid4())
+    reply_text_fn = AsyncMock()
+    push_text_fn = AsyncMock()
+    get_line_user_record = AsyncMock(return_value={"display_name": "TestUser"})
+
+    monkeypatch.setattr(linebot_router, "get_user_profile", get_user_profile)
+    monkeypatch.setattr(linebot_router, "get_or_create_user", get_or_create_user)
+    monkeypatch.setattr(linebot_router, "save_message", save_message)
+    monkeypatch.setattr(linebot_router, "reply_text", reply_text_fn)
+    monkeypatch.setattr(linebot_router, "push_text", push_text_fn)
+    monkeypatch.setattr(linebot_router, "is_binding_code_format", AsyncMock(return_value=False))
+    monkeypatch.setattr(linebot_router, "check_line_access", AsyncMock(return_value=(False, "user_not_bound")))
+    monkeypatch.setattr(linebot_router, "get_line_user_record", get_line_user_record)
+
+    # --- 測試 1: 受限模式斜線指令攔截（/reset）---
+    from ching_tech_os.services.bot.identity_router import UnboundRouteResult
+    from ching_tech_os.services.bot.command_handlers import register_builtin_commands
+
+    register_builtin_commands()
+
+    monkeypatch.setattr(
+        "ching_tech_os.services.bot.identity_router.route_unbound",
+        lambda **kw: UnboundRouteResult(action="restricted"),
+    )
+    # mock handle_restricted_mode 避免呼叫
+    handle_restricted_mock = AsyncMock(return_value="AI 回覆")
+    monkeypatch.setattr(
+        "ching_tech_os.services.bot.identity_router.handle_restricted_mode",
+        handle_restricted_mock,
+    )
+
+    # 先測試斜線指令攔截
+    from ching_tech_os.services.bot_line.trigger import reset_conversation
+    monkeypatch.setattr(
+        "ching_tech_os.services.bot_line.trigger.reset_conversation",
+        AsyncMock(),
+    )
+
+    reply_text_fn.reset_mock()
+    await linebot_router.process_message_event(
+        _Event(
+            message=_TextMessage("m-reset", "/reset"),
+            source=_Source(user_id="U1"),
+        )
+    )
+    # /reset 應該被攔截，回覆文字
+    reply_text_fn.assert_awaited()
+    handle_restricted_mock.assert_not_awaited()
+
+    # --- 測試 2: 受限模式 AI 處理 + reply 成功 ---
+    reply_text_fn.reset_mock()
+    handle_restricted_mock.reset_mock()
+
+    await linebot_router.process_message_event(
+        _Event(
+            message=_TextMessage("m-ai", "你好"),
+            source=_Source(user_id="U1"),
+        )
+    )
+    handle_restricted_mock.assert_awaited_once()
+    reply_text_fn.assert_awaited_once()
+
+    # --- 測試 3: reply_token 過期 → fallback 到 push_text ---
+    reply_text_fn.reset_mock()
+    push_text_fn.reset_mock()
+    handle_restricted_mock.reset_mock()
+    reply_text_fn.side_effect = Exception("reply token expired")
+
+    await linebot_router.process_message_event(
+        _Event(
+            message=_TextMessage("m-expired", "你好"),
+            source=_Source(user_id="U1"),
+        )
+    )
+    push_text_fn.assert_awaited_once()
+
+    # --- 測試 4: 無 reply_token → 直接 push ---
+    reply_text_fn.reset_mock()
+    push_text_fn.reset_mock()
+    handle_restricted_mock.reset_mock()
+    reply_text_fn.side_effect = None
+
+    await linebot_router.process_message_event(
+        _Event(
+            message=_TextMessage("m-no-token", "你好"),
+            source=_Source(user_id="U1"),
+            reply_token=None,
+        )
+    )
+    push_text_fn.assert_awaited_once()
+    reply_text_fn.assert_not_awaited()
+
+    # --- 測試 5: AI 處理例外 → push 錯誤訊息 ---
+    push_text_fn.reset_mock()
+    handle_restricted_mock.side_effect = Exception("AI crashed")
+
+    await linebot_router.process_message_event(
+        _Event(
+            message=_TextMessage("m-crash", "你好"),
+            source=_Source(user_id="U1"),
+        )
+    )
+    push_text_fn.assert_awaited_once()
+    assert "錯誤" in push_text_fn.await_args[0][1]
+
+    # --- 測試 6: AI 回應 None → 不發送 ---
+    push_text_fn.reset_mock()
+    reply_text_fn.reset_mock()
+    handle_restricted_mock.side_effect = None
+    handle_restricted_mock.return_value = None
+
+    await linebot_router.process_message_event(
+        _Event(
+            message=_TextMessage("m-none", "你好"),
+            source=_Source(user_id="U1"),
+        )
+    )
+    reply_text_fn.assert_not_awaited()
+    push_text_fn.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_linebot_router_admin_routes(monkeypatch: pytest.MonkeyPatch) -> None:
     session = _session()
     group_id = uuid4()
