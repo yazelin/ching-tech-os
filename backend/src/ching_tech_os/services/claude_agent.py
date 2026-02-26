@@ -266,6 +266,16 @@ async def call_claude(
     # 如果 tools 為空，不載入 MCP（避免不必要的啟動開銷）
     mcp_servers = _build_mcp_servers(session_dir, required_mcp_servers) if tools else []
 
+    # 注入 CTOS_USER_ID 環境變數到 ching-tech-os MCP server
+    # （bypassPermissions 模式下 on_tool_input_transform 不會被呼叫，
+    #  因此改用環境變數在 MCP server 啟動時傳遞使用者身份）
+    if ctos_user_id is not None and mcp_servers:
+        from acp.schema import EnvVariable
+        for server in mcp_servers:
+            if server.name == "ching-tech-os":
+                server.env.append(EnvVariable(name="CTOS_USER_ID", value=str(ctos_user_id)))
+                break
+
     # 收集回應資料
     tool_calls: list[ToolCall] = []
     tool_timings: list[dict] = []
@@ -394,6 +404,7 @@ async def call_claude(
 
     # Framework 級參數注入：自動為 ching-tech-os MCP 工具注入 ctos_user_id
     # 這確保使用者身分由 framework 控制，LLM 無法偽造
+    # 保留 on_tool_input_transform 作為非 bypassPermissions 模式的備案
     if ctos_user_id is not None:
         @client.on_tool_input_transform
         async def inject_ctos_user_id(

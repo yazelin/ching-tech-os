@@ -5,6 +5,7 @@
 
 import json
 import logging
+import os
 from typing import Any
 
 from .server import mcp, ensure_db_connection
@@ -61,8 +62,15 @@ async def run_skill_script(
         input: 傳給 script 的輸入字串（透過 stdin 傳入）
         ctos_user_id: CTOS 用戶 ID（由 bot framework 注入，非 LLM 控制）
     """
-    # NOTE: ctos_user_id 由 bot framework 透過 claude-code-acp 的
-    # on_tool_input_transform 自動注入（見 claude_agent.py），LLM 無法偽造此參數。
+    # ctos_user_id 由 bot framework 透過 MCP server 環境變數 CTOS_USER_ID 注入（見 claude_agent.py）。
+    # LLM 無法偽造此參數，因為環境變數在 MCP server 啟動時設定。
+    if ctos_user_id is None:
+        env_user_id = os.environ.get("CTOS_USER_ID")
+        if env_user_id:
+            try:
+                ctos_user_id = int(env_user_id)
+            except ValueError:
+                pass
     await ensure_db_connection()
     from ...skills import get_skill_manager
     from ...config import settings
