@@ -172,15 +172,15 @@ async def handle_restricted_mode(
 
         # 從 agent settings 讀取自訂超限訊息
         agent_settings = agent.get("settings") or {}
-        rate_msgs = {
-            k: v
-            for k, v in {
-                "hourly": agent_settings.get("rate_limit_hourly_msg"),
-                "daily": agent_settings.get("rate_limit_daily_msg"),
-            }.items()
-            if v
-        }
-        custom_rate_msgs = rate_msgs or None
+        hourly_msg = agent_settings.get("rate_limit_hourly_msg")
+        daily_msg = agent_settings.get("rate_limit_daily_msg")
+        custom_rate_msgs: dict[str, str] | None = None
+        if hourly_msg or daily_msg:
+            custom_rate_msgs = {}
+            if hourly_msg:
+                custom_rate_msgs["hourly"] = hourly_msg
+            if daily_msg:
+                custom_rate_msgs["daily"] = daily_msg
 
         allowed, deny_msg = await check_and_increment(
             bot_user_id, custom_messages=custom_rate_msgs,
