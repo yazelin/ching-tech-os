@@ -143,6 +143,22 @@ class Settings:
     ]
 
     # ===================
+    # Bot 多模式平台設定
+    # ===================
+    # 未綁定用戶策略：reject（預設，拒絕並提示綁定）/ restricted（走受限模式 Agent）
+    bot_unbound_user_policy: str = _get_env("BOT_UNBOUND_USER_POLICY", "reject")
+    # 受限模式使用的 AI 模型（控制成本，預設用較輕量的 haiku）
+    bot_restricted_model: str = _get_env("BOT_RESTRICTED_MODEL", "haiku")
+    # Debug 模式使用的 AI 模型
+    bot_debug_model: str = _get_env("BOT_DEBUG_MODEL", "sonnet")
+    # 頻率限制開關（僅在 restricted 模式下生效）
+    bot_rate_limit_enabled: bool = _get_env_bool("BOT_RATE_LIMIT_ENABLED", True)
+    # 每小時訊息上限（未綁定用戶）
+    bot_rate_limit_hourly: int = _get_env_int("BOT_RATE_LIMIT_HOURLY", 20)
+    # 每日訊息上限（未綁定用戶）
+    bot_rate_limit_daily: int = _get_env_int("BOT_RATE_LIMIT_DAILY", 50)
+
+    # ===================
     # Telegram Bot 設定
     # ===================
     telegram_bot_token: str = _get_env("TELEGRAM_BOT_TOKEN", "")

@@ -425,29 +425,53 @@ async def _handle_text(
     except Exception as e:
         logger.error(f"確保用戶/群組失敗: {e}", exc_info=True)
 
-    # 私訊才處理指令和綁定驗證碼
+    # === 斜線指令攔截（統一使用 CommandRouter） ===
+    from ..bot.commands import CommandContext, router as command_router
+
+    parsed = command_router.parse(text)
+    if parsed is not None:
+        command, args = parsed
+        # 查詢綁定狀態和管理員身份
+        ctos_user_id = None
+        is_admin = False
+        if bot_user_id:
+            try:
+                async with get_connection() as conn:
+                    row = await conn.fetchrow(
+                        "SELECT user_id FROM bot_users WHERE id = $1",
+                        bot_user_id,
+                    )
+                    if row and row["user_id"]:
+                        ctos_user_id = row["user_id"]
+                        user_info = await get_user_role_and_permissions(ctos_user_id)
+                        is_admin = user_info["role"] == "admin"
+            except Exception as e:
+                logger.error(f"查詢用戶綁定狀態失敗: {e}", exc_info=True)
+
+        ctx = CommandContext(
+            platform_type="telegram",
+            platform_user_id=str(user.id) if user else "",
+            bot_user_id=bot_user_id,
+            ctos_user_id=ctos_user_id,
+            is_admin=is_admin,
+            is_group=is_group,
+            group_id=bot_group_id,
+            reply_token=None,
+            raw_args=args,
+        )
+        reply = await command_router.dispatch(command, args, ctx)
+        if reply is not None:
+            await adapter.send_text(chat_id, reply)
+        return
+
+    # Telegram 專屬指令（不在 CommandRouter 中的）
     if not is_group:
-        # /start 和 /help 指令（不需綁定即可使用）
-        cmd = text.strip().split("@")[0]  # 處理 /start@botname 格式
+        cmd = text.strip().split("@")[0]
         if cmd == "/start":
             await adapter.send_text(chat_id, START_MESSAGE)
             return
         if cmd == "/help":
             await adapter.send_text(chat_id, HELP_MESSAGE)
-            return
-
-        # 檢查重置指令
-        if text.strip() in RESET_COMMANDS:
-            if bot_user_id:
-                try:
-                    async with get_connection() as conn:
-                        await conn.execute(
-                            "UPDATE bot_users SET conversation_reset_at = NOW() WHERE id = $1",
-                            bot_user_id,
-                        )
-                except Exception as e:
-                    logger.error(f"重置對話失敗: {e}", exc_info=True)
-            await adapter.send_text(chat_id, "對話已重置 ✨")
             return
 
         # 檢查是否為綁定驗證碼（6 位數字）

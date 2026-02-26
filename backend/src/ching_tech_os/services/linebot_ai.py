@@ -1410,6 +1410,47 @@ async def handle_text_message(
         reply_token: Line 回覆 token
         quoted_message_id: 被回覆的訊息 ID（用戶回覆舊訊息時）
     """
+    # === 斜線指令攔截（在 AI 處理之前） ===
+    from .bot.commands import CommandContext, router as command_router
+
+    parsed = command_router.parse(content)
+    if parsed is not None:
+        command, args = parsed
+        # 建構指令上下文（需要查詢綁定狀態和管理員身份）
+        ctos_user_id = None
+        is_admin = False
+        bot_user_id = None
+        user_row = await get_line_user_record(line_user_id, "id, user_id")
+        if user_row:
+            bot_user_id = str(user_row["id"]) if user_row["id"] else None
+            if user_row["user_id"]:
+                ctos_user_id = user_row["user_id"]
+                from .user import get_user_role_and_permissions
+                user_info = await get_user_role_and_permissions(ctos_user_id)
+                is_admin = user_info["role"] == "admin"
+
+        ctx = CommandContext(
+            platform_type="line",
+            platform_user_id=line_user_id,
+            bot_user_id=bot_user_id,
+            ctos_user_id=ctos_user_id,
+            is_admin=is_admin,
+            is_group=line_group_id is not None,
+            group_id=str(line_group_id) if line_group_id else None,
+            reply_token=reply_token,
+            raw_args=args,
+        )
+        reply = await command_router.dispatch(command, args, ctx)
+        if reply is not None:
+            # 有回覆文字，發送給用戶
+            if reply_token:
+                await reply_text(reply_token, reply)
+            else:
+                await push_text(line_user_id, reply)
+        # 指令已處理，不進入 AI 流程
+        return
+
+    # === 一般訊息，進入 AI 處理 ===
     # 取得用戶顯示名稱
     user_display_name = None
     user_row = await get_line_user_record(line_user_id, "display_name")
