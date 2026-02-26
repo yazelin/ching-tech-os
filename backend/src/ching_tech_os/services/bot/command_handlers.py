@@ -193,6 +193,95 @@ async def _handle_debug(ctx: CommandContext) -> str | None:
     return reply_text or "診斷完成，但未產生回報內容。"
 
 
+async def _handle_agent(ctx: CommandContext) -> str | None:
+    """切換對話使用的 AI Agent
+
+    用法：
+    /agent          — 顯示目前使用的 Agent 和可切換清單
+    /agent <name>   — 用名稱切換
+    /agent <number> — 用編號切換
+    /agent reset    — 恢復預設
+    """
+    from .. import ai_manager
+    from ..linebot_agents import (
+        get_group_active_agent_id,
+        get_user_active_agent_id,
+        set_group_active_agent,
+        set_user_active_agent,
+    )
+
+    args = ctx.raw_args.strip()
+
+    # 取得可切換的 Agent 清單（按 name 排序）
+    selectable = await ai_manager.get_selectable_agents()
+
+    async def _apply_preference(agent_id: str | None) -> None:
+        """將 Agent 偏好寫入群組或個人"""
+        if ctx.is_group and ctx.group_id:
+            await set_group_active_agent(ctx.group_id, agent_id)
+        elif ctx.bot_user_id:
+            await set_user_active_agent(ctx.bot_user_id, agent_id)
+
+    # === /agent reset ===
+    if args.lower() == "reset":
+        await _apply_preference(None)
+        return "已恢復預設 Agent"
+
+    # === 查詢目前 Agent ===
+    current_agent_id = None
+    if ctx.is_group and ctx.group_id:
+        current_agent_id = await get_group_active_agent_id(ctx.group_id)
+    elif ctx.bot_user_id:
+        current_agent_id = await get_user_active_agent_id(ctx.bot_user_id)
+
+    # 取得目前 Agent 的顯示資訊
+    current_label = "預設"
+    if current_agent_id:
+        from uuid import UUID
+        current_agent = await ai_manager.get_agent(UUID(current_agent_id))
+        if current_agent:
+            current_label = f"{current_agent['name']}（{current_agent.get('display_name', '')}）"
+        else:
+            current_label = "預設（偏好 Agent 已不存在）"
+
+    # === /agent（無參數）— 顯示狀態和清單 ===
+    if not args:
+        lines = [f"目前 Agent：{current_label}"]
+        if selectable:
+            lines.append("")
+            lines.append("可切換的 Agent：")
+            for i, agent in enumerate(selectable, 1):
+                display = agent.get("display_name") or agent["name"]
+                lines.append(f"{i}. {agent['name']} — {display}")
+            lines.append("")
+            lines.append("用法：/agent <名稱或編號>")
+            lines.append("恢復預設：/agent reset")
+        else:
+            lines.append("目前沒有可切換的 Agent")
+            lines.append("請在 AI 管理介面將 Agent 的 settings.user_selectable 設為 true")
+        return "\n".join(lines)
+
+    # === /agent <number> — 編號切換 ===
+    if args.isdigit():
+        idx = int(args)
+        if idx < 1 or idx > len(selectable):
+            return f"編號 {idx} 超出範圍（1-{len(selectable)}），請用 /agent 查看可用清單"
+        target = selectable[idx - 1]
+    else:
+        # === /agent <name> — 名稱切換 ===
+        target = next((a for a in selectable if a["name"] == args), None)
+        if not target:
+            # 檢查 Agent 是否存在但不可選
+            existing = await ai_manager.get_agent_by_name(args)
+            if existing:
+                return f"Agent {args} 不可切換，請用 /agent 查看可用清單"
+            return f"找不到 Agent: {args}，請用 /agent 查看可用清單"
+
+    await _apply_preference(str(target["id"]))
+    display = target.get("display_name") or target["name"]
+    return f"已切換到 {display}"
+
+
 _registered = False
 
 
@@ -242,6 +331,15 @@ def register_builtin_commands() -> None:
             require_bound=True,
             require_admin=True,
             private_only=True,
+        ),
+        SlashCommand(
+            name="agent",
+            aliases=["切換助理"],
+            handler=_handle_agent,
+            description="切換 AI Agent",
+            require_bound=True,
+            require_admin=True,
+            private_only=False,
         ),
     ]
 

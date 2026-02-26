@@ -635,16 +635,96 @@ async def ensure_default_linebot_agents() -> None:
     await _ensure_agents(DEFAULT_BOT_MODE_AGENTS, use_dynamic_prompt=False)
 
 
-async def get_linebot_agent(is_group: bool) -> dict | None:
-    """
-    取得 Line Bot Agent 設定。
+async def set_user_active_agent(bot_user_id: str, agent_id: str | None) -> None:
+    """設定用戶的個人對話 Agent 偏好"""
+    from uuid import UUID as _UUID
+
+    from ..database import get_connection
+
+    value = _UUID(agent_id) if agent_id else None
+    async with get_connection() as conn:
+        await conn.execute(
+            "UPDATE bot_users SET active_agent_id = $1 WHERE id = $2",
+            value,
+            bot_user_id,
+        )
+
+
+async def set_group_active_agent(bot_group_id: str, agent_id: str | None) -> None:
+    """設定群組的 Agent 偏好"""
+    from uuid import UUID as _UUID
+
+    from ..database import get_connection
+
+    value = _UUID(agent_id) if agent_id else None
+    async with get_connection() as conn:
+        await conn.execute(
+            "UPDATE bot_groups SET active_agent_id = $1 WHERE id = $2",
+            value,
+            bot_group_id,
+        )
+
+
+async def get_user_active_agent_id(bot_user_id: str) -> str | None:
+    """查詢用戶的 active_agent_id"""
+    from ..database import get_connection
+
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            "SELECT active_agent_id FROM bot_users WHERE id = $1",
+            bot_user_id,
+        )
+        return str(row["active_agent_id"]) if row and row["active_agent_id"] else None
+
+
+async def get_group_active_agent_id(bot_group_id: str) -> str | None:
+    """查詢群組的 active_agent_id"""
+    from ..database import get_connection
+
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            "SELECT active_agent_id FROM bot_groups WHERE id = $1",
+            bot_group_id,
+        )
+        return str(row["active_agent_id"]) if row and row["active_agent_id"] else None
+
+
+async def get_linebot_agent(
+    is_group: bool,
+    *,
+    bot_user_id: str | None = None,
+    bot_group_id: str | None = None,
+) -> dict | None:
+    """取得 Line Bot Agent 設定，支援偏好覆蓋。
+
+    路由優先級：
+    1. 群組對話：bot_groups.active_agent_id > 預設 linebot-group
+    2. 個人對話：bot_users.active_agent_id > 預設 linebot-personal
 
     Args:
         is_group: 是否為群組對話
+        bot_user_id: Bot 用戶 ID（用於查詢個人偏好）
+        bot_group_id: Bot 群組 ID（用於查詢群組偏好）
 
     Returns:
         Agent 設定字典，包含 model 和 system_prompt
         如果找不到則回傳 None
     """
+    from uuid import UUID
+
+    # 查詢偏好 Agent
+    active_agent_id = None
+    if is_group and bot_group_id:
+        active_agent_id = await get_group_active_agent_id(bot_group_id)
+    elif not is_group and bot_user_id:
+        active_agent_id = await get_user_active_agent_id(bot_user_id)
+
+    if active_agent_id:
+        agent = await ai_manager.get_agent(UUID(active_agent_id))
+        if agent and agent.get("is_active"):
+            return agent
+        # 偏好 Agent 不存在或已停用，fallback 到預設
+        logger.warning(f"偏好 Agent {active_agent_id} 不可用，使用預設 Agent")
+
     agent_name = AGENT_LINEBOT_GROUP if is_group else AGENT_LINEBOT_PERSONAL
     return await ai_manager.get_agent_by_name(agent_name)
