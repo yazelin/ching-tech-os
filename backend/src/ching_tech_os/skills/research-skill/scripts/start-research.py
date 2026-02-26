@@ -36,7 +36,7 @@ MAX_SNIPPET_CHARS = 260
 USER_AGENT = "ChingTechOS-ResearchSkill/1.0"
 BRAVE_SEARCH_ENDPOINT = "https://api.search.brave.com/res/v1/web/search"
 DEFAULT_RESEARCH_MODEL = "claude-opus"
-DEFAULT_CLAUDE_WORKER_TIMEOUT_SEC = 120
+DEFAULT_CLAUDE_WORKER_TIMEOUT_SEC = 300
 DEFAULT_LOCAL_SYNTHESIS_TIMEOUT_SEC = 240
 RESEARCH_RETENTION_DAYS = 7
 MAX_RESEARCH_WORKERS = 1
@@ -45,6 +45,7 @@ QUEUE_POLL_INTERVAL_SEC = 2
 MAX_TOOL_TRACE_ITEMS = 80
 
 _SCRIPT_STYLE_RE = re.compile(r"(?is)<(script|style|noscript).*?>.*?</\1>")
+_NAV_BLOCK_RE = re.compile(r"(?is)<(nav|header|footer|aside)[\s>].*?</\1>")
 _TAG_RE = re.compile(r"(?is)<[^>]+>")
 _WHITESPACE_RE = re.compile(r"\s+")
 _BRAVE_PUBLIC_ANCHOR_RE = re.compile(
@@ -149,9 +150,10 @@ def _truncate(text: str, limit: int) -> str:
 
 
 def _strip_html(html_text: str) -> str:
-    """移除 HTML 標籤並壓縮空白。"""
+    """移除 HTML 標籤並壓縮空白，同時去除 nav/header/footer 等非正文區塊。"""
     no_script = _SCRIPT_STYLE_RE.sub(" ", html_text)
-    plain = _TAG_RE.sub(" ", no_script)
+    no_nav = _NAV_BLOCK_RE.sub(" ", no_script)
+    plain = _TAG_RE.sub(" ", no_nav)
     plain = unescape(plain)
     return _WHITESPACE_RE.sub(" ", plain).strip()
 
@@ -628,13 +630,15 @@ def _fetch_source(client: httpx.Client, source: dict) -> dict:
     """抓取單一來源內容。"""
     title = str(source.get("title") or source.get("url") or "來源")
     url = str(source.get("url") or "")
+    # 保留搜尋引擎提供的原始 snippet（比從 content 截斷的更有意義）
+    original_snippet = str(source.get("snippet") or "").strip()
     if not url:
         return {
             "title": title,
             "url": "",
             "fetch_status": "failed",
             "error": "來源 URL 為空",
-            "snippet": "",
+            "snippet": original_snippet,
             "content": "",
         }
 
@@ -652,12 +656,14 @@ def _fetch_source(client: httpx.Client, source: dict) -> dict:
         if not normalized_text:
             raise RuntimeError("來源內容為空")
 
+        # snippet 優先保留搜尋引擎的原始摘要，沒有的話才從 content 截取
+        snippet = original_snippet if original_snippet else _truncate(normalized_text, MAX_SNIPPET_CHARS)
         return {
             "title": title,
             "url": url,
             "fetch_status": "ok",
             "error": None,
-            "snippet": _truncate(normalized_text, MAX_SNIPPET_CHARS),
+            "snippet": snippet,
             "content": normalized_text,
         }
     except (httpx.HTTPError, RuntimeError) as exc:
@@ -666,13 +672,35 @@ def _fetch_source(client: httpx.Client, source: dict) -> dict:
             "url": url,
             "fetch_status": "failed",
             "error": str(exc),
-            "snippet": "",
+            "snippet": original_snippet,
             "content": "",
         }
 
 
+def _extract_body_content(content: str, max_chars: int = 600) -> str:
+    """從網頁純文字中提取正文內容，跳過開頭的選單/導覽碎片。
+
+    啟發式：跳過開頭連續的短句（< 40 字、通常是選單項目），
+    找到第一段有意義的正文後開始截取。
+    """
+    if not content:
+        return ""
+    # 用句號、問號等做段落切分
+    segments = re.split(r"(?<=[。.!?！？\n])\s*", content)
+    body_start = 0
+    for i, seg in enumerate(segments):
+        seg_stripped = seg.strip()
+        # 找到第一個超過 40 字的段落，視為正文開始
+        if len(seg_stripped) > 40:
+            body_start = i
+            break
+    # 從正文開始處拼接
+    body_text = " ".join(s.strip() for s in segments[body_start:] if s.strip())
+    return _truncate(body_text, max_chars)
+
+
 def _build_final_summary(query: str, fetched_results: list[dict]) -> str:
-    """根據已擷取內容產生最終統整。"""
+    """根據已擷取內容產生最終統整（降級版：Claude synthesis 失敗時使用）。"""
     ok_results = [item for item in fetched_results if item.get("fetch_status") == "ok" and item.get("content")]
     failed_results = [item for item in fetched_results if item.get("fetch_status") != "ok"]
 
@@ -684,12 +712,22 @@ def _build_final_summary(query: str, fetched_results: list[dict]) -> str:
 
     lines = [
         "## 一句話結論",
-        f"針對「{query}」已完成多來源擷取，以下為可驗證的重點整理與待確認事項。",
+        f"針對「{query}」已完成多來源擷取，以下為各來源的重點摘錄。",
         "",
         "## 核心重點",
     ]
     for idx, item in enumerate(ok_results[:5], start=1):
-        lines.append(f"{idx}. **{item['title']}**：{_truncate(item['content'], 240)}")
+        title = item.get("title") or "來源"
+        url = item.get("url") or ""
+        # 優先使用搜尋引擎的 snippet（已是有意義的摘要）
+        snippet = str(item.get("snippet") or "").strip()
+        if snippet and len(snippet) > 30:
+            description = snippet
+        else:
+            # snippet 不可用時，從正文提取有意義的內容（跳過 nav 碎片）
+            description = _extract_body_content(str(item.get("content") or ""), 500)
+        source_ref = f"（{url}）" if url else ""
+        lines.append(f"{idx}. **{title}**{source_ref}：{description}")
 
     lines.extend(["", "## 風險與待確認事項"])
     if failed_results:
@@ -820,15 +858,21 @@ def _build_local_synthesis_prompt(query: str, fetched_results: list[dict]) -> st
     for idx, item in enumerate(fetched_results[:6], start=1):
         if item.get("fetch_status") != "ok":
             continue
-        content = _truncate(str(item.get("content") or ""), 2200)
-        if not content:
+        raw_content = str(item.get("content") or "")
+        # 提取正文（跳過 nav/menu 碎片）再截斷，給 Claude 更多有意義的內容
+        body = _extract_body_content(raw_content, 3500)
+        if not body:
+            body = _truncate(raw_content, 3500)
+        if not body:
             continue
+        snippet = str(item.get("snippet") or "").strip()
+        snippet_line = f"搜尋摘要: {snippet}\n" if snippet else ""
         source_blocks.append(
             "\n".join(
                 [
                     f"[來源 {idx}] {item.get('title') or '來源'}",
                     f"URL: {item.get('url') or 'N/A'}",
-                    f"摘錄: {content}",
+                    f"{snippet_line}正文摘錄: {body}",
                 ]
             )
         )
@@ -868,8 +912,8 @@ async def _call_claude_local_synthesis(query: str, fetched_results: list[dict]) 
 
     prompt = _build_local_synthesis_prompt(query=query, fetched_results=fetched_results)
     timeout_sec = max(
-        120,
-        min(DEFAULT_LOCAL_SYNTHESIS_TIMEOUT_SEC, _get_research_claude_timeout_sec() // 3),
+        180,
+        min(DEFAULT_LOCAL_SYNTHESIS_TIMEOUT_SEC, _get_research_claude_timeout_sec() // 2),
     )
     response = await call_claude(
         prompt=prompt,

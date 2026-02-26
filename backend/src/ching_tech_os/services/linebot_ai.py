@@ -196,6 +196,33 @@ def _append_text_to_first_message(
         messages.append(create_text_message_with_mention(append_text, mention_line_user_id))
 
 
+LINE_TEXT_MAX_CHARS = 5000
+
+
+def _split_long_text(text: str, max_chars: int = LINE_TEXT_MAX_CHARS) -> list[str]:
+    """將超過 LINE 上限的長文字分割成多段（在換行處斷開）。"""
+    if not text or len(text) <= max_chars:
+        return [text] if text else []
+
+    chunks: list[str] = []
+    remaining = text
+    while remaining:
+        if len(remaining) <= max_chars:
+            chunks.append(remaining)
+            break
+        # 在 max_chars 以內找最後一個換行位置
+        cut = remaining.rfind("\n", 0, max_chars)
+        if cut <= 0:
+            # 沒有換行，找空白
+            cut = remaining.rfind(" ", 0, max_chars)
+        if cut <= 0:
+            # 都沒有，硬切
+            cut = max_chars
+        chunks.append(remaining[:cut].rstrip())
+        remaining = remaining[cut:].lstrip("\n")
+    return chunks
+
+
 async def send_ai_response(
     reply_token: str,
     text: str,
@@ -220,8 +247,11 @@ async def send_ai_response(
 
     # 先加入文字訊息（顯示在上方）
     # 如果有提供 mention_line_user_id，使用 TextMessageV2 帶 mention
+    # LINE 單則訊息上限 5000 字，超過時自動分割
     if text:
-        messages.append(create_text_message_with_mention(text, mention_line_user_id))
+        text_chunks = _split_long_text(text)
+        for chunk in text_chunks:
+            messages.append(create_text_message_with_mention(chunk, mention_line_user_id))
 
     # 再處理檔案訊息
     for file_info in file_messages:
@@ -317,6 +347,65 @@ def _contains_builtin_web_fetch_search(tool_calls: list) -> bool:
     return False
 
 
+def _summarize_for_line(
+    final_summary: str,
+    payload: dict,
+    max_chars: int = 3000,
+) -> str:
+    """從 final_summary 萃取重點摘要，控制在 LINE 安全字數內。
+
+    策略：
+    1. 若 final_summary 為空，fallback 到 partial_results snippets
+    2. 若 final_summary 有 Markdown 結構，擷取「統整摘要」之後的內容
+    3. 最後截斷到 max_chars
+    """
+    if not final_summary:
+        # fallback：從 partial_results 組合
+        partial_results = payload.get("partial_results") or []
+        lines = []
+        for item in partial_results[:5]:
+            if not isinstance(item, dict):
+                continue
+            snippet = str(item.get("snippet") or "").strip()
+            if snippet:
+                title = str(item.get("title") or item.get("url") or "來源")
+                lines.append(f"• {title}：{snippet[:200]}")
+        if lines:
+            return "\n".join(lines)
+        return "研究已完成，但未能產生摘要。"
+
+    # 嘗試擷取「統整摘要」區段（result.md 的結構是 ## 統整摘要 → 內容 → ## 來源）
+    summary_section = final_summary
+    match = re.search(r"(?:^|\n)##\s*統整摘要\s*\n(.*?)(?:\n##\s|$)", final_summary, re.DOTALL)
+    if match:
+        summary_section = match.group(1).strip()
+
+    # 若仍太長，截斷
+    if len(summary_section) > max_chars:
+        # 在句尾斷開
+        cut = summary_section.rfind("。", 0, max_chars)
+        if cut <= 0:
+            cut = summary_section.rfind("\n", 0, max_chars)
+        if cut <= 0:
+            cut = max_chars
+        summary_section = summary_section[:cut + 1] + "\n\n…（略）"
+
+    # 附加參考來源（最多 3 筆）
+    sources = payload.get("sources") or []
+    if sources:
+        source_lines = []
+        for src in sources[:3]:
+            if not isinstance(src, dict):
+                continue
+            title = str(src.get("title") or src.get("url") or "來源")
+            url = str(src.get("url") or "").strip()
+            source_lines.append(f"• {title}" + (f"\n  {url}" if url else ""))
+        if source_lines:
+            summary_section += "\n\n參考來源：\n" + "\n".join(source_lines)
+
+    return summary_section
+
+
 def _extract_research_tool_feedback(tool_calls: list) -> dict | None:
     """從 run_skill_script(research-skill) 的工具輸出組合可回覆訊息。"""
     for tool_call in reversed(tool_calls or []):
@@ -334,12 +423,20 @@ def _extract_research_tool_feedback(tool_calls: list) -> dict | None:
         if not wrapper:
             continue
 
+        # 逐層展開巢狀 JSON（可能有 "output" 或 "result" key 包裝）
         payload = wrapper
-        nested_output = wrapper.get("output")
-        if isinstance(nested_output, str):
-            parsed_nested = _parse_json_object(nested_output)
-            if parsed_nested:
-                payload = parsed_nested
+        for _depth in range(3):  # 最多展開 3 層
+            unwrapped = False
+            for key in ("output", "result"):
+                nested = payload.get(key)
+                if isinstance(nested, str):
+                    parsed_nested = _parse_json_object(nested)
+                    if parsed_nested:
+                        payload = parsed_nested
+                        unwrapped = True
+                        break
+            if not unwrapped:
+                break
 
         # start-research: 確保 job_id 一定回到使用者
         if script_name == "start-research":
@@ -380,39 +477,33 @@ def _extract_research_tool_feedback(tool_calls: list) -> dict | None:
 
             if status == "completed":
                 summary = str(payload.get("final_summary") or "").strip()
+                result_ctos_path = str(payload.get("result_ctos_path") or "").strip()
+
                 # 若 final_summary 是 API Error（合成階段失敗），改用來源摘要
                 if not summary or summary.startswith("API Error:"):
-                    summary = "✅ 研究任務已完成，以下是搜集到的來源資訊。"
-                sources = payload.get("sources") or []
-                source_lines = []
-                for source in sources[:5]:
-                    if not isinstance(source, dict):
-                        continue
-                    title = str(source.get("title") or source.get("url") or "來源")
-                    url = str(source.get("url") or "").strip()
-                    source_lines.append(f"- {title}" + (f"（{url}）" if url else ""))
+                    summary = ""
 
-                # 若 final_summary 失敗但有 partial_results 的 snippets，附上
-                if summary.startswith("✅ 研究任務已完成"):
-                    partial_results = payload.get("partial_results") or []
-                    snippet_lines = []
-                    for item in partial_results[:3]:
-                        if not isinstance(item, dict):
-                            continue
-                        snippet = str(item.get("snippet") or "").strip()
-                        if snippet:
-                            item_title = str(item.get("title") or item.get("url") or "來源")
-                            snippet_lines.append(f"- {item_title}：{snippet[:200]}")
-                    if snippet_lines:
-                        summary += "\n\n" + "\n".join(snippet_lines)
+                # 萃取重點摘要（控制在 LINE 字數安全範圍）
+                key_points = _summarize_for_line(summary, payload)
 
-                message = summary
-                if source_lines:
-                    message += "\n\n參考來源：\n" + "\n".join(source_lines)
+                # 計算完整報告長度（用於告知使用者）
+                full_len = len(summary) if summary else 0
+
+                # 組合訊息：重點摘要 + 詢問是否存知識庫
+                message = f"✅ 研究完成\n\n{key_points}"
+                if full_len > 0:
+                    message += (
+                        f"\n\n---\n"
+                        f"以上為重點摘要（完整報告約 {full_len} 字）。\n"
+                        f"如需保存完整報告，請回覆「存知識庫」，"
+                        f"我會將完整內容存入知識庫並產生 24 小時暫存連結。"
+                    )
+
                 return {
                     "script": script_name,
                     "job_id": job_id,
                     "message": message,
+                    "result_ctos_path": result_ctos_path,
                 }
 
             if status == "failed":
@@ -880,12 +971,8 @@ async def process_message_with_ai(
                         ai_response = feedback_text
                     elif job_id and job_id not in ai_response:
                         ai_response = ai_response.rstrip() + "\n\n" + feedback_text
-                # check-research：一律以工具回傳結果為準，避免模型再切回同步網頁抓取
+                # check-research：一律使用已摘要的 feedback_text（已控制在 LINE 安全字數內）
                 elif script_name == "check-research" and feedback_text:
-                    if _contains_builtin_web_fetch_search(response.tool_calls):
-                        logger.warning(
-                            "check-research 後偵測到 WebSearch/WebFetch；改用工具摘要回覆，忽略模型二次抓取內容",
-                        )
                     ai_response = feedback_text
                 elif feedback_text and not str(ai_response or "").strip():
                     ai_response = feedback_text
@@ -933,9 +1020,10 @@ async def process_message_with_ai(
 
                 push_message_list: list[LBTextMessage | LBImageMessage] = []
 
-                # 文字訊息放在前面
+                # 文字訊息放在前面（超過 LINE 上限時自動分割）
                 if text_response:
-                    push_message_list.append(LBTextMessage(text=text_response))
+                    for chunk in _split_long_text(text_response):
+                        push_message_list.append(LBTextMessage(text=chunk))
 
                 # 圖片訊息放在後面
                 for file_info in file_messages:
