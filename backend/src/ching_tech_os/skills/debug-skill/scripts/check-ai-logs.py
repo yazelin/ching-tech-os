@@ -25,7 +25,7 @@ def main() -> int:
     limit = _safe_int(payload.get("limit", 10), default=10, max_val=50)
     errors_only = payload.get("errors_only", False) is True  # 嚴格布林驗證
 
-    # 建構 SQL 查詢（使用參數化的 LIMIT，errors_only 為固定值）
+    # 建構 SQL 查詢（LIMIT 值已透過 _safe_int 做範圍限制）
     where_clause = "WHERE success = false" if errors_only else ""
     sql = (
         f"SELECT id, context_type, model, success, duration_ms, "

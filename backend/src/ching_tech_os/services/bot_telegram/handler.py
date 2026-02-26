@@ -38,9 +38,6 @@ from .media import download_telegram_document, download_telegram_photo
 
 logger = logging.getLogger("bot_telegram.handler")
 
-# 重置對話指令
-RESET_COMMANDS = {"/新對話", "/reset"}
-
 # /start 歡迎訊息
 START_MESSAGE = (
     "👋 歡迎使用 CTOS Bot！\n\n"

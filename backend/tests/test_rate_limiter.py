@@ -4,7 +4,6 @@ import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 
 from ching_tech_os.services.bot.rate_limiter import (
-    check_rate_limit,
     check_and_increment,
     record_usage,
     cleanup_old_tracking,
@@ -204,27 +203,6 @@ class TestCheckAndIncrement:
             allowed, msg = await check_and_increment("uuid-123")
             assert allowed is True
             assert msg is None
-
-
-# ============================================================
-# check_rate_limit() 向後相容測試
-# ============================================================
-
-
-class TestCheckRateLimit:
-    """測試 check_rate_limit() 向後相容介面"""
-
-    @pytest.mark.asyncio
-    async def test_delegates_to_check_and_increment(self):
-        """check_rate_limit 委派給 check_and_increment"""
-        with patch(
-            "ching_tech_os.services.bot.rate_limiter.check_and_increment",
-            new_callable=AsyncMock,
-            return_value=(True, None),
-        ) as mock_fn:
-            allowed, msg = await check_rate_limit("uuid-123")
-            assert allowed is True
-            mock_fn.assert_awaited_once_with("uuid-123")
 
 
 # ============================================================

@@ -34,7 +34,6 @@ from .bot_line import (
     save_bot_response,
     save_file_record,
     reset_conversation,
-    is_reset_command,
     ensure_temp_image,
     get_image_info_by_line_message_id,
     get_temp_image_path,
@@ -480,40 +479,7 @@ async def process_message_with_ai(
     """
     is_group = line_group_id is not None
 
-    # 檢查是否為重置對話指令（僅限個人對話）
-    if is_reset_command(content):
-        if is_group:
-            # 群組不支援重置，靜默忽略
-            return None
-        elif line_user_id:
-            # 個人對話：執行重置
-            await reset_conversation(line_user_id)
-            reset_msg = "已清除對話歷史，開始新對話！有什麼可以幫你的嗎？"
-            # 儲存 Bot 回應
-            await save_bot_response(
-                group_uuid=None,
-                content=reset_msg,
-                responding_to_line_user_id=line_user_id,
-            )
-            # 回覆訊息（reply token 可能過期，失敗時改用 push message）
-            reply_success = False
-            if reply_token:
-                try:
-                    await reply_text(reply_token, reset_msg)
-                    reply_success = True
-                except Exception as e:
-                    logger.warning(f"回覆重置訊息失敗（reply token 可能過期）: {e}")
-
-            # 如果沒有 reply_token 或回覆失敗，改用 push message
-            if not reply_success and line_user_id:
-                try:
-                    await push_text(line_user_id, reset_msg)
-                    logger.info(f"使用 push message 發送重置訊息給 {line_user_id}")
-                except Exception as e:
-                    logger.error(f"Push 重置訊息也失敗: {e}")
-
-            return reset_msg
-        return None
+    # 重置對話指令已由 CommandRouter 在 handle_text_message 中攔截處理
 
     # 檢查是否回覆機器人訊息（群組對話用）
     is_reply_to_bot = False

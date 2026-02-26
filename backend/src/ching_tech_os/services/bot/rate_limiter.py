@@ -110,20 +110,6 @@ async def check_and_increment(bot_user_id: str) -> tuple[bool, str | None]:
         return True, None
 
 
-async def check_rate_limit(bot_user_id: str) -> tuple[bool, str | None]:
-    """檢查未綁定用戶是否超過頻率限制（向後相容介面）
-
-    內部委派給 check_and_increment() 實現原子性操作。
-
-    Args:
-        bot_user_id: bot_users.id (UUID 字串)
-
-    Returns:
-        (是否允許, 拒絕訊息) - 允許時拒絕訊息為 None
-    """
-    return await check_and_increment(bot_user_id)
-
-
 async def record_usage(bot_user_id: str) -> None:
     """記錄使用量（UPSERT 每小時和每日計數）
 
