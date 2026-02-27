@@ -289,6 +289,83 @@ const AgentSettingsApp = (function() {
   }
 
   /**
+   * 產生 settings key-value 所有行的 HTML
+   */
+  function buildSettingsKvRows(settings) {
+    if (!settings || typeof settings !== 'object') return '';
+    return Object.keys(settings).sort().map(key => {
+      return buildSettingsKvRow(key, settings[key]);
+    }).join('');
+  }
+
+  /**
+   * 產生單行 settings key-value HTML
+   */
+  function buildSettingsKvRow(key, value) {
+    const safeKey = escapeHtml(String(key || ''));
+    // value 可能是物件/陣列，轉為字串顯示
+    let displayValue = '';
+    if (value !== null && value !== undefined) {
+      displayValue = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+    }
+    const safeValue = escapeHtml(displayValue);
+    return `
+      <div class="agent-settings-kv-row">
+        <input type="text" class="agent-form-input agent-settings-kv-key"
+               placeholder="key" value="${safeKey}">
+        <textarea class="agent-form-input agent-settings-kv-value"
+                  placeholder="value" rows="1">${safeValue}</textarea>
+        <button type="button" class="agent-settings-kv-delete" title="刪除此設定">
+          <span class="icon">${getIcon('close')}</span>
+        </button>
+      </div>
+    `;
+  }
+
+  /**
+   * 從表單收集所有 settings key-value
+   */
+  function collectSettings(form) {
+    const result = {};
+    const rows = form.querySelectorAll('.agent-settings-kv-row');
+    rows.forEach(row => {
+      const key = row.querySelector('.agent-settings-kv-key')?.value?.trim();
+      const rawValue = row.querySelector('.agent-settings-kv-value')?.value ?? '';
+      if (!key) return;
+      // 嘗試解析 JSON（物件/陣列/布林/數字），否則保留字串
+      let value = rawValue;
+      try {
+        const trimmed = rawValue.trim();
+        if (trimmed.startsWith('{') || trimmed.startsWith('[') ||
+            trimmed === 'true' || trimmed === 'false' || trimmed === 'null' ||
+            (!isNaN(Number(trimmed)) && trimmed !== '')) {
+          value = JSON.parse(trimmed);
+        }
+      } catch { /* 保留原始字串 */ }
+      result[key] = value;
+    });
+    return result;
+  }
+
+  /**
+   * 綁定 settings key-value 行事件（刪除、變更標記 dirty）
+   */
+  function bindSettingsKvRowEvents(row) {
+    const deleteBtn = row.querySelector('.agent-settings-kv-delete');
+    if (deleteBtn) {
+      deleteBtn.addEventListener('click', () => {
+        row.remove();
+        isDirty = true;
+      });
+    }
+    row.querySelectorAll('input, textarea').forEach(el => {
+      el.addEventListener('input', () => {
+        isDirty = true;
+      });
+    });
+  }
+
+  /**
    * 建立編輯表單
    */
   function buildEditForm(agent) {
@@ -383,6 +460,16 @@ const AgentSettingsApp = (function() {
               </div>
             </div>
           </div>
+        </div>
+
+        <div class="agent-form-section">
+          <div class="agent-form-section-title">額外設定</div>
+          <div class="agent-settings-kv">
+            ${buildSettingsKvRows(agent?.settings)}
+          </div>
+          <button type="button" class="agent-settings-add-btn">
+            <span class="icon">${getIcon('plus')}</span> 新增設定
+          </button>
         </div>
 
         ${agent?.system_prompt?.content ? `
@@ -556,6 +643,27 @@ const AgentSettingsApp = (function() {
       });
     }
 
+    // 額外設定：新增按鈕
+    const addSettingBtn = form.querySelector('.agent-settings-add-btn');
+    if (addSettingBtn) {
+      addSettingBtn.addEventListener('click', () => {
+        const container = form.querySelector('.agent-settings-kv');
+        if (!container) return;
+        const temp = document.createElement('div');
+        temp.innerHTML = buildSettingsKvRow('', '');
+        const row = temp.firstElementChild;
+        container.appendChild(row);
+        bindSettingsKvRowEvents(row);
+        row.querySelector('.agent-settings-kv-key')?.focus();
+        isDirty = true;
+      });
+    }
+
+    // 額外設定：綁定現有行的事件
+    form.querySelectorAll('.agent-settings-kv-row').forEach(row => {
+      bindSettingsKvRowEvents(row);
+    });
+
     // 儲存按鈕
     const saveBtn = document.querySelector(`#${windowId} .agent-save-btn`);
     if (saveBtn) {
@@ -599,6 +707,9 @@ const AgentSettingsApp = (function() {
     const toolCheckboxes = form.querySelectorAll('[name="tools"]:checked');
     const tools = Array.from(toolCheckboxes).map(cb => cb.value);
 
+    // 收集額外設定
+    const settings = collectSettings(form);
+
     const data = {
       name: form.querySelector('[name="name"]').value,
       display_name: form.querySelector('[name="display_name"]').value || null,
@@ -606,7 +717,8 @@ const AgentSettingsApp = (function() {
       model: form.querySelector('[name="model"]').value,
       system_prompt_id: form.querySelector('[name="system_prompt_id"]').value || null,
       is_active: isActive,
-      tools: tools.length > 0 ? tools : null
+      tools: tools.length > 0 ? tools : null,
+      settings: Object.keys(settings).length > 0 ? settings : null
     };
 
     // 驗證

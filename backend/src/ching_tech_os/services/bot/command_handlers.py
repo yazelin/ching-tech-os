@@ -466,7 +466,7 @@ def register_builtin_commands() -> None:
             description="系統診斷",
             require_bound=True,
             require_admin=True,
-            private_only=True,
+            private_only=False,
         ),
         SlashCommand(
             name="agent",

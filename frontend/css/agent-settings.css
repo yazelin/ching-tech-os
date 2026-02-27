@@ -881,6 +881,85 @@
 }
 
 /* ==========================================================================
+   額外設定 Key-Value 編輯器
+   ========================================================================== */
+
+.agent-settings-kv {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.agent-settings-kv-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.agent-settings-kv-key {
+  width: 160px;
+  flex-shrink: 0;
+}
+
+.agent-settings-kv-value {
+  flex: 1;
+  min-height: 32px;
+  resize: vertical;
+  font-family: inherit;
+  line-height: 1.4;
+}
+
+.agent-settings-kv-delete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.agent-settings-kv-delete:hover {
+  color: var(--color-error);
+  background: var(--bg-tertiary);
+}
+
+.agent-settings-kv-delete .icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.agent-settings-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 6px 12px;
+  background: none;
+  border: 1px dashed var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.agent-settings-add-btn:hover {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.agent-settings-add-btn .icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ==========================================================================
    Mobile Responsive (≤768px)
    ========================================================================== */
 @media (max-width: 768px) {
@@ -972,6 +1051,21 @@
 
   .agent-form-label {
     font-size: var(--font-size-sm);
+  }
+
+  /* 額外設定 KV 手機版 */
+  .agent-settings-kv-row {
+    flex-wrap: wrap;
+  }
+
+  .agent-settings-kv-key {
+    width: 100%;
+    flex-shrink: unset;
+  }
+
+  .agent-settings-kv-value {
+    flex: 1;
+    min-width: 0;
   }
 
   /* 工具格子單欄 */
