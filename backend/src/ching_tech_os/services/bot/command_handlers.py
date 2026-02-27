@@ -15,6 +15,44 @@ from ..bot_line.trigger import reset_conversation
 logger = logging.getLogger(__name__)
 
 
+# 工具名稱 → 中文標籤對照（用於 /agent 清單顯示）
+_TOOL_LABELS: dict[str, str] = {
+    "search_knowledge": "知識庫",
+    "search_nas_files": "NAS 檔案",
+    "read_document": "文件讀取",
+    "run_skill_script": "腳本執行",
+    "WebSearch": "網路搜尋",
+    "WebFetch": "網頁擷取",
+}
+
+
+def _format_agent_tools(agent: dict) -> str:
+    """將 agent 的 tools 列表轉為中文標籤字串"""
+    import json
+
+    tools_raw = agent.get("tools")
+    if not tools_raw:
+        return ""
+
+    # tools 可能是 JSON 字串或已解析的 list
+    if isinstance(tools_raw, str):
+        try:
+            tools = json.loads(tools_raw)
+        except (json.JSONDecodeError, TypeError):
+            return ""
+    else:
+        tools = tools_raw
+
+    if not tools:
+        return ""
+
+    labels = []
+    for tool in tools:
+        label = _TOOL_LABELS.get(tool, tool)
+        labels.append(label)
+    return "｜" + "、".join(labels)
+
+
 DEFAULT_WELCOME_MESSAGE = (
     "歡迎使用 CTOS Bot！\n\n"
     "我是 Ching Tech OS 的 AI 助手，可以幫你：\n"
@@ -238,7 +276,8 @@ async def _handle_agent_restricted(ctx: CommandContext, sub_args: str) -> str | 
             lines.append("可切換的 Agent：")
             for i, agent in enumerate(selectable, 1):
                 display = agent.get("display_name") or agent["name"]
-                lines.append(f"{i}. {agent['name']} — {display}")
+                tools_label = _format_agent_tools(agent)
+                lines.append(f"{i}. {agent['name']} — {display}{tools_label}")
             lines.append("")
             lines.append("用法：/agent restricted <名稱或編號>")
             lines.append("重置：/agent restricted reset")
@@ -346,7 +385,8 @@ async def _handle_agent(ctx: CommandContext) -> str | None:
             lines.append("可切換的 Agent：")
             for i, agent in enumerate(selectable, 1):
                 display = agent.get("display_name") or agent["name"]
-                lines.append(f"{i}. {agent['name']} — {display}")
+                tools_label = _format_agent_tools(agent)
+                lines.append(f"{i}. {agent['name']} — {display}{tools_label}")
             lines.append("")
             lines.append("用法：/agent <名稱或編號>")
             lines.append("恢復預設：/agent reset")

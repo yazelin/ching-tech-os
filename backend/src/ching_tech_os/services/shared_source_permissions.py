@@ -90,7 +90,8 @@ async def get_allowed_shared_mounts_for_user(
 ) -> dict[str, str]:
     """依使用者設定取得可用的 shared 掛載點。"""
     if ctos_user_id is None:
-        return {}
+        # 未綁定用戶使用預設權限（與 check_mcp_tool_permission 一致）
+        return filter_shared_mounts_by_permissions(shared_mounts, None)
 
     async with get_connection() as conn:
         row = await conn.fetchrow(

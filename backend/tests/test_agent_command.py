@@ -29,8 +29,8 @@ AGENT_A_ID = uuid4()
 AGENT_B_ID = uuid4()
 
 SELECTABLE_AGENTS = [
-    {"id": AGENT_A_ID, "name": "demo-agent", "display_name": "展示助理", "description": "", "model": "claude-haiku"},
-    {"id": AGENT_B_ID, "name": "jfmskin-edu", "display_name": "杰膚美衛教助理", "description": "", "model": "claude-haiku"},
+    {"id": AGENT_A_ID, "name": "demo-agent", "display_name": "展示助理", "description": "", "model": "claude-haiku", "tools": None},
+    {"id": AGENT_B_ID, "name": "jfmskin-edu", "display_name": "杰膚美衛教助理", "description": "", "model": "claude-haiku", "tools": '["search_knowledge", "search_nas_files", "read_document"]'},
 ]
 
 
@@ -77,6 +77,17 @@ class TestAgentListCommand:
         assert "1. demo-agent" in result
         assert "2. jfmskin-edu" in result
         assert "杰膚美衛教助理" in result
+
+    @pytest.mark.asyncio
+    async def test_show_list_with_tools_label(self):
+        """清單應顯示 agent 的工具權限標籤"""
+        ctx = _make_ctx(raw_args="")
+        result = await _handle_agent(ctx)
+        # jfmskin-edu 有 tools，應顯示中文標籤
+        assert "知識庫" in result
+        assert "NAS 檔案" in result
+        # demo-agent 沒有 tools，不應有多餘的標籤
+        assert "demo-agent — 展示助理\n" in result or "demo-agent — 展示助理" in result
 
     @pytest.mark.asyncio
     async def test_show_list_with_custom_agent(self, mock_deps):

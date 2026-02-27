@@ -358,7 +358,7 @@ async def get_selectable_agents() -> list[dict]:
     async with get_connection() as conn:
         rows = await conn.fetch(
             """
-            SELECT id, name, display_name, description, model
+            SELECT id, name, display_name, description, model, tools
             FROM ai_agents
             WHERE is_active = true
               AND settings->>'user_selectable' = 'true'
