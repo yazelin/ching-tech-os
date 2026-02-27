@@ -77,6 +77,8 @@ from ..services.bot_line import (
     get_binding_status,
     is_binding_code_format,
     check_line_access,
+    is_bot_message,
+    should_trigger_ai,
     update_group_settings,
     reply_text,
     push_text,
@@ -261,6 +263,14 @@ async def process_message_event(event: MessageEvent) -> None:
 
         if not has_access:
             if deny_reason == "user_not_bound":
+                # 群組中：只在觸發條件成立時回應（避免對每則訊息都回應造成噪音）
+                if is_group:
+                    is_reply_to_bot = False
+                    if quoted_message_id:
+                        is_reply_to_bot = await is_bot_message(quoted_message_id)
+                    if not should_trigger_ai(content, is_group, is_reply_to_bot):
+                        return  # 未被 @提及 也未回覆機器人，靜默忽略
+
                 # 身份分流：根據策略決定拒絕或進入受限模式
                 from ..services.bot.identity_router import (
                     route_unbound,

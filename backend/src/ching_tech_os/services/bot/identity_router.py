@@ -99,10 +99,6 @@ async def route_unbound(
     Returns:
         UnboundRouteResult 指示應採取的動作
     """
-    # 群組中的未綁定用戶一律靜默忽略（不受策略影響）
-    if is_group:
-        return UnboundRouteResult(action="silent")
-
     policy = get_unbound_policy()
 
     if policy == "restricted":
