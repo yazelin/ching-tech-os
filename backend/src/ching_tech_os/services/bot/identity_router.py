@@ -128,10 +128,13 @@ async def handle_restricted_mode(
     line_group_id: UUID | None = None,
     message_uuid: UUID | None = None,
     user_display_name: str | None = None,
+    bot_group_id: str | None = None,
 ) -> str | None:
     """執行受限模式 AI 流程
 
-    使用 bot-restricted Agent、受限工具白名單、縮短的對話歷史。
+    使用受限 Agent（可自訂）、受限工具白名單、縮短的對話歷史。
+    settings（rate_limit、disclaimer 等）始終從 bot-restricted 讀取，
+    AI prompt/tools/model 從實際選用的 Agent 讀取。
 
     Args:
         content: 使用者訊息內容
@@ -141,6 +144,7 @@ async def handle_restricted_mode(
         line_group_id: 群組 UUID（用於取得對話歷史）
         message_uuid: 訊息 UUID（用於 AI log）
         user_display_name: 使用者顯示名稱
+        bot_group_id: Bot 群組 ID（用於查詢群組受限 Agent 偏好）
 
     Returns:
         AI 回應文字，或 None
@@ -153,21 +157,26 @@ async def handle_restricted_mode(
         log_linebot_ai_call,
     )
     from ..mcp import get_mcp_tool_names
-    from ..linebot_agents import get_mcp_servers_for_user
+    from ..linebot_agents import get_mcp_servers_for_user, get_restricted_agent
     from ..bot.ai import parse_ai_response
 
-    # 1. 取得 bot-restricted Agent
-    agent = await ai_manager.get_agent_by_name("bot-restricted")
+    # 1. 取得受限模式 Agent（支援群組自訂，fallback 到 bot-restricted）
+    agent = await get_restricted_agent(bot_group_id=bot_group_id)
     if not agent:
-        logger.error("bot-restricted Agent 不存在，無法進行受限模式 AI 處理")
+        logger.error("受限模式 Agent 不存在，無法進行受限模式 AI 處理")
         return "系統設定錯誤，請聯繫管理員。"
+
+    # settings 始終從 bot-restricted 讀取（全域框架）
+    settings_agent = agent
+    if agent.get("name") != "bot-restricted":
+        settings_agent = await ai_manager.get_agent_by_name("bot-restricted")
 
     # 原子性頻率限制檢查+計數（在 AI 處理之前）
     if bot_user_id:
         from .rate_limiter import check_and_increment
 
-        # 從 agent settings 讀取自訂超限訊息
-        agent_settings = agent.get("settings") or {}
+        # 從 bot-restricted settings 讀取自訂超限訊息
+        agent_settings = (settings_agent or {}).get("settings") or {}
         hourly_msg = agent_settings.get("rate_limit_hourly_msg")
         daily_msg = agent_settings.get("rate_limit_daily_msg")
         custom_rate_msgs: dict[str, str] | None = None
@@ -184,8 +193,13 @@ async def handle_restricted_mode(
         if not allowed:
             return deny_msg
 
-    # 2. 取得 model（優先使用環境變數設定）
-    model = settings.bot_restricted_model
+    # 2. 取得 model
+    # 若使用自訂 Agent，用 Agent 自身的 model；若使用 bot-restricted，才 fallback 到環境變數
+    if agent.get("name") != "bot-restricted":
+        # 自訂 Agent：直接使用 agent.model（call_claude 內部的 MODEL_MAP 會處理轉換）
+        model = agent.get("model") or settings.bot_restricted_model
+    else:
+        model = settings.bot_restricted_model
 
     # 3. 取得 system prompt
     system_prompt_data = agent.get("system_prompt")
@@ -195,7 +209,7 @@ async def handle_restricted_mode(
         base_prompt = ""
 
     if not base_prompt:
-        logger.error("bot-restricted Agent 缺少 system_prompt")
+        logger.error("受限模式 Agent '%s' 缺少 system_prompt", agent.get("name"))
         return "系統設定錯誤，請聯繫管理員。"
 
     # 加入對話識別（標記為未綁定用戶）
@@ -271,7 +285,7 @@ async def handle_restricted_mode(
     except Exception:
         logger.exception("受限模式 AI 呼叫失敗")
         return _get_restricted_setting(
-            agent, "error_message",
+            settings_agent, "error_message",
             "抱歉，處理您的訊息時發生錯誤，請稍後再試。",
         )
 
@@ -304,8 +318,8 @@ async def handle_restricted_mode(
     if not reply_text:
         return "抱歉，我目前無法回答您的問題。"
 
-    # 附加免責聲明（若 agent settings 有設定）
-    disclaimer = _get_restricted_setting(agent, "disclaimer", "")
+    # 附加免責聲明（從 bot-restricted settings 讀取）
+    disclaimer = _get_restricted_setting(settings_agent, "disclaimer", "")
     if disclaimer:
         reply_text = reply_text + disclaimer
 

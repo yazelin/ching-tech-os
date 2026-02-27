@@ -331,6 +331,14 @@ services/scheduler.py      ← APScheduler 任務定義
 2. 編輯 `settings` JSONB 欄位中的對應 key（`welcome_message`、`binding_prompt`、`rate_limit_hourly_msg`、`rate_limit_daily_msg`、`disclaimer`、`error_message`）
 3. 空字串表示使用程式碼中的預設值
 
+### 「設定群組受限模式 Agent」
+1. 在 Bot 群組中使用 `/agent restricted <name>` 指令
+2. 相關程式碼：
+   - `services/bot/command_handlers.py`（`_handle_agent_restricted`）
+   - `services/linebot_agents.py`（`set_group_restricted_agent`、`get_restricted_agent`）
+   - `services/bot/identity_router.py`（`handle_restricted_mode` 支援動態 Agent）
+3. settings（rate_limit、disclaimer 等）始終從 `bot-restricted` 讀取，AI prompt/tools/model 從實際選用的 Agent 讀取
+
 ### 「修改 Bot AI 行為」
 1. `services/bot/agents.py`（prompt 模板）
 2. `services/linebot_agents.py`（agent 定義、工具分配）

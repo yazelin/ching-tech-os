@@ -484,6 +484,7 @@ async def _handle_text(
                             line_group_id=None,
                             message_uuid=restricted_msg_uuid,
                             user_display_name=display_name,
+                            bot_group_id=bot_group_id if is_group else None,
                         )
                         if reply:
                             await adapter.send_text(chat_id, reply)

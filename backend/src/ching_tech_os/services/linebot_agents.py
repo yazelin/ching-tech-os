@@ -403,7 +403,7 @@ LINEBOT_GROUP_PROMPT = """你是擎添工業的 AI 助理，在 Line 或 Telegra
 - 列表用「・」或數字編號
 - 分隔用空行，不要用分隔線"""
 
-# 受限模式 prompt（未綁定用戶使用）
+# 受限模式 prompt（未綁定用戶使用，通用版本）
 BOT_RESTRICTED_PROMPT = """你是 AI 助理，僅能回答特定範圍的問題。請根據可用工具和知識範圍提供協助。
 
 你的能力範圍：
@@ -687,6 +687,67 @@ async def get_group_active_agent_id(bot_group_id: str) -> str | None:
             bot_group_id,
         )
         return str(row["active_agent_id"]) if row and row["active_agent_id"] else None
+
+
+async def set_group_restricted_agent(bot_group_id: str, agent_id: str | None) -> None:
+    """設定群組的受限模式 Agent 偏好"""
+    from uuid import UUID as _UUID
+
+    from ..database import get_connection
+
+    value = _UUID(agent_id) if agent_id else None
+    async with get_connection() as conn:
+        await conn.execute(
+            "UPDATE bot_groups SET restricted_agent_id = $1 WHERE id = $2",
+            value,
+            bot_group_id,
+        )
+
+
+async def get_group_restricted_agent_id(bot_group_id: str) -> str | None:
+    """查詢群組的 restricted_agent_id"""
+    from ..database import get_connection
+
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            "SELECT restricted_agent_id FROM bot_groups WHERE id = $1",
+            bot_group_id,
+        )
+        return str(row["restricted_agent_id"]) if row and row["restricted_agent_id"] else None
+
+
+async def get_restricted_agent(bot_group_id: str | None = None) -> dict | None:
+    """取得受限模式使用的 Agent
+
+    Fallback 鏈：群組 restricted_agent_id → 環境變數 BOT_DEFAULT_RESTRICTED_AGENT → bot-restricted
+
+    Args:
+        bot_group_id: Bot 群組 ID（用於查詢群組偏好）
+
+    Returns:
+        Agent 設定字典，或 None
+    """
+    from uuid import UUID
+
+    # 1. 群組偏好（/agent restricted 設定）
+    if bot_group_id:
+        restricted_agent_id = await get_group_restricted_agent_id(bot_group_id)
+        if restricted_agent_id:
+            agent = await ai_manager.get_agent(UUID(restricted_agent_id))
+            if agent and agent.get("is_active"):
+                return agent
+            logger.warning(f"受限 Agent {restricted_agent_id} 不可用，fallback 到預設")
+
+    # 2. 環境變數指定的預設受限 Agent
+    default_name = settings.bot_default_restricted_agent
+    if default_name and default_name != AGENT_BOT_RESTRICTED:
+        agent = await ai_manager.get_agent_by_name(default_name)
+        if agent and agent.get("is_active"):
+            return agent
+        logger.warning(f"環境變數指定的受限 Agent '{default_name}' 不可用，fallback 到 bot-restricted")
+
+    # 3. 預設 bot-restricted
+    return await ai_manager.get_agent_by_name(AGENT_BOT_RESTRICTED)
 
 
 async def get_linebot_agent(

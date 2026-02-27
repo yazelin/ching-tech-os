@@ -157,6 +157,8 @@ class Settings:
     bot_unbound_user_policy: str = _get_env("BOT_UNBOUND_USER_POLICY", "reject")
     # 受限模式使用的 AI 模型（控制成本，預設用較輕量的 haiku）
     bot_restricted_model: str = _get_env("BOT_RESTRICTED_MODEL", "haiku")
+    # 預設受限模式 Agent 名稱（空字串 = 使用 bot-restricted）
+    bot_default_restricted_agent: str = _get_env("BOT_DEFAULT_RESTRICTED_AGENT", "")
     # Debug 模式使用的 AI 模型
     bot_debug_model: str = _get_env("BOT_DEBUG_MODEL", "sonnet")
     # 停用的斜線指令（逗號分隔，大小寫不敏感，如 "debug,start"）

@@ -332,6 +332,7 @@ async def process_message_event(event: MessageEvent) -> None:
                             line_group_id=group_uuid,
                             message_uuid=message_uuid,
                             user_display_name=display_name,
+                            bot_group_id=str(group_uuid) if group_uuid else None,
                         )
                         if reply:
                             # reply_token 可能在長時間 AI 處理後過期，

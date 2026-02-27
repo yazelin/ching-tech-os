@@ -20,7 +20,9 @@ backend/
 │       ├── 007_seed_admin_user.py             # 預設管理員帳號
 │       ├── 008_update_bot_prompt_platform.py  # Bot Prompt 加入 Telegram 平台說明
 │       ├── 009_add_bot_usage_tracking.py      # 未綁定用戶使用量追蹤表
-│       └── 010_add_bot_restricted_settings.py # bot-restricted Agent 預設 settings
+│       ├── 010_add_bot_restricted_settings.py # bot-restricted Agent 預設 settings
+│       ├── 011_add_active_agent_id.py         # bot_users/bot_groups 新增 active_agent_id
+│       └── 012_add_restricted_agent_id.py     # bot_users/bot_groups 新增 restricted_agent_id
 ```
 
 ## 資料庫連線設定

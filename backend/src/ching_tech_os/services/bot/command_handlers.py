@@ -193,24 +193,104 @@ async def _handle_debug(ctx: CommandContext) -> str | None:
     return reply_text or "診斷完成，但未產生回報內容。"
 
 
+async def _handle_agent_restricted(ctx: CommandContext, sub_args: str) -> str | None:
+    """處理 /agent restricted 子指令
+
+    用法：
+    /agent restricted              — 顯示目前受限模式 Agent + 可切換清單
+    /agent restricted <name>       — 用名稱切換
+    /agent restricted <number>     — 用編號切換
+    /agent restricted reset        — 重置為預設 bot-restricted
+    """
+    from .. import ai_manager
+    from ..linebot_agents import (
+        get_group_restricted_agent_id,
+        set_group_restricted_agent,
+    )
+
+    # 僅群組中可用
+    if not ctx.is_group or not ctx.group_id:
+        return "此指令僅在群組中可用（受限 Agent 按群組設定）"
+
+    selectable = await ai_manager.get_selectable_agents()
+
+    # === /agent restricted reset ===
+    if sub_args.lower() == "reset":
+        await set_group_restricted_agent(ctx.group_id, None)
+        return "已重置受限模式 Agent 為預設（bot-restricted）"
+
+    # === 查詢目前受限 Agent ===
+    current_restricted_id = await get_group_restricted_agent_id(ctx.group_id)
+    current_label = "預設（bot-restricted）"
+    if current_restricted_id:
+        from uuid import UUID
+        current_agent = await ai_manager.get_agent(UUID(current_restricted_id))
+        if current_agent:
+            current_label = f"{current_agent['name']}（{current_agent.get('display_name', '')}）"
+        else:
+            current_label = "預設（偏好 Agent 已不存在）"
+
+    # === /agent restricted（無參數）— 顯示狀態和清單 ===
+    if not sub_args:
+        lines = [f"受限模式 Agent：{current_label}"]
+        if selectable:
+            lines.append("")
+            lines.append("可切換的 Agent：")
+            for i, agent in enumerate(selectable, 1):
+                display = agent.get("display_name") or agent["name"]
+                lines.append(f"{i}. {agent['name']} — {display}")
+            lines.append("")
+            lines.append("用法：/agent restricted <名稱或編號>")
+            lines.append("重置：/agent restricted reset")
+        else:
+            lines.append("目前沒有可切換的 Agent")
+        return "\n".join(lines)
+
+    # === /agent restricted <number> — 編號切換 ===
+    if sub_args.isdigit():
+        idx = int(sub_args)
+        if idx < 1 or idx > len(selectable):
+            return f"編號 {idx} 超出範圍（1-{len(selectable)}），請用 /agent restricted 查看可用清單"
+        target = selectable[idx - 1]
+    else:
+        # === /agent restricted <name> — 名稱切換 ===
+        target = next((a for a in selectable if a["name"] == sub_args), None)
+        if not target:
+            existing = await ai_manager.get_agent_by_name(sub_args)
+            if existing:
+                return f"Agent {sub_args} 不可切換，請用 /agent restricted 查看可用清單"
+            return f"找不到 Agent: {sub_args}，請用 /agent restricted 查看可用清單"
+
+    await set_group_restricted_agent(ctx.group_id, str(target["id"]))
+    display = target.get("display_name") or target["name"]
+    return f"已將受限模式 Agent 切換到 {display}"
+
+
 async def _handle_agent(ctx: CommandContext) -> str | None:
     """切換對話使用的 AI Agent
 
     用法：
-    /agent          — 顯示目前使用的 Agent 和可切換清單
-    /agent <name>   — 用名稱切換
-    /agent <number> — 用編號切換
-    /agent reset    — 恢復預設
+    /agent                        — 顯示目前使用的 Agent 和可切換清單
+    /agent <name>                 — 用名稱切換
+    /agent <number>               — 用編號切換
+    /agent reset                  — 恢復預設
+    /agent restricted [...]       — 管理受限模式 Agent（群組限定）
     """
     from .. import ai_manager
     from ..linebot_agents import (
         get_group_active_agent_id,
+        get_group_restricted_agent_id,
         get_user_active_agent_id,
         set_group_active_agent,
         set_user_active_agent,
     )
 
     args = ctx.raw_args.strip()
+
+    # === /agent restricted ... — 導向子處理 ===
+    if args.startswith("restricted"):
+        sub_args = args[len("restricted"):].strip()
+        return await _handle_agent_restricted(ctx, sub_args)
 
     # 取得可切換的 Agent 清單（按 name 排序）
     selectable = await ai_manager.get_selectable_agents()
@@ -247,6 +327,20 @@ async def _handle_agent(ctx: CommandContext) -> str | None:
     # === /agent（無參數）— 顯示狀態和清單 ===
     if not args:
         lines = [f"目前 Agent：{current_label}"]
+
+        # 群組中額外顯示受限模式 Agent 資訊
+        if ctx.is_group and ctx.group_id:
+            restricted_id = await get_group_restricted_agent_id(ctx.group_id)
+            restricted_label = "預設（bot-restricted）"
+            if restricted_id:
+                from uuid import UUID
+                restricted_agent = await ai_manager.get_agent(UUID(restricted_id))
+                if restricted_agent:
+                    restricted_label = f"{restricted_agent['name']}（{restricted_agent.get('display_name', '')}）"
+                else:
+                    restricted_label = "預設（偏好 Agent 已不存在）"
+            lines.append(f"受限模式 Agent：{restricted_label}")
+
         if selectable:
             lines.append("")
             lines.append("可切換的 Agent：")
@@ -256,6 +350,8 @@ async def _handle_agent(ctx: CommandContext) -> str | None:
             lines.append("")
             lines.append("用法：/agent <名稱或編號>")
             lines.append("恢復預設：/agent reset")
+            if ctx.is_group:
+                lines.append("受限模式：/agent restricted [名稱或編號]")
         else:
             lines.append("目前沒有可切換的 Agent")
             lines.append("請在 AI 管理介面將 Agent 的 settings.user_selectable 設為 true")
