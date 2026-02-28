@@ -233,6 +233,7 @@ async def call_claude(
     on_tool_end: ToolNotifyCallback | None = None,
     required_mcp_servers: set[str] | None = None,
     ctos_user_id: int | None = None,
+    extra_mcp_env: dict[str, str] | None = None,
 ) -> ClaudeResponse:
     """非同步呼叫 Claude（透過 ClaudeClient in-process）
 
@@ -248,6 +249,7 @@ async def call_claude(
         on_tool_end: 工具結束回調
         required_mcp_servers: 需要載入的 MCP server 名稱集合（可選，None=全部）
         ctos_user_id: CTOS 使用者 ID（自動注入至 ching-tech-os MCP 工具參數）
+        extra_mcp_env: 額外注入到 ching-tech-os MCP server 的環境變數（可選）
 
     Returns:
         ClaudeResponse: 包含成功狀態、回應訊息、工具調用記錄和 token 統計
@@ -267,14 +269,18 @@ async def call_claude(
     # 如果 tools 為空，不載入 MCP（避免不必要的啟動開銷）
     mcp_servers = _build_mcp_servers(session_dir, required_mcp_servers) if tools else []
 
-    # 注入 CTOS_USER_ID 環境變數到 ching-tech-os MCP server
+    # 注入環境變數到 ching-tech-os MCP server
     # （bypassPermissions 模式下 on_tool_input_transform 不會被呼叫，
-    #  因此改用環境變數在 MCP server 啟動時傳遞使用者身份）
-    if ctos_user_id is not None and mcp_servers:
+    #  因此改用環境變數在 MCP server 啟動時傳遞使用者身份和 Agent 限制）
+    if mcp_servers and (ctos_user_id is not None or extra_mcp_env):
         from acp.schema import EnvVariable
         for server in mcp_servers:
             if server.name == "ching-tech-os":
-                server.env.append(EnvVariable(name="CTOS_USER_ID", value=str(ctos_user_id)))
+                if ctos_user_id is not None:
+                    server.env.append(EnvVariable(name="CTOS_USER_ID", value=str(ctos_user_id)))
+                if extra_mcp_env:
+                    for env_key, env_val in extra_mcp_env.items():
+                        server.env.append(EnvVariable(name=env_key, value=env_val))
                 break
 
     # 收集回應資料

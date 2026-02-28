@@ -26,17 +26,30 @@ _MAX_IMAGE_SIZE = 10 * 1024 * 1024
 
 
 async def _get_user_shared_mounts(ctos_user_id: int | None) -> dict[str, str]:
-    """取得使用者可存取的 shared 掛載點。"""
+    """取得使用者可存取的 shared 掛載點。
+
+    未綁定用戶（ctos_user_id=None）時，會額外檢查 Agent 的
+    allowed_shared_sources 限制，對結果做交集過濾。
+    """
     from ..path_manager import path_manager
-    from .server import resolve_ctos_user_id
+    from .server import resolve_ctos_user_id, resolve_agent_allowed_shared_sources
 
     # bypassPermissions 模式下 AI 可能不傳 ctos_user_id，fallback 環境變數
     ctos_user_id = resolve_ctos_user_id(ctos_user_id)
 
-    return await get_allowed_shared_mounts_for_user(
+    mounts = await get_allowed_shared_mounts_for_user(
         path_manager.get_shared_mounts(),
         ctos_user_id,
     )
+
+    # 未綁定用戶：若 Agent 有限制 shared 來源，做交集過濾
+    if ctos_user_id is None:
+        allowed_sources = resolve_agent_allowed_shared_sources()
+        if allowed_sources is not None:
+            allowed_set = set(allowed_sources)
+            mounts = {k: v for k, v in mounts.items() if k in allowed_set}
+
+    return mounts
 
 
 def _to_source_permissions(shared_mounts: dict[str, str]) -> dict[str, bool]:
@@ -153,6 +166,19 @@ async def search_nas_files(
     }
     if not available_sources:
         return "錯誤：沒有可用的搜尋來源掛載點"
+
+    # Agent library 路徑限制：將 library 來源替換成限定的子路徑
+    from .server import resolve_ctos_user_id, resolve_agent_allowed_library_paths
+    _resolved_uid = resolve_ctos_user_id(ctos_user_id)
+    if _resolved_uid is None and "library" in available_sources:
+        agent_lib_paths = resolve_agent_allowed_library_paths()
+        if agent_lib_paths:
+            library_root = available_sources.pop("library")
+            for i, sub_path in enumerate(agent_lib_paths):
+                sub_dir = library_root / sub_path
+                if sub_dir.exists():
+                    # 使用 library:{sub_path} 作為來源名稱，保留 library 前綴
+                    available_sources[f"library/{sub_path}"] = sub_dir
 
     # 解析關鍵字（大小寫不敏感）
     keyword_list = [k.strip().lower() for k in keywords.split(",") if k.strip()]
@@ -454,6 +480,17 @@ async def read_document(
     # 安全檢查：只允許 CTOS 和 SHARED 區域（不允許 TEMP/LOCAL）
     if parsed.zone not in (StorageZone.CTOS, StorageZone.SHARED):
         return f"錯誤：不允許存取 {parsed.zone.value}:// 區域的檔案"
+
+    # Agent library 路徑限制：未綁定用戶讀取 library 檔案時，檢查是否在允許範圍內
+    from .server import resolve_ctos_user_id, resolve_agent_allowed_library_paths
+    _resolved_uid = resolve_ctos_user_id(ctos_user_id)
+    if _resolved_uid is None and parsed.zone == StorageZone.SHARED:
+        agent_lib_paths = resolve_agent_allowed_library_paths()
+        if agent_lib_paths and parsed.path.startswith("library/"):
+            # 取得 library 內的相對路徑（去掉 "library/" 前綴）
+            lib_rel = parsed.path[len("library/"):]
+            if not any(lib_rel.startswith(allowed) for allowed in agent_lib_paths):
+                return "錯誤：此檔案不在允許的搜尋範圍內"
 
     # 安全檢查：確保路徑在 /mnt/nas/ 下
     nas_path = Path(settings.nas_mount_path)
@@ -906,7 +943,16 @@ async def list_library_folders(
     # 權限檢查（未綁定用戶走公開資料夾路徑，跳過完整權限檢查）
     if is_unbound:
         library_root = settings.library_mount_path
-        public_folders = settings.library_public_folders
+        # 優先使用 Agent 的 library 路徑限制（取第一層目錄名作為 public_folders）
+        from .server import resolve_agent_allowed_library_paths as _resolve_lib_paths
+        agent_lib_paths = _resolve_lib_paths()
+        if agent_lib_paths:
+            # 從 Agent 允許的路徑中提取第一層目錄名（如 "教育訓練/杰膚美衛教" → "教育訓練"）
+            public_folders = list(dict.fromkeys(
+                p.split("/")[0] for p in agent_lib_paths if p
+            ))
+        else:
+            public_folders = settings.library_public_folders
     else:
         allowed, error_msg = await check_mcp_tool_permission("list_library_folders", ctos_user_id)
         if not allowed:

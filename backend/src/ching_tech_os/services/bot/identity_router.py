@@ -268,7 +268,20 @@ async def handle_restricted_mode(
         # 受限模式使用空權限取得 MCP servers
         required_mcp_servers = await get_mcp_servers_for_user(app_permissions)
 
-    # 8. 呼叫 Claude CLI
+    # 8. 建構 Agent NAS 來源限制的 MCP 環境變數
+    extra_mcp_env: dict[str, str] | None = None
+    agent_settings = (agent or {}).get("settings") or {}
+    allowed_shared_sources = agent_settings.get("allowed_shared_sources")
+    allowed_library_paths = agent_settings.get("allowed_library_paths")
+    if allowed_shared_sources or allowed_library_paths:
+        import json as _json
+        extra_mcp_env = {}
+        if allowed_shared_sources:
+            extra_mcp_env["AGENT_ALLOWED_SHARED_SOURCES"] = _json.dumps(allowed_shared_sources)
+        if allowed_library_paths:
+            extra_mcp_env["AGENT_ALLOWED_LIBRARY_PATHS"] = _json.dumps(allowed_library_paths)
+
+    # 9. 呼叫 Claude CLI
     start_time = time.time()
 
     try:
@@ -281,6 +294,7 @@ async def handle_restricted_mode(
             tools=all_tools,
             required_mcp_servers=required_mcp_servers,
             ctos_user_id=None,  # 未綁定用戶
+            extra_mcp_env=extra_mcp_env,
         )
     except Exception:
         logger.exception("受限模式 AI 呼叫失敗")
@@ -291,7 +305,7 @@ async def handle_restricted_mode(
 
     duration_ms = int((time.time() - start_time) * 1000)
 
-    # 9. 記錄 AI Log
+    # 10. 記錄 AI Log
     if message_uuid:
         await log_linebot_ai_call(
             message_uuid=message_uuid,
@@ -306,7 +320,7 @@ async def handle_restricted_mode(
             duration_ms=duration_ms,
         )
 
-    # 10. 解析回應（受限模式僅支援文字，不處理 FILE_MESSAGE）
+    # 11. 解析回應（受限模式僅支援文字，不處理 FILE_MESSAGE）
     reply_text, _files = parse_ai_response(response.message)
 
     if not reply_text:

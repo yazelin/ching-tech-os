@@ -72,6 +72,50 @@ def resolve_ctos_user_id(ctos_user_id: int | None) -> int | None:
     return None
 
 
+def resolve_agent_allowed_shared_sources() -> list[str] | None:
+    """從環境變數讀取 Agent 允許的 shared 來源列表。
+
+    由 claude_agent.py 注入 AGENT_ALLOWED_SHARED_SOURCES 環境變數，
+    用於限制受限 Agent 可搜尋的 NAS 來源範圍。
+
+    Returns:
+        允許的來源名稱列表，或 None（不限制）
+    """
+    import json as _json
+    env_val = os.environ.get("AGENT_ALLOWED_SHARED_SOURCES")
+    if not env_val:
+        return None
+    try:
+        result = _json.loads(env_val)
+        if isinstance(result, list):
+            return [str(s) for s in result]
+    except (ValueError, TypeError):
+        pass
+    return None
+
+
+def resolve_agent_allowed_library_paths() -> list[str] | None:
+    """從環境變數讀取 Agent 允許的 library 子路徑列表。
+
+    由 claude_agent.py 注入 AGENT_ALLOWED_LIBRARY_PATHS 環境變數，
+    用於限制受限 Agent 在 library 中可搜尋的路徑範圍。
+
+    Returns:
+        允許的 library 子路徑列表（相對於 library 根目錄），或 None（不限制）
+    """
+    import json as _json
+    env_val = os.environ.get("AGENT_ALLOWED_LIBRARY_PATHS")
+    if not env_val:
+        return None
+    try:
+        result = _json.loads(env_val)
+        if isinstance(result, list):
+            return [str(s) for s in result]
+    except (ValueError, TypeError):
+        pass
+    return None
+
+
 # ============================================================
 # 權限檢查輔助函數
 # ============================================================
