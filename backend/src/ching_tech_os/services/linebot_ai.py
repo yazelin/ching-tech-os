@@ -846,6 +846,7 @@ async def process_message_with_ai(
             response=response,
             duration_ms=duration_ms,
             tool_routing=tool_routing,
+            actual_agent_name=agent_name,
         )
 
         # 檢查 nanobanana 是否有錯誤（overloaded/timeout）
@@ -1077,6 +1078,7 @@ async def log_linebot_ai_call(
     duration_ms: int,
     context_type_override: str | None = None,
     tool_routing: dict | None = None,
+    actual_agent_name: str | None = None,
 ) -> None:
     """
     記錄 Line Bot AI 調用到 AI Log
@@ -1093,10 +1095,11 @@ async def log_linebot_ai_call(
         response: Claude 回應物件
         duration_ms: 耗時（毫秒）
         tool_routing: 工具路由決策資訊（script-first / fallback）
+        actual_agent_name: 實際使用的 Agent 名稱（如 jfmskin_edu），用於記錄正確的 agent_id
     """
     try:
-        # 根據對話類型取得對應的 Agent
-        agent_name = AGENT_LINEBOT_GROUP if is_group else AGENT_LINEBOT_PERSONAL
+        # 優先用實際使用的 Agent，否則依對話類型取得預設 Agent
+        agent_name = actual_agent_name or (AGENT_LINEBOT_GROUP if is_group else AGENT_LINEBOT_PERSONAL)
         agent = await ai_manager.get_agent_by_name(agent_name)
         agent_id = agent["id"] if agent else None
         prompt_id = agent.get("system_prompt", {}).get("id") if agent else None
