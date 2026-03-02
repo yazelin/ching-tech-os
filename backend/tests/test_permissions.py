@@ -258,9 +258,14 @@ class TestHelperFunctions:
     """輔助函數測試"""
 
     def test_get_default_permissions(self):
-        """get_default_permissions() 應返回預設權限副本"""
+        """get_default_permissions() 應返回預設權限副本（含模組擴充）"""
         perms = get_default_permissions()
-        assert perms == DEFAULT_PERMISSIONS
+        # 應包含所有靜態預設權限（模組可能新增額外項目）
+        for key in DEFAULT_PERMISSIONS:
+            assert key in perms
+            for app_id, default_val in DEFAULT_PERMISSIONS[key].items():
+                assert app_id in perms[key], f"{app_id} 不在 perms[{key}] 中"
+                assert perms[key][app_id] == default_val
         # 確認是副本
         perms["apps"]["terminal"] = True
         assert DEFAULT_PERMISSIONS["apps"]["terminal"] is False

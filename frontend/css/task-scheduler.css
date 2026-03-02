@@ -1,0 +1,427 @@
+/* ==========================================================================
+   排程管理應用樣式
+   ========================================================================== */
+
+.task-scheduler {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 16px;
+  gap: 12px;
+  overflow: hidden;
+}
+
+/* ── 工具列 ─────────────────────────────────────────────── */
+
+.ts-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.ts-toolbar .ts-btn-primary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: var(--color-primary);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.15s;
+}
+
+.ts-toolbar .ts-btn-primary:hover {
+  filter: brightness(1.15);
+}
+
+.ts-toolbar .ts-filter-select {
+  padding: 6px 10px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.ts-toolbar .ts-filter-select option {
+  background-color: var(--color-background);
+  color: var(--text-primary);
+}
+
+.ts-toolbar .ts-refresh-btn {
+  margin-left: auto;
+  padding: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: color 0.15s;
+}
+
+.ts-toolbar .ts-refresh-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--border-medium);
+}
+
+/* ── 排程列表 ────────────────────────────────────────────── */
+
+.ts-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ts-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-muted);
+  font-size: 14px;
+  gap: 8px;
+}
+
+.ts-empty .icon svg {
+  width: 48px;
+  height: 48px;
+  opacity: 0.3;
+}
+
+/* ── 排程卡片 ────────────────────────────────────────────── */
+
+.ts-card {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  gap: 12px;
+  transition: border-color 0.15s;
+}
+
+.ts-card:hover {
+  border-color: var(--border-medium);
+}
+
+.ts-card.ts-card--disabled {
+  opacity: 0.55;
+}
+
+.ts-card.ts-card--static {
+  border-left: 3px solid var(--text-muted);
+}
+
+.ts-card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.ts-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.ts-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ts-card-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.ts-card-badge--dynamic {
+  background: rgba(var(--color-primary-rgb), 0.15);
+  color: var(--color-primary);
+}
+
+.ts-card-badge--system {
+  background: rgba(var(--text-muted-rgb), 0.15);
+  color: var(--text-muted);
+}
+
+.ts-card-badge--module {
+  background: rgba(var(--color-warning-rgb), 0.15);
+  color: var(--color-warning);
+}
+
+.ts-card-detail {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  flex-wrap: wrap;
+}
+
+.ts-card-detail span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ── 狀態指示 ────────────────────────────────────────────── */
+
+.ts-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ts-status-dot--success {
+  background: var(--color-success);
+}
+
+.ts-status-dot--error {
+  background: var(--color-error);
+}
+
+.ts-status-dot--idle {
+  background: var(--text-muted);
+}
+
+/* ── 操作按鈕 ────────────────────────────────────────────── */
+
+.ts-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.ts-action-btn {
+  padding: 5px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  transition: color 0.15s, background 0.15s;
+}
+
+.ts-action-btn:hover {
+  color: var(--text-primary);
+  background: var(--hover-bg);
+}
+
+.ts-action-btn--danger:hover {
+  color: var(--color-error);
+}
+
+/* ── Toggle 開關 ─────────────────────────────────────────── */
+
+.ts-toggle {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  background: var(--bg-surface-darker);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.ts-toggle.ts-toggle--on {
+  background: var(--color-primary);
+}
+
+.ts-toggle::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+
+.ts-toggle.ts-toggle--on::after {
+  transform: translateX(16px);
+}
+
+/* ── Modal 表單 ──────────────────────────────────────────── */
+
+.ts-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--bg-overlay-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.ts-modal {
+  background: var(--window-bg);
+  border: 1px solid var(--border-medium);
+  border-radius: 12px;
+  width: 520px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ts-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.ts-modal-header h3 {
+  margin: 0;
+  font-size: 15px;
+  color: var(--text-primary);
+}
+
+.ts-modal-close {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+}
+
+.ts-modal-close:hover {
+  color: var(--text-primary);
+}
+
+.ts-modal-body {
+  padding: 18px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ts-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 18px;
+  border-top: 1px solid var(--border-light);
+}
+
+/* ── 表單元件 ────────────────────────────────────────────── */
+
+.ts-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ts-field label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.ts-field input,
+.ts-field select,
+.ts-field textarea {
+  padding: 8px 10px;
+  background: var(--bg-surface-dark);
+  color: var(--text-primary);
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.ts-field input:focus,
+.ts-field select:focus,
+.ts-field textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.ts-field select option {
+  background-color: var(--color-background);
+  color: var(--text-primary);
+}
+
+.ts-field textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+
+.ts-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.ts-field-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ── 按鈕 ────────────────────────────────────────────────── */
+
+.ts-btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  border: none;
+  transition: filter 0.15s;
+}
+
+.ts-btn:hover {
+  filter: brightness(1.1);
+}
+
+.ts-btn--primary {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.ts-btn--secondary {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-light);
+}
+
+/* ── 載入中 ──────────────────────────────────────────────── */
+
+.ts-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-muted);
+  font-size: 13px;
+}

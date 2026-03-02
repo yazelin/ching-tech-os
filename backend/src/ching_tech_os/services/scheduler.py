@@ -22,6 +22,9 @@ logger = logging.getLogger(__name__)
 # 全域排程器實例
 scheduler = AsyncIOScheduler()
 
+# 模組宣告的動態排程（啟動時收集，由 load_dynamic_tasks 處理）
+_pending_dynamic_module_jobs: list[tuple[str, dict]] = []
+
 
 async def cleanup_old_messages():
     """
@@ -364,7 +367,16 @@ async def check_telegram_webhook_health():
 
 
 def _register_module_job(module_id: str, job: dict) -> None:
-    """註冊模組宣告的排程任務。"""
+    """註冊模組宣告的排程任務。
+
+    若 job 包含 executor_type 欄位，視為動態排程（寫入 scheduled_tasks 表）。
+    否則為靜態排程（直接註冊 Python 函式到 APScheduler）。
+    """
+    # 動態排程：包含 executor_type 欄位
+    if "executor_type" in job:
+        _pending_dynamic_module_jobs.append((module_id, job))
+        return
+
     fn_name = job.get("fn")
     if not isinstance(fn_name, str) or not fn_name:
         logger.warning("模組 %s 排程任務缺少 fn: %s", module_id, job)
@@ -461,6 +473,47 @@ def start_scheduler():
     #     name='檢查 Telegram Webhook',
     #     replace_existing=True
     # )
+
+    # 從 DB 載入動態排程 + 處理模組宣告的動態排程（失敗不阻止啟動）
+    import asyncio
+
+    async def _load():
+        try:
+            from .task_scheduler import create_scheduled_task, load_dynamic_tasks, list_scheduled_tasks
+
+            # 處理模組宣告的動態排程（首次寫入 DB，已存在則跳過）
+            if _pending_dynamic_module_jobs:
+                existing = await list_scheduled_tasks()
+                existing_names = {t["name"] for t in existing}
+                for module_id, job in _pending_dynamic_module_jobs:
+                    job_name = job.get("name", f"{module_id}:{job.get('executor_type', 'unknown')}")
+                    if job_name in existing_names:
+                        continue
+                    try:
+                        await create_scheduled_task({
+                            "name": job_name,
+                            "description": job.get("description", f"模組 {module_id} 宣告的排程"),
+                            "trigger_type": job.get("trigger", "interval"),
+                            "trigger_config": {
+                                k: v for k, v in job.items()
+                                if k in ("minute", "hour", "day", "month", "day_of_week",
+                                         "weeks", "days", "hours", "minutes", "seconds")
+                            },
+                            "executor_type": job["executor_type"],
+                            "executor_config": job.get("executor_config", {}),
+                            "is_enabled": job.get("is_enabled", True),
+                        })
+                        logger.info("模組 %s 動態排程已寫入 DB: %s", module_id, job_name)
+                    except Exception as e:
+                        logger.error("寫入模組動態排程失敗 %s: %s", job_name, e)
+                _pending_dynamic_module_jobs.clear()
+
+            await load_dynamic_tasks()
+        except Exception as e:
+            logger.error("載入動態排程失敗: %s", e)
+
+    loop = asyncio.get_event_loop()
+    loop.create_task(_load())
 
     scheduler.start()
     logger.info("排程服務已啟動")

@@ -174,6 +174,20 @@ BUILTIN_MODULES: dict[str, ModuleInfo] = {
             {"id": "code-editor", "name": "VSCode", "icon": "mdi-code-braces"},
         ],
     },
+    "task-scheduler": {
+        "id": "task-scheduler",
+        "source": "builtin",
+        "routers": [
+            {"module": ".api.scheduler", "attr": "router"},
+        ],
+        "mcp_module": ".services.mcp.scheduler_tools",
+        "app_ids": ["task-scheduler"],
+        "app_manifest": [
+            {"id": "task-scheduler", "name": "排程管理", "icon": "calendar-clock"},
+        ],
+        "permission_defaults": {"task-scheduler": False},
+        "permission_display_names": {"task-scheduler": "排程管理"},
+    },
     "erpnext": {
         "id": "erpnext",
         "source": "builtin",

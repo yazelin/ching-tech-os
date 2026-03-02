@@ -42,6 +42,7 @@ const DesktopModule = (function() {
     'share-manager':  { src: './js/share-manager.js',  globalName: 'ShareManagerApp' },
     'settings':       { src: './js/settings.js',       globalName: 'SettingsApp' },
     'linebot':        { src: './js/linebot.js',        globalName: 'LineBotApp' },
+    'task-scheduler': { src: './js/task-scheduler.js', globalName: 'TaskSchedulerApp' },
   };
   let appLoaders = { ...fallbackAppLoaders };
 
