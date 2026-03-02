@@ -18,7 +18,7 @@
     },
     {
       "name": "create_share_link",
-      "skill": "share-links",
+      "skill": "base",
       "script": "create_share_link",
       "script_first": true,
       "fallback_mcp_tool": "create_share_link"
@@ -46,7 +46,7 @@
     },
     {
       "name": "convert_pdf_to_images",
-      "skill": "pdf-converter",
+      "skill": "file-manager",
       "script": "convert_pdf_to_images",
       "script_first": true,
       "fallback_mcp_tool": "convert_pdf_to_images"
