@@ -569,8 +569,8 @@ const TaskSchedulerApp = (function() {
   }
 
   function showToast(msg, icon) {
-    if (typeof NotificationModule !== 'undefined') {
-      NotificationModule.showToast(msg, icon);
+    if (typeof NotificationModule !== 'undefined' && NotificationModule.show) {
+      NotificationModule.show({ message: msg, icon: icon || 'information' });
     }
   }
 

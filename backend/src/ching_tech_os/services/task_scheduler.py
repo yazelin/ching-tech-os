@@ -365,10 +365,10 @@ async def load_dynamic_tasks() -> int:
 # ============================================================
 
 
-def _to_json(data) -> str:
-    """將 dict 轉為 JSON 字串（供 asyncpg JSONB 參數使用）"""
+def _to_json(data) -> dict:
+    """確保 JSONB 參數為 dict（asyncpg 自訂 codec 會處理序列化）"""
     import json
 
     if isinstance(data, str):
-        return data
-    return json.dumps(data, ensure_ascii=False)
+        return json.loads(data)
+    return data
