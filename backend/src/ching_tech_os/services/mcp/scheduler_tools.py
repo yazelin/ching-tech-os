@@ -175,11 +175,13 @@ async def manage_scheduled_task(
 @mcp.tool()
 async def list_scheduled_tasks(
     is_enabled: bool | None = None,
+    include_static: bool = True,
     ctos_user_id: int | None = None,
 ) -> str:
-    """查詢動態排程列表。
+    """查詢排程列表（含動態排程與靜態排程）。
 
-    is_enabled: 可選，篩選啟用(true)或停用(false)的排程，不傳則回傳全部。
+    is_enabled: 可選，篩選啟用(true)或停用(false)的動態排程，不傳則回傳全部。
+    include_static: 是否包含系統/模組靜態排程（預設 true）。
     """
     await ensure_db_connection()
 
@@ -190,15 +192,85 @@ async def list_scheduled_tasks(
     from ..task_scheduler import list_scheduled_tasks as _list_tasks
 
     try:
-        tasks = await _list_tasks(is_enabled=is_enabled)
+        # 動態排程（來自 DB）
+        db_tasks = await _list_tasks(is_enabled=is_enabled)
+        result_tasks = [
+            {**_format_task(t), "source": "dynamic"} for t in db_tasks
+        ]
+
+        # 靜態排程（來自 APScheduler，唯讀）
+        if include_static:
+            result_tasks.extend(_collect_static_schedules())
+
         return json.dumps({
             "success": True,
-            "count": len(tasks),
-            "tasks": [_format_task(t) for t in tasks],
+            "count": len(result_tasks),
+            "tasks": result_tasks,
         }, ensure_ascii=False)
     except Exception as e:
         logger.error("list_scheduled_tasks 失敗: %s", e)
         return json.dumps({"success": False, "error": str(e)}, ensure_ascii=False)
+
+
+def _collect_static_schedules() -> list[dict]:
+    """收集系統/模組靜態排程的唯讀資訊"""
+    from ..scheduler import scheduler
+    from apscheduler.triggers.cron import CronTrigger
+    from apscheduler.triggers.interval import IntervalTrigger
+
+    static_tasks: list[dict] = []
+    try:
+        for job in scheduler.get_jobs():
+            if job.id.startswith("dynamic:"):
+                continue
+
+            source = "system" if ":" not in job.id else "module"
+            trigger_type, trigger_config = _parse_trigger(job.trigger)
+
+            static_tasks.append({
+                "id": job.id,
+                "name": job.id,
+                "description": job.name or job.id,
+                "trigger_type": trigger_type,
+                "trigger_config": trigger_config,
+                "is_enabled": True,
+                "source": source,
+                "next_run_at": job.next_run_time.isoformat() if job.next_run_time else None,
+            })
+    except Exception as e:
+        logger.warning("收集靜態排程失敗: %s", e)
+
+    return static_tasks
+
+
+def _parse_trigger(trigger) -> tuple[str, dict]:
+    """從 APScheduler trigger 解析類型和設定"""
+    from apscheduler.triggers.cron import CronTrigger
+    from apscheduler.triggers.interval import IntervalTrigger
+
+    if isinstance(trigger, CronTrigger):
+        fields = {}
+        for field in trigger.fields:
+            expr = str(field)
+            if expr != "*":
+                fields[field.name] = expr
+        return "cron", fields
+
+    if isinstance(trigger, IntervalTrigger):
+        total_seconds = int(trigger.interval.total_seconds())
+        config = {}
+        if total_seconds >= 3600:
+            config["hours"] = total_seconds // 3600
+            remaining = total_seconds % 3600
+            if remaining >= 60:
+                config["minutes"] = remaining // 60
+        elif total_seconds >= 60:
+            config["minutes"] = total_seconds // 60
+        else:
+            config["seconds"] = total_seconds
+        return "interval", config
+
+    return "cron", {}
 
 
 def _format_task(task: dict) -> dict:
