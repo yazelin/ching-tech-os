@@ -243,11 +243,14 @@ async def execute_dynamic_task(task_id: UUID) -> None:
 
     logger.info("開始執行動態排程: %s (type=%s)", task["name"], executor_type)
 
+    # 排程建立者作為 ctos_user_id 的 fallback（繼承管理員權限）
+    fallback_user_id = task.get("created_by")
+
     try:
         if executor_type == "agent":
-            await _execute_agent_task(task["name"], executor_config)
+            await _execute_agent_task(task["name"], executor_config, fallback_user_id)
         elif executor_type == "skill_script":
-            await _execute_skill_script_task(task["name"], executor_config)
+            await _execute_skill_script_task(task["name"], executor_config, fallback_user_id)
         else:
             raise ValueError(f"未知的 executor_type: {executor_type}")
 
@@ -260,7 +263,7 @@ async def execute_dynamic_task(task_id: UUID) -> None:
         logger.error("動態排程執行失敗: %s - %s", task["name"], error_msg)
 
 
-async def _execute_agent_task(task_name: str, config: dict) -> None:
+async def _execute_agent_task(task_name: str, config: dict, fallback_user_id: int | None = None) -> None:
     """執行 Agent 模式排程"""
     import time
 
@@ -270,7 +273,7 @@ async def _execute_agent_task(task_name: str, config: dict) -> None:
 
     agent_name = config["agent_name"]
     prompt = config["prompt"]
-    ctos_user_id = config.get("ctos_user_id")
+    ctos_user_id = config.get("ctos_user_id") or fallback_user_id
 
     agent = await get_agent_by_name(agent_name)
     if not agent:
@@ -324,14 +327,14 @@ async def _execute_agent_task(task_name: str, config: dict) -> None:
         raise RuntimeError(f"Agent 執行失敗: {response.error or response.message}")
 
 
-async def _execute_skill_script_task(task_name: str, config: dict) -> None:
+async def _execute_skill_script_task(task_name: str, config: dict, fallback_user_id: int | None = None) -> None:
     """執行 Skill Script 模式排程"""
     from .mcp.skill_script_tools import run_skill_script
 
     skill = config["skill"]
     script = config["script"]
     input_data = config.get("input", "")
-    ctos_user_id = config.get("ctos_user_id")
+    ctos_user_id = config.get("ctos_user_id") or fallback_user_id
 
     result = await run_skill_script(
         skill=skill,

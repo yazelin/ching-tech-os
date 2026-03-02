@@ -107,7 +107,15 @@ async def create_next_month_partitions():
                 FOR VALUES FROM ('{start_date}') TO ('{end_date}')
             """)
 
-            logger.info(f"已建立分區: {messages_partition}, {login_partition}")
+            # 建立 ai_logs 分區
+            ai_logs_partition = f"ai_logs_{partition_suffix}"
+            await conn.execute(f"""
+                CREATE TABLE IF NOT EXISTS {ai_logs_partition}
+                PARTITION OF ai_logs
+                FOR VALUES FROM ('{start_date}') TO ('{end_date}')
+            """)
+
+            logger.info(f"已建立分區: {messages_partition}, {login_partition}, {ai_logs_partition}")
 
     except Exception as e:
         # 分區已存在時會拋出錯誤，這是正常的
