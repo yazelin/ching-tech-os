@@ -38,7 +38,8 @@ const TaskSchedulerApp = (function() {
       const res = await fetch('/api/ai/agents', { headers: getAuthHeaders() });
       if (!res.ok) return;
       const data = await res.json();
-      agents = data.items || data.agents || (Array.isArray(data) ? data : []);
+      const list = data.items || data.agents || (Array.isArray(data) ? data : []);
+      agents = Array.isArray(list) ? list : [];
     } catch (_) { /* ignore */ }
   }
 
@@ -404,7 +405,7 @@ const TaskSchedulerApp = (function() {
       const type = executorTypeEl.value;
       const container = overlay.querySelector('#ts-executor-fields');
       if (type === 'agent') {
-        const agentOptions = agents.map(a => {
+        const agentOptions = (Array.isArray(agents) ? agents : []).map(a => {
           const aName = a.name || a.display_name;
           const selected = executorConfig.agent_name === aName ? 'selected' : '';
           return `<option value="${escapeHtml(aName)}" ${selected}>${escapeHtml(a.display_name || aName)}</option>`;
@@ -422,7 +423,7 @@ const TaskSchedulerApp = (function() {
             <textarea id="ts-agent-prompt" rows="3" placeholder="要求 Agent 執行的指令">${escapeHtml(executorConfig.prompt || '')}</textarea>
           </div>`;
       } else {
-        const skillOptions = skills.map(s => {
+        const skillOptions = (Array.isArray(skills) ? skills : []).map(s => {
           const sName = s.name;
           const selected = executorConfig.skill === sName ? 'selected' : '';
           return `<option value="${escapeHtml(sName)}" ${selected}>${escapeHtml(sName)}</option>`;

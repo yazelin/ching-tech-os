@@ -12,8 +12,11 @@ from starlette.responses import Response
 # 認證端點：必須阻止快取（安全需求）
 _AUTH_PREFIXES = ("/api/auth/", "/api/login/")
 
-# 靜態資源：長期快取
-_STATIC_PREFIXES = ("/css/", "/js/", "/assets/", "/data/")
+# 靜態資源（含版本雜湊的長期快取）
+_IMMUTABLE_PREFIXES = ("/fonts/", "/assets/", "/data/")
+
+# 靜態資源（無版本號，每次驗證 ETag）
+_REVALIDATE_PREFIXES = ("/css/", "/js/")
 
 # 公開分享頁面：短期快取
 _PUBLIC_PREFIXES = ("/share/", "/public", "/s/", "/api/config/public")
@@ -52,9 +55,13 @@ class CacheControlMiddleware(BaseHTTPMiddleware):
         if path in _SPA_PATHS:
             return "no-cache"
 
-        # 靜態資源：長期不可變快取
-        if any(path.startswith(p) for p in _STATIC_PREFIXES):
+        # 靜態資源（不常變動）：長期不可變快取
+        if any(path.startswith(p) for p in _IMMUTABLE_PREFIXES):
             return "public, max-age=31536000, immutable"
+
+        # JS/CSS：每次驗證 ETag，命中 304 不重新下載
+        if any(path.startswith(p) for p in _REVALIDATE_PREFIXES):
+            return "no-cache"
 
         # 公開分享頁面：短期快取（5 分鐘）
         if any(path.startswith(p) for p in _PUBLIC_PREFIXES):
