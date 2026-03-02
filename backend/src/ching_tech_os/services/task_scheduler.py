@@ -262,8 +262,11 @@ async def execute_dynamic_task(task_id: UUID) -> None:
 
 async def _execute_agent_task(task_name: str, config: dict) -> None:
     """執行 Agent 模式排程"""
-    from .ai_manager import get_agent_by_name
+    import time
+
+    from .ai_manager import create_log, get_agent_by_name
     from .claude_agent import call_claude
+    from ..models.ai import AiLogCreate
 
     agent_name = config["agent_name"]
     prompt = config["prompt"]
@@ -282,6 +285,7 @@ async def _execute_agent_task(task_name: str, config: dict) -> None:
     model = agent.get("model", "sonnet")
     tools = agent.get("tools")
 
+    start_time = time.time()
     response = await asyncio.wait_for(
         call_claude(
             prompt=prompt,
@@ -292,6 +296,29 @@ async def _execute_agent_task(task_name: str, config: dict) -> None:
         ),
         timeout=180,
     )
+    duration_ms = int((time.time() - start_time) * 1000)
+
+    # 記錄 AI Log
+    try:
+        log_data = AiLogCreate(
+            agent_id=agent.get("id"),
+            context_type="scheduler",
+            context_id=task_name,
+            input_prompt=prompt,
+            system_prompt=system_prompt,
+            allowed_tools=tools,
+            raw_response=response.message,
+            parsed_response={"source": "scheduler", "task_name": task_name},
+            model=model,
+            success=response.success,
+            error_message=response.error,
+            duration_ms=duration_ms,
+            input_tokens=getattr(response, "input_tokens", None),
+            output_tokens=getattr(response, "output_tokens", None),
+        )
+        await create_log(log_data)
+    except Exception as e:
+        logger.warning("排程 AI Log 記錄失敗: %s", e)
 
     if not response.success:
         raise RuntimeError(f"Agent 執行失敗: {response.error or response.message}")
