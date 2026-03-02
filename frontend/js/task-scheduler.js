@@ -38,7 +38,7 @@ const TaskSchedulerApp = (function() {
       const res = await fetch('/api/ai/agents', { headers: getAuthHeaders() });
       if (!res.ok) return;
       const data = await res.json();
-      agents = data.agents || data || [];
+      agents = data.items || data.agents || (Array.isArray(data) ? data : []);
     } catch (_) { /* ignore */ }
   }
 
