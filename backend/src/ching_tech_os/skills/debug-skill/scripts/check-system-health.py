@@ -46,10 +46,10 @@ def main() -> int:
     if status == "異常":
         overall_status = "嚴重"
 
-    # 2. CTOS 最近錯誤日誌
+    # 2. CTOS 最近錯誤日誌（僅查 24 小時內）
     output, ok = _run_cmd([
         "journalctl", "-u", "ching-tech-os", "-n", "20",
-        "--no-pager", "-p", "err",
+        "--no-pager", "-p", "err", "--since", "24 hours ago",
     ])
     error_count = len(output.strip().splitlines()) if output.strip() else 0
     if error_count > 10:
@@ -63,9 +63,9 @@ def main() -> int:
     else:
         status = "正常"
     checks.append({
-        "name": "CTOS 錯誤日誌",
+        "name": "CTOS 錯誤日誌（24h 內）",
         "status": status,
-        "detail": f"最近 20 行錯誤日誌：{error_count} 行\n{output[:500]}",
+        "detail": f"最近 24 小時錯誤日誌：{error_count} 行\n{output[:500]}" if error_count > 0 else "最近 24 小時無錯誤日誌",
     })
 
     # 3. Docker 容器狀態
