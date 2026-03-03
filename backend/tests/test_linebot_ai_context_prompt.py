@@ -120,7 +120,7 @@ async def test_get_conversation_context_user_and_empty(monkeypatch: pytest.Monke
 @pytest.mark.asyncio
 async def test_build_system_prompt_group(monkeypatch: pytest.MonkeyPatch) -> None:
     conn = AsyncMock()
-    conn.fetchrow = AsyncMock(return_value={"name": "測試群"})
+    conn.fetchrow = AsyncMock(return_value={"name": "測試群", "platform_group_id": "C_TEST_GROUP"})
     monkeypatch.setattr(linebot_ai, "get_connection", lambda: _CM(conn))
     monkeypatch.setattr(linebot_ai, "get_line_user_record", AsyncMock(return_value={"id": "u1", "user_id": 321}))
     monkeypatch.setattr(
@@ -157,12 +157,15 @@ async def test_build_system_prompt_group(monkeypatch: pytest.MonkeyPatch) -> Non
     assert "【長時外部研究（規則）】" in prompt
     assert "check-research 若回傳 failed" in prompt
     assert "禁止改用 WebSearch/WebFetch 重做" in prompt
+    assert "caller_context" in prompt
     assert "TOOL_PROMPT" in prompt
     assert "USAGE_TIPS" in prompt
     assert "【自訂記憶】" in prompt
     assert "目前群組：測試群" in prompt
     assert "平台：Telegram" in prompt
     assert "ctos_user_id: 321" in prompt
+    assert "platform_group_id: C_TEST_GROUP" in prompt
+    assert "platform_user_id: U1" in prompt
 
 
 @pytest.mark.asyncio
@@ -206,7 +209,7 @@ async def test_build_system_prompt_group_unbound_and_personal_bound(monkeypatch:
         AsyncMock(return_value=[]),
     )
     conn = AsyncMock()
-    conn.fetchrow = AsyncMock(return_value={"name": "群組B"})
+    conn.fetchrow = AsyncMock(return_value={"name": "群組B", "platform_group_id": "C_GROUP_B"})
     monkeypatch.setattr(linebot_ai, "get_connection", lambda: _CM(conn))
     prompt_group = await linebot_ai.build_system_prompt(
         line_group_id=uuid4(),

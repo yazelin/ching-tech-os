@@ -603,6 +603,50 @@ async def prepare_print_file(
     # 檢查檔案格式
     ext = actual_path.suffix.lower()
 
+    if ext == ".pdf":
+        # PDF 透過 pdf2ps 轉換為 PostScript，繞過 RICOH 等印表機嚴格的 PDF 解譯器
+        # 實測：AutoCAD 等軟體產生的 PDF 含格式瑕疵（如重複 /PageMode 鍵值），
+        # 直接送 PDF 會被拒絕；轉成 PS 後改走 PS 解譯器，可正常列印
+        try:
+            tmp_dir = Path("/tmp/ctos/print")
+            tmp_dir.mkdir(parents=True, exist_ok=True)
+            ps_file = tmp_dir / (actual_path.stem + ".ps")
+
+            proc_ps = await _asyncio.create_subprocess_exec(
+                "pdf2ps", str(actual_path), str(ps_file),
+                stdout=_asyncio.subprocess.PIPE,
+                stderr=_asyncio.subprocess.PIPE,
+            )
+            _, stderr_ps = await proc_ps.communicate()
+
+            if proc_ps.returncode != 0 or not ps_file.exists():
+                # pdf2ps 失敗則 fallback 使用原始 PDF 路徑
+                return f"""✅ 檔案已準備好，請使用 printer-mcp 的 print_file 工具列印：
+
+📄 檔案：{actual_path.name}
+📂 絕對路徑：{actual_str}
+
+下一步：呼叫 print_file(file_path="{actual_str}")"""
+
+            ps_str = str(ps_file)
+            return f"""✅ PDF 已轉換為 PostScript，請使用 printer-mcp 的 print_file 工具列印：
+
+📄 檔案：{actual_path.name}
+📂 絕對路徑：{ps_str}
+
+下一步：呼叫 print_file(file_path="{ps_str}")"""
+
+        except FileNotFoundError:
+            # 沒有 pdf2ps 指令則直接使用原始路徑
+            return f"""✅ 檔案已準備好，請使用 printer-mcp 的 print_file 工具列印：
+
+📄 檔案：{actual_path.name}
+📂 絕對路徑：{actual_str}
+
+下一步：呼叫 print_file(file_path="{actual_str}")"""
+        except Exception as e:
+            return f"❌ PDF 轉換時發生錯誤：{str(e)}"
+
     if ext in PRINTABLE_EXTENSIONS:
         return f"""✅ 檔案已準備好，請使用 printer-mcp 的 print_file 工具列印：
 

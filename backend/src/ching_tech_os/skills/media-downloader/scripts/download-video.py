@@ -36,7 +36,23 @@ def _write_status(status_path: Path, data: dict) -> None:
     tmp_path.replace(status_path)
 
 
-def _do_download(job_dir: Path, status_path: Path, url: str, fmt: str, job_id: str) -> None:
+def _trigger_proactive_push(job_id: str, skill: str) -> None:
+    """通知內部端點觸發主動推送（靜默失敗）"""
+    try:
+        import urllib.request
+        data = json.dumps({"job_id": job_id, "skill": skill}).encode()
+        req = urllib.request.Request(
+            "http://127.0.0.1:8088/api/internal/proactive-push",
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        urllib.request.urlopen(req, timeout=5)
+    except Exception:
+        pass
+
+
+def _do_download(job_dir: Path, status_path: Path, url: str, fmt: str, job_id: str, caller_context: dict | None = None) -> None:
     """背景程序：執行實際下載。"""
     import yt_dlp
 
@@ -54,6 +70,8 @@ def _do_download(job_dir: Path, status_path: Path, url: str, fmt: str, job_id: s
         "error": None,
         "created_at": datetime.now().isoformat(),
     }
+    if caller_context:
+        status_data["caller_context"] = caller_context
     _write_status(status_path, status_data)
 
     def progress_hook(d: dict) -> None:
@@ -191,6 +209,7 @@ def _do_download(job_dir: Path, status_path: Path, url: str, fmt: str, job_id: s
         status_data["ctos_path"] = ctos_path
         status_data["error"] = None
         _write_status(status_path, status_data)
+        _trigger_proactive_push(job_id, "media-downloader")
 
     except Exception as exc:
         status_data["status"] = "failed"
@@ -216,6 +235,8 @@ def main() -> int:
         print(json.dumps({"success": False, "error": f"不支援的格式：{fmt}，可用：mp4、mp3、best"}, ensure_ascii=False))
         return 1
 
+    caller_context = payload.get("caller_context") or None
+
     # 建立儲存目錄
     job_id = uuid_module.uuid4().hex[:8]
     date_str = datetime.now().strftime("%Y-%m-%d")
@@ -226,7 +247,7 @@ def main() -> int:
     status_path = job_dir / "status.json"
 
     # 寫入初始狀態
-    _write_status(status_path, {
+    initial_status: dict = {
         "job_id": job_id,
         "status": "starting",
         "progress": 0.0,
@@ -237,7 +258,10 @@ def main() -> int:
         "url": url,
         "format": fmt,
         "created_at": datetime.now().isoformat(),
-    })
+    }
+    if caller_context:
+        initial_status["caller_context"] = caller_context
+    _write_status(status_path, initial_status)
 
     # Fork 背景程序
     pid = os.fork()
@@ -266,7 +290,7 @@ def main() -> int:
             sys.stdout = open(os.devnull, "w")
             sys.stderr = open(os.devnull, "w")
 
-            _do_download(job_dir, status_path, url, fmt, job_id)
+            _do_download(job_dir, status_path, url, fmt, job_id, caller_context)
         except Exception as e:
             # 寫入錯誤日誌以便除錯
             try:

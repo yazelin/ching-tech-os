@@ -84,6 +84,22 @@ def _resolve_source_path(source_path: str) -> Path | None:
     return Path(fs_path)
 
 
+def _trigger_proactive_push(job_id: str, skill: str) -> None:
+    """通知內部端點觸發主動推送（靜默失敗）"""
+    try:
+        import urllib.request
+        data = json.dumps({"job_id": job_id, "skill": skill}).encode()
+        req = urllib.request.Request(
+            "http://127.0.0.1:8088/api/internal/proactive-push",
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        urllib.request.urlopen(req, timeout=5)
+    except Exception:
+        pass
+
+
 def _write_status(status_path: Path, data: dict) -> None:
     """寫入狀態檔（atomic write）。"""
     data["updated_at"] = datetime.now().isoformat()
@@ -119,9 +135,10 @@ def _do_transcribe(
     source_ctos_path: str,
     model_name: str,
     job_id: str,
+    caller_context: dict | None = None,
 ) -> None:
     """背景程序：執行實際轉錄。"""
-    status_data = {
+    status_data: dict = {
         "job_id": job_id,
         "status": "started",
         "source_path": source_ctos_path,
@@ -129,6 +146,8 @@ def _do_transcribe(
         "error": None,
         "created_at": datetime.now().isoformat(),
     }
+    if caller_context:
+        status_data["caller_context"] = caller_context
 
     audio_path = None
 
@@ -245,6 +264,7 @@ def _do_transcribe(
         status_data["transcript_preview"] = preview
         status_data["error"] = None
         _write_status(status_path, status_data)
+        _trigger_proactive_push(job_id, "media-transcription")
 
     except Exception as exc:
         status_data["status"] = "failed"
@@ -294,6 +314,8 @@ def main() -> int:
         print(json.dumps({"success": False, "error": f"不支援的模型：{model_name}，可用：{', '.join(sorted(VALID_MODELS))}"}, ensure_ascii=False))
         return 1
 
+    caller_context = payload.get("caller_context") or None
+
     # 建立暫存目錄
     job_id = uuid_module.uuid4().hex[:8]
     date_str = datetime.now().strftime("%Y-%m-%d")
@@ -304,7 +326,7 @@ def main() -> int:
     status_path = job_dir / "status.json"
 
     # 寫入初始狀態
-    _write_status(status_path, {
+    initial_status: dict = {
         "job_id": job_id,
         "status": "started",
         "source_path": source_path,
@@ -315,7 +337,10 @@ def main() -> int:
         "transcript_preview": "",
         "error": None,
         "created_at": datetime.now().isoformat(),
-    })
+    }
+    if caller_context:
+        initial_status["caller_context"] = caller_context
+    _write_status(status_path, initial_status)
 
     # Fork 背景程序
     pid = os.fork()
@@ -350,7 +375,7 @@ def main() -> int:
             sys.stderr = os.fdopen(2, "w")
 
             print(f"[{datetime.now().isoformat()}] 子程序啟動 PID={os.getpid()}", flush=True)
-            _do_transcribe(job_dir, status_path, source_file, source_path, model_name, job_id)
+            _do_transcribe(job_dir, status_path, source_file, source_path, model_name, job_id, caller_context)
             print(f"[{datetime.now().isoformat()}] 轉錄完成", flush=True)
         except Exception as e:
             try:

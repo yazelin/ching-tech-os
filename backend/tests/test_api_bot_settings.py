@@ -61,6 +61,8 @@ def test_bot_settings_routes(monkeypatch: pytest.MonkeyPatch) -> None:
             }
         },
     }))
+    monkeypatch.setattr(bot_settings_api, "get_proactive_push_enabled", AsyncMock(return_value=False))
+    monkeypatch.setattr(bot_settings_api, "update_proactive_push_enabled", AsyncMock(return_value=None))
     monkeypatch.setattr(bot_settings_api, "update_bot_credentials", AsyncMock(return_value=None))
     monkeypatch.setattr(bot_settings_api, "delete_bot_credentials", AsyncMock(return_value=2))
     monkeypatch.setattr(bot_settings_api, "_test_line_connection", AsyncMock(return_value={"success": True, "message": "ok"}))
@@ -68,7 +70,10 @@ def test_bot_settings_routes(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(bot_settings_api, "get_bot_credentials", AsyncMock(return_value={"channel_access_token": "x", "bot_token": "y"}))
 
     assert client.get("/api/admin/bot-settings/line").status_code == 200
+    # 儲存憑證
     assert client.put("/api/admin/bot-settings/line", json={"channel_secret": "x"}).status_code == 200
+    # 僅切換主動推送開關
+    assert client.put("/api/admin/bot-settings/line", json={"proactive_push_enabled": True}).status_code == 200
     assert client.delete("/api/admin/bot-settings/line").status_code == 200
     assert client.post("/api/admin/bot-settings/line/test").status_code == 200
     assert client.post("/api/admin/bot-settings/telegram/test").status_code == 200

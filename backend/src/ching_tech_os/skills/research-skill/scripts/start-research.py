@@ -963,6 +963,22 @@ def _run_claude_research(
     )
 
 
+def _trigger_proactive_push(job_id: str, skill: str) -> None:
+    """通知內部端點觸發主動推送（靜默失敗）"""
+    try:
+        import urllib.request
+        data = json.dumps({"job_id": job_id, "skill": skill}).encode()
+        req = urllib.request.Request(
+            "http://127.0.0.1:8088/api/internal/proactive-push",
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        urllib.request.urlopen(req, timeout=5)
+    except Exception:
+        pass  # 靜默失敗，不影響任務本身
+
+
 def _do_research(
     base_dir: Path,
     job_dir: Path,
@@ -972,6 +988,7 @@ def _do_research(
     seed_urls: list[str],
     max_results: int,
     max_fetch: int,
+    caller_context: dict | None = None,
 ) -> None:
     """背景程序主流程：優先走 Claude web tools，失敗再 fallback。"""
     _wait_for_worker_slot(base_dir=base_dir, status_path=status_path, job_id=job_id)
@@ -1014,6 +1031,8 @@ def _do_research(
         "created_at": now,
         "updated_at": now,
     }
+    if caller_context:
+        status_data["caller_context"] = caller_context
     _write_status(status_path, status_data)
 
     claude_timeout_sec = _get_research_claude_timeout_sec()
@@ -1084,6 +1103,7 @@ def _do_research(
                 "updated_at": datetime.now().isoformat(),
             },
         )
+        _trigger_proactive_push(job_id, "research-skill")
         return
     except (RuntimeError, ValueError, OSError) as exc:
         provider_trace[0]["status"] = "failed"
@@ -1183,6 +1203,7 @@ def _do_research_local_pipeline(
     # 保留 Claude worker 階段已蒐集到的部分來源
     prev_sources = previous_status.get("sources") or []
     prev_partial = previous_status.get("partial_results") or []
+    prev_caller_context = previous_status.get("caller_context") or None
 
     status_data = {
         "job_id": job_id,
@@ -1200,6 +1221,8 @@ def _do_research_local_pipeline(
         "error": None,
         "created_at": created_at,
     }
+    if prev_caller_context:
+        status_data["caller_context"] = prev_caller_context
     _write_status(status_path, status_data)
 
     try:
@@ -1391,6 +1414,7 @@ def _do_research_local_pipeline(
             status_data["sources_ctos_path"] = f"ctos://linebot/research/{date_str}/{job_id}/sources.json"
             status_data["tool_trace_ctos_path"] = f"ctos://linebot/research/{date_str}/{job_id}/tool_trace.json"
             _write_status(status_path, status_data)
+            _trigger_proactive_push(job_id, "research-skill")
     except (httpx.HTTPError, OSError, RuntimeError, ValueError) as exc:
         status_data["status"] = "failed"
         status_data["status_label"] = "失敗"
@@ -1448,26 +1472,28 @@ def main() -> int:
     job_dir = base_dir / date_str / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
 
+    caller_context = payload.get("caller_context") or None
+
     status_path = job_dir / "status.json"
-    _write_status(
-        status_path,
-        {
-            "job_id": job_id,
-            "status": "queued",
-            "status_label": "排隊中",
-            "stage": "queued",
-            "stage_label": "等待背景程序啟動",
-            "progress": 0,
-            "query": query,
-            "search_provider": "none",
-            "provider_trace": [],
-            "sources": [],
-            "partial_results": [],
-            "final_summary": "",
-            "error": None,
-            "created_at": datetime.now().isoformat(),
-        },
-    )
+    initial_status: dict = {
+        "job_id": job_id,
+        "status": "queued",
+        "status_label": "排隊中",
+        "stage": "queued",
+        "stage_label": "等待背景程序啟動",
+        "progress": 0,
+        "query": query,
+        "search_provider": "none",
+        "provider_trace": [],
+        "sources": [],
+        "partial_results": [],
+        "final_summary": "",
+        "error": None,
+        "created_at": datetime.now().isoformat(),
+    }
+    if caller_context:
+        initial_status["caller_context"] = caller_context
+    _write_status(status_path, initial_status)
 
     pid = os.fork()
     if pid > 0:
@@ -1504,6 +1530,7 @@ def main() -> int:
             seed_urls=seed_urls,
             max_results=max_results,
             max_fetch=max_fetch,
+            caller_context=caller_context,
         )
     except (OSError, RuntimeError, ValueError) as exc:
         _write_status(

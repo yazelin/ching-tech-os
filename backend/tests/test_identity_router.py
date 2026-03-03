@@ -95,21 +95,14 @@ class TestRouteUnbound:
 
     @pytest.mark.asyncio
     async def test_reject_policy_group(self):
-        """reject 策略 + 群組 → 回覆綁定提示（與個人對話相同）"""
-        with (
-            patch(
-                "ching_tech_os.services.bot.identity_router.settings"
-            ) as mock_settings,
-            patch(
-                "ching_tech_os.services.ai_manager.get_agent_by_name",
-                new_callable=AsyncMock,
-                return_value=None,
-            ),
-        ):
+        """reject 策略 + 群組 → 靜默忽略（群組不廣播綁定提示）"""
+        with patch(
+            "ching_tech_os.services.bot.identity_router.settings"
+        ) as mock_settings:
             mock_settings.bot_unbound_user_policy = "reject"
             result = await route_unbound(platform_type="line", is_group=True)
-            assert result.action == "reject"
-            assert result.reply_text == BINDING_PROMPT_LINE
+            assert result.action == "silent"
+            assert result.reply_text is None
 
     @pytest.mark.asyncio
     async def test_restricted_policy_private(self):
@@ -124,7 +117,7 @@ class TestRouteUnbound:
 
     @pytest.mark.asyncio
     async def test_restricted_policy_group(self):
-        """restricted 策略 + 群組 → 走受限模式（與個人對話相同）"""
+        """restricted 策略 + 群組 → 受限模式（群組 restricted_agent_id 可服務未綁定用戶）"""
         with patch(
             "ching_tech_os.services.bot.identity_router.settings"
         ) as mock_settings:

@@ -15,8 +15,13 @@ import logging
 import os
 import sys
 
+import pytest
+
 # 強制設定環境變數（模擬 restricted 策略）
 os.environ["BOT_UNBOUND_USER_POLICY"] = "restricted"
+
+# 此檔案是整合測試腳本（需手動執行），跳過 pytest 自動收集
+pytestmark = pytest.mark.skip(reason="整合測試：需連接真實資料庫，請手動執行")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)

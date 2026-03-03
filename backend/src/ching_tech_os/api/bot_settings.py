@@ -21,6 +21,8 @@ from ..services.bot_settings import (
     get_bot_credentials,
     update_bot_credentials,
     delete_bot_credentials,
+    get_proactive_push_enabled,
+    update_proactive_push_enabled,
 )
 
 logger = logging.getLogger(__name__)
@@ -70,6 +72,7 @@ class UpdateBotSettingsRequest(BaseModel):
     bot_token: str | None = None
     webhook_secret: str | None = None
     admin_chat_id: str | None = None
+    proactive_push_enabled: bool | None = None
 
 
 class UpdateBotSettingsResponse(BaseModel):
@@ -90,6 +93,7 @@ class BotSettingsStatusResponse(BaseModel):
     """Bot 設定狀態回應"""
     platform: str
     fields: dict[str, FieldStatus]
+    proactive_push_enabled: bool = False
 
 
 class BotSettingsDeleteResponse(BaseModel):
@@ -114,7 +118,9 @@ async def get_settings_status(
 ):
     """取得 Bot 設定狀態（遮罩顯示）"""
     _validate_platform(platform)
-    return await get_bot_credentials_status(platform)
+    status = await get_bot_credentials_status(platform)
+    status["proactive_push_enabled"] = await get_proactive_push_enabled(platform)
+    return status
 
 
 @router.put("/{platform}", response_model=UpdateBotSettingsResponse)
@@ -126,12 +132,22 @@ async def update_settings(
     """更新 Bot 憑證"""
     _validate_platform(platform)
 
-    # 過濾 None 和空字串（只更新有值的欄位）
-    credentials = {k: v for k, v in body.model_dump(exclude_none=True).items() if v}
-    if not credentials:
+    data = body.model_dump(exclude_none=True)
+
+    # 處理主動推送開關（獨立存儲，不經過 update_bot_credentials）
+    push_enabled = data.pop("proactive_push_enabled", None)
+
+    # 過濾憑證（None 和空字串排除）
+    credentials = {k: v for k, v in data.items() if v}
+
+    if not credentials and push_enabled is None:
         raise HTTPException(status_code=400, detail="至少需要一個非空欄位")
 
-    await update_bot_credentials(platform, credentials)
+    if credentials:
+        await update_bot_credentials(platform, credentials)
+    if push_enabled is not None:
+        await update_proactive_push_enabled(platform, push_enabled)
+
     return UpdateBotSettingsResponse(success=True, message=f"{platform} 設定已更新")
 
 

@@ -773,6 +773,69 @@
   color: var(--color-error);
 }
 
+/* 主動推送切換開關 */
+.bot-push-toggle-row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.bot-push-toggle-group {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.bot-push-toggle-label {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  min-width: 3em;
+}
+
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 22px;
+  cursor: pointer;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.toggle-slider {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-surface-dark);
+  border-radius: 22px;
+  transition: background 0.2s;
+}
+
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  left: 3px;
+  top: 3px;
+  background: var(--text-muted);
+  border-radius: 50%;
+  transition: transform 0.2s, background 0.2s;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background: var(--color-primary);
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(18px);
+  background: var(--btn-text-on-primary);
+}
+
 /* ==========================================================================
    Mobile Responsive Styles (手機版響應式)
    ========================================================================== */

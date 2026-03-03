@@ -67,6 +67,19 @@ include = ["src/ching_tech_os"]
 [tool.uv]
 package = true
 
+[tool.coverage.run]
+omit = [
+    # Skill 腳本為獨立執行的子行程，不適合單元測試
+    "src/ching_tech_os/skills/*/scripts/*.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
+
 [dependency-groups]
 dev = [
     "httpx>=0.28.1",

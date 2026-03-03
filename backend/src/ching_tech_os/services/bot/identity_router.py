@@ -102,7 +102,12 @@ async def route_unbound(
     policy = get_unbound_policy()
 
     if policy == "restricted":
+        # restricted 策略：群組中也使用受限模式（群組可設定 restricted_agent_id 服務未綁定用戶）
         return UnboundRouteResult(action="restricted")
+
+    # reject 策略：群組靜默忽略（避免對群組廣播「請綁定帳號」提示）
+    if is_group:
+        return UnboundRouteResult(action="silent")
 
     # reject 策略：嘗試從 agent settings 讀取自訂綁定提示
     from .. import ai_manager

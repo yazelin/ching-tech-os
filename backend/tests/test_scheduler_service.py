@@ -61,7 +61,7 @@ async def test_create_next_month_partitions_and_already_exists(monkeypatch: pyte
 
     monkeypatch.setattr(scheduler, "datetime", _FixedDateTime)
     await scheduler.create_next_month_partitions()
-    assert conn.execute.await_count == 2
+    assert conn.execute.await_count == 3  # messages + login_records + ai_logs
 
     conn2 = AsyncMock()
     conn2.execute = AsyncMock(side_effect=Exception("already exists"))
