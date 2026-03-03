@@ -1056,6 +1056,7 @@ const SettingsApp = (function () {
    */
   function renderBotPlatformCard(platform, config, data) {
     const fields = data.fields || {};
+    const pushEnabled = data.proactive_push_enabled === true;
 
     return `
       <div class="settings-group bot-platform-card" data-platform="${platform}">
@@ -1081,6 +1082,16 @@ const SettingsApp = (function () {
               </div>
             `;
           }).join('')}
+          <div class="bot-field-row bot-push-toggle-row">
+            <label class="bot-field-label">主動推送通知</label>
+            <div class="bot-push-toggle-group">
+              <label class="toggle-switch">
+                <input type="checkbox" class="bot-push-toggle" data-platform="${platform}" ${pushEnabled ? 'checked' : ''}>
+                <span class="toggle-slider"></span>
+              </label>
+              <span class="bot-push-toggle-label">${pushEnabled ? '已啟用' : '已停用'}</span>
+            </div>
+          </div>
         </div>
         <div class="bot-actions">
           <button class="btn btn-primary btn-sm bot-save-btn" data-platform="${platform}">
@@ -1115,6 +1126,11 @@ const SettingsApp = (function () {
     // 清除按鈕
     container.querySelectorAll('.bot-clear-btn').forEach(btn => {
       btn.addEventListener('click', () => clearBotSettings(btn.dataset.platform, container, windowEl));
+    });
+
+    // 主動推送切換
+    container.querySelectorAll('.bot-push-toggle').forEach(toggle => {
+      toggle.addEventListener('change', () => savePushToggle(toggle.dataset.platform, toggle.checked, container));
     });
   }
 
@@ -1174,6 +1190,38 @@ const SettingsApp = (function () {
       loadBotSettings(windowEl);
     } catch (error) {
       showBotStatus(container, platform, `儲存失敗：${error.message}`, true);
+    }
+  }
+
+  /**
+   * 儲存主動推送切換狀態
+   */
+  async function savePushToggle(platform, enabled, container) {
+    const labelEl = container.querySelector(`.bot-push-toggle-row[data-platform="${platform}"] .bot-push-toggle-label`)
+      || container.querySelector(`.bot-push-toggle[data-platform="${platform}"]`)?.closest('.bot-push-toggle-row')?.querySelector('.bot-push-toggle-label');
+    try {
+      const token = LoginModule.getToken();
+      const resp = await fetch(`/api/admin/bot-settings/${platform}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ proactive_push_enabled: enabled }),
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json();
+        throw new Error(err.detail || '儲存失敗');
+      }
+
+      if (labelEl) labelEl.textContent = enabled ? '已啟用' : '已停用';
+      showBotStatus(container, platform, `主動推送已${enabled ? '啟用' : '停用'}`);
+    } catch (error) {
+      showBotStatus(container, platform, `切換失敗：${error.message}`, true);
+      // 還原 toggle 狀態
+      const toggle = container.querySelector(`.bot-push-toggle[data-platform="${platform}"]`);
+      if (toggle) toggle.checked = !enabled;
     }
   }
 

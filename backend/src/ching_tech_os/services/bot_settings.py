@@ -158,6 +158,41 @@ async def update_bot_credentials(platform: str, credentials: dict[str, str]) -> 
     logger.info(f"已更新 {platform} 憑證: {list(credentials.keys())}")
 
 
+# 各平台主動推送的預設值（無設定時使用）
+_PROACTIVE_PUSH_DEFAULTS: dict[str, bool] = {
+    "line": False,
+    "telegram": True,
+}
+
+
+async def get_proactive_push_enabled(platform: str) -> bool:
+    """取得平台的主動推送開關狀態"""
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            "SELECT value FROM bot_settings WHERE platform = $1 AND key = 'proactive_push_enabled'",
+            platform,
+        )
+    if row is None:
+        return _PROACTIVE_PUSH_DEFAULTS.get(platform, False)
+    return row["value"].lower() == "true"
+
+
+async def update_proactive_push_enabled(platform: str, enabled: bool) -> None:
+    """更新平台的主動推送開關"""
+    now = datetime.now(timezone.utc)
+    async with get_connection() as conn:
+        await conn.execute(
+            """
+            INSERT INTO bot_settings (platform, key, value, updated_at)
+            VALUES ($1, 'proactive_push_enabled', $2, $3)
+            ON CONFLICT (platform, key)
+            DO UPDATE SET value = $2, updated_at = $3
+            """,
+            platform, "true" if enabled else "false", now,
+        )
+    logger.info(f"已更新 {platform} 主動推送設定: {enabled}")
+
+
 async def delete_bot_credentials(platform: str) -> int:
     """刪除 Bot 憑證
 

@@ -1389,6 +1389,7 @@ async def build_system_prompt(
 - 查詢一次若未完成 → 告知使用者目前進度，請稍後再問，結束回應。
 - 嚴禁使用 sleep 等待任務完成，嚴禁在同一回應中反覆 sleep + check。
 - 這些任務可能需要數分鐘，反覆等待必定導致整體超時。
+- 呼叫 start-research、download-video、transcribe 時，必須在 input JSON 附帶 caller_context 欄位（格式見【對話識別】末端），讓任務完成後系統可主動通知發起者。
 
 【長時外部研究（規則）】
 - 需要「搜尋 + 擷取 + 統整」多個來源時，必須使用 research-skill（start/check）：
@@ -1493,20 +1494,36 @@ async def build_system_prompt(
     platform_label = "Telegram" if platform_type == "telegram" else "Line"
 
     if line_group_id:
+        platform_group_id: str | None = None
         async with get_connection() as conn:
             group = await conn.fetchrow(
-                "SELECT name FROM bot_groups WHERE id = $1",
+                "SELECT name, platform_group_id FROM bot_groups WHERE id = $1",
                 line_group_id,
             )
             if group:
-                base_prompt += f"\n\n目前群組：{group['name'] or '未命名群組'}"
+                if group["name"]:
+                    base_prompt += f"\n\n目前群組：{group['name']}"
+                platform_group_id = group["platform_group_id"]
         # 加入群組 ID 和用戶身份識別
         base_prompt += f"\n\n【對話識別】\n平台：{platform_label}"
         base_prompt += f"\ngroup_id: {line_group_id}"
+        if platform_group_id:
+            base_prompt += f"\nplatform_group_id: {platform_group_id}"
+        if line_user_id:
+            base_prompt += f"\nplatform_user_id: {line_user_id}"
         if ctos_user_id:
             base_prompt += f"\nctos_user_id: {ctos_user_id}"
         else:
             base_prompt += "\nctos_user_id: （未關聯）"
+        # caller_context 範本（供背景任務附帶）
+        import json as _json
+        _caller_ctx = {
+            "platform": platform_type,
+            "platform_user_id": line_user_id or "",
+            "is_group": True,
+            "group_id": platform_group_id or "",
+        }
+        base_prompt += f"\ncaller_context（呼叫背景任務時附帶此值）: {_json.dumps(_caller_ctx, ensure_ascii=False)}"
     elif line_user_id:
         # 個人對話：加入用戶 ID 和身份識別
         base_prompt += f"\n\n【對話識別】\n平台：{platform_label}"
@@ -1515,6 +1532,15 @@ async def build_system_prompt(
             base_prompt += f"\nctos_user_id: {ctos_user_id}"
         else:
             base_prompt += "\nctos_user_id: （未關聯，無法進行專案更新操作）"
+        # caller_context 範本（供背景任務附帶）
+        import json as _json
+        _caller_ctx = {
+            "platform": platform_type,
+            "platform_user_id": line_user_id,
+            "is_group": False,
+            "group_id": None,
+        }
+        base_prompt += f"\ncaller_context（呼叫背景任務時附帶此值）: {_json.dumps(_caller_ctx, ensure_ascii=False)}"
 
     return base_prompt
 
