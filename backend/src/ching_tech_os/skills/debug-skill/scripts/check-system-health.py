@@ -51,7 +51,12 @@ def main() -> int:
         "journalctl", "-u", "ching-tech-os", "-n", "20",
         "--no-pager", "-p", "err", "--since", "24 hours ago",
     ])
-    error_count = len(output.strip().splitlines()) if output.strip() else 0
+    # journalctl 沒有錯誤時會輸出 "-- No entries --"，需排除
+    stripped = output.strip()
+    if not stripped or stripped == "-- No entries --":
+        error_count = 0
+    else:
+        error_count = len(stripped.splitlines())
     if error_count > 10:
         status = "警告"
         if overall_status == "正常":
