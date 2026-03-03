@@ -288,7 +288,9 @@ async def test_handle_text_command_and_access_paths(monkeypatch: pytest.MonkeyPa
     await handler._handle_text(message, "123456", "100", chat, user, False, adapter)
     adapter.send_text.assert_awaited_with("100", "綁定成功")
 
-    # 未綁定拒絕
+    # 未綁定拒絕（patch policy 確保不受環境變數影響）
+    from ching_tech_os.config import settings as app_settings
+    monkeypatch.setattr(app_settings, "bot_unbound_user_policy", "reject")
     monkeypatch.setattr(handler, "check_line_access", AsyncMock(return_value=(False, "user_not_bound")))
     monkeypatch.setattr(handler, "is_binding_code_format", AsyncMock(return_value=False))
     adapter.send_text.reset_mock()
