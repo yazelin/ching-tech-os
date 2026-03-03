@@ -31,7 +31,7 @@
 #### Scenario: 管理員執行 /help
 - **WHEN** 管理員用戶在個人對話中發送 `/help`
 - **THEN** 系統 SHALL 回覆完整指令列表
-- **AND** 包含管理員專用指令，標註「（管理員）」
+- **AND** 包含管理員專用指令（如 `/debug`、`/agent`），標註「（管理員）」
 
 #### Scenario: /help 不要求綁定
 - **WHEN** 未綁定帳號的用戶發送 `/help`
