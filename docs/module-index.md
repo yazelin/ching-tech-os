@@ -342,6 +342,7 @@ services/scheduler.py      ← APScheduler 任務定義
 1. 遠端主機安裝 Tailscale + CTOS（見 `docs/tailscale-multi-site.md`）
 2. 主站 nginx 加入 location block（範本：`scripts/nginx/ctos-remote-site.conf.template`）
 3. Line Developer Console 設定 webhook URL
+4. 依驗證清單逐步確認（見 `docs/tailscale-multi-site.md`「驗證與除錯」章節）
 
 ### 「版本號更新」
 同步修改三個檔案：

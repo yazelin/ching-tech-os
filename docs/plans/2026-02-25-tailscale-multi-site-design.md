@@ -59,43 +59,9 @@ sudo tailscale up
 
 ### 2. nginx 設定範本
 
-每新增一個遠端客戶，在 nginx 設定中加入以下 location block（需修改三個值）：
+每新增一個遠端客戶，複製 `scripts/nginx/ctos-remote-site.conf.template`，將 `<CLIENT_ID>` 和 `<TAILSCALE_IP>` 替換後加入 nginx server block。
 
-```nginx
-# ============================================
-# 遠端 CTOS: <CLIENT_ID>
-# Tailscale IP: <TAILSCALE_IP>
-# Port: 8088
-# ============================================
-
-# CTOS 完整應用（strip prefix 後轉發）
-location /<CLIENT_ID>/ {
-    proxy_pass http://<TAILSCALE_IP>:8088/;
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection "upgrade";
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-}
-
-# Line Bot Webhook（改寫路徑後轉發）
-location = /bot/<CLIENT_ID>/webhook {
-    proxy_pass http://<TAILSCALE_IP>:8088/api/bot/line/webhook;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Line-Signature $http_x_line_signature;
-}
-```
-
-**需替換的值：**
-
-| 佔位符 | 說明 | 範例 |
-|--------|------|------|
-| `<CLIENT_ID>` | 客戶識別碼（URL 路徑） | `company-a` |
-| `<TAILSCALE_IP>` | 遠端的 Tailscale IP | `100.64.0.2` |
+完整範本內容與注意事項詳見 `docs/tailscale-multi-site.md`（「主站設定 > nginx 設定」章節）。
 
 ### 3. 新增客戶 SOP
 
@@ -163,13 +129,12 @@ cp .env.example .env
 
 使用現有的 `install-service.sh`，但需先手動調整以下項目：
 
-| 行號 | 變數 | 預設值 | 調整說明 |
-|------|------|--------|---------|
-| 12 | `PROJECT_DIR` | `/home/ct/SDD/ching-tech-os` | 改為實際的 clone 路徑 |
-| 244 | `User=ct` | `ct` | 改為遠端主機的使用者 |
-| 244 | `Group=ct` | `ct` | 同上 |
-| 248 | node 路徑 | `v24.13.0` | 改為遠端實際的 node 版本（或移除） |
-| 39-43 | NAS 設定檢查 | 必填 | 若無 NAS，註解掉 NAS 相關段落（第 34-209 行） |
+| 搜尋關鍵字 | 預設值 | 調整說明 |
+|-----------|--------|---------|
+| `PROJECT_DIR=` | `/home/ct/SDD/ching-tech-os` | 改為實際的 clone 路徑 |
+| `User=ct` / `Group=ct` | `ct` | 改為遠端主機的使用者 |
+| `Environment="PATH=` 中的 node 路徑 | `v24.13.0` | 改為遠端實際的 node 版本（或移除） |
+| `# 檢查必要的 NAS 設定` 區塊 | 必填 | 若無 NAS，註解掉此區塊及後續 NAS 掛載設定 |
 
 調整完畢後執行：
 

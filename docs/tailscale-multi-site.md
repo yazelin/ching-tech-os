@@ -212,6 +212,8 @@ cp .env.example .env
 
 編輯 `.env` 檔案，至少需要設定以下項目：
 
+**資料庫（必填）**
+
 | 變數 | 說明 |
 |------|------|
 | `DB_HOST` | 資料庫主機（通常為 `localhost`） |
@@ -219,8 +221,41 @@ cp .env.example .env
 | `DB_USER` | 資料庫使用者 |
 | `DB_PASSWORD` | 資料庫密碼 |
 | `DB_NAME` | 資料庫名稱 |
+
+**Line Bot（必填）**
+
+| 變數 | 說明 |
+|------|------|
 | `LINE_CHANNEL_SECRET` | 此客戶的 Line Bot Channel Secret |
 | `LINE_CHANNEL_ACCESS_TOKEN` | 此客戶的 Line Bot Access Token |
+
+**NAS 設定（有 NAS 必填，無 NAS 見下方說明）**
+
+| 變數 | 說明 |
+|------|------|
+| `NAS_HOST` | NAS 主機 IP |
+| `NAS_USER` | NAS 使用者 |
+| `NAS_PASSWORD` | NAS 密碼 |
+| `NAS_SHARE` | NAS 共享名稱（如 `擎添開發`） |
+| `CTOS_MOUNT_PATH` | NAS 掛載後的本機路徑（預設 `/mnt/nas/ctos`） |
+
+**若遠端主機無 NAS：**
+
+將 `CTOS_MOUNT_PATH` 改為本機目錄，並預先建立該目錄：
+
+```bash
+mkdir -p /var/ctos
+```
+
+`.env` 中設定：
+
+```
+CTOS_MOUNT_PATH=/var/ctos
+```
+
+同時在 `install-service.sh` 中，將 `# 檢查必要的 NAS 設定` 以下的 NAS 相關區塊全部以 `#` 註解掉（搜尋此關鍵字定位），避免安裝腳本因缺少 NAS 設定而中止。
+
+> **注意**：無 NAS 環境下，研究任務、媒體下載等需要寫入 NAS 的功能會將檔案儲存在 `CTOS_MOUNT_PATH` 指定的本機目錄，功能仍可正常運作。
 
 ### 步驟 3：啟動資料庫
 
@@ -238,12 +273,12 @@ cd backend && uv run alembic upgrade head && cd ..
 
 使用專案中的 `scripts/install-service.sh`，但遠端主機的環境通常與主站不同，需要先調整以下項目：
 
-| 變數/區段 | 預設值 | 調整說明 |
+| 搜尋關鍵字 | 預設值 | 調整說明 |
 |-----------|--------|---------|
-| `PROJECT_DIR`（第 12 行） | `/home/ct/SDD/ching-tech-os` | 改為遠端主機上的實際 clone 路徑 |
-| `User` / `Group`（systemd unit） | `ct` | 改為遠端主機的使用者名稱 |
-| node 路徑（第 248 行附近） | `v24.13.0` | 改為遠端實際的 node 版本，或在不需要前端建置時移除 |
-| NAS 設定檢查（第 34-43 行） | 必填 | 若遠端主機無 NAS，註解掉 NAS 相關段落（約第 34-209 行） |
+| `PROJECT_DIR=` | `/home/ct/SDD/ching-tech-os` | 改為遠端主機上的實際 clone 路徑 |
+| `User=ct` / `Group=ct` | `ct` | 改為遠端主機的使用者名稱 |
+| `Environment="PATH=` 中的 node 路徑 | `v24.13.0` | 改為遠端實際的 node 版本，或移除整段 nvm node 路徑 |
+| `# 檢查必要的 NAS 設定` 區塊 | 必填 | 若遠端主機無 NAS，將此區塊及後續 NAS 掛載設定全部以 `#` 註解掉 |
 
 調整完成後執行：
 
