@@ -49,6 +49,7 @@ BUILTIN_MODULES: dict[str, ModuleInfo] = {
             {"module": ".api.user", "attr": "router"},
             {"module": ".api.user", "attr": "admin_router"},
             {"module": ".api.config_public", "attr": "router"},
+            {"module": ".api.internal_push", "attr": "router"},
         ],
         "app_ids": ["settings"],
         "app_manifest": [
