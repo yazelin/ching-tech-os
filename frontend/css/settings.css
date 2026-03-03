@@ -833,7 +833,7 @@
 
 .toggle-switch input:checked + .toggle-slider::before {
   transform: translateX(18px);
-  background: #fff;
+  background: var(--btn-text-on-primary);
 }
 
 /* ==========================================================================

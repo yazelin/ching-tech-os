@@ -60,7 +60,7 @@ def _build_message(skill: str, status: dict) -> str:
 
     if skill == "research-skill":
         query = status.get("query", "")
-        summary = status.get("summary") or status.get("result", "")
+        summary = status.get("final_summary") or status.get("summary") or status.get("result", "")
         if isinstance(summary, str) and len(summary) > 500:
             summary = summary[:500] + "…"
         lines = ["✅ 研究任務完成"]
