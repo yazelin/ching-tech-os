@@ -99,14 +99,15 @@ async def route_unbound(
     Returns:
         UnboundRouteResult 指示應採取的動作
     """
-    # 群組中的未綁定用戶靜默忽略（不受策略影響，避免打擾群組）
-    if is_group:
-        return UnboundRouteResult(action="silent")
-
     policy = get_unbound_policy()
 
     if policy == "restricted":
+        # restricted 策略：群組中也使用受限模式（群組可設定 restricted_agent_id 服務未綁定用戶）
         return UnboundRouteResult(action="restricted")
+
+    # reject 策略：群組靜默忽略（避免對群組廣播「請綁定帳號」提示）
+    if is_group:
+        return UnboundRouteResult(action="silent")
 
     # reject 策略：嘗試從 agent settings 讀取自訂綁定提示
     from .. import ai_manager

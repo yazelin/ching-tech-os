@@ -117,8 +117,8 @@ class TestRestrictedPolicy:
             assert result.reply_text is None  # 不回覆拒絕訊息
 
     @pytest.mark.asyncio
-    async def test_restricted_policy_group_still_silent(self):
-        """restricted 策略 — 群組中仍然靜默忽略"""
+    async def test_restricted_policy_group_uses_restricted(self):
+        """restricted 策略 + 群組 → 受限模式（群組可設定受限 Agent 服務未綁定用戶）"""
         from ching_tech_os.services.bot.identity_router import route_unbound
 
         with patch(
@@ -126,7 +126,7 @@ class TestRestrictedPolicy:
         ) as mock_settings:
             mock_settings.bot_unbound_user_policy = "restricted"
             result = await route_unbound(platform_type="line", is_group=True)
-            assert result.action == "silent"
+            assert result.action == "restricted"
 
     @pytest.mark.asyncio
     async def test_restricted_mode_full_flow(self):
