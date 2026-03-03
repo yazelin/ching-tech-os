@@ -36,7 +36,8 @@ metadata:
   只有當你已經有絕對路徑（/mnt/nas/...）時才能直接用 printer-mcp。
 
 【支援的檔案格式】
-- 直接列印：PDF、純文字（.txt, .log, .csv）、圖片（PNG, JPG, JPEG, GIF, BMP, TIFF, WebP）
+- PDF：自動透過 Ghostscript 正規化（修復 AutoCAD 等軟體產生的格式問題，確保 RICOH 等嚴格 PDF 解譯器能接受）
+- 純文字（.txt, .log, .csv）、圖片（PNG, JPG, JPEG, GIF, BMP, TIFF, WebP）：直接列印
 - 自動轉 PDF：Office 文件（.docx, .xlsx, .pptx, .doc, .xls, .ppt, .odt, .ods, .odp）
 
 【列印使用情境】
