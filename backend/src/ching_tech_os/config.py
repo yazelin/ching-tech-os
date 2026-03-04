@@ -111,7 +111,7 @@ class Settings:
     # 外部 skill 根目錄（external-first 載入）
     skill_external_root: str = _get_env(
         "SKILL_EXTERNAL_ROOT",
-        str(Path.home() / "SDD/skill"),
+        str(Path.home() / "SDD/external-skills"),
     )
     # 工具路由策略：script-first | mcp-first
     skill_route_policy: str = _get_env("SKILL_ROUTE_POLICY", "script-first")
