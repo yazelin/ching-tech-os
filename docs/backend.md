@@ -276,22 +276,108 @@ uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8088 --reload
 
 ## 環境變數
 
-可透過環境變數覆蓋預設設定：
+完整環境變數定義在 `config.py`，範例檔為 `.env.example`。
+
+### 資料庫
 
 | 變數 | 預設值 | 說明 |
 |------|--------|------|
-| NAS_HOST | 192.168.11.50 | NAS 主機位址 |
 | DB_HOST | localhost | 資料庫主機 |
 | DB_PORT | 5432 | 資料庫埠號 |
 | DB_USER | ching_tech | 資料庫使用者 |
 | DB_PASSWORD | （必填） | 資料庫密碼 |
-| SESSION_TTL_HOURS | 8 | Session 有效時間（小時）|
-| ENABLE_NAS_AUTH | True | 是否啟用 NAS SMB 認證 |
+| DB_NAME | ching_tech_os | 資料庫名稱 |
+
+### NAS / SMB
+
+| 變數 | 預設值 | 說明 |
+|------|--------|------|
+| NAS_HOST | 192.168.11.50 | NAS 主機位址 |
+| NAS_PORT | 445 | SMB 埠號 |
+| NAS_USER | （必填） | NAS 帳號 |
+| NAS_PASSWORD | （必填） | NAS 密碼 |
+| NAS_SHARE | 擎添開發 | NAS 共享名稱 |
+| NAS_MOUNT_PATH | /mnt/nas | NAS 掛載根路徑 |
+| CTOS_MOUNT_PATH | /mnt/nas/ctos | CTOS 掛載路徑（讀寫） |
+| PROJECTS_MOUNT_PATH | /mnt/nas/projects | 專案掛載路徑（唯讀） |
+| CIRCUITS_MOUNT_PATH | /mnt/nas/circuits | 線路圖掛載路徑（唯讀） |
+| LIBRARY_MOUNT_PATH | /mnt/nas/library | 圖書館掛載路徑（讀寫） |
+| LIBRARY_PUBLIC_FOLDERS | 產品資料,教育訓練 | 公開資料夾列表（逗號分隔） |
+| SMB_CONNECT_TIMEOUT | 10 | SMB 連線逾時（秒） |
+| ENABLE_NAS_AUTH | true | 是否啟用 NAS SMB 認證 |
+
+### 路徑
+
+| 變數 | 預設值 | 說明 |
+|------|--------|------|
+| FRONTEND_DIR | ~/SDD/ching-tech-os/frontend | 前端靜態檔案目錄 |
+| PROJECT_ROOT | （自動偵測） | 專案根目錄 |
+| KNOWLEDGE_NAS_PATH | knowledge | 知識庫 NAS 相對路徑 |
+| PROJECT_NAS_PATH | projects | 專案 NAS 相對路徑 |
+| LINEBOT_NAS_PATH | linebot/files | Line Bot 檔案 NAS 相對路徑 |
+| PROJECT_ATTACHMENTS_PATH | data/projects/attachments | 專案附件本機路徑 |
+| KNOWLEDGE_DATA_PATH | data/knowledge | 知識庫本機路徑 |
+
+### Session / 系統
+
+| 變數 | 預設值 | 說明 |
+|------|--------|------|
+| SESSION_TTL_HOURS | 8 | Session 有效時間（小時） |
+| PUBLIC_URL | https://ching-tech.ddns.net/ctos | 公開 URL（分享連結、Webhook） |
+| ENABLED_MODULES | `*` | 啟用模組清單（`*`=全開，逗號分隔） |
+
+### Bot 設定
+
+| 變數 | 預設值 | 說明 |
+|------|--------|------|
 | BOT_SECRET_KEY | （無預設） | Bot 憑證加密金鑰（AES-256-GCM） |
-| ENABLED_MODULES | `*` | 啟用模組清單（`*`=全開） |
-| SKILLHUB_ENABLED | false | 是否啟用 SkillHub 來源 |
-| SKILL_ROUTE_POLICY | script-first | Skills 路由策略（script-first / mcp-first） |
-| SKILL_SCRIPT_FALLBACK_ENABLED | true | script 失敗且明確要求 fallback 時，是否回退到對應 MCP tool |
+| BOT_UNBOUND_USER_POLICY | reject | 未綁定用戶策略（reject / restricted） |
+| BOT_RESTRICTED_MODEL | haiku | 受限模式使用的 AI 模型 |
+| BOT_DEFAULT_RESTRICTED_AGENT | （空） | 預設受限 Agent ID |
+| BOT_DEBUG_MODEL | sonnet | /debug 指令使用的模型 |
+| BOT_CMD_DISABLED | （空） | 停用指令（逗號分隔） |
+| BOT_RATE_LIMIT_ENABLED | false | 受限模式頻率限制開關 |
+| BOT_RATE_LIMIT_HOURLY | 10 | 每小時上限 |
+| BOT_RATE_LIMIT_DAILY | 50 | 每日上限 |
+
+### Line Bot
+
+| 變數 | 預設值 | 說明 |
+|------|--------|------|
+| LINE_CHANNEL_SECRET | （必填） | Line Channel Secret |
+| LINE_CHANNEL_ACCESS_TOKEN | （必填） | Line Channel Access Token |
+
+### Telegram Bot
+
+| 變數 | 預設值 | 說明 |
+|------|--------|------|
+| TELEGRAM_BOT_TOKEN | （空） | Telegram Bot Token |
+| TELEGRAM_WEBHOOK_SECRET | （空） | Webhook 驗證密鑰 |
+| TELEGRAM_ADMIN_CHAT_ID | （空） | 管理員 Telegram ID（上線通知） |
+
+### Skill 系統
+
+| 變數 | 預設值 | 說明 |
+|------|--------|------|
+| SKILL_EXTERNAL_ROOT | ~/SDD/external-skills | 外部 skills 目錄（external-first 載入） |
+| SKILL_ROUTE_POLICY | script-first | 工具路由策略（script-first / mcp-first） |
+| SKILL_SCRIPT_FALLBACK_ENABLED | true | script 失敗時 fallback 到對應 MCP tool |
+
+### Research Skill
+
+| 變數 | 預設值 | 說明 |
+|------|--------|------|
+| BRAVE_SEARCH_API_KEY | （空） | Brave Search API 金鑰（留空 fallback 到公開搜尋） |
+| RESEARCH_CLAUDE_MODEL | claude-opus | research worker 使用的模型 |
+| RESEARCH_CLAUDE_TIMEOUT_SEC | 300 | Claude 背景研究 timeout（秒） |
+| RESEARCH_STALE_TIMEOUT_MINUTES | 15 | 研究逾時判定（分鐘） |
+
+### 文件轉換
+
+| 變數 | 預設值 | 說明 |
+|------|--------|------|
+| MD2PPT_URL | https://md-2-ppt-evolution.vercel.app | MD2PPT 服務 URL |
+| MD2DOC_URL | https://md-2-doc-evolution.vercel.app | MD2DOC 服務 URL |
 
 ## 專案結構
 

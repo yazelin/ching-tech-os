@@ -26,10 +26,13 @@
   - `skills/`：AI Skills 系統
   - `utils/`：工具函式
   - `migrations/versions/`：Alembic migration 檔案
+- `extends/`：外部模組（git submodule）
+  - `his/`：展望 HIS 整合（private repo）
 - `docker/`：Docker Compose 設定
 - `data/`：知識庫資料
 - `docs/`：技術文件
 - `openspec/`：功能規格與變更管理
+- `~/SDD/external-skills/`：外部 Skills（external-first 載入，優先於內建 skills）
 
 ## Python 後端重要依賴
 - `fastapi` + `uvicorn`：Web 框架與 ASGI server
