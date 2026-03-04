@@ -1,0 +1,3 @@
+[submodule "extends/his"]
+	path = extends/his
+	url = https://github.com/yazelin/ching-tech-his.git
