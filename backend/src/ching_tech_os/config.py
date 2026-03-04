@@ -90,7 +90,7 @@ class Settings:
     project_root: str = _get_env("PROJECT_ROOT", str(_project_root))
     frontend_dir: str = _get_env("FRONTEND_DIR", "/home/ct/SDD/ching-tech-os/frontend")
 
-    # NAS 路徑（相對於 ctos_mount_path）
+    # NAS 路徑（相對於 ctos_mount_path，由 property 組合為本機路徑）
     knowledge_nas_path: str = _get_env("KNOWLEDGE_NAS_PATH", "knowledge")
     project_nas_path: str = _get_env("PROJECT_NAS_PATH", "projects")
     line_files_nas_path: str = _get_env("LINEBOT_NAS_PATH", "linebot/files")
