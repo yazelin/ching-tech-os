@@ -439,6 +439,8 @@ APP_PROMPT_MAPPING: dict[str, str] = {
 async def generate_tools_prompt(
     app_permissions: dict[str, bool],
     is_group: bool = False,
+    *,
+    role: str = "user",
 ) -> str:
     """根據使用者權限動態生成工具說明 prompt
 
@@ -455,14 +457,14 @@ async def generate_tools_prompt(
     if _HAS_SKILL_MANAGER:
         try:
             sm = get_skill_manager()
-            result = await sm.generate_tools_prompt(app_permissions, is_group)
+            result = await sm.generate_tools_prompt(app_permissions, is_group, role=role)
             if result:
                 return result
         except (OSError, ValueError, RuntimeError) as e:
             logger.warning(f"SkillManager 載入失敗，使用 fallback: {e}")
 
     # 嘗試注入 Script Tools prompt
-    script_prompt = await _generate_script_tools_prompt(app_permissions)
+    script_prompt = await _generate_script_tools_prompt(app_permissions, role=role)
 
     # Fallback: 硬編碼 prompt
     sections: list[str] = []
@@ -486,6 +488,8 @@ async def generate_tools_prompt(
 
 async def _generate_script_tools_prompt(
     app_permissions: dict[str, bool],
+    *,
+    role: str = "user",
 ) -> str:
     """根據使用者權限生成 Script Tools prompt"""
     if not _HAS_SKILL_MANAGER:
@@ -493,7 +497,7 @@ async def _generate_script_tools_prompt(
 
     try:
         sm = get_skill_manager()
-        skills = await sm.get_skills_for_user(app_permissions)
+        skills = await sm.get_skills_for_user(app_permissions, role=role)
 
         lines = []
         for skill in skills:
@@ -657,6 +661,8 @@ _FALLBACK_TOOLS: dict[str | None, list[str]] = {
 
 async def get_tools_for_user(
     app_permissions: dict[str, bool],
+    *,
+    role: str = "user",
 ) -> list[str]:
     """根據使用者權限動態產生外部 MCP 工具白名單
 
@@ -677,7 +683,7 @@ async def get_tools_for_user(
     if _HAS_SKILL_MANAGER:
         try:
             sm = get_skill_manager()
-            skills = await sm.get_skills_for_user(app_permissions)
+            skills = await sm.get_skills_for_user(app_permissions, role=role)
             tools: list[str] = []
             for skill in skills:
                 tools.extend(skill.allowed_tools)
@@ -710,6 +716,8 @@ async def get_tools_for_user(
 
 async def get_tool_routing_for_user(
     app_permissions: dict[str, bool],
+    *,
+    role: str = "user",
 ) -> dict:
     """回傳當前使用者的工具路由決策（供 ai_logs/debug 使用）。"""
     route_state = {
@@ -726,7 +734,7 @@ async def get_tool_routing_for_user(
 
     try:
         sm = get_skill_manager()
-        skills = await sm.get_skills_for_user(app_permissions)
+        skills = await sm.get_skills_for_user(app_permissions, role=role)
         route_state = await _calculate_tool_routing_state(sm, skills)
     except (OSError, ValueError, RuntimeError) as e:
         logger.warning(f"取得工具路由決策失敗: {e}")
@@ -736,6 +744,8 @@ async def get_tool_routing_for_user(
 
 async def get_mcp_servers_for_user(
     app_permissions: dict[str, bool],
+    *,
+    role: str = "user",
 ) -> set[str] | None:
     """根據使用者權限取得需要載入的 MCP server 集合
 
@@ -750,8 +760,8 @@ async def get_mcp_servers_for_user(
     if _HAS_SKILL_MANAGER:
         try:
             sm = get_skill_manager()
-            skills = await sm.get_skills_for_user(app_permissions)
-            servers = await sm.get_required_mcp_servers(app_permissions)
+            skills = await sm.get_skills_for_user(app_permissions, role=role)
+            servers = await sm.get_required_mcp_servers(app_permissions, role=role)
             if any(skill.scripts for skill in skills):
                 # script runner 需要 ching-tech-os server
                 servers.add("ching-tech-os")

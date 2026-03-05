@@ -412,12 +412,16 @@ class SkillManager:
     async def get_skills_for_user(
         self,
         app_permissions: dict[str, bool],
+        *,
+        role: str = "user",
     ) -> list[Skill]:
         """根據使用者權限回傳可用的 skills"""
         await self.load_skills()
         result = []
         for skill in self._skills.values():
-            if skill.requires_app is None:
+            if role == "admin":
+                result.append(skill)
+            elif skill.requires_app is None:
                 result.append(skill)
             elif app_permissions.get(skill.requires_app, False):
                 result.append(skill)
@@ -427,18 +431,22 @@ class SkillManager:
         self,
         app_permissions: dict[str, bool],
         is_group: bool = False,
+        *,
+        role: str = "user",
     ) -> str:
         """根據使用者權限動態生成工具說明 prompt"""
-        skills = await self.get_skills_for_user(app_permissions)
+        skills = await self.get_skills_for_user(app_permissions, role=role)
         sections = [skill.prompt for skill in skills if skill.prompt]
         return "\n\n".join(sections)
 
     async def get_tool_names(
         self,
         app_permissions: dict[str, bool],
+        *,
+        role: str = "user",
     ) -> list[str]:
         """回傳使用者可用的所有工具名稱"""
-        skills = await self.get_skills_for_user(app_permissions)
+        skills = await self.get_skills_for_user(app_permissions, role=role)
         tools = []
         for skill in skills:
             tools.extend(skill.allowed_tools)
@@ -447,9 +455,11 @@ class SkillManager:
     async def get_required_mcp_servers(
         self,
         app_permissions: dict[str, bool],
+        *,
+        role: str = "user",
     ) -> set[str]:
         """回傳使用者需要的 MCP server 名稱"""
-        skills = await self.get_skills_for_user(app_permissions)
+        skills = await self.get_skills_for_user(app_permissions, role=role)
         servers = set()
         for skill in skills:
             servers.update(skill.mcp_servers)

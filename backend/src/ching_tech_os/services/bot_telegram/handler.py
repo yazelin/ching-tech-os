@@ -738,22 +738,23 @@ async def _handle_text_with_ai(
         builtin_tools=builtin_tools,
         app_permissions=app_permissions,
         platform_type="telegram",
+        role=user_role,
     )
 
     # 3. 組裝工具列表（根據用戶權限過濾）
     # 內建 MCP 工具（ching-tech-os server）
     mcp_tools = await get_mcp_tool_names(exclude_group_only=not is_group)
     mcp_tools = get_mcp_tools_for_user(user_role, user_permissions, mcp_tools)
-    tool_routing = await get_tool_routing_for_user(app_permissions)
+    tool_routing = await get_tool_routing_for_user(app_permissions, role=user_role)
     suppressed_tools = set(tool_routing.get("suppressed_mcp_tools") or [])
     if suppressed_tools:
         mcp_tools = [tool for tool in mcp_tools if tool not in suppressed_tools]
     # 外部 MCP 工具（由 SkillManager 動態產生，含 fallback）
-    skill_tools = await get_tools_for_user(app_permissions)
+    skill_tools = await get_tools_for_user(app_permissions, role=user_role)
     all_tools = list(dict.fromkeys(builtin_tools + mcp_tools + skill_tools))
 
     # 取得需要的 MCP server 集合（按需載入）
-    required_mcp_servers = await get_mcp_servers_for_user(app_permissions)
+    required_mcp_servers = await get_mcp_servers_for_user(app_permissions, role=user_role)
 
     # 4. 建立進度通知 callback（含節流避免 Telegram API 限流）
     progress_message_id: str | None = None

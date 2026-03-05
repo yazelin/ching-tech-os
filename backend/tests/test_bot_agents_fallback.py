@@ -52,7 +52,7 @@ async def test_generate_tools_prompt_skill_manager_exception(monkeypatch: pytest
     monkeypatch.setattr(bot_agents, "_HAS_SKILL_MANAGER", True)
 
     class _SM:
-        async def generate_tools_prompt(self, _permissions, _is_group):
+        async def generate_tools_prompt(self, _permissions, _is_group, **_kw):
             raise RuntimeError("boom")
 
     monkeypatch.setattr(bot_agents, "get_skill_manager", lambda: _SM())
@@ -75,7 +75,7 @@ async def test_generate_script_tools_prompt_paths(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(bot_agents, "_HAS_SKILL_MANAGER", True)
 
     class _SM:
-        async def get_skills_for_user(self, _permissions):
+        async def get_skills_for_user(self, _permissions, **_kw):
             return [
                 SimpleNamespace(name="none-script", scripts=[]),
                 SimpleNamespace(name="empty-info", scripts=["scripts/a.py"]),
@@ -101,7 +101,7 @@ async def test_generate_script_tools_prompt_exception(monkeypatch: pytest.Monkey
     monkeypatch.setattr(bot_agents, "_HAS_SKILL_MANAGER", True)
 
     class _SM:
-        async def get_skills_for_user(self, _permissions):
+        async def get_skills_for_user(self, _permissions, **_kw):
             raise ValueError("bad")
 
     monkeypatch.setattr(bot_agents, "get_skill_manager", lambda: _SM())
@@ -122,7 +122,7 @@ async def test_get_tools_for_user_fallback(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(bot_agents, "_HAS_SKILL_MANAGER", True)
 
     class _SM:
-        async def get_skills_for_user(self, _permissions):
+        async def get_skills_for_user(self, _permissions, **_kw):
             raise RuntimeError("oops")
 
     monkeypatch.setattr(bot_agents, "get_skill_manager", lambda: _SM())
@@ -143,7 +143,7 @@ async def test_get_tool_routing_paths(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(bot_agents, "_HAS_SKILL_MANAGER", True)
 
     class _SM:
-        async def get_skills_for_user(self, _permissions):
+        async def get_skills_for_user(self, _permissions, **_kw):
             raise RuntimeError("oops")
 
     monkeypatch.setattr(bot_agents, "get_skill_manager", lambda: _SM())
@@ -157,10 +157,10 @@ async def test_get_mcp_servers_for_user_paths(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(bot_agents, "_HAS_SKILL_MANAGER", True)
 
     class _SM:
-        async def get_skills_for_user(self, _permissions):
+        async def get_skills_for_user(self, _permissions, **_kw):
             return [SimpleNamespace(name="runner", scripts=["scripts/run.py"])]
 
-        async def get_required_mcp_servers(self, _permissions):
+        async def get_required_mcp_servers(self, _permissions, **_kw):
             return {"erpnext"}
 
     monkeypatch.setattr(bot_agents, "get_skill_manager", lambda: _SM())
@@ -168,10 +168,10 @@ async def test_get_mcp_servers_for_user_paths(monkeypatch: pytest.MonkeyPatch):
     assert servers == {"erpnext", "ching-tech-os"}
 
     class _SMEmpty:
-        async def get_skills_for_user(self, _permissions):
+        async def get_skills_for_user(self, _permissions, **_kw):
             return [SimpleNamespace(name="no-script", scripts=[])]
 
-        async def get_required_mcp_servers(self, _permissions):
+        async def get_required_mcp_servers(self, _permissions, **_kw):
             return set()
 
     monkeypatch.setattr(bot_agents, "get_skill_manager", lambda: _SMEmpty())
@@ -181,7 +181,7 @@ async def test_get_mcp_servers_for_user_paths(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(bot_agents.logger, "warning", warning)
 
     class _SMError:
-        async def get_skills_for_user(self, _permissions):
+        async def get_skills_for_user(self, _permissions, **_kw):
             raise RuntimeError("oops")
 
     monkeypatch.setattr(bot_agents, "get_skill_manager", lambda: _SMError())

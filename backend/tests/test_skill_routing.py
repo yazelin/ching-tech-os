@@ -74,13 +74,13 @@ async def test_script_first_suppresses_overlap_tools(monkeypatch):
     )
 
     class FakeSkillManager:
-        async def get_skills_for_user(self, _app_permissions):
+        async def get_skills_for_user(self, _app_permissions, **_kw):
             return [script_skill]
 
         async def get_script_fallback_map(self, _skill_name):
             return {"create_share_link": "create_share_link"}
 
-        async def get_required_mcp_servers(self, _app_permissions):
+        async def get_required_mcp_servers(self, _app_permissions, **_kw):
             return {"ching-tech-os"}
 
     monkeypatch.setattr(bot_agents, "get_skill_manager", lambda: FakeSkillManager(), raising=False)

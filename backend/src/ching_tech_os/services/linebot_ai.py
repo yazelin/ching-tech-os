@@ -702,7 +702,8 @@ async def process_message_with_ai(
 
         # 建立系統提示（加入群組資訊、內建工具說明和動態 MCP 工具說明）
         system_prompt = await build_system_prompt(
-            line_group_id, line_user_id, base_prompt, agent_tools, app_permissions
+            line_group_id, line_user_id, base_prompt, agent_tools, app_permissions,
+            role=user_role,
         )
 
         # 取得對話歷史（20 則提供更好的上下文理解，包含圖片和檔案）
@@ -797,11 +798,11 @@ async def process_message_with_ai(
             get_mcp_servers_for_user,
             get_tool_routing_for_user,
         )
-        tool_routing = await get_tool_routing_for_user(app_permissions)
+        tool_routing = await get_tool_routing_for_user(app_permissions, role=user_role)
         suppressed_tools = set(tool_routing.get("suppressed_mcp_tools") or [])
         if suppressed_tools:
             mcp_tools = [tool for tool in mcp_tools if tool not in suppressed_tools]
-        skill_tools = await get_tools_for_user(app_permissions)
+        skill_tools = await get_tools_for_user(app_permissions, role=user_role)
         all_tools = list(dict.fromkeys(agent_tools + mcp_tools + skill_tools))
 
         # 研究進度查詢模式：避免模型在 check-research 後又切回同步網頁重抓
@@ -810,7 +811,7 @@ async def process_message_with_ai(
             logger.info("研究進度查詢模式：已禁用 WebSearch/WebFetch（避免重複抓網頁）")
 
         # 取得需要的 MCP server 集合（按需載入）
-        required_mcp_servers = await get_mcp_servers_for_user(app_permissions)
+        required_mcp_servers = await get_mcp_servers_for_user(app_permissions, role=user_role)
 
         # 計時開始
         start_time = time.time()
@@ -1345,6 +1346,8 @@ async def build_system_prompt(
     builtin_tools: list[str] | None = None,
     app_permissions: dict[str, bool] | None = None,
     platform_type: str = "line",
+    *,
+    role: str = "user",
 ) -> str:
     """
     建立系統提示
@@ -1449,7 +1452,7 @@ async def build_system_prompt(
     if app_permissions:
         from .linebot_agents import generate_tools_prompt, generate_usage_tips_prompt
         is_group = line_group_id is not None
-        tools_prompt = await generate_tools_prompt(app_permissions, is_group)
+        tools_prompt = await generate_tools_prompt(app_permissions, is_group, role=role)
         if tools_prompt:
             base_prompt += "\n\n你可以使用以下工具：\n\n" + tools_prompt
         # 加入使用說明
