@@ -520,6 +520,58 @@ async def hub_install(
     }
 
 
+class ScriptRunRequest(BaseModel):
+    input: str = ""
+
+
+@router.post("/{name}/scripts/{script}/run")
+async def run_skill_script(
+    name: str,
+    script: str,
+    data: ScriptRunRequest | None = None,
+    session: SessionData = Depends(get_current_session),
+):
+    """執行 Skill script（需要對應 app 權限）。"""
+    from ..services.permissions import PermissionsService
+    from ..skills.script_runner import ScriptRunner
+
+    sm = get_skill_manager()
+    skill = await sm.get_skill(name)
+    if not skill:
+        raise HTTPException(status_code=404, detail=f"Skill '{name}' not found")
+
+    # 權限檢查：requires_app
+    if skill.requires_app:
+        perms = PermissionsService()
+        has_perm = await perms.check_user_permission(session.user_id, skill.requires_app)
+        if not has_perm and not session.is_admin:
+            raise HTTPException(
+                status_code=403,
+                detail=f"無權限使用 skill '{name}'（需要 {skill.requires_app} 權限）",
+            )
+
+    # 取得 script 路徑
+    script_path = await sm.get_script_path(name, script)
+    if not script_path:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Script not found: {name}/{script}",
+        )
+
+    # 取得 env overrides
+    env_overrides = sm.get_skill_env_overrides(skill)
+
+    # 執行
+    skill_dir = await sm.get_skill_dir(name)
+    runner = ScriptRunner(skill_dir.parent)
+    result = await runner.execute_path(
+        script_path, name,
+        input=data.input if data else "",
+        env_overrides=env_overrides,
+    )
+    return result
+
+
 @router.get("/{name}/frontend/{file_path:path}")
 async def get_skill_frontend_file(
     name: str,

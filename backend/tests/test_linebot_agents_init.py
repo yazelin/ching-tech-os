@@ -42,12 +42,12 @@ async def test_ensure_default_linebot_agents_skip_existing(monkeypatch: pytest.M
 
 @pytest.mark.asyncio
 async def test_ensure_default_linebot_agents_create_prompt_and_agent(monkeypatch: pytest.MonkeyPatch):
-    # linebot agents (2) + bot mode agents (2) = 4 個 agent
-    # 前 2 個（linebot）不存在，後 2 個（bot mode）已存在
+    # linebot agents (2) + bot mode agents (2) + extends agents (2) = 6 個
+    # 前 2 個（linebot）不存在，後 4 個（bot mode + extends）已存在
     monkeypatch.setattr(
         linebot_agents.ai_manager,
         "get_agent_by_name",
-        AsyncMock(side_effect=[None, None, {"id": 3}, {"id": 4}]),
+        AsyncMock(side_effect=[None, None, {"id": 3}, {"id": 4}, {"id": 5}, {"id": 6}]),
     )
     monkeypatch.setattr(
         linebot_agents.ai_manager,
