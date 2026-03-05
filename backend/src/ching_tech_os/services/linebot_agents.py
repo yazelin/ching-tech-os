@@ -4,6 +4,7 @@
 """
 
 import logging
+from pathlib import Path
 
 from . import ai_manager
 from ..config import settings
@@ -622,6 +623,80 @@ async def _ensure_agents(agent_configs: list[dict], *, use_dynamic_prompt: bool 
         logger.info(f"已建立 Agent: {agent_name}")
 
 
+def _parse_agent_md(file_path: Path) -> dict | None:
+    """解析 Agent .md 檔案（YAML frontmatter + body）為 agent_config dict。"""
+    try:
+        text = file_path.read_text(encoding="utf-8")
+    except Exception as e:
+        logger.warning("讀取 Agent 檔案失敗: %s (%s)", file_path, e)
+        return None
+
+    # 解析 YAML frontmatter
+    frontmatter = {}
+    body = text
+    if text.startswith("---"):
+        parts = text.split("---", 2)
+        if len(parts) >= 3:
+            import yaml
+            try:
+                frontmatter = yaml.safe_load(parts[1]) or {}
+            except Exception as e:
+                logger.warning("Agent frontmatter 解析失敗: %s (%s)", file_path, e)
+                return None
+            body = parts[2].strip()
+
+    if not body:
+        logger.warning("Agent 檔案無 prompt 內容: %s", file_path)
+        return None
+
+    agent_name = file_path.stem  # 檔名去掉 .md
+    display_name = frontmatter.get("display_name", agent_name)
+    model = frontmatter.get("model", "claude-sonnet")
+    tools = frontmatter.get("tools", [])
+
+    return {
+        "name": agent_name,
+        "display_name": display_name,
+        "description": f"extends agent: {agent_name}",
+        "model": model,
+        "tools": tools if tools else None,
+        "prompt": {
+            "name": f"{agent_name}-prompt",
+            "display_name": f"{display_name} Prompt",
+            "category": "extends",
+            "content": body,
+            "description": f"Auto-seeded from {file_path.name}",
+        },
+    }
+
+
+async def _seed_extends_agents() -> None:
+    """掃描 extends/*/clients/*/agents/*.md，自動 seed Agent 到 DB。"""
+    extends_dir = Path(settings.extends_dir)
+    if not extends_dir.exists():
+        return
+
+    agent_configs = []
+    for module_dir in sorted(extends_dir.iterdir()):
+        clients_dir = module_dir / "clients"
+        if not clients_dir.is_dir():
+            continue
+        for client_dir in sorted(clients_dir.iterdir()):
+            if not client_dir.is_dir() or client_dir.name.startswith("_"):
+                continue
+            agents_dir = client_dir / "agents"
+            if not agents_dir.is_dir():
+                continue
+            for md_file in sorted(agents_dir.glob("*.md")):
+                config = _parse_agent_md(md_file)
+                if config:
+                    agent_configs.append(config)
+
+    if agent_configs:
+        await _ensure_agents(agent_configs, use_dynamic_prompt=False)
+        logger.info("extends agent seed 完成，共掃描 %d 個 Agent 定義", len(agent_configs))
+
+
 async def ensure_default_linebot_agents() -> None:
     """
     確保預設的 Line Bot Agent 和模式 Agent 存在。
@@ -633,6 +708,8 @@ async def ensure_default_linebot_agents() -> None:
     await _ensure_agents(DEFAULT_LINEBOT_AGENTS, use_dynamic_prompt=True)
     # 受限模式 + Debug 模式 agents（使用靜態 prompt）
     await _ensure_agents(DEFAULT_BOT_MODE_AGENTS, use_dynamic_prompt=False)
+    # extends 子模組的 Agent（從 .md 檔案 seed）
+    await _seed_extends_agents()
 
 
 async def set_user_active_agent(bot_user_id: str, agent_id: str | None) -> None:

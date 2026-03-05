@@ -78,6 +78,9 @@ class Settings:
     circuits_mount_path: str = _get_env("CIRCUITS_MOUNT_PATH", "/mnt/nas/circuits")
     library_mount_path: str = _get_env("LIBRARY_MOUNT_PATH", "/mnt/nas/library")
 
+    # ct-his 外部資料路徑（展望 HIS DBF 檔案，SMB 掛載或本機目錄）
+    cthis_data_path: str = _get_env("CTHIS_DATA_PATH", "/mnt/nas/ctos/external-data/cthis-jfmskin/data")
+
     # ===================
     # Session 設定
     # ===================

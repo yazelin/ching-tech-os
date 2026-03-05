@@ -370,15 +370,12 @@ async def get_selectable_agents() -> list[dict]:
 
 async def create_agent(data: AiAgentCreate) -> dict:
     """建立 Agent"""
-    settings_json = json.dumps(data.settings) if data.settings else None
-    tools_json = json.dumps(data.tools) if data.tools else None
-
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
             INSERT INTO ai_agents (name, display_name, description, model,
                                    system_prompt_id, is_active, tools, settings)
-            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING id, name, display_name, description, model,
                       system_prompt_id, is_active, tools, settings, created_at, updated_at
             """,
@@ -388,8 +385,8 @@ async def create_agent(data: AiAgentCreate) -> dict:
             data.model,
             data.system_prompt_id,
             data.is_active,
-            tools_json,
-            settings_json,
+            data.tools,
+            data.settings,
         )
         result = dict(row)
         if result.get("settings"):
@@ -436,13 +433,13 @@ async def update_agent(agent_id: UUID, data: AiAgentUpdate) -> dict | None:
         param_idx += 1
 
     if data.tools is not None:
-        updates.append(f"tools = ${param_idx}::jsonb")
-        params.append(json.dumps(data.tools))
+        updates.append(f"tools = ${param_idx}")
+        params.append(data.tools)
         param_idx += 1
 
     if data.settings is not None:
-        updates.append(f"settings = ${param_idx}::jsonb")
-        params.append(json.dumps(data.settings))
+        updates.append(f"settings = ${param_idx}")
+        params.append(data.settings)
         param_idx += 1
 
     if not updates:
