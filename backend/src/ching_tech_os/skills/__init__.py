@@ -305,7 +305,11 @@ class SkillManager:
 
         # external-first：同名 skill 由 external 覆蓋 native
         _load_root(self._external_skills_dir, source="external", can_override_existing=True)
-        _load_root(self._extends_skills_dir, source="extends", can_override_existing=False)
+        # extends 子模組：掃描 extends/*/skills/*/ 結構
+        if self._extends_skills_dir.exists():
+            for submodule_skills in sorted(self._extends_skills_dir.glob("*/skills")):
+                if submodule_skills.is_dir():
+                    _load_root(submodule_skills, source="extends", can_override_existing=False)
         _load_root(self._native_skills_dir, source="native", can_override_existing=False)
 
         self._loaded = True
@@ -392,7 +396,7 @@ class SkillManager:
     def _is_within_skill_roots(self, path: Path) -> bool:
         """檢查路徑是否在受信任的 skill roots 內。"""
         resolved = path.resolve()
-        for root in (self._external_skills_dir, self._native_skills_dir):
+        for root in (self._external_skills_dir, self._extends_skills_dir, self._native_skills_dir):
             try:
                 resolved.relative_to(root.resolve())
                 return True
