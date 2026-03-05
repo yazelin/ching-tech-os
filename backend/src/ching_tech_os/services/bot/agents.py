@@ -459,6 +459,10 @@ async def generate_tools_prompt(
             sm = get_skill_manager()
             result = await sm.generate_tools_prompt(app_permissions, is_group, role=role)
             if result:
+                # SkillManager prompt 不含 Script Tools 用法，需附加
+                script_prompt = await _generate_script_tools_prompt(app_permissions, role=role)
+                if script_prompt:
+                    result += "\n\n" + script_prompt
                 return result
         except (OSError, ValueError, RuntimeError) as e:
             logger.warning(f"SkillManager 載入失敗，使用 fallback: {e}")
