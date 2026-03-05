@@ -532,7 +532,6 @@ async def run_skill_script(
     session: SessionData = Depends(get_current_session),
 ):
     """執行 Skill script（需要對應 app 權限）。"""
-    from ..services.permissions import PermissionsService
     from ..skills.script_runner import ScriptRunner
 
     sm = get_skill_manager()
@@ -541,10 +540,8 @@ async def run_skill_script(
         raise HTTPException(status_code=404, detail=f"Skill '{name}' not found")
 
     # 權限檢查：requires_app
-    if skill.requires_app:
-        perms = PermissionsService()
-        has_perm = await perms.check_user_permission(session.user_id, skill.requires_app)
-        if not has_perm and not session.is_admin:
+    if skill.requires_app and session.role != "admin":
+        if not session.app_permissions.get(skill.requires_app, False):
             raise HTTPException(
                 status_code=403,
                 detail=f"無權限使用 skill '{name}'（需要 {skill.requires_app} 權限）",
