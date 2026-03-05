@@ -45,6 +45,7 @@ dependencies = [
     # 語音轉文字
     "faster-whisper>=1.0.0",
     "opencc-python-reimplemented>=0.1.7",
+    "dbfread>=2.0.7",
 ]
 
 [project.optional-dependencies]
