@@ -91,6 +91,81 @@ def _register_module_routers(fastapi_app: FastAPI) -> None:
                 )
 
 
+async def _start_extends_modules() -> list:
+    """掃描 extends/*/contributes.yaml，執行 startup 並收集 shutdown 函式。"""
+    import os
+    import sys
+
+    import yaml
+
+    _log = logging.getLogger(__name__)
+    extends_root = Path(settings.extends_dir)
+    shutdown_fns: list = []
+
+    if not extends_root.is_dir():
+        return shutdown_fns
+
+    for contrib_path in sorted(extends_root.glob("*/contributes.yaml")):
+        module_dir = contrib_path.parent
+        module_name = module_dir.name
+        try:
+            config = yaml.safe_load(contrib_path.read_text(encoding="utf-8"))
+        except Exception as e:
+            _log.warning("extends/%s contributes.yaml 解析失敗: %s", module_name, e)
+            continue
+
+        lifespan_cfg = config.get("lifespan") if isinstance(config, dict) else None
+        if not isinstance(lifespan_cfg, dict):
+            continue
+
+        # 將模組根目錄加入 sys.path（供 import）
+        module_dir_str = str(module_dir)
+        if module_dir_str not in sys.path:
+            sys.path.insert(0, module_dir_str)
+
+        # 解析 kwargs 中的 ${ENV_VAR}
+        def _resolve_kwargs(raw_kwargs: dict) -> dict:
+            resolved = {}
+            for k, v in raw_kwargs.items():
+                if isinstance(v, str) and v.startswith("${") and v.endswith("}"):
+                    env_name = v[2:-1]
+                    resolved[k] = os.environ.get(env_name, "")
+                else:
+                    resolved[k] = v
+            return resolved
+
+        # 執行 startup
+        startup_cfg = lifespan_cfg.get("startup")
+        if isinstance(startup_cfg, dict) and startup_cfg.get("callable"):
+            callable_path = startup_cfg["callable"]
+            kwargs = _resolve_kwargs(startup_cfg.get("kwargs") or {})
+            try:
+                fn = _resolve_callable(callable_path)
+                result = fn(**kwargs)
+                if inspect.isawaitable(result):
+                    await result
+                _log.info("extends/%s startup 完成: %s", module_name, callable_path)
+            except Exception as e:
+                _log.warning("extends/%s startup 失敗 (%s): %s", module_name, callable_path, e)
+
+        # 收集 shutdown
+        shutdown_cfg = lifespan_cfg.get("shutdown")
+        if isinstance(shutdown_cfg, dict) and shutdown_cfg.get("callable"):
+            try:
+                shutdown_fn = _resolve_callable(shutdown_cfg["callable"])
+                shutdown_fns.append(shutdown_fn)
+            except Exception as e:
+                _log.warning("extends/%s shutdown 函式解析失敗: %s", module_name, e)
+        elif isinstance(shutdown_cfg, str):
+            try:
+                shutdown_fn = _resolve_callable(shutdown_cfg)
+                shutdown_fns.append(shutdown_fn)
+            except Exception as e:
+                _log.warning("extends/%s shutdown 函式解析失敗: %s", module_name, e)
+
+    return shutdown_fns
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """應用程式生命週期管理"""
@@ -136,6 +211,9 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             _logging.getLogger(__name__).warning("模組 %s 啟動函式執行失敗: %s", module_id, e)
 
+    # 啟動 extends 模組生命週期
+    extends_shutdown_fns = await _start_extends_modules()
+
     await session_manager.start_cleanup_task()
     await terminal_service.start_cleanup_task()
     start_scheduler()
@@ -148,6 +226,15 @@ async def lifespan(app: FastAPI):
         telegram_polling_task = asyncio.create_task(run_telegram_polling())
     yield
     # 關閉時
+    # 停止 extends 模組
+    for shutdown_fn in extends_shutdown_fns:
+        try:
+            result = shutdown_fn()
+            if inspect.isawaitable(result):
+                await result
+        except Exception as e:
+            _logging.getLogger(__name__).warning("extends 模組關閉失敗: %s", e)
+
     if telegram_polling_task is not None:
         telegram_polling_task.cancel()
         try:
