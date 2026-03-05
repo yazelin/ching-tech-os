@@ -17,6 +17,7 @@ from core.services.vision_his import (
     query_appointments,
     query_prescriptions,
     get_doctor_name,
+    query_vislog_bookings,
 )
 
 
@@ -168,3 +169,46 @@ class TestGetDoctorName:
             "99", dbf_base_path=str(dbf_data_path)
         )
         assert name is None
+
+
+# === VISLOG 手動預約統計 ===
+
+
+class TestQueryVislogBookings:
+    """統計醫師手動預約次數（VISLOG）"""
+
+    @pytest.mark.asyncio
+    async def test_query_all(self, dbf_data_path):
+        """查詢所有手動預約"""
+        results = await query_vislog_bookings(
+            dbf_base_path=str(dbf_data_path)
+        )
+        assert isinstance(results, list)
+        # 測試資料中有預約紀錄
+        if results:
+            assert "name" in results[0]
+            assert "count" in results[0]
+            assert "is_doctor" in results[0]
+
+    @pytest.mark.asyncio
+    async def test_date_filter(self, dbf_data_path):
+        """依日期範圍過濾"""
+        results = await query_vislog_bookings(
+            start_date=date(2026, 2, 28),
+            end_date=date(2026, 2, 28),
+            dbf_base_path=str(dbf_data_path),
+        )
+        assert isinstance(results, list)
+
+    @pytest.mark.asyncio
+    async def test_operator_parsing(self, dbf_data_path):
+        """驗證操作者名稱解析"""
+        results = await query_vislog_bookings(
+            dbf_base_path=str(dbf_data_path)
+        )
+        for r in results:
+            if r["is_doctor"]:
+                # 醫師名稱不應包含末尾數字
+                assert not r["name"][-1].isdigit() if r["name"] else True
+            else:
+                assert r["name"] == "掛號台"
