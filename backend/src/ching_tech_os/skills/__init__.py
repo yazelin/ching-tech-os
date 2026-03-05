@@ -174,6 +174,8 @@ class SkillManager:
         self._native_skills_dir = Path(skills_dir) if skills_dir else SKILLS_DIR
         configured_external = external_skills_dir or settings.skill_external_root
         self._external_skills_dir = Path(configured_external).expanduser()
+        # extends 子模組目錄（git submodule）
+        self._extends_skills_dir = Path(settings.extends_dir).expanduser()
         # 外部目錄做為可寫入目錄（Hub 安裝/匯入）
         self._writable_skills_dir = self._external_skills_dir
         self._skills: dict[str, Skill] = {}
@@ -303,6 +305,7 @@ class SkillManager:
 
         # external-first：同名 skill 由 external 覆蓋 native
         _load_root(self._external_skills_dir, source="external", can_override_existing=True)
+        _load_root(self._extends_skills_dir, source="extends", can_override_existing=False)
         _load_root(self._native_skills_dir, source="native", can_override_existing=False)
 
         self._loaded = True

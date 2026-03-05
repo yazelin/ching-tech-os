@@ -113,6 +113,8 @@ class Settings:
         "SKILL_EXTERNAL_ROOT",
         str(Path.home() / "SDD/external-skills"),
     )
+    # extends 子模組目錄（git submodule，優先權介於 external 和 native 之間）
+    extends_dir: str = _get_env("EXTENDS_DIR", str(_project_root / "extends"))
     # 工具路由策略：script-first | mcp-first
     skill_route_policy: str = _get_env("SKILL_ROUTE_POLICY", "script-first")
     # script 失敗時是否允許 fallback 到對應 MCP

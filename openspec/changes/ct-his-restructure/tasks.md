@@ -40,4 +40,4 @@
 
 - [x] 7.1 確認 ct-his 目錄結構符合 spec 定義
 - [x] 7.2 確認 SKILL.md 的 frontmatter 可被 CTOS 的 `parse_skill_md()` 正確解析（手動測試）
-- [ ] 7.3 git commit 並 push ct-his submodule，更新主 repo 的 submodule 指向
+- [x] 7.3 git commit 並 push ct-his submodule，更新主 repo 的 submodule 指向
