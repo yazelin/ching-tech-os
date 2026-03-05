@@ -576,7 +576,6 @@ async def run_skill_script(
 async def get_skill_frontend_file(
     name: str,
     file_path: str,
-    session: SessionData = Depends(get_current_session),
 ):
     """提供 Skill frontend 靜態資源（JS/CSS）。"""
     if file_path.startswith("/") or ".." in Path(file_path).parts:
