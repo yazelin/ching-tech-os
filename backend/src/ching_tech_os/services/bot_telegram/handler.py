@@ -711,6 +711,7 @@ async def _handle_text_with_ai(
     user_role = "user"
     user_permissions = None
     app_permissions: dict[str, bool] = {}
+    ctos_user_id: int | None = None
     if bot_user_id:
         try:
             async with get_connection() as conn:
@@ -718,7 +719,8 @@ async def _handle_text_with_ai(
                     "SELECT user_id FROM bot_users WHERE id = $1", bot_user_id
                 )
                 if row and row["user_id"]:
-                    user_info = await get_user_role_and_permissions(row["user_id"])
+                    ctos_user_id = row["user_id"]
+                    user_info = await get_user_role_and_permissions(ctos_user_id)
                     user_role = user_info["role"]
                     user_permissions = user_info["permissions"]
                     app_permissions = get_user_app_permissions_sync(
@@ -830,6 +832,7 @@ async def _handle_text_with_ai(
         on_tool_start=_on_tool_start,
         on_tool_end=_on_tool_end,
         required_mcp_servers=required_mcp_servers,
+        ctos_user_id=ctos_user_id,
     )
     duration_ms = int((time.time() - start_time) * 1000)
 
