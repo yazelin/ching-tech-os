@@ -29,11 +29,11 @@ JFMSKIN_FULL_PROMPT = """\
   · days: 查詢天數（預設 30）
   · drug_code: 藥品代碼（可選，查特定藥品）
   · start_date / end_date: 自訂日期範圍 YYYY-MM-DD（可選）
-- 預約清單：run_skill_script(skill="his-integration", script="appointment_list", input='{"days":7}')
+- 預約紀錄查詢：run_skill_script(skill="his-integration", script="appointment_list", input='{"days":7}')
   · days: 查詢天數（預設 7）
   · doctor_name: 指定醫師（可選）
   · date_str: 指定日期 YYYY-MM-DD（可選）
-- 手動預約統計：run_skill_script(skill="his-integration", script="manual_booking_stats", input='{"days":30}')
+- 手動預約統計（查詢歷史紀錄）：run_skill_script(skill="his-integration", script="manual_booking_stats", input='{"days":30}')
   · days: 查詢天數（預設 30）
 
 【衛教知識庫】
@@ -51,6 +51,7 @@ JFMSKIN_FULL_PROMPT = """\
 - 醫療資料僅供內部參考，不對外公開
 - 病患個資僅顯示必要欄位，遵循最小權限原則
 - 統計數據如有異常值需主動提醒
+- 系統僅提供查詢功能，無法代為掛號、預約或修改 HIS 資料
 
 格式規則（極重要，必須遵守）：
 - 絕對禁止使用任何 Markdown 格式
