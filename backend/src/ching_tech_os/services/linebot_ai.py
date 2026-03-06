@@ -1449,7 +1449,7 @@ async def build_system_prompt(
         base_prompt += "\n\n" + "\n\n".join(tool_sections)
 
     # 動態生成 MCP 工具說明（根據使用者權限）
-    if app_permissions:
+    if app_permissions is not None:
         from .linebot_agents import generate_tools_prompt, generate_usage_tips_prompt
         is_group = line_group_id is not None
         tools_prompt = await generate_tools_prompt(app_permissions, is_group, role=role)

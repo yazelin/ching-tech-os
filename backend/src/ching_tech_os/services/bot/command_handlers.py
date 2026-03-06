@@ -276,8 +276,11 @@ async def _handle_agent_restricted(ctx: CommandContext, sub_args: str) -> str | 
             lines.append("可切換的 Agent：")
             for i, agent in enumerate(selectable, 1):
                 display = agent.get("display_name") or agent["name"]
-                tools_label = _format_agent_tools(agent)
-                lines.append(f"{i}. {agent['name']} — {display}{tools_label}")
+                desc = agent.get("description") or ""
+                line = f"{i}. {display}"
+                if desc:
+                    line += f"\n   {desc}"
+                lines.append(line)
             lines.append("")
             lines.append("用法：/agent restricted <名稱或編號>")
             lines.append("重置：/agent restricted reset")
@@ -385,8 +388,11 @@ async def _handle_agent(ctx: CommandContext) -> str | None:
             lines.append("可切換的 Agent：")
             for i, agent in enumerate(selectable, 1):
                 display = agent.get("display_name") or agent["name"]
-                tools_label = _format_agent_tools(agent)
-                lines.append(f"{i}. {agent['name']} — {display}{tools_label}")
+                desc = agent.get("description") or ""
+                line = f"{i}. {display}"
+                if desc:
+                    line += f"\n   {desc}"
+                lines.append(line)
             lines.append("")
             lines.append("用法：/agent <名稱或編號>")
             lines.append("恢復預設：/agent reset")
