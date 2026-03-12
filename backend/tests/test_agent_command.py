@@ -29,8 +29,8 @@ AGENT_A_ID = uuid4()
 AGENT_B_ID = uuid4()
 
 SELECTABLE_AGENTS = [
-    {"id": AGENT_A_ID, "name": "demo-agent", "display_name": "展示助理", "description": "", "model": "claude-haiku", "tools": None},
-    {"id": AGENT_B_ID, "name": "jfmskin-edu", "display_name": "杰膚美衛教助理", "description": "", "model": "claude-haiku", "tools": '["search_knowledge", "search_nas_files", "read_document"]'},
+    {"id": AGENT_A_ID, "name": "jfmskin-edu", "display_name": "杰膚美衛教助理", "description": "", "model": "claude-haiku", "tools": '["search_knowledge", "search_nas_files", "read_document"]'},
+    {"id": AGENT_B_ID, "name": "jfmskin-full", "display_name": "杰膚美完整助理", "description": "", "model": "claude-sonnet", "tools": '["search_knowledge", "search_nas_files", "read_document", "run_skill_script"]'},
 ]
 
 
@@ -74,32 +74,31 @@ class TestAgentListCommand:
         ctx = _make_ctx(raw_args="")
         result = await _handle_agent(ctx)
         assert "目前 Agent：預設" in result
-        assert "1. demo-agent" in result
-        assert "2. jfmskin-edu" in result
-        assert "杰膚美衛教助理" in result
+        assert "1. 杰膚美衛教助理" in result
+        assert "2. 杰膚美完整助理" in result
 
     @pytest.mark.asyncio
-    async def test_show_list_with_tools_label(self):
-        """清單應顯示 agent 的工具權限標籤"""
+    async def test_show_list_with_description(self):
+        """清單應顯示 agent 的 description（如有）"""
         ctx = _make_ctx(raw_args="")
+        # 設定帶 description 的 agent
+        SELECTABLE_AGENTS[0]["description"] = "這是展示用的助理"
         result = await _handle_agent(ctx)
-        # jfmskin-edu 有 tools，應顯示中文標籤
-        assert "知識庫" in result
-        assert "NAS 檔案" in result
-        # demo-agent 沒有 tools，不應有多餘的標籤
-        assert "demo-agent — 展示助理\n" in result or "demo-agent — 展示助理" in result
+        assert "這是展示用的助理" in result
+        # 還原
+        SELECTABLE_AGENTS[0]["description"] = ""
 
     @pytest.mark.asyncio
     async def test_show_list_with_custom_agent(self, mock_deps):
         mock_deps["get_user"].return_value = str(AGENT_A_ID)
         mock_deps["get_agent"].return_value = {
-            "name": "demo-agent",
-            "display_name": "展示助理",
+            "name": "jfmskin-edu",
+            "display_name": "杰膚美衛教助理",
         }
         ctx = _make_ctx(raw_args="")
         result = await _handle_agent(ctx)
-        assert "demo-agent" in result
-        assert "展示助理" in result
+        assert "jfmskin-edu" in result
+        assert "杰膚美衛教助理" in result
 
     @pytest.mark.asyncio
     async def test_show_list_empty(self, mock_deps):
@@ -114,16 +113,16 @@ class TestAgentSwitchByName:
 
     @pytest.mark.asyncio
     async def test_switch_by_name(self, mock_deps):
-        ctx = _make_ctx(raw_args="jfmskin-edu")
+        ctx = _make_ctx(raw_args="jfmskin-full")
         result = await _handle_agent(ctx)
-        assert "已切換到 杰膚美衛教助理" in result
+        assert "已切換到 杰膚美完整助理" in result
         mock_deps["set_user"].assert_called_once_with("bot-user-uuid", str(AGENT_B_ID))
 
     @pytest.mark.asyncio
     async def test_switch_by_name_in_group(self, mock_deps):
-        ctx = _make_ctx(raw_args="demo-agent", is_group=True, group_id="group-uuid")
+        ctx = _make_ctx(raw_args="jfmskin-edu", is_group=True, group_id="group-uuid")
         result = await _handle_agent(ctx)
-        assert "已切換到 展示助理" in result
+        assert "已切換到 杰膚美衛教助理" in result
         mock_deps["set_group"].assert_called_once_with("group-uuid", str(AGENT_A_ID))
 
     @pytest.mark.asyncio
@@ -147,14 +146,14 @@ class TestAgentSwitchByNumber:
     async def test_switch_by_number(self, mock_deps):
         ctx = _make_ctx(raw_args="1")
         result = await _handle_agent(ctx)
-        assert "已切換到 展示助理" in result
+        assert "已切換到 杰膚美衛教助理" in result
         mock_deps["set_user"].assert_called_once_with("bot-user-uuid", str(AGENT_A_ID))
 
     @pytest.mark.asyncio
     async def test_switch_by_number_second(self, mock_deps):
         ctx = _make_ctx(raw_args="2")
         result = await _handle_agent(ctx)
-        assert "已切換到 杰膚美衛教助理" in result
+        assert "已切換到 杰膚美完整助理" in result
 
     @pytest.mark.asyncio
     async def test_switch_by_number_out_of_range(self):

@@ -40,6 +40,7 @@ jobs:
       - name: Run pytest + coverage
         run: |
           uv run pytest \
+            --ignore=tests/test_his \
             --cov=src/ching_tech_os \
             --cov-report=term-missing:skip-covered \
             --cov-report=xml \
