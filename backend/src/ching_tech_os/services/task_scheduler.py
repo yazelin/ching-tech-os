@@ -354,12 +354,12 @@ async def _execute_skill_script_task(task_name: str, config: dict, fallback_user
         pass  # 非 JSON 回傳視為成功
 
 
-def _execute_dynamic_task_wrapper(task_id: UUID) -> None:
-    """APScheduler 回呼包裝器（同步 → 非同步橋接）"""
-    import asyncio
+async def _execute_dynamic_task_wrapper(task_id: UUID) -> None:
+    """APScheduler 回呼包裝器
 
-    loop = asyncio.get_event_loop()
-    loop.create_task(execute_dynamic_task(task_id))
+    AsyncIOScheduler 原生支援 async 函式，直接 await 即可。
+    """
+    await execute_dynamic_task(task_id)
 
 
 # ============================================================
