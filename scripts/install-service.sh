@@ -262,6 +262,27 @@ echo "  ${MOUNT_LIBRARY_PATH} - 圖書館"
 fi  # END ENABLE_NAS
 
 # ===================
+# HIS SMB 掛載（由子模組腳本處理）
+# ===================
+# 如果需要掛載 HIS 資料（展望 HIS DBF），請執行：
+#   sudo extends/his/clients/<client>/deploy/scripts/setup-his-mount.sh
+# 該腳本會從 .env 讀取 HIS_SMB_* 設定並建立 systemd mount unit
+
+# 偵測是否已有 HIS mount unit（用於 service 依賴）
+ENABLE_HIS_MOUNT=false
+HIS_MOUNT_UNIT=""
+if [ -f "${ENV_FILE}" ]; then
+    HIS_SMB_MOUNT_PATH=$(grep -E '^HIS_SMB_MOUNT_PATH=' "${ENV_FILE}" | cut -d= -f2) 2>/dev/null || true
+    if [ -n "${HIS_SMB_MOUNT_PATH}" ]; then
+        HIS_MOUNT_UNIT=$(systemd-escape --path "${HIS_SMB_MOUNT_PATH}").mount
+        if [ -f "/etc/systemd/system/${HIS_MOUNT_UNIT}" ]; then
+            ENABLE_HIS_MOUNT=true
+            echo "偵測到 HIS 掛載 unit: ${HIS_MOUNT_UNIT}"
+        fi
+    fi
+fi
+
+# ===================
 # ClawHub CLI 安裝（已改用 REST API，保留備用）
 # ===================
 # echo "檢查 ClawHub CLI..."
@@ -294,7 +315,7 @@ sudo -u ${RUN_USER} bash -c "export PATH=${NODE_BIN_DIR}:\$PATH && cd ${PROJECT_
 # 應用程式服務設定
 # ===================
 
-# 根據 NAS 設定決定 systemd 依賴
+# 根據 NAS / HIS 設定決定 systemd 依賴
 if [ "${ENABLE_NAS}" = true ]; then
     UNIT_AFTER="network.target docker.service ${MOUNT_CTOS_UNIT}"
     UNIT_REQUIRES="docker.service ${MOUNT_CTOS_UNIT}"
@@ -303,6 +324,12 @@ else
     UNIT_AFTER="network.target docker.service"
     UNIT_REQUIRES="docker.service"
     UNIT_WANTS=""
+fi
+
+# 如果有 HIS 掛載，加入 Wants（非必要依賴，掛載失敗不影響啟動）
+if [ "${ENABLE_HIS_MOUNT}" = true ]; then
+    UNIT_AFTER="${UNIT_AFTER} ${HIS_MOUNT_UNIT}"
+    UNIT_WANTS="${UNIT_WANTS} ${HIS_MOUNT_UNIT}"
 fi
 
 # 建立 systemd service 檔案
@@ -388,4 +415,10 @@ echo ""
 echo "儲存模式：本機目錄（無 NAS）"
 echo "  資料路徑: ${PROJECT_DIR}/data/"
 echo "  如需改用 NAS，請在 .env 設定 NAS_HOST、NAS_USER、NAS_PASSWORD、NAS_SHARE 後重新執行此腳本"
+fi
+if [ "${ENABLE_HIS_MOUNT}" = true ]; then
+echo ""
+echo "HIS 資料掛載:"
+echo "  sudo systemctl status ${HIS_MOUNT_UNIT}  # 查看 HIS 掛載狀態"
+echo "  ${HIS_MOUNT_PATH} (唯讀) - 展望 HIS DBF 資料"
 fi
