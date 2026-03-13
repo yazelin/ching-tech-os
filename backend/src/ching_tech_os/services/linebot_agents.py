@@ -32,9 +32,9 @@ from .bot.agents import (  # noqa: F401
 logger = logging.getLogger("linebot_agents")
 
 
-# Agent 名稱常數
-AGENT_LINEBOT_PERSONAL = "linebot-personal"
-AGENT_LINEBOT_GROUP = "linebot-group"
+# Agent 名稱常數（可透過環境變數覆蓋）
+AGENT_LINEBOT_PERSONAL = settings.bot_default_personal_agent or "linebot-personal"
+AGENT_LINEBOT_GROUP = settings.bot_default_group_agent or "linebot-group"
 AGENT_BOT_RESTRICTED = "bot-restricted"
 AGENT_BOT_DEBUG = "bot-debug"
 

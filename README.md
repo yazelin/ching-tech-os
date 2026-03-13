@@ -55,26 +55,58 @@ ChingTech OS 是擎添工業內部使用的整合式工作平台，以 Web 技�
 
 ### 需求
 
-- Python 3.11+
-- Docker & Docker Compose
-- Node.js 20+
+#### 必要工具
 
-#### 系統套件安裝
+| 工具 | 最低版本 | 用途 |
+|------|---------|------|
+| Python | 3.11+ | 後端執行環境 |
+| uv | latest | Python 套件管理 |
+| Node.js (nvm) | 20+ | 前端建置、Marp CLI |
+| npm | (隨 Node.js) | 前端套件管理 |
+| Docker | latest | PostgreSQL、code-server 容器 |
+| Docker Compose | v2+ | 容器編排 |
+| Git | latest | 版本控制 |
+| gh (GitHub CLI) | latest | GitHub 操作（可選但建議） |
+
+#### 系統套件（Ubuntu/Debian）
+
+| 套件 | 用途 |
+|------|------|
+| `cifs-utils` | NAS CIFS/SMB 掛載 |
+| `smbclient` | NAS 檔案存取 |
+| `ripgrep` | 快速全文搜尋 |
+| `psmisc` | `fuser` 指令（端口檢查） |
+
+#### 安裝指令
 
 ```bash
-# Ubuntu/Debian
-sudo apt install smbclient cifs-utils ripgrep git
+# 1. 系統套件
+sudo apt update && sudo apt install -y git cifs-utils smbclient ripgrep psmisc
 
-# uv (Python 套件管理)
+# 2. uv (Python 套件管理)
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Claude Code (Line Bot AI 功能)
+# 3. Node.js (透過 nvm)
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+source ~/.bashrc
+nvm install 24  # 或 nvm install --lts
+
+# 4. Docker & Docker Compose
+# 參考官方文件：https://docs.docker.com/engine/install/ubuntu/
+# 安裝後將使用者加入 docker 群組：
+sudo usermod -aG docker $USER
+
+# 5. GitHub CLI（可選）
+# 參考：https://cli.github.com/
+# 或下載二進位檔安裝到 ~/.local/bin
+
+# 6. Claude Code (Line Bot AI 功能)
 curl -fsSL https://claude.ai/install.sh | bash
 
-# Marp CLI (HTML 簡報生成，可選)
+# 7. Marp CLI (HTML 簡報生成，可選)
 cd backend && npm install @marp-team/marp-cli && cd ..
 
-# Nanobanana MCP (AI 圖片生成，可選)
+# 8. Nanobanana MCP (AI 圖片生成，可選)
 # 需要 Gemini API Key: https://aistudio.google.com/apikey
 curl -fsSL https://raw.githubusercontent.com/yazelin/nanobanana/main/install.sh | bash
 ```

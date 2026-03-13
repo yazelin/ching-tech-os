@@ -148,11 +148,14 @@ class Settings:
     bot_secret_key: str = _get_env("BOT_SECRET_KEY", "")
 
     # Bot 觸發名稱（用於群組 @ 觸發，檢查訊息是否包含 @名稱）
+    # 可透過 BOT_TRIGGER_NAMES 環境變數設定（逗號分隔），未設定則使用預設值
     line_bot_trigger_names: list[str] = [
-        "ChingTech 擎添工業",  # Line 自動填入的完整名稱
-        "ChingTech",           # 簡稱
-        "擎添",                # 中文簡稱
-        "ctos",                # 系統簡稱
+        s.strip()
+        for s in _get_env(
+            "BOT_TRIGGER_NAMES",
+            "ChingTech 擎添工業,ChingTech,擎添,ctos",
+        ).split(",")
+        if s.strip()
     ]
 
     # ===================
@@ -164,6 +167,9 @@ class Settings:
     bot_restricted_model: str = _get_env("BOT_RESTRICTED_MODEL", "haiku")
     # 預設受限模式 Agent 名稱（空字串 = 使用 bot-restricted）
     bot_default_restricted_agent: str = _get_env("BOT_DEFAULT_RESTRICTED_AGENT", "")
+    # 已綁定用戶預設 Agent（空字串 = 使用內建 linebot-personal / linebot-group）
+    bot_default_personal_agent: str = _get_env("BOT_DEFAULT_PERSONAL_AGENT", "")
+    bot_default_group_agent: str = _get_env("BOT_DEFAULT_GROUP_AGENT", "")
     # Debug 模式使用的 AI 模型
     bot_debug_model: str = _get_env("BOT_DEBUG_MODEL", "sonnet")
     # 停用的斜線指令（逗號分隔，大小寫不敏感，如 "debug,start"）

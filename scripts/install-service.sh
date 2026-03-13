@@ -11,7 +11,30 @@ NAS_CREDENTIALS_FILE="/etc/nas-credentials"
 NAS_MOUNT_BASE="/mnt/nas"
 PROJECT_DIR="/home/ct/SDD/ching-tech-os"
 BACKEND_DIR="${PROJECT_DIR}/backend"
+DOCKER_DIR="${PROJECT_DIR}/docker"
 ENV_FILE="${PROJECT_DIR}/.env"
+
+# 使用者設定
+RUN_USER="ct"
+RUN_GROUP="ct"
+USER_HOME="/home/${RUN_USER}"
+RUN_UID="1000"
+RUN_GID="1000"
+
+# 工具路徑
+UV_BIN="${USER_HOME}/.local/bin/uv"
+# 自動偵測 nvm 安裝的 Node.js 版本
+NODE_VERSION=$(ls -1 "${USER_HOME}/.nvm/versions/node/" 2>/dev/null | sort -V | tail -n1)
+if [ -z "${NODE_VERSION}" ]; then
+    echo "錯誤：找不到 Node.js，請先安裝 nvm 並安裝 Node.js"
+    exit 1
+fi
+NODE_BIN_DIR="${USER_HOME}/.nvm/versions/node/${NODE_VERSION}/bin"
+echo "偵測到 Node.js ${NODE_VERSION}"
+SERVICE_PATH="${USER_HOME}/.local/bin:${NODE_BIN_DIR}:/usr/local/bin:/usr/bin:/bin"
+
+# 服務設定
+SERVICE_PORT="8088"
 
 # 掛載設定
 MOUNT_CTOS_UNIT="mnt-nas-ctos.mount"
@@ -32,14 +55,17 @@ fi
 echo "=== 安裝 ${SERVICE_NAME} 服務 ==="
 
 # 從 .env 讀取 NAS 設定
+ENABLE_NAS=false
 if [ -f "${ENV_FILE}" ]; then
-    export $(grep -E '^NAS_(HOST|USER|PASSWORD|SHARE)=' "${ENV_FILE}" | xargs)
+    export $(grep -E '^NAS_(HOST|USER|PASSWORD|SHARE)=' "${ENV_FILE}" | xargs) 2>/dev/null || true
 fi
 
-# 檢查必要的 NAS 設定
-if [ -z "${NAS_HOST}" ] || [ -z "${NAS_USER}" ] || [ -z "${NAS_PASSWORD}" ] || [ -z "${NAS_SHARE}" ]; then
-    echo "錯誤：缺少 NAS 設定，請確認 .env 檔案包含 NAS_HOST、NAS_USER、NAS_PASSWORD、NAS_SHARE"
-    exit 1
+# 檢查 NAS 設定是否完整
+if [ -n "${NAS_HOST}" ] && [ -n "${NAS_USER}" ] && [ -n "${NAS_PASSWORD}" ] && [ -n "${NAS_SHARE}" ]; then
+    ENABLE_NAS=true
+    echo "偵測到 NAS 設定，將設定 NAS 掛載"
+else
+    echo "未偵測到完整的 NAS 設定，跳過 NAS 掛載（檔案管理相關功能將無法使用）"
 fi
 
 # 停止現有服務（如果存在）
@@ -49,8 +75,9 @@ if systemctl is-active --quiet ${SERVICE_NAME}; then
 fi
 
 # ===================
-# NAS 掛載設定
+# NAS 掛載設定（可選）
 # ===================
+if [ "${ENABLE_NAS}" = true ]; then
 echo "設定 NAS 掛載..."
 
 # 建立 NAS 憑證檔案
@@ -106,7 +133,7 @@ Wants=network-online.target
 What=//${NAS_HOST}/${NAS_SHARE}/ching-tech-os
 Where=${MOUNT_CTOS_PATH}
 Type=cifs
-Options=credentials=${NAS_CREDENTIALS_FILE},uid=1000,gid=1000,iocharset=utf8,_netdev
+Options=credentials=${NAS_CREDENTIALS_FILE},uid=${RUN_UID},gid=${RUN_GID},iocharset=utf8,_netdev
 
 [Install]
 WantedBy=multi-user.target
@@ -124,7 +151,7 @@ Wants=network-online.target
 What=//${NAS_HOST}/擎添共用區/在案資料分享
 Where=${MOUNT_PROJECTS_PATH}
 Type=cifs
-Options=credentials=${NAS_CREDENTIALS_FILE},uid=1000,gid=1000,iocharset=utf8,_netdev,ro
+Options=credentials=${NAS_CREDENTIALS_FILE},uid=${RUN_UID},gid=${RUN_GID},iocharset=utf8,_netdev,ro
 
 [Install]
 WantedBy=multi-user.target
@@ -142,7 +169,7 @@ Wants=network-online.target
 What=//${NAS_HOST}/擎添線路圖/圖檔
 Where=${MOUNT_CIRCUITS_PATH}
 Type=cifs
-Options=credentials=${NAS_CREDENTIALS_FILE},uid=1000,gid=1000,iocharset=utf8,_netdev,ro
+Options=credentials=${NAS_CREDENTIALS_FILE},uid=${RUN_UID},gid=${RUN_GID},iocharset=utf8,_netdev,ro
 
 [Install]
 WantedBy=multi-user.target
@@ -160,7 +187,7 @@ Wants=network-online.target
 What=//${NAS_HOST}/擎添圖書館
 Where=${MOUNT_LIBRARY_PATH}
 Type=cifs
-Options=credentials=${NAS_CREDENTIALS_FILE},uid=1000,gid=1000,iocharset=utf8,_netdev
+Options=credentials=${NAS_CREDENTIALS_FILE},uid=${RUN_UID},gid=${RUN_GID},iocharset=utf8,_netdev
 
 [Install]
 WantedBy=multi-user.target
@@ -208,6 +235,32 @@ else
     MOUNT_SUCCESS=false
 fi
 
+else
+# ===================
+# 無 NAS：建立本機目錄（使用預設的 /mnt/nas/ 路徑）
+# ===================
+echo "建立本機資料目錄（替代 NAS 掛載）..."
+
+# 建立 ctos 子目錄
+for subdir in knowledge linebot attachments ai-generated projects; do
+    mkdir -p "${MOUNT_CTOS_PATH}/${subdir}"
+done
+
+# 建立 shared 目錄
+mkdir -p ${MOUNT_PROJECTS_PATH}
+mkdir -p ${MOUNT_CIRCUITS_PATH}
+mkdir -p ${MOUNT_LIBRARY_PATH}
+
+chown -R ${RUN_USER}:${RUN_GROUP} ${NAS_MOUNT_BASE}
+
+echo "本機資料目錄建立完成: ${NAS_MOUNT_BASE}"
+echo "  ${MOUNT_CTOS_PATH} (讀寫) - 系統檔案"
+echo "  ${MOUNT_PROJECTS_PATH} - 專案資料"
+echo "  ${MOUNT_CIRCUITS_PATH} - 線路圖"
+echo "  ${MOUNT_LIBRARY_PATH} - 圖書館"
+
+fi  # END ENABLE_NAS
+
 # ===================
 # ClawHub CLI 安裝（已改用 REST API，保留備用）
 # ===================
@@ -225,39 +278,63 @@ fi
 # fi
 
 # ===================
+# 依賴安裝與建置
+# ===================
+echo "安裝後端 Python 依賴..."
+sudo -u ${RUN_USER} bash -c "cd ${BACKEND_DIR} && ${UV_BIN} sync"
+
+echo "安裝前端依賴..."
+sudo -u ${RUN_USER} bash -c "export PATH=${NODE_BIN_DIR}:\$PATH && cd ${PROJECT_DIR} && npm install"
+sudo -u ${RUN_USER} bash -c "export PATH=${NODE_BIN_DIR}:\$PATH && cd ${PROJECT_DIR}/frontend && npm install"
+
+echo "建置前端..."
+sudo -u ${RUN_USER} bash -c "export PATH=${NODE_BIN_DIR}:\$PATH && cd ${PROJECT_DIR} && npm run build"
+
+# ===================
 # 應用程式服務設定
 # ===================
+
+# 根據 NAS 設定決定 systemd 依賴
+if [ "${ENABLE_NAS}" = true ]; then
+    UNIT_AFTER="network.target docker.service ${MOUNT_CTOS_UNIT}"
+    UNIT_REQUIRES="docker.service ${MOUNT_CTOS_UNIT}"
+    UNIT_WANTS="${MOUNT_PROJECTS_UNIT} ${MOUNT_CIRCUITS_UNIT} ${MOUNT_LIBRARY_UNIT}"
+else
+    UNIT_AFTER="network.target docker.service"
+    UNIT_REQUIRES="docker.service"
+    UNIT_WANTS=""
+fi
 
 # 建立 systemd service 檔案
 echo "建立 systemd service 檔案..."
 cat > ${SERVICE_FILE} << EOF
 [Unit]
 Description=Ching Tech OS Web Desktop Service
-After=network.target docker.service ${MOUNT_CTOS_UNIT}
-Requires=docker.service ${MOUNT_CTOS_UNIT}
-Wants=${MOUNT_PROJECTS_UNIT} ${MOUNT_CIRCUITS_UNIT} ${MOUNT_LIBRARY_UNIT}
+After=${UNIT_AFTER}
+Requires=${UNIT_REQUIRES}
+Wants=${UNIT_WANTS}
 
 [Service]
 Type=simple
-User=ct
-Group=ct
-WorkingDirectory=/home/ct/SDD/ching-tech-os/backend
-EnvironmentFile=/home/ct/SDD/ching-tech-os/.env
+User=${RUN_USER}
+Group=${RUN_GROUP}
+WorkingDirectory=${BACKEND_DIR}
+EnvironmentFile=${ENV_FILE}
 
 # 確保 PATH 包含 uv、nvm node 和其他工具
-Environment="PATH=/home/ct/.local/bin:/home/ct/.nvm/versions/node/v24.13.0/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PATH=${SERVICE_PATH}"
 
 # 啟動前確保資料庫容器運行
-ExecStartPre=/usr/bin/docker compose -f /home/ct/SDD/ching-tech-os/docker/docker-compose.yml up -d postgres
+ExecStartPre=/usr/bin/docker compose -f ${DOCKER_DIR}/docker-compose.yml up -d postgres
 ExecStartPre=/bin/sleep 3
 
 # 確保端口未被佔用（- 前綴表示失敗時繼續）
-ExecStartPre=-/usr/bin/fuser -k 8088/tcp
+ExecStartPre=-/usr/bin/fuser -k ${SERVICE_PORT}/tcp
 
 # 執行資料庫遷移並啟動應用程式
-ExecStartPre=/home/ct/.local/bin/uv run alembic upgrade head
+ExecStartPre=${UV_BIN} run alembic upgrade head
 # UVICORN_RELOAD=true 時啟用自動重載（開發用）
-ExecStart=/bin/bash -c 'if [ "\$UVICORN_RELOAD" = "true" ]; then exec /home/ct/.local/bin/uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8088 --reload --reload-dir /home/ct/SDD/ching-tech-os/backend/src; else exec /home/ct/.local/bin/uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8088; fi'
+ExecStart=/bin/bash -c 'if [ "\$UVICORN_RELOAD" = "true" ]; then exec ${UV_BIN} run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port ${SERVICE_PORT} --reload --reload-dir ${BACKEND_DIR}/src; else exec ${UV_BIN} run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port ${SERVICE_PORT}; fi'
 
 Restart=on-failure
 RestartSec=10
@@ -295,6 +372,7 @@ echo "  sudo systemctl status ${SERVICE_NAME}   # 查看狀態"
 echo "  sudo systemctl restart ${SERVICE_NAME}  # 重啟服務"
 echo "  sudo systemctl stop ${SERVICE_NAME}     # 停止服務"
 echo "  sudo journalctl -u ${SERVICE_NAME} -f   # 查看日誌"
+if [ "${ENABLE_NAS}" = true ]; then
 echo "  sudo systemctl status ${MOUNT_CTOS_UNIT}     # 查看 ctos 掛載狀態"
 echo "  sudo systemctl status ${MOUNT_PROJECTS_UNIT} # 查看 projects 掛載狀態"
 echo "  sudo systemctl status ${MOUNT_CIRCUITS_UNIT} # 查看 circuits 掛載狀態"
@@ -305,3 +383,9 @@ echo "  ${MOUNT_CTOS_PATH} (讀寫) - 系統檔案"
 echo "  ${MOUNT_PROJECTS_PATH} (唯讀) - 專案資料分享"
 echo "  ${MOUNT_CIRCUITS_PATH} (唯讀) - 線路圖"
 echo "  ${MOUNT_LIBRARY_PATH} (讀寫) - 擎添圖書館"
+else
+echo ""
+echo "儲存模式：本機目錄（無 NAS）"
+echo "  資料路徑: ${PROJECT_DIR}/data/"
+echo "  如需改用 NAS，請在 .env 設定 NAS_HOST、NAS_USER、NAS_PASSWORD、NAS_SHARE 後重新執行此腳本"
+fi

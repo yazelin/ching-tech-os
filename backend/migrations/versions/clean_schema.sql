@@ -427,7 +427,7 @@ CREATE TABLE public.ai_prompts (
 -- Name: alembic_version; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.alembic_version (
+CREATE TABLE IF NOT EXISTS public.alembic_version (
     version_num character varying(32) NOT NULL
 );
 
@@ -1138,8 +1138,11 @@ ALTER TABLE ONLY public.ai_prompts
 -- Name: alembic_version alembic_version_pkc; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.alembic_version
-    ADD CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num);
+DO $$ BEGIN
+    ALTER TABLE ONLY public.alembic_version
+        ADD CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num);
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
 
 --
