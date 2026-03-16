@@ -447,9 +447,20 @@ const SettingsApp = (function () {
       </button>`
     ).join('');
 
-    // 定位選單
-    const wrapper = anchorBtn.closest('.user-actions-wrapper');
-    wrapper.appendChild(menu);
+    // 定位選單（使用 fixed 定位避免被父層 overflow hidden 裁切）
+    document.body.appendChild(menu);
+    const rect = anchorBtn.getBoundingClientRect();
+    menu.style.position = 'fixed';
+    menu.style.top = `${rect.bottom + 4}px`;
+    menu.style.right = `${window.innerWidth - rect.right}px`;
+
+    // 確保選單不超出螢幕底部
+    requestAnimationFrame(() => {
+      const menuRect = menu.getBoundingClientRect();
+      if (menuRect.bottom > window.innerHeight) {
+        menu.style.top = `${rect.top - menuRect.height - 4}px`;
+      }
+    });
 
     // 綁定選單項目事件
     menu.querySelectorAll('.user-actions-menu-item:not(.disabled)').forEach(item => {

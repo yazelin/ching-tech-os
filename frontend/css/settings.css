@@ -592,12 +592,10 @@
   display: inline-block;
 }
 
-/* 操作下拉選單 */
+/* 操作下拉選單（fixed 定位，避免被 overflow hidden 裁切） */
 .user-actions-menu {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  z-index: 100;
+  position: fixed;
+  z-index: 10000;
   min-width: 200px;
   background-color: var(--modal-bg);
   border: 1px solid var(--modal-border);
@@ -958,10 +956,6 @@
     width: 100%;
     display: flex;
     justify-content: flex-end;
-  }
-
-  .user-actions-menu {
-    right: 0;
   }
 
   /* 權限對話框調整 */
