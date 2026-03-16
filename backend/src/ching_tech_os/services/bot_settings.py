@@ -5,7 +5,7 @@
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 
 from ..config import settings
 from ..database import get_connection
@@ -135,7 +135,7 @@ async def update_bot_credentials(platform: str, credentials: dict[str, str]) -> 
         raise ValueError(f"不支援的平台: {platform}")
 
     valid_keys = set(PLATFORM_KEYS[platform])
-    now = datetime.now(timezone.utc)
+    now = datetime.utcnow()
 
     async with get_connection() as conn:
         for key, value in credentials.items():
@@ -179,7 +179,7 @@ async def get_proactive_push_enabled(platform: str) -> bool:
 
 async def update_proactive_push_enabled(platform: str, enabled: bool) -> None:
     """更新平台的主動推送開關"""
-    now = datetime.now(timezone.utc)
+    now = datetime.utcnow()
     async with get_connection() as conn:
         await conn.execute(
             """
