@@ -345,7 +345,7 @@ uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8088 --reload
 | `his-integration` | HIS 整合 | 需搭配 extends/his |
 | `ct-his` | 展望 HIS 叫號 | 需搭配 extends/his |
 | `printer` | 列印功能 | 需搭配 extends/printer |
-| `erpnext` | ERPNext ERP 整合 | |
+| `erpnext` | ERPNext ERP 整合 | 需搭配 extends/erpnext |
 
 ### Bot 設定
 

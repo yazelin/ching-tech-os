@@ -18,7 +18,6 @@ from ..models.share import (
     PasswordRequiredResponse,
 )
 from .knowledge import get_knowledge, KnowledgeNotFoundError
-from .project import get_project, ProjectNotFoundError
 
 # 密碼錯誤最大嘗試次數
 MAX_PASSWORD_ATTEMPTS = 5
@@ -240,40 +239,21 @@ async def get_resource_title(resource_type: str, resource_id: str, filename: str
         if resource_type == "knowledge":
             knowledge = get_knowledge(resource_id)
             return knowledge.title
-        elif resource_type == "project":
-            project = await get_project(UUIDType(resource_id))
-            return project.name
         elif resource_type == "nas_file":
             # 驗證路徑並回傳檔名
             full_path = validate_nas_file_path(resource_id)
             return full_path.name
-        elif resource_type == "project_attachment":
-            # 取得專案附件資訊
-            attachment = await get_project_attachment_info(resource_id)
-            return attachment["filename"]
         elif resource_type == "content":
             # content 類型使用 filename 或預設標題
             return filename or "分享內容"
         else:
             return "未知資源"
-    except (KnowledgeNotFoundError, ProjectNotFoundError):
+    except KnowledgeNotFoundError:
         raise ResourceNotFoundError(f"資源 {resource_type}/{resource_id} 不存在")
     except NasFileNotFoundError as e:
         raise ResourceNotFoundError(str(e))
     except NasFileAccessDenied as e:
         raise ResourceNotFoundError(str(e))
-
-
-async def get_project_attachment_info(attachment_id: str) -> dict:
-    """取得專案附件資訊"""
-    async with get_connection() as conn:
-        row = await conn.fetchrow(
-            "SELECT id, filename, storage_path, file_type, project_id, file_size FROM project_attachments WHERE id = $1",
-            UUID(attachment_id),
-        )
-        if not row:
-            raise ResourceNotFoundError(f"附件 {attachment_id} 不存在")
-        return dict(row)
 
 
 async def create_share_link(
@@ -617,35 +597,6 @@ async def get_public_resource(token: str, password: str | None = None) -> Public
             except KnowledgeNotFoundError:
                 raise ResourceNotFoundError("原始內容已被刪除")
 
-        elif resource_type == "project":
-            try:
-                project = await get_project(UUID(resource_id))
-                # 只顯示安全的資訊
-                data = {
-                    "id": str(project.id),
-                    "name": project.name,
-                    "description": project.description,
-                    "status": project.status,
-                    "start_date": project.start_date.isoformat() if project.start_date else None,
-                    "end_date": project.end_date.isoformat() if project.end_date else None,
-                    "milestones": [
-                        {
-                            "name": m.name,
-                            "milestone_type": m.milestone_type,
-                            "planned_date": m.planned_date.isoformat() if m.planned_date else None,
-                            "actual_date": m.actual_date.isoformat() if m.actual_date else None,
-                            "status": m.status,
-                        }
-                        for m in project.milestones
-                    ],
-                    "members": [
-                        {"name": m.name, "role": m.role}
-                        for m in project.members
-                    ],
-                }
-            except ProjectNotFoundError:
-                raise ResourceNotFoundError("原始內容已被刪除")
-
         elif resource_type == "nas_file":
             try:
                 # 驗證檔案存在且可存取
@@ -673,35 +624,6 @@ async def get_public_resource(token: str, password: str | None = None) -> Public
                 raise ResourceNotFoundError(str(e))
             except Exception as e:
                 raise ResourceNotFoundError(f"無法存取檔案：{e}")
-
-        elif resource_type == "project_attachment":
-            try:
-                # 取得附件資訊（已包含 file_size）
-                attachment = await get_project_attachment_info(resource_id)
-                filename = attachment["filename"]
-                size = attachment.get("file_size") or 0
-
-                if size >= 1024 * 1024:
-                    size_str = f"{size / 1024 / 1024:.2f} MB"
-                elif size >= 1024:
-                    size_str = f"{size / 1024:.2f} KB"
-                elif size > 0:
-                    size_str = f"{size} bytes"
-                else:
-                    size_str = "未知"
-
-                # 回傳檔案資訊（實際下載透過 /download 端點）
-                data = {
-                    "file_name": filename,
-                    "file_type": attachment.get("file_type", ""),
-                    "file_size": size,
-                    "file_size_str": size_str,
-                    "download_url": f"/api/public/{token}/download",
-                }
-            except ResourceNotFoundError:
-                raise
-            except Exception as e:
-                raise ResourceNotFoundError(f"無法存取附件：{e}")
 
         elif resource_type == "content":
             # 直接儲存的內容

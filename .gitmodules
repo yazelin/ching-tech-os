@@ -1,3 +1,6 @@
 [submodule "extends/his"]
 	path = extends/his
 	url = https://github.com/yazelin/ching-tech-his.git
+[submodule "extends/erpnext"]
+	path = extends/erpnext
+	url = https://github.com/yazelin/ching-tech-erpnext.git

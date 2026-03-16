@@ -189,14 +189,6 @@ BUILTIN_MODULES: dict[str, ModuleInfo] = {
         "permission_defaults": {"task-scheduler": False},
         "permission_display_names": {"task-scheduler": "排程管理"},
     },
-    "erpnext": {
-        "id": "erpnext",
-        "source": "builtin",
-        "app_ids": ["project-management", "inventory-management", "vendor-management"],
-        "app_manifest": [
-            {"id": "erpnext", "name": "ERPNext", "icon": "erpnext"},
-        ],
-    },
 }
 
 

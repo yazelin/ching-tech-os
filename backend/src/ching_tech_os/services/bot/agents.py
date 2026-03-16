@@ -58,95 +58,6 @@ async def _calculate_tool_routing_state(sm, skills) -> dict:
 # 按 App 權限分類的工具說明 Prompt 區塊
 # ============================================================
 
-# 專案管理工具說明（對應 app: project-management）
-# 此功能已遷移至 ERPNext，以下為 ERPNext 操作指引
-PROJECT_TOOLS_PROMPT = """【專案管理】（使用 ERPNext）
-專案管理功能已遷移至 ERPNext 系統，請使用 ERPNext MCP 工具操作：
-
-【查詢專案】
-- mcp__erpnext__list_documents: 查詢專案列表
-  · doctype: "Project"
-  · fields: ["name", "project_name", "status", "expected_start_date", "expected_end_date"]
-  · filters: 可依狀態過濾，如 '{"status": "Open"}'
-- mcp__erpnext__get_document: 取得專案詳情
-  · doctype: "Project"
-  · name: 專案名稱
-
-【任務管理】（對應原本的里程碑）
-- mcp__erpnext__list_documents: 查詢專案任務
-  · doctype: "Task"
-  · filters: '{"project": "專案名稱"}'
-- mcp__erpnext__create_document: 新增任務
-  · doctype: "Task"
-  · data: {"subject": "任務名稱", "project": "專案名稱", "status": "Open"}
-
-【專案操作範例】
-1. 查詢所有進行中的專案：
-   mcp__erpnext__list_documents(doctype="Project", filters='{"status":"Open"}')
-2. 查詢特定專案的任務：
-   mcp__erpnext__list_documents(doctype="Task", filters='{"project":"專案名稱"}')
-3. 更新任務狀態為完成：
-   mcp__erpnext__update_document(doctype="Task", name="TASK-00001", data='{"status":"Completed"}')
-
-【直接操作 ERPNext】
-若需要更複雜的操作，請直接在 ERPNext 系統操作：http://ct.erp"""
-
-# 物料/庫存管理工具說明（對應 app: inventory）
-# 此功能已遷移至 ERPNext，以下為 ERPNext 操作指引
-INVENTORY_TOOLS_PROMPT = """【物料/庫存管理】（使用 ERPNext）
-物料與庫存管理功能已遷移至 ERPNext 系統，請使用 ERPNext MCP 工具操作：
-
-【查詢物料】
-- mcp__erpnext__list_documents: 查詢物料列表
-  · doctype: "Item"
-  · fields: ["item_code", "item_name", "item_group", "stock_uom"]
-  · filters: 可依類別過濾，如 '{"item_group": "零件"}'
-- mcp__erpnext__get_document: 取得物料詳情
-  · doctype: "Item"
-  · name: 物料代碼
-
-【查詢庫存】
-- mcp__erpnext__get_stock_balance: 查詢即時庫存
-  · item_code: 物料代碼（可選）
-  · warehouse: 倉庫名稱（可選）
-- mcp__erpnext__get_stock_ledger: 查詢庫存異動記錄
-  · item_code: 物料代碼（可選）
-  · warehouse: 倉庫名稱（可選）
-  · limit: 回傳筆數（預設 50）
-
-【庫存異動】
-- mcp__erpnext__create_document: 建立 Stock Entry
-  · doctype: "Stock Entry"
-  · data: 包含 stock_entry_type、items 等欄位
-  · stock_entry_type 常用值：
-    - "Material Receipt"：收料入庫
-    - "Material Issue"：發料出庫
-    - "Material Transfer"：倉庫間調撥
-
-【廠商/客戶管理】
-⭐ 首選工具（一次取得完整資料，支援別名搜尋）：
-- mcp__erpnext__get_supplier_details: 查詢廠商完整資料
-  · keyword: 關鍵字搜尋（支援別名，如「健保局」、「104人力銀行」）
-  · 回傳：名稱、地址、電話、傳真、聯絡人
-- mcp__erpnext__get_customer_details: 查詢客戶完整資料
-  · keyword: 關鍵字搜尋（支援別名）
-  · 回傳：名稱、地址、電話、傳真、聯絡人
-
-進階操作：
-- mcp__erpnext__list_documents: 查詢列表（doctype: "Supplier" 或 "Customer"）
-- mcp__erpnext__create_document: 新增廠商/客戶
-
-【操作範例】
-1. 查詢庫存：
-   mcp__erpnext__get_stock_balance(item_code="CTOS-ABC123")
-2. 查詢物料清單：
-   mcp__erpnext__list_documents(doctype="Item", fields='["item_code","item_name","stock_uom"]')
-3. 收料入庫：
-   mcp__erpnext__create_document(doctype="Stock Entry", data='{"stock_entry_type":"Material Receipt","items":[{"item_code":"CTOS-ABC123","qty":10,"t_warehouse":"Stores - 擎添工業"}]}')
-
-【直接操作 ERPNext】
-若需要更複雜的操作（如採購單、批號管理），請直接在 ERPNext 系統操作：http://ct.erp"""
-
 # 知識庫工具說明（對應 app: knowledge-base）
 KNOWLEDGE_TOOLS_PROMPT = """【知識庫】
 - search_knowledge: 搜尋知識庫（輸入關鍵字，回傳標題列表）
@@ -384,8 +295,6 @@ AI_IMAGE_TOOLS_PROMPT = """【AI 圖片生成】
 
 # App ID 與 Prompt 區塊的對應
 APP_PROMPT_MAPPING: dict[str, str] = {
-    "project-management": PROJECT_TOOLS_PROMPT,
-    "inventory-management": INVENTORY_TOOLS_PROMPT,
     "knowledge-base": KNOWLEDGE_TOOLS_PROMPT,
     "file-manager": FILE_TOOLS_PROMPT,
     "ai-assistant": AI_IMAGE_TOOLS_PROMPT + "\n\n" + AI_DOCUMENT_TOOLS_PROMPT,
@@ -504,14 +413,6 @@ def generate_usage_tips_prompt(
     """
     tips: list[str] = []
 
-    # 專案相關流程（已遷移至 ERPNext）
-    if app_permissions.get("project-management", False):
-        tips.extend([
-            "1. 專案管理已遷移至 ERPNext，使用 mcp__erpnext__list_documents(doctype='Project') 查詢專案",
-            "2. 使用 mcp__erpnext__list_documents(doctype='Task', filters='{\"project\":\"專案名稱\"}') 查詢任務",
-            "3. 複雜操作請引導用戶直接在 ERPNext 系統操作：http://ct.erp",
-        ])
-
     # 知識庫相關流程
     if app_permissions.get("knowledge-base", False):
         tips.extend([
@@ -519,14 +420,6 @@ def generate_usage_tips_prompt(
             f"{len(tips)+1}. 用戶要求「記住」或「記錄」某事時，使用 add_note 新增筆記，傳入 line_user_id 和 ctos_user_id",
             f"{len(tips)+1}. 用戶要求修改或更新知識時，使用 update_knowledge_item",
             f"{len(tips)+1}. 用戶要求將圖片加入知識庫時，先用 get_message_attachments 查詢附件，再用 add_note_with_attachments 加入",
-        ])
-
-    # 庫存相關流程（已遷移至 ERPNext）
-    if app_permissions.get("inventory-management", False):
-        tips.extend([
-            f"{len(tips)+1}. 庫存管理已遷移至 ERPNext，使用 mcp__erpnext__get_stock_balance 查詢庫存",
-            f"{len(tips)+1}. 使用 mcp__erpnext__list_documents(doctype='Item') 查詢物料清單",
-            f"{len(tips)+1}. 收料/發料請引導用戶在 ERPNext 建立 Stock Entry：http://ct.erp",
         ])
 
     # 檔案相關流程
@@ -558,56 +451,6 @@ _FALLBACK_TOOLS: dict[str | None, list[str]] = {
         "mcp__nanobanana__generate_image",
         "mcp__nanobanana__edit_image",
         "mcp__nanobanana__restore_image",
-    ],
-    "inventory-management": [
-        "mcp__erpnext__list_documents",
-        "mcp__erpnext__get_document",
-        "mcp__erpnext__create_document",
-        "mcp__erpnext__update_document",
-        "mcp__erpnext__delete_document",
-        "mcp__erpnext__submit_document",
-        "mcp__erpnext__cancel_document",
-        "mcp__erpnext__run_report",
-        "mcp__erpnext__get_count",
-        "mcp__erpnext__get_list_with_summary",
-        "mcp__erpnext__run_method",
-        "mcp__erpnext__search_link",
-        "mcp__erpnext__list_doctypes",
-        "mcp__erpnext__get_doctype_meta",
-        "mcp__erpnext__get_stock_balance",
-        "mcp__erpnext__get_stock_ledger",
-        "mcp__erpnext__get_item_price",
-        "mcp__erpnext__make_mapped_doc",
-        "mcp__erpnext__get_party_balance",
-        "mcp__erpnext__get_supplier_details",
-        "mcp__erpnext__get_customer_details",
-        "mcp__erpnext__upload_file",
-        "mcp__erpnext__upload_file_from_url",
-        "mcp__erpnext__list_files",
-        "mcp__erpnext__download_file",
-        "mcp__erpnext__get_file_url",
-    ],
-    "project-management": [
-        "mcp__erpnext__list_documents",
-        "mcp__erpnext__get_document",
-        "mcp__erpnext__create_document",
-        "mcp__erpnext__update_document",
-        "mcp__erpnext__delete_document",
-        "mcp__erpnext__submit_document",
-        "mcp__erpnext__cancel_document",
-        "mcp__erpnext__run_report",
-        "mcp__erpnext__get_count",
-        "mcp__erpnext__get_list_with_summary",
-        "mcp__erpnext__run_method",
-        "mcp__erpnext__search_link",
-        "mcp__erpnext__list_doctypes",
-        "mcp__erpnext__get_doctype_meta",
-        "mcp__erpnext__make_mapped_doc",
-        "mcp__erpnext__upload_file",
-        "mcp__erpnext__upload_file_from_url",
-        "mcp__erpnext__list_files",
-        "mcp__erpnext__download_file",
-        "mcp__erpnext__get_file_url",
     ],
 }
 

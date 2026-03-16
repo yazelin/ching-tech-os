@@ -380,17 +380,6 @@ async def short_share_url(token: str):
             except Exception:
                 pass
 
-        elif resource_type == "project":
-            from .services import project_service
-            try:
-                project = await project_service.get_project(resource_id)
-                if project:
-                    og_title = f"{project['name']} - 擎添工業專案"
-                    if project.get("description"):
-                        og_description = project["description"][:100]
-            except Exception:
-                pass
-
         elif resource_type == "nas_file":
             # 從路徑取得檔名
             file_name = resource_id.split("/")[-1] if "/" in resource_id else resource_id

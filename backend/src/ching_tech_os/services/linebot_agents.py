@@ -14,8 +14,6 @@ from .permissions import get_effective_app_permissions
 
 # 從平台無關的 bot.agents 模組匯入工具 Prompt 與函式（向後相容）
 from .bot.agents import (  # noqa: F401
-    PROJECT_TOOLS_PROMPT,
-    INVENTORY_TOOLS_PROMPT,
     KNOWLEDGE_TOOLS_PROMPT,
     FILE_TOOLS_PROMPT,
     BASE_TOOLS_PROMPT,
