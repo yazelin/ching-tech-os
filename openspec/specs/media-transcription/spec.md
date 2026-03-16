@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: 非同步轉錄音訊/影片
-Skill SHALL 提供 `transcribe` script，以非同步方式將音訊或影片檔轉錄為繁體中文逐字稿。start script SHALL 接受並持久化 `caller_context`，供主動推送使用。
+Skill SHALL 提供 `transcribe` script，以非同步方式將音訊或影片檔轉錄為繁體中文逐字稿。start script SHALL 接受並持久化 `caller_context`，供主動推送使用。Bot 語音模組的長音訊（> 60 秒）SHALL 能委派給本 skill 處理。
 
 #### Scenario: 啟動轉錄（立即回傳 job ID）
 - **WHEN** AI 呼叫 `run_skill_script(skill="media-transcription", script="transcribe", input='{"source_path":"ctos://linebot/videos/2026-02-23/a1b2c3d4/video.mp4"}')`
@@ -48,3 +48,9 @@ Skill SHALL 提供 `transcribe` script，以非同步方式將音訊或影片檔
 - **WHEN** 背景轉錄程序寫入 `status: "completed"`
 - **THEN** 程序 SHALL POST 至 `/api/internal/proactive-push`，帶入 `job_id` 與 `skill="media-transcription"`
 - **AND** 推送訊息包含逐字稿前 300 字與完整逐字稿的 ctos_path
+
+#### Scenario: Bot 語音模組委派長音訊轉錄
+- **WHEN** `extends/voice` 模組收到 duration > 60 秒的語音訊息
+- **THEN** voice 模組 SHALL 呼叫 `transcribe` script，傳入音訊的 NAS 路徑（轉為 `ctos://` 格式）
+- **AND** SHALL 傳入 `caller_context` 包含 platform、chat_id、user_id 等回覆資訊
+- **AND** 轉錄完成後 SHALL 透過 proactive-push 回覆用戶逐字稿

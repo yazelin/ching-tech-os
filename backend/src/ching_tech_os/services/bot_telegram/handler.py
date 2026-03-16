@@ -343,7 +343,7 @@ async def handle_update(update: Update, adapter: TelegramBotAdapter) -> None:
     # 判斷訊息類型
     if message.photo:
         msg_type = "image"
-    elif message.voice:
+    elif message.voice or message.audio or message.video_note:
         msg_type = "audio"
     elif message.document:
         msg_type = "file"
@@ -589,8 +589,8 @@ async def _handle_voice(
         await adapter.send_text(chat_id, "語音下載失敗，請稍後再試。")
         return
 
-    # STT 轉錄
-    voice_obj = message.voice
+    # STT 轉錄（支援 voice、audio、video_note）
+    voice_obj = message.voice or message.audio or message.video_note
     duration_ms = (voice_obj.duration * 1000) if voice_obj and voice_obj.duration else None
     file_size = voice_obj.file_size if voice_obj else None
 
@@ -610,8 +610,19 @@ async def _handle_voice(
         await adapter.send_text(chat_id, "語音辨識失敗，請重新發送或改用文字")
         return
 
-    # 轉錄成功：送入 AI 處理
-    text = f"[語音訊息] {result.text}"
+    # 轉錄成功：回寫轉錄文字到資料庫（讓對話歷史可查）
+    transcribed_content = f"[語音訊息] {result.text}"
+    try:
+        async with get_connection() as conn:
+            await conn.execute(
+                "UPDATE bot_messages SET content = $1 WHERE id = $2",
+                transcribed_content, message_uuid,
+            )
+    except Exception as e:
+        logger.warning(f"回寫語音轉錄文字失敗: {e}")
+
+    # 送入 AI 處理
+    text = transcribed_content
     text = _prefix_user(text, user)
 
     # 取得回覆上下文

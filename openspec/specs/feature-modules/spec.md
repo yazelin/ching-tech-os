@@ -20,3 +20,19 @@
 #### Scenario: SkillManager 不可用
 - **WHEN** SkillManager 載入失敗
 - **THEN** `get_module_registry()` SHALL 只回傳內建模組，不 raise exception
+
+#### Scenario: _start_extends_modules 支援 routers 欄位
+- **WHEN** `extends/*/contributes.yaml` 包含 `routers` 欄位
+- **THEN** `_start_extends_modules(app)` SHALL 讀取 `routers` 列表
+- **AND** 對每個 router spec SHALL 使用 `importlib.import_module()` 載入模組
+- **AND** SHALL 使用 `app.include_router()` 動態註冊到 FastAPI app
+- **AND** router 的 `module` 路徑 SHALL 從已加入 sys.path 的 extends 模組目錄解析
+
+#### Scenario: _start_extends_modules 接收 app 參數
+- **WHEN** `lifespan()` 呼叫 `_start_extends_modules()`
+- **THEN** SHALL 傳入 FastAPI `app` 實例作為參數
+- **AND** 此修改 SHALL 不影響現有 lifespan startup/shutdown 行為
+
+#### Scenario: routers 欄位不存在
+- **WHEN** `contributes.yaml` 沒有 `routers` 欄位
+- **THEN** 系統 SHALL 靜默跳過 router 註冊（與現行行為一致）

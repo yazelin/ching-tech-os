@@ -124,7 +124,8 @@ async def download_telegram_voice(
     Returns:
         NAS 路徑，失敗回傳 None
     """
-    voice = message.voice
+    # 支援 voice（語音訊息）、audio（音訊檔案）、video_note（圓形影片）
+    voice = message.voice or message.audio or message.video_note
     if not voice:
         return None
 
@@ -134,13 +135,16 @@ async def download_telegram_voice(
         content = await file.download_as_bytearray()
         content = bytes(content)
 
+        # 副檔名：voice/audio 用 .ogg，video_note 用 .mp4
+        ext = ".mp4" if message.video_note else ".ogg"
+
         # 生成 NAS 路徑
         nas_path = _generate_telegram_nas_path(
             file_type="audio",
             message_id=message.message_id,
             chat_id=chat_id,
             is_group=is_group,
-            ext=".ogg",
+            ext=ext,
         )
 
         # 儲存到 NAS
@@ -150,11 +154,12 @@ async def download_telegram_voice(
             return None
 
         # 記錄到 bot_files
+        mime_type = getattr(voice, "mime_type", None) or ("video/mp4" if message.video_note else "audio/ogg")
         await save_file_record(
             message_uuid=message_uuid,
             file_type="audio",
             file_size=voice.file_size,
-            mime_type=voice.mime_type or "audio/ogg",
+            mime_type=mime_type,
             nas_path=nas_path,
             duration=voice.duration,
         )

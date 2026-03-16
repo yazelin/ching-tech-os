@@ -601,6 +601,7 @@ async def process_message_with_ai(
     user_display_name: str | None = None,
     quoted_message_id: str | None = None,
     bot_user_id: str | None = None,
+    skip_send: bool = False,
 ) -> str | None:
     """
     使用 AI 處理訊息
@@ -613,6 +614,7 @@ async def process_message_with_ai(
         reply_token: Line 回覆 token（可能已過期）
         user_display_name: 發送者顯示名稱
         quoted_message_id: 被回覆的訊息 ID（Line 的 quotedMessageId）
+        skip_send: 跳過發送（由呼叫端自行處理回覆，如語音合併回覆）
 
     Returns:
         AI 回應文字，或 None（如果不需處理）
@@ -960,6 +962,10 @@ async def process_message_with_ai(
         # 解析 AI 回應，提取檔案訊息標記
         text_response, file_messages = parse_ai_response(ai_response)
 
+        # skip_send 模式：不發送，由呼叫端自行處理（如語音合併回覆）
+        if skip_send:
+            return text_response
+
         # 回覆訊息並取得 Line 訊息 ID（用於回覆觸發功能）
         # 群組對話時，mention 發問的用戶
         line_message_ids = []
@@ -1193,7 +1199,7 @@ async def get_conversation_context(
                 LEFT JOIN bot_files f ON f.message_id = m.id
                 WHERE m.bot_group_id = $1
                   AND ($3::uuid IS NULL OR m.id != $3)
-                  AND m.message_type IN ('text', 'image', 'file')
+                  AND m.message_type IN ('text', 'image', 'file', 'audio')
                   AND (m.content IS NOT NULL OR m.message_type IN ('image', 'file'))
                 ORDER BY m.created_at DESC
                 LIMIT $2
@@ -1215,7 +1221,7 @@ async def get_conversation_context(
                 WHERE u.platform_user_id = $1
                   AND ($3::uuid IS NULL OR m.id != $3)
                   AND m.bot_group_id IS NULL
-                  AND m.message_type IN ('text', 'image', 'file')
+                  AND m.message_type IN ('text', 'image', 'file', 'audio')
                   AND (m.content IS NOT NULL OR m.message_type IN ('image', 'file'))
                   AND (
                     u.conversation_reset_at IS NULL
@@ -1561,6 +1567,7 @@ async def handle_text_message(
     line_group_id: UUID | None,
     reply_token: str | None,
     quoted_message_id: str | None = None,
+    skip_send: bool = False,
 ) -> str | None:
     """
     處理文字訊息的 Webhook 入口
@@ -1633,4 +1640,5 @@ async def handle_text_message(
         user_display_name=user_display_name,
         quoted_message_id=quoted_message_id,
         bot_user_id=bot_user_id,
+        skip_send=skip_send,
     )

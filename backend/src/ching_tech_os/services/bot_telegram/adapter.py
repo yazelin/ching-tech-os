@@ -136,18 +136,18 @@ class TelegramBotAdapter:
             reply_to: 回覆的訊息 ID
         """
         buf = BytesIO(audio_bytes)
-        buf.name = "voice.mp3"
+        buf.name = "reply.mp3"
 
         kwargs: dict[str, Any] = {
             "chat_id": target,
-            "voice": InputFile(buf, filename="voice.mp3"),
+            "audio": InputFile(buf, filename="reply.mp3"),
         }
         if duration:
             kwargs["duration"] = duration // 1000  # Telegram 用秒
         if reply_to:
             kwargs["reply_to_message_id"] = int(reply_to)
 
-        msg = await self.bot.send_voice(**kwargs)
+        msg = await self.bot.send_audio(**kwargs)
         return SentMessage(message_id=str(msg.message_id), platform_type="telegram")
 
     async def send_messages(

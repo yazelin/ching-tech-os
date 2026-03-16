@@ -272,6 +272,16 @@ async def process_message_event(event: MessageEvent) -> None:
                 # 同步轉錄成功：當作文字訊息處理
                 content = f"[語音訊息] {result.text}"
                 message_type = "text"  # 讓後續走文字 AI 流程
+                # 回寫轉錄文字到資料庫（讓對話歷史可查）
+                try:
+                    from ..services.db import get_connection
+                    async with get_connection() as conn:
+                        await conn.execute(
+                            "UPDATE bot_messages SET content = $1 WHERE id = $2",
+                            content, message_uuid,
+                        )
+                except Exception as e:
+                    logger.warning("回寫語音轉錄文字失敗: %s", e)
             elif result.mode == "async" and result.job_id:
                 # 長音訊：非同步轉錄已啟動，回覆提示
                 tip = "語音訊息較長，轉錄中，完成後通知你"
@@ -392,38 +402,84 @@ async def process_message_event(event: MessageEvent) -> None:
 
         # 通過存取控制，觸發 AI 處理
         is_voice_origin = isinstance(message, AudioMessageContent)
-        ai_reply = await handle_text_message(
-            message_id=message.id,
-            message_uuid=message_uuid,
-            content=content,
-            line_user_id=line_user_id,
-            line_group_id=group_uuid,
-            reply_token=event.reply_token,
-            quoted_message_id=quoted_message_id,
-        )
 
-        # 語音訊息：AI 回覆後額外推送 TTS 語音
-        if is_voice_origin and ai_reply:
-            from ..services.bot.voice_bridge import get_voice_tts
-            voice_tts = get_voice_tts()
-            if voice_tts:
-                try:
-                    tts_result = await voice_tts.synthesize(ai_reply)
-                    if tts_result.file_id and not tts_result.error:
-                        from linebot.v3.messaging import AudioMessage as LineAudioMessage
-                        from ..services.bot_line import push_audio
-                        # 組裝公開 URL（使用 public_url 設定）
-                        from ..config import settings
-                        base_url = settings.public_url.rstrip("/")
-                        audio_url = f"{base_url}/api/voice/tts/{tts_result.file_id}.mp3"
-                        push_target = line_user_id if not is_group else str(group_uuid) if group_uuid else line_user_id
-                        await push_audio(
-                            to=push_target,
-                            audio_url=audio_url,
-                            duration_ms=tts_result.duration_ms or 5000,
-                        )
-                except Exception as e:
-                    logger.warning("TTS 語音回覆失敗（已回覆文字）: %s", e)
+        if is_voice_origin:
+            # 語音訊息：skip_send 讓 AI 不自行回覆，由這裡合併文字+語音一次 reply
+            ai_reply = await handle_text_message(
+                message_id=message.id,
+                message_uuid=message_uuid,
+                content=content,
+                line_user_id=line_user_id,
+                line_group_id=group_uuid,
+                reply_token=event.reply_token,
+                quoted_message_id=quoted_message_id,
+                skip_send=True,
+            )
+
+            if ai_reply:
+                from ..services.bot.voice_bridge import get_voice_tts
+                from ..services.bot_line import reply_messages, push_messages, push_text
+                from ..services.bot_line.messaging import create_text_message_with_mention
+                from ..config import settings
+
+                # 建立文字訊息
+                mention_id = line_user_id if is_group else None
+                messages = [create_text_message_with_mention(ai_reply, mention_id)]
+
+                # 生成 TTS 語音
+                voice_tts = get_voice_tts()
+                if voice_tts:
+                    try:
+                        tts_result = await voice_tts.synthesize(ai_reply)
+                        if tts_result.file_id and not tts_result.error:
+                            from linebot.v3.messaging import AudioMessage as LineAudioMessage
+                            base_url = settings.public_url.rstrip("/")
+                            audio_url = f"{base_url}/api/voice/tts/{tts_result.file_id}.mp3"
+                            messages.append(LineAudioMessage(
+                                original_content_url=audio_url,
+                                duration=tts_result.duration_ms or 5000,
+                            ))
+                    except Exception as e:
+                        logger.warning("TTS 生成失敗（僅回覆文字）: %s", e)
+
+                # 合併回覆（文字 + 語音一次 reply）
+                reply_success = False
+                if event.reply_token:
+                    try:
+                        await reply_messages(event.reply_token, messages)
+                        reply_success = True
+                    except Exception as e:
+                        logger.warning("語音合併回覆失敗（token 可能已過期）: %s", e)
+
+                # Fallback: push
+                if not reply_success:
+                    push_target = line_user_id if not is_group else None
+                    if is_group and group_uuid:
+                        from ..services.linebot_ai import get_line_group_external_id
+                        push_target = await get_line_group_external_id(group_uuid)
+                    if push_target:
+                        try:
+                            await push_messages(push_target, messages)
+                        except Exception as e:
+                            logger.warning("語音 push fallback 失敗: %s", e)
+
+                # 儲存 Bot 回應到資料庫
+                from ..services.bot_line.message_store import save_bot_response
+                await save_bot_response(
+                    group_uuid=group_uuid,
+                    content=ai_reply,
+                    responding_to_line_user_id=line_user_id if not is_group else None,
+                )
+        else:
+            ai_reply = await handle_text_message(
+                message_id=message.id,
+                message_uuid=message_uuid,
+                content=content,
+                line_user_id=line_user_id,
+                line_group_id=group_uuid,
+                reply_token=event.reply_token,
+                quoted_message_id=quoted_message_id,
+            )
 
 
 async def process_media_message(

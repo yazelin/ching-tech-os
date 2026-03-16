@@ -35,8 +35,22 @@ async def run_telegram_polling() -> None:
         logger.info("Telegram Bot Token 未設定，跳過 polling")
         return
 
-    adapter = TelegramBotAdapter(token=settings.telegram_bot_token)
-    await adapter.ensure_bot_info()
+    # 初始化階段：含重試，避免重啟時與舊進程短暫衝突導致永久失敗
+    adapter: TelegramBotAdapter | None = None
+    for attempt in range(5):
+        try:
+            adapter = TelegramBotAdapter(token=settings.telegram_bot_token)
+            await adapter.ensure_bot_info()
+            break
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            delay = min(2 ** attempt, MAX_RETRY_DELAY)
+            logger.warning(f"Telegram Bot 初始化失敗（第 {attempt + 1} 次）: {e}，{delay}s 後重試")
+            await asyncio.sleep(delay)
+    else:
+        logger.error("Telegram Bot 初始化重試耗盡，放棄 polling")
+        return
 
     # 建立專用 Bot 實例，read_timeout 必須大於 POLL_TIMEOUT
     # （adapter.bot 的預設 timeout 太短，不適合 long polling）
@@ -54,7 +68,10 @@ async def run_telegram_polling() -> None:
         logger.error(f"刪除 webhook 失敗: {e}")
 
     # 通知管理員 Bot 已上線（polling 模式）
-    await _notify_admin_startup(adapter)
+    try:
+        await _notify_admin_startup(adapter)
+    except Exception as e:
+        logger.warning(f"通知管理員啟動失敗: {e}")
 
     # Polling 迴圈
     offset: int | None = None

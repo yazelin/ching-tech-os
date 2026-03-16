@@ -14,8 +14,9 @@ from pathlib import Path
 
 logger = logging.getLogger("voice.tts")
 
-# 預設語音角色
-DEFAULT_VOICE = "zh-TW-HsiaoChenNeural"
+# 預設語音角色（可透過 .env 的 TTS_VOICE 設定覆蓋）
+import os
+DEFAULT_VOICE = os.environ.get("TTS_VOICE", "zh-TW-HsiaoChenNeural")
 
 # 文字長度上限
 MAX_TEXT_LENGTH = 500
@@ -66,9 +67,54 @@ def _strip_markdown(text: str) -> str:
     return text.strip()
 
 
+def _strip_emojis(text: str) -> str:
+    """移除 emoji 符號，避免 TTS 將 emoji 唸出來"""
+    # 移除常見 Unicode emoji 範圍
+    # 注意：不可使用跨越 CJK 漢字區（U+4E00-9FFF）的大範圍
+    emoji_pattern = re.compile(
+        "["
+        "\U0001F600-\U0001F64F"  # 表情符號
+        "\U0001F300-\U0001F5FF"  # 符號與象形文字
+        "\U0001F680-\U0001F6FF"  # 交通與地圖
+        "\U0001F1E0-\U0001F1FF"  # 國旗
+        "\U0001F900-\U0001F9FF"  # 補充表情
+        "\U0001FA00-\U0001FA6F"  # 棋子
+        "\U0001FA70-\U0001FAFF"  # 額外符號
+        "\U0001F000-\U0001F02F"  # 麻將、撲克牌
+        "\U0001F0A0-\U0001F0FF"  # 撲克牌補充
+        "\U0001F200-\U0001F251"  # 圈號文字符號（安全範圍，不含 CJK）
+        "\U00002600-\U000027BF"  # 雜項符號 + 裝飾符號
+        "\U0000FE00-\U0000FE0F"  # 變體選擇器
+        "\U0000200D"             # 零寬連接符
+        "\U00002B50-\U00002B55"  # 星星、圓圈等
+        "\U0000231A-\U0000231B"  # 手錶/沙漏
+        "\U000023E9-\U000023F3"  # 播放按鈕等
+        "\U000023F8-\U000023FA"  # 暫停/錄音
+        "\U0000200B-\U0000200F"  # 零寬空格等
+        "\U000020E3"             # Combining Enclosing Keycap（1️⃣ 2️⃣ 等）
+        "\U00002934-\U00002935"  # 箭頭
+        "\U000025AA-\U000025AB"  # 小方塊
+        "\U000025FB-\U000025FE"  # 中方塊
+        "\U00002B05-\U00002B07"  # 箭頭
+        "\U00002B1B-\U00002B1C"  # 大方塊
+        "\U00003030"             # 波浪號
+        "\U0000303D"             # 日文符號
+        "\U00003297"             # 圈祝
+        "\U00003299"             # 圈秘
+        "]+",
+        flags=re.UNICODE,
+    )
+    return emoji_pattern.sub("", text)
+
+
 def _prepare_text(text: str) -> str:
-    """前處理文字：清除 Markdown、截斷"""
+    """前處理文字：清除 Markdown、emoji、截斷"""
     text = _strip_markdown(text)
+    text = _strip_emojis(text)
+    # 清理 emoji 移除後可能留下的多餘空格
+    text = re.sub(r"  +", " ", text)
+    text = re.sub(r"\n +", "\n", text)
+    text = text.strip()
     if len(text) > MAX_TEXT_LENGTH:
         text = text[:MAX_TEXT_LENGTH] + "...後續請參考文字訊息"
     return text

@@ -39,14 +39,16 @@ class TranscribeResult:
     error: str | None       # 錯誤訊息（失敗時有值）
 
 
-def _get_ctos_mount_path() -> str:
-    """取得 CTOS 掛載路徑"""
+def _get_linebot_local_path() -> str:
+    """取得 Line Bot 檔案本機路徑（NAS 掛載）"""
     try:
         from ching_tech_os.config import settings
-        return settings.ctos_mount_path
+        return settings.linebot_local_path
     except ImportError:
         import os
-        return os.environ.get("CTOS_MOUNT_PATH", "/mnt/nas/ctos")
+        mount = os.environ.get("CTOS_MOUNT_PATH", "/mnt/nas/ctos")
+        nas_path = os.environ.get("LINEBOT_NAS_PATH", "linebot/files")
+        return f"{mount}/{nas_path}"
 
 
 def _get_duration_seconds(
@@ -64,8 +66,8 @@ def _get_duration_seconds(
         return duration_ms / 1000.0
 
     # 2. ffprobe 讀取 header
-    mount = _get_ctos_mount_path()
-    abs_path = f"{mount}/{nas_path}"
+    base = _get_linebot_local_path()
+    abs_path = f"{base}/{nas_path}"
     if Path(abs_path).exists() and shutil.which("ffprobe"):
         try:
             result = subprocess.run(
@@ -149,10 +151,11 @@ async def transcribe_for_bot(
     Returns:
         TranscribeResult
     """
-    mount = _get_ctos_mount_path()
-    abs_path = f"{mount}/{nas_path}"
+    base = _get_linebot_local_path()
+    abs_path = f"{base}/{nas_path}"
 
     if not Path(abs_path).exists():
+        logger.error("音訊檔案不存在: %s", abs_path)
         return TranscribeResult(mode="sync", text=None, job_id=None, error="音訊檔案不存在")
 
     # 判斷 duration
