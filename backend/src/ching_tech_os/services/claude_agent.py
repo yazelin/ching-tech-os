@@ -8,13 +8,16 @@ import asyncio
 import json
 import logging
 import os
+import re
 import shutil
 import tempfile
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Optional
 
+import yaml
 from claude_code_acp import ClaudeClient
 
 from ..config import settings
@@ -33,6 +36,110 @@ if not _WORKING_DIR_BASE:
     _WORKING_DIR_BASE = tempfile.mkdtemp(prefix="ching-tech-os-cli-")
 os.makedirs(_WORKING_DIR_BASE, exist_ok=True)
 
+# extends MCP server 設定快取（None = 尚未載入）
+_extends_mcp_servers: dict[str, dict] | None = None
+
+# ${VAR} 變數替換用的環境對應
+_MCP_ENV_VARS: dict[str, str] = {
+    "PROJECT_ROOT": settings.project_root,
+}
+
+
+def _resolve_mcp_value(value: str) -> str:
+    """替換字串中的 ${VAR} 變數"""
+    def _replacer(m: re.Match) -> str:
+        var_name = m.group(1)
+        return _MCP_ENV_VARS.get(var_name, os.environ.get(var_name, m.group(0)))
+    return re.sub(r"\$\{(\w+)}", _replacer, value)
+
+
+def _resolve_mcp_server_config(cfg: dict) -> dict:
+    """遞迴替換 MCP server 設定中的 ${VAR} 變數"""
+    resolved = {}
+    for k, v in cfg.items():
+        if isinstance(v, str):
+            resolved[k] = _resolve_mcp_value(v)
+        elif isinstance(v, list):
+            resolved[k] = [_resolve_mcp_value(item) if isinstance(item, str) else item for item in v]
+        elif isinstance(v, dict):
+            resolved[k] = {dk: _resolve_mcp_value(dv) if isinstance(dv, str) else dv for dk, dv in v.items()}
+        else:
+            resolved[k] = v
+    return resolved
+
+
+def _load_extends_mcp_servers() -> dict[str, dict]:
+    """掃描 extends/*/contributes.yaml，提取 mcp_servers 設定。
+    結果快取，只在首次呼叫時掃描。"""
+    global _extends_mcp_servers
+    if _extends_mcp_servers is not None:
+        return _extends_mcp_servers
+
+    result: dict[str, dict] = {}
+    extends_dir = Path(settings.extends_dir)
+    if not extends_dir.is_dir():
+        _extends_mcp_servers = result
+        return result
+
+    from ..modules import is_module_enabled
+
+    for contrib_path in sorted(extends_dir.glob("*/contributes.yaml")):
+        module_name = contrib_path.parent.name
+        try:
+            config = yaml.safe_load(contrib_path.read_text(encoding="utf-8"))
+        except Exception as e:
+            logger.warning("extends/%s contributes.yaml 解析失敗: %s", module_name, e)
+            continue
+
+        if not isinstance(config, dict):
+            continue
+
+        # 檢查 ENABLED_MODULES（module_id 未指定時以目錄名為預設）
+        module_id = config.get("module_id", module_name)
+        if not is_module_enabled(module_id):
+            continue
+
+        mcp_servers = config.get("mcp_servers")
+        if not isinstance(mcp_servers, dict):
+            continue
+
+        for name, server_cfg in mcp_servers.items():
+            if not isinstance(server_cfg, dict):
+                continue
+            resolved = _resolve_mcp_server_config(server_cfg)
+            resolved.setdefault("type", "stdio")
+            result[name] = resolved
+
+    _extends_mcp_servers = result
+    if result:
+        logger.info("extends MCP servers: %s", ", ".join(result.keys()))
+    return result
+
+
+def _build_merged_mcp_json() -> dict:
+    """合併 .mcp.json 基底 + extends 貢獻的 MCP server 設定"""
+    # 讀取基底
+    project_mcp = os.path.join(settings.project_root, ".mcp.json")
+    if os.path.exists(project_mcp):
+        try:
+            with open(project_mcp, encoding="utf-8") as f:
+                base = json.load(f)
+        except (OSError, json.JSONDecodeError) as e:
+            logger.warning("讀取 .mcp.json 失敗: %s", e)
+            base = {"mcpServers": {}}
+    else:
+        base = {"mcpServers": {}}
+
+    if "mcpServers" not in base:
+        base["mcpServers"] = {}
+
+    # 合併 extends（基底優先，不覆蓋）
+    for name, server_cfg in _load_extends_mcp_servers().items():
+        if name not in base["mcpServers"]:
+            base["mcpServers"][name] = server_cfg
+
+    return base
+
 
 def _create_session_workdir() -> str:
     """為每次 AI 呼叫建立隔離的工作目錄，防止跨 session 污染"""
@@ -45,10 +152,11 @@ def _create_session_workdir() -> str:
         nanobanana_link = os.path.join(session_dir, "nanobanana-output")
         os.symlink(nas_ai_images_dir, nanobanana_link)
 
-    # 複製 .mcp.json（唯讀副本，不可被 AI 修改原檔）
-    project_mcp = os.path.join(settings.project_root, ".mcp.json")
-    if os.path.exists(project_mcp):
-        shutil.copy2(project_mcp, os.path.join(session_dir, ".mcp.json"))
+    # 合併 .mcp.json + extends 貢獻的 MCP server，寫入 session 目錄
+    merged_mcp = _build_merged_mcp_json()
+    if merged_mcp.get("mcpServers"):
+        with open(os.path.join(session_dir, ".mcp.json"), "w", encoding="utf-8") as f:
+            json.dump(merged_mcp, f, ensure_ascii=False)
 
     return session_dir
 

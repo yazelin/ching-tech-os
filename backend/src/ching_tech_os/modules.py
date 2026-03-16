@@ -147,7 +147,7 @@ BUILTIN_MODULES: dict[str, ModuleInfo] = {
         "source": "builtin",
         "routers": [{"module": ".api.presentation", "attr": "router"}],
         "mcp_module": ".services.mcp.presentation_tools",
-        "app_ids": ["md2ppt", "md2doc", "printer"],
+        "app_ids": ["md2ppt", "md2doc"],
         "app_manifest": [
             {"id": "md2ppt", "name": "md2ppt", "icon": "file-powerpoint"},
             {"id": "md2doc", "name": "md2doc", "icon": "file-word"},

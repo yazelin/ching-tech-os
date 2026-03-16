@@ -27,11 +27,6 @@
       "args": [
         "@playwright/mcp@latest"
       ]
-    },
-    "printer": {
-      "type": "stdio",
-      "command": "uvx",
-      "args": ["printer-mcp"]
     }
   }
 }

@@ -324,7 +324,28 @@ uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8088 --reload
 |------|--------|------|
 | SESSION_TTL_HOURS | 8 | Session 有效時間（小時） |
 | PUBLIC_URL | https://ching-tech.ddns.net/ctos | 公開 URL（分享連結、Webhook） |
-| ENABLED_MODULES | `*` | 啟用模組清單（`*`=全開，逗號分隔） |
+| ENABLED_MODULES | `*` | 啟用模組清單（`*`=全開，逗號分隔，見下表） |
+
+**可用模組：**
+
+| 模組 ID | 說明 | 備註 |
+|---------|------|------|
+| `core` | 核心功能 | 永遠啟用，不需列入 |
+| `knowledge-base` | 知識庫 | |
+| `file-manager` | 檔案管理器 | |
+| `ai-agent` | AI Agent（Claude 對話） | |
+| `line-bot` | Line Bot 整合 | |
+| `telegram-bot` | Telegram Bot 整合 | |
+| `public-share` | 公開分享連結 / 檔案下載 | Line Bot 圖片傳送需要 |
+| `docs-tools` | 文件工具（簡報/文件生成） | |
+| `skills` | Skills 系統 | 必要模組 |
+| `terminal` | Web 終端機 | |
+| `code-editor` | 程式碼編輯器 | |
+| `task-scheduler` | 任務排程 | |
+| `his-integration` | HIS 整合 | 需搭配 extends/his |
+| `ct-his` | 展望 HIS 叫號 | 需搭配 extends/his |
+| `printer` | 列印功能 | 需搭配 extends/printer |
+| `erpnext` | ERPNext ERP 整合 | |
 
 ### Bot 設定
 

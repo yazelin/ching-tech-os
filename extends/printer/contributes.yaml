@@ -1,0 +1,9 @@
+# printer 模組對主系統的貢獻宣告
+# 需在 .env 的 ENABLED_MODULES 中加入 "printer" 才會啟用
+
+module_id: printer
+
+mcp_servers:
+  printer:
+    command: uvx
+    args: [printer-mcp]
