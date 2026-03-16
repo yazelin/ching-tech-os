@@ -91,8 +91,8 @@ def _register_module_routers(fastapi_app: FastAPI) -> None:
                 )
 
 
-async def _start_extends_modules() -> list:
-    """掃描 extends/*/contributes.yaml，執行 startup 並收集 shutdown 函式。"""
+async def _start_extends_modules(fastapi_app: FastAPI | None = None) -> list:
+    """掃描 extends/*/contributes.yaml，執行 startup、註冊 routers 並收集 shutdown 函式。"""
     import os
     import sys
 
@@ -114,8 +114,7 @@ async def _start_extends_modules() -> list:
             _log.warning("extends/%s contributes.yaml 解析失敗: %s", module_name, e)
             continue
 
-        lifespan_cfg = config.get("lifespan") if isinstance(config, dict) else None
-        if not isinstance(lifespan_cfg, dict):
+        if not isinstance(config, dict):
             continue
 
         # 將模組根目錄加入 sys.path（供 import）
@@ -134,34 +133,55 @@ async def _start_extends_modules() -> list:
                     resolved[k] = v
             return resolved
 
-        # 執行 startup
-        startup_cfg = lifespan_cfg.get("startup")
-        if isinstance(startup_cfg, dict) and startup_cfg.get("callable"):
-            callable_path = startup_cfg["callable"]
-            kwargs = _resolve_kwargs(startup_cfg.get("kwargs") or {})
-            try:
-                fn = _resolve_callable(callable_path)
-                result = fn(**kwargs)
-                if inspect.isawaitable(result):
-                    await result
-                _log.info("extends/%s startup 完成: %s", module_name, callable_path)
-            except Exception as e:
-                _log.warning("extends/%s startup 失敗 (%s): %s", module_name, callable_path, e)
+        # 執行 lifespan startup
+        lifespan_cfg = config.get("lifespan")
+        if isinstance(lifespan_cfg, dict):
+            startup_cfg = lifespan_cfg.get("startup")
+            if isinstance(startup_cfg, dict) and startup_cfg.get("callable"):
+                callable_path = startup_cfg["callable"]
+                kwargs = _resolve_kwargs(startup_cfg.get("kwargs") or {})
+                try:
+                    fn = _resolve_callable(callable_path)
+                    result = fn(**kwargs)
+                    if inspect.isawaitable(result):
+                        await result
+                    _log.info("extends/%s startup 完成: %s", module_name, callable_path)
+                except Exception as e:
+                    _log.warning("extends/%s startup 失敗 (%s): %s", module_name, callable_path, e)
 
-        # 收集 shutdown
-        shutdown_cfg = lifespan_cfg.get("shutdown")
-        if isinstance(shutdown_cfg, dict) and shutdown_cfg.get("callable"):
-            try:
-                shutdown_fn = _resolve_callable(shutdown_cfg["callable"])
-                shutdown_fns.append(shutdown_fn)
-            except Exception as e:
-                _log.warning("extends/%s shutdown 函式解析失敗: %s", module_name, e)
-        elif isinstance(shutdown_cfg, str):
-            try:
-                shutdown_fn = _resolve_callable(shutdown_cfg)
-                shutdown_fns.append(shutdown_fn)
-            except Exception as e:
-                _log.warning("extends/%s shutdown 函式解析失敗: %s", module_name, e)
+            # 收集 shutdown
+            shutdown_cfg = lifespan_cfg.get("shutdown")
+            if isinstance(shutdown_cfg, dict) and shutdown_cfg.get("callable"):
+                try:
+                    shutdown_fn = _resolve_callable(shutdown_cfg["callable"])
+                    shutdown_fns.append(shutdown_fn)
+                except Exception as e:
+                    _log.warning("extends/%s shutdown 函式解析失敗: %s", module_name, e)
+            elif isinstance(shutdown_cfg, str):
+                try:
+                    shutdown_fn = _resolve_callable(shutdown_cfg)
+                    shutdown_fns.append(shutdown_fn)
+                except Exception as e:
+                    _log.warning("extends/%s shutdown 函式解析失敗: %s", module_name, e)
+
+        # 註冊 routers（需要 FastAPI app 實例）
+        routers_cfg = config.get("routers")
+        if isinstance(routers_cfg, list) and fastapi_app is not None:
+            for router_spec in routers_cfg:
+                if not isinstance(router_spec, dict):
+                    continue
+                router_module = router_spec.get("module")
+                router_attr = router_spec.get("attr", "router")
+                router_kwargs = router_spec.get("kwargs") or {}
+                if not isinstance(router_module, str):
+                    continue
+                try:
+                    mod = importlib.import_module(router_module)
+                    router = getattr(mod, router_attr)
+                    fastapi_app.include_router(router, **router_kwargs)
+                    _log.info("extends/%s router 註冊: %s.%s", module_name, router_module, router_attr)
+                except Exception as e:
+                    _log.warning("extends/%s router 註冊失敗 (%s): %s", module_name, router_module, e)
 
     return shutdown_fns
 
@@ -211,8 +231,8 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             _logging.getLogger(__name__).warning("模組 %s 啟動函式執行失敗: %s", module_id, e)
 
-    # 啟動 extends 模組生命週期
-    extends_shutdown_fns = await _start_extends_modules()
+    # 啟動 extends 模組生命週期（傳入 app 以支援動態 router 註冊）
+    extends_shutdown_fns = await _start_extends_modules(app)
 
     await session_manager.start_cleanup_task()
     await terminal_service.start_cleanup_task()

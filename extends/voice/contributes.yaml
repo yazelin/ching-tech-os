@@ -1,0 +1,13 @@
+lifespan:
+  startup:
+    callable: voice_startup.startup
+  shutdown:
+    callable: voice_startup.shutdown
+
+routers:
+  - module: tts_router
+    attr: router
+    kwargs:
+      prefix: /api/voice
+      tags:
+        - voice

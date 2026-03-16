@@ -1561,7 +1561,7 @@ async def handle_text_message(
     line_group_id: UUID | None,
     reply_token: str | None,
     quoted_message_id: str | None = None,
-) -> None:
+) -> str | None:
     """
     處理文字訊息的 Webhook 入口
 
@@ -1624,7 +1624,7 @@ async def handle_text_message(
 
     # === 一般訊息，進入 AI 處理 ===
     # 處理訊息
-    await process_message_with_ai(
+    return await process_message_with_ai(
         message_uuid=message_uuid,
         content=content,
         line_group_id=line_group_id,

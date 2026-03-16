@@ -105,6 +105,68 @@ async def download_telegram_photo(
         return None
 
 
+async def download_telegram_voice(
+    bot: Bot,
+    message: Message,
+    message_uuid: str,
+    chat_id: str,
+    is_group: bool,
+) -> str | None:
+    """下載 Telegram 語音訊息並儲存到 NAS
+
+    Args:
+        bot: Telegram Bot 物件
+        message: Telegram Message 物件
+        message_uuid: bot_messages 的 UUID
+        chat_id: chat ID
+        is_group: 是否為群組
+
+    Returns:
+        NAS 路徑，失敗回傳 None
+    """
+    voice = message.voice
+    if not voice:
+        return None
+
+    try:
+        # 下載語音
+        file = await bot.get_file(voice.file_id)
+        content = await file.download_as_bytearray()
+        content = bytes(content)
+
+        # 生成 NAS 路徑
+        nas_path = _generate_telegram_nas_path(
+            file_type="audio",
+            message_id=message.message_id,
+            chat_id=chat_id,
+            is_group=is_group,
+            ext=".ogg",
+        )
+
+        # 儲存到 NAS
+        success = await save_to_nas(nas_path, content)
+        if not success:
+            logger.error(f"儲存語音到 NAS 失敗: {nas_path}")
+            return None
+
+        # 記錄到 bot_files
+        await save_file_record(
+            message_uuid=message_uuid,
+            file_type="audio",
+            file_size=voice.file_size,
+            mime_type=voice.mime_type or "audio/ogg",
+            nas_path=nas_path,
+            duration=voice.duration,
+        )
+
+        logger.info(f"已儲存 Telegram 語音: {nas_path} (duration={voice.duration}s)")
+        return nas_path
+
+    except Exception as e:
+        logger.error(f"下載 Telegram 語音失敗: {e}", exc_info=True)
+        return None
+
+
 async def download_telegram_document(
     bot: Bot,
     message: Message,

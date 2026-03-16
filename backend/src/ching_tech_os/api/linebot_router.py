@@ -244,8 +244,9 @@ async def process_message_event(event: MessageEvent) -> None:
     logger.info(f"已儲存訊息: {message.id} (type={message_type})")
 
     # 處理媒體檔案（圖片、影片、音訊、檔案）
+    nas_path = None
     if message_type in ("image", "video", "audio", "file"):
-        await process_media_message(
+        nas_path = await process_media_message(
             message_id=message.id,
             message_uuid=message_uuid,
             message_type=message_type,
@@ -255,6 +256,39 @@ async def process_message_event(event: MessageEvent) -> None:
             file_size=file_size,
             duration=duration,
         )
+
+    # 語音訊息：STT 轉錄後走文字 AI 流程
+    if message_type == "audio" and nas_path:
+        from ..services.bot.voice_bridge import get_voice_stt, get_voice_tts
+        voice_stt = get_voice_stt()
+        if voice_stt:
+            result = await voice_stt.transcribe_for_bot(
+                nas_path=nas_path,
+                duration_ms=duration,
+                file_size=file_size,
+                platform="line",
+            )
+            if result.mode == "sync" and result.text:
+                # 同步轉錄成功：當作文字訊息處理
+                content = f"[語音訊息] {result.text}"
+                message_type = "text"  # 讓後續走文字 AI 流程
+            elif result.mode == "async" and result.job_id:
+                # 長音訊：非同步轉錄已啟動，回覆提示
+                tip = "語音訊息較長，轉錄中，完成後通知你"
+                if event.reply_token:
+                    try:
+                        await reply_text(event.reply_token, tip)
+                    except Exception:
+                        await push_text(line_user_id, tip)
+            elif result.error:
+                # 轉錄失敗
+                err_msg = "語音辨識失敗，請重新發送或改用文字"
+                logger.warning("語音轉錄失敗: %s", result.error)
+                if event.reply_token:
+                    try:
+                        await reply_text(event.reply_token, err_msg)
+                    except Exception:
+                        await push_text(line_user_id, err_msg)
 
     # 如果是文字訊息，進行存取控制檢查並觸發 AI 處理
     if message_type == "text" and content:
@@ -357,7 +391,8 @@ async def process_message_event(event: MessageEvent) -> None:
             return
 
         # 通過存取控制，觸發 AI 處理
-        await handle_text_message(
+        is_voice_origin = isinstance(message, AudioMessageContent)
+        ai_reply = await handle_text_message(
             message_id=message.id,
             message_uuid=message_uuid,
             content=content,
@@ -366,6 +401,29 @@ async def process_message_event(event: MessageEvent) -> None:
             reply_token=event.reply_token,
             quoted_message_id=quoted_message_id,
         )
+
+        # 語音訊息：AI 回覆後額外推送 TTS 語音
+        if is_voice_origin and ai_reply:
+            from ..services.bot.voice_bridge import get_voice_tts
+            voice_tts = get_voice_tts()
+            if voice_tts:
+                try:
+                    tts_result = await voice_tts.synthesize(ai_reply)
+                    if tts_result.file_id and not tts_result.error:
+                        from linebot.v3.messaging import AudioMessage as LineAudioMessage
+                        from ..services.bot_line import push_audio
+                        # 組裝公開 URL（使用 public_url 設定）
+                        from ..config import settings
+                        base_url = settings.public_url.rstrip("/")
+                        audio_url = f"{base_url}/api/voice/tts/{tts_result.file_id}.mp3"
+                        push_target = line_user_id if not is_group else str(group_uuid) if group_uuid else line_user_id
+                        await push_audio(
+                            to=push_target,
+                            audio_url=audio_url,
+                            duration_ms=tts_result.duration_ms or 5000,
+                        )
+                except Exception as e:
+                    logger.warning("TTS 語音回覆失敗（已回覆文字）: %s", e)
 
 
 async def process_media_message(
@@ -377,7 +435,7 @@ async def process_media_message(
     file_name: str | None = None,
     file_size: int | None = None,
     duration: int | None = None,
-) -> None:
+) -> str | None:
     """處理媒體訊息（圖片、影片、音訊、檔案）
 
     Args:
@@ -389,6 +447,9 @@ async def process_media_message(
         file_name: 原始檔案名稱
         file_size: 檔案大小
         duration: 音訊/影片長度（毫秒）
+
+    Returns:
+        NAS 路徑，失敗時回傳 None
     """
     try:
         # 根據副檔名自動重新分類檔案類型
@@ -430,9 +491,11 @@ async def process_media_message(
         )
 
         logger.info(f"媒體訊息處理完成: {message_id} -> {nas_path}")
+        return nas_path
 
     except Exception as e:
         logger.error(f"處理媒體訊息失敗 {message_id}: {e}")
+        return None
 
 
 async def process_join_event(event: JoinEvent) -> None:

@@ -74,6 +74,7 @@ from .messaging import (
     reply_messages,
     push_text,
     push_image,
+    push_audio,
     push_messages,
 )
 
@@ -189,6 +190,7 @@ __all__ = [
     "reply_messages",
     "push_text",
     "push_image",
+    "push_audio",
     "push_messages",
     # file_handler
     "save_file_record",

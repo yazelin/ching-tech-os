@@ -119,6 +119,37 @@ class TelegramBotAdapter:
         msg = await self.bot.send_document(**kwargs)
         return SentMessage(message_id=str(msg.message_id), platform_type="telegram")
 
+    async def send_voice(
+        self,
+        target: str,
+        audio_bytes: bytes,
+        *,
+        duration: int | None = None,
+        reply_to: str | None = None,
+    ) -> SentMessage:
+        """發送語音訊息
+
+        Args:
+            target: chat ID
+            audio_bytes: 音檔二進位（MP3 或 OGG）
+            duration: 音檔長度（毫秒）
+            reply_to: 回覆的訊息 ID
+        """
+        buf = BytesIO(audio_bytes)
+        buf.name = "voice.mp3"
+
+        kwargs: dict[str, Any] = {
+            "chat_id": target,
+            "voice": InputFile(buf, filename="voice.mp3"),
+        }
+        if duration:
+            kwargs["duration"] = duration // 1000  # Telegram 用秒
+        if reply_to:
+            kwargs["reply_to_message_id"] = int(reply_to)
+
+        msg = await self.bot.send_voice(**kwargs)
+        return SentMessage(message_id=str(msg.message_id), platform_type="telegram")
+
     async def send_messages(
         self,
         target: str,

@@ -343,6 +343,8 @@ async def handle_update(update: Update, adapter: TelegramBotAdapter) -> None:
     # 判斷訊息類型
     if message.photo:
         msg_type = "image"
+    elif message.voice:
+        msg_type = "audio"
     elif message.document:
         msg_type = "file"
     elif message.text:
@@ -367,6 +369,13 @@ async def handle_update(update: Update, adapter: TelegramBotAdapter) -> None:
         else:
             text = message.text
         await _handle_text(message, text, chat_id, chat, user, is_group, adapter)
+    elif msg_type == "audio":
+        # 語音訊息：群組中需要回覆 Bot 訊息才觸發
+        if is_group:
+            if not (message.reply_to_message and message.reply_to_message.from_user
+                    and message.reply_to_message.from_user.is_bot):
+                return
+        await _handle_voice(message, chat_id, chat, user, is_group, adapter)
     elif msg_type in ("image", "file"):
         # 圖片和檔案：群組中需要回覆 Bot 訊息才觸發
         if is_group:
@@ -516,6 +525,124 @@ async def _handle_text(
         await adapter.send_text(chat_id, "抱歉，處理訊息時發生錯誤，請稍後再試。")
 
 
+async def _handle_voice(
+    message, chat_id: str, chat, user,
+    is_group: bool, adapter: TelegramBotAdapter,
+) -> None:
+    """處理語音訊息：STT → AI → TTS"""
+    from ..bot.voice_bridge import get_voice_stt, get_voice_tts
+
+    voice_stt = get_voice_stt()
+    if not voice_stt:
+        logger.debug("voice 模組未安裝，跳過語音處理")
+        return
+
+    # 確保用戶和群組存在
+    bot_user_id: str | None = None
+    bot_group_id: str | None = None
+    try:
+        async with get_connection() as conn:
+            bot_user_id = await _ensure_bot_user(user, conn)
+            if is_group:
+                bot_group_id = await _ensure_bot_group(chat, conn)
+    except Exception as e:
+        logger.error(f"確保用戶/群組失敗: {e}", exc_info=True)
+
+    # 存取控制
+    if bot_user_id:
+        has_access, deny_reason = await check_line_access(
+            bot_user_id, line_group_uuid=bot_group_id
+        )
+        if not has_access:
+            if deny_reason == "user_not_bound" and not is_group:
+                await adapter.send_text(
+                    chat_id, "請先綁定帳號才能使用此功能。發送 /start 查看綁定步驟。"
+                )
+            return
+
+    # 儲存訊息記錄
+    message_uuid: str | None = None
+    if bot_user_id:
+        try:
+            async with get_connection() as conn:
+                message_uuid = await _save_message(
+                    conn,
+                    message_id=f"tg_{message.message_id}",
+                    bot_user_id=bot_user_id,
+                    bot_group_id=bot_group_id,
+                    message_type="audio",
+                    content="",
+                    is_from_bot=False,
+                )
+        except Exception as e:
+            logger.error(f"儲存語音訊息失敗: {e}", exc_info=True)
+
+    if not message_uuid:
+        return
+
+    # 下載語音到 NAS
+    from .media import download_telegram_voice
+    nas_path = await download_telegram_voice(
+        adapter.bot, message, message_uuid, chat_id, is_group
+    )
+    if not nas_path:
+        await adapter.send_text(chat_id, "語音下載失敗，請稍後再試。")
+        return
+
+    # STT 轉錄
+    voice_obj = message.voice
+    duration_ms = (voice_obj.duration * 1000) if voice_obj and voice_obj.duration else None
+    file_size = voice_obj.file_size if voice_obj else None
+
+    result = await voice_stt.transcribe_for_bot(
+        nas_path=nas_path,
+        duration_ms=duration_ms,
+        file_size=file_size,
+        platform="telegram",
+    )
+
+    if result.mode == "async" and result.job_id:
+        await adapter.send_text(chat_id, "語音訊息較長，轉錄中，完成後通知你")
+        return
+
+    if result.error or not result.text:
+        logger.warning("語音轉錄失敗: %s", result.error)
+        await adapter.send_text(chat_id, "語音辨識失敗，請重新發送或改用文字")
+        return
+
+    # 轉錄成功：送入 AI 處理
+    text = f"[語音訊息] {result.text}"
+    text = _prefix_user(text, user)
+
+    # 取得回覆上下文
+    reply_context = await _get_reply_context(message, bot=adapter.bot)
+    if reply_context:
+        text = reply_context + text
+
+    try:
+        ai_reply = await _handle_text_with_ai(
+            text, chat_id, user, message.message_id,
+            bot_user_id, bot_group_id, is_group, adapter,
+        )
+
+        # TTS 語音回覆
+        voice_tts = get_voice_tts()
+        if voice_tts and ai_reply:
+            try:
+                tts_result = await voice_tts.synthesize(ai_reply)
+                if tts_result.audio_bytes and not tts_result.error:
+                    await adapter.send_voice(
+                        chat_id,
+                        tts_result.audio_bytes,
+                        duration=tts_result.duration_ms,
+                    )
+            except Exception as e:
+                logger.warning("TTS 語音回覆失敗: %s", e)
+    except Exception as e:
+        logger.error(f"語音 AI 處理失敗: {e}", exc_info=True)
+        await adapter.send_text(chat_id, "抱歉，處理訊息時發生錯誤，請稍後再試。")
+
+
 async def _handle_media(
     message, msg_type: str, chat_id: str, chat, user,
     is_group: bool, adapter: TelegramBotAdapter,
@@ -642,7 +769,7 @@ async def _handle_text_with_ai(
     is_group: bool,
     adapter: TelegramBotAdapter,
     existing_message_uuid: str | None = None,
-) -> None:
+) -> str | None:
     """透過 AI 處理文字訊息並回覆"""
     # 發送「正在輸入」提示
     try:
@@ -958,3 +1085,5 @@ async def _handle_text_with_ai(
                             logger.error(f"儲存圖片記錄失敗: {e}", exc_info=True)
         except Exception as e:
             logger.error(f"儲存 Bot 回覆失敗: {e}", exc_info=True)
+
+    return reply_text

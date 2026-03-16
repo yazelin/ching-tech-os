@@ -8,6 +8,7 @@ from linebot.v3.messaging import (
     TextMessage,
     TextMessageV2,
     ImageMessage,
+    AudioMessage,
     MentionSubstitutionObject,
     UserMentionTarget,
 )
@@ -258,3 +259,38 @@ async def push_messages(
         if sent_message_ids:
             return sent_message_ids, f"部分訊息發送失敗: {last_error}"
         return [], last_error
+
+
+async def push_audio(
+    to: str,
+    audio_url: str,
+    duration_ms: int,
+) -> tuple[str | None, str | None]:
+    """主動推送音訊訊息
+
+    Args:
+        to: 目標 ID（Line 用戶 ID 或群組 ID）
+        audio_url: 音訊檔 URL（必須是 HTTPS 公開可存取）
+        duration_ms: 音訊長度（毫秒）
+
+    Returns:
+        (Line 訊息 ID, 錯誤訊息)，成功時錯誤訊息為 None
+    """
+    try:
+        api = await get_messaging_api()
+        response = await api.push_message(
+            PushMessageRequest(
+                to=to,
+                messages=[AudioMessage(
+                    original_content_url=audio_url,
+                    duration=duration_ms,
+                )],
+            )
+        )
+        logger.info(f"推送音訊到 {to}: {audio_url}")
+        if response and response.sent_messages:
+            return response.sent_messages[0].id, None
+        return None, "未知錯誤：無回應"
+    except Exception as e:
+        logger.error(f"推送音訊失敗: {e}")
+        return None, _parse_line_error(e)
