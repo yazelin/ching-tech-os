@@ -71,6 +71,21 @@ def _load_enabled_mcp_tools() -> None:
 
 _load_enabled_mcp_tools()
 
+# voice MCP 工具：無條件載入（MCP server 是獨立進程，voice_bridge 可能不可用）
+# 工具內部會在呼叫時才檢查 voice 模組是否可用
+try:
+    from . import voice_tools  # noqa: F401
+    logger.info("voice MCP 工具已載入")
+except Exception as e:
+    logger.debug("voice MCP 工具未載入: %s", e)
+
+# web MCP 工具：無條件載入（提供 browse_webpage 瀏覽器擷取功能）
+try:
+    from . import web_tools  # noqa: F401
+    logger.info("web MCP 工具已載入")
+except Exception as e:
+    logger.debug("web MCP 工具未載入: %s", e)
+
 
 __all__ = [
     "mcp",

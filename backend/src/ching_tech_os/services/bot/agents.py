@@ -171,7 +171,16 @@ BASE_TOOLS_PROMPT = """【對話附件管理】
 - create_share_link: 產生公開分享連結（不顯示在回覆中，只給連結）
   · resource_type: "nas_file"、"knowledge"、"project" 或 "project_attachment"
   · resource_id: 檔案路徑、知識ID、專案UUID 或 附件UUID
-  · expires_in: 1h/24h/7d（預設 24h）"""
+  · expires_in: 1h/24h/7d（預設 24h）
+
+【網頁瀏覽】
+- browse_webpage: 用瀏覽器開啟網頁並擷取完整渲染後的內容（accessibility snapshot 格式）
+  · url: 目標網頁 URL（必須 HTTPS）
+  · max_length: 回傳內容最大字數（預設 8000）
+  · timeout: 頁面載入超時毫秒數（預設 30000）
+  · 適合 JavaScript 渲染的 SPA 網站（如 React、Next.js、Vue）
+  · ⚠️ 一般靜態網頁請優先使用 WebFetch，browse_webpage 資源消耗較大
+  · 使用時機：WebFetch 回傳空白或 SPA 空殼時、用戶明確要求「用瀏覽器開」時"""
 
 # AI 文件生成工具說明（對應 app: ai-assistant）
 AI_DOCUMENT_TOOLS_PROMPT = """【AI 文件/簡報生成】
