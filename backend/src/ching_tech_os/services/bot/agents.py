@@ -179,8 +179,15 @@ BASE_TOOLS_PROMPT = """【對話附件管理】
   · max_length: 回傳內容最大字數（預設 8000）
   · timeout: 頁面載入超時毫秒數（預設 30000）
   · 適合 JavaScript 渲染的 SPA 網站（如 React、Next.js、Vue）
-  · ⚠️ 一般靜態網頁請優先使用 WebFetch，browse_webpage 資源消耗較大
-  · 使用時機：WebFetch 回傳空白或 SPA 空殼時、用戶明確要求「用瀏覽器開」時"""
+
+⚠️ 網頁擷取策略（必須遵守）：
+1. 先用 WebFetch 擷取網頁
+2. 如果 WebFetch 的結果符合以下任一情況，你必須自動改用 browse_webpage 重新擷取：
+   - 內容幾乎是空白，只有 "Loading..."、"Please wait" 等載入提示
+   - 內容主要是 JavaScript 程式碼或 <script> 標籤，缺乏實際文字
+   - 包含 __next、__nuxt、React、Vue 等 SPA 框架標記但無實質內容
+   - 你判斷回傳的內容明顯不是完整的網頁內容
+3. 用戶明確要求「用瀏覽器開」時，直接使用 browse_webpage，跳過 WebFetch"""
 
 # AI 文件生成工具說明（對應 app: ai-assistant）
 AI_DOCUMENT_TOOLS_PROMPT = """【AI 文件/簡報生成】

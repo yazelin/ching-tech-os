@@ -156,6 +156,63 @@ async def auto_prepare_generated_images(
     return ai_response
 
 
+def auto_extract_voice_messages(ai_response: str, tool_calls: list) -> str:
+    """從 tool_calls 中提取 TTS 結果，自動補上 [VOICE_MESSAGE:...] 標記
+
+    AI 呼叫 text_to_speech 工具後，工具回傳包含標記的字串，
+    但 AI 的最終回覆可能沒有把標記帶出來。此函式從 tool_calls
+    中提取成功的 TTS 結果，補到 ai_response 中。
+    """
+    if not tool_calls:
+        return ai_response
+
+    # 回覆中已有 VOICE_MESSAGE，不重複處理
+    if "[VOICE_MESSAGE:" in ai_response:
+        return ai_response
+
+    # 從 tool_calls 中找 text_to_speech 的成功結果
+    for tc in tool_calls:
+        if not hasattr(tc, "name") or tc.name != "mcp__ching-tech-os__text_to_speech":
+            continue
+
+        output = tc.output or ""
+        if not isinstance(output, str):
+            continue
+
+        # 嘗試多種格式提取 VOICE_MESSAGE 標記
+        # 1. 直接在 output 中（可能被 JSON escape）
+        # 2. JSON 包裝 {"result": "...[VOICE_MESSAGE:...]..."}
+        candidates = [output]
+
+        # 嘗試 JSON 解包
+        try:
+            import json as _json
+            parsed = _json.loads(output)
+            if isinstance(parsed, dict) and "result" in parsed:
+                candidates.append(parsed["result"])
+        except (ValueError, TypeError):
+            pass
+
+        for candidate in candidates:
+            if not isinstance(candidate, str) or "[VOICE_MESSAGE:" not in candidate:
+                continue
+            match = re.search(r'\[VOICE_MESSAGE:\{.*?\}\]', candidate)
+            if match:
+                tag = match.group(0)
+                # 驗證標記內的 JSON 可解析
+                inner = re.search(r'\[VOICE_MESSAGE:(\{.*?\})\]', tag)
+                if inner:
+                    try:
+                        _json.loads(inner.group(1))
+                        ai_response = ai_response.rstrip() + "\n" + tag
+                        logger.info("自動補上語音標記: %s", tag[:80])
+                        return ai_response
+                    except (ValueError, TypeError):
+                        logger.debug("語音標記 JSON 無效，跳過: %s", tag[:80])
+
+    return ai_response
+
+
 # ============================================================
 # AI 回應解析與發送
 # ============================================================
@@ -227,20 +284,22 @@ async def send_ai_response(
     text: str,
     file_messages: list[dict],
     mention_line_user_id: str | None = None,
+    voice_messages: list[dict] | None = None,
 ) -> list[str]:
     """
-    發送 AI 回應（文字 + 檔案訊息）
+    發送 AI 回應（文字 + 檔案訊息 + 語音訊息）
 
     Args:
         reply_token: Line 回覆 token
         text: 文字回覆
         file_messages: 檔案訊息列表
         mention_line_user_id: 要 mention 的 Line 用戶 ID（群組對話時使用）
+        voice_messages: 語音訊息列表（從 [VOICE_MESSAGE:{...}] 解析）
 
     Returns:
         發送成功的訊息 ID 列表
     """
-    from linebot.v3.messaging import ImageMessage
+    from linebot.v3.messaging import AudioMessage, ImageMessage
 
     messages = []
 
@@ -274,6 +333,34 @@ async def send_ai_response(
                 link_text += f"（{size}）"
             link_text += f"\n{url}\n⏰ 連結 24 小時內有效"
             _append_text_to_first_message(messages, link_text, mention_line_user_id)
+
+    # 語音訊息
+    LINE_AUDIO_MAX_DURATION_MS = 60000
+    if voice_messages:
+        from ..config import settings as app_settings
+        base_url = app_settings.public_url.rstrip("/")
+        for voice_info in voice_messages:
+            file_id = voice_info.get("file_id")
+            duration_ms = voice_info.get("duration_ms") or 5000
+            engine = voice_info.get("engine", "edge")
+            voice_name = voice_info.get("voice", "")
+            if not file_id:
+                continue
+            audio_url = f"{base_url}/api/voice/tts/{file_id}.m4a"
+            # 標註引擎和語音角色
+            tts_label = f"🎙️ {engine}・{voice_name}" if voice_name else f"🎙️ {engine}"
+            if duration_ms <= LINE_AUDIO_MAX_DURATION_MS:
+                # 60 秒內：用 AudioMessage 直接播放 + 標註
+                _append_text_to_first_message(messages, tts_label, mention_line_user_id)
+                messages.append(AudioMessage(
+                    original_content_url=audio_url,
+                    duration=duration_ms,
+                ))
+            else:
+                # 超過 60 秒：改用超連結
+                duration_sec = duration_ms // 1000
+                link_text = f"{tts_label}（{duration_sec}秒）\n{audio_url}"
+                _append_text_to_first_message(messages, link_text, mention_line_user_id)
 
     # Line 限制每次最多 5 則訊息
     # 如果檔案太多，只發送前 4 張圖片（預留 1 則給文字）
@@ -602,6 +689,7 @@ async def process_message_with_ai(
     quoted_message_id: str | None = None,
     bot_user_id: str | None = None,
     skip_send: bool = False,
+    force_trigger: bool = False,
 ) -> str | None:
     """
     使用 AI 處理訊息
@@ -631,8 +719,8 @@ async def process_message_with_ai(
         logger.info(f"is_bot_message({quoted_message_id}) = {is_reply_to_bot}")
 
     # 檢查是否應該觸發 AI
-    should_trigger = should_trigger_ai(content, is_group, is_reply_to_bot)
-    logger.info(f"AI 觸發判斷: is_group={is_group}, is_reply_to_bot={is_reply_to_bot}, content={content[:50]!r}, should_trigger={should_trigger}")
+    should_trigger = force_trigger or should_trigger_ai(content, is_group, is_reply_to_bot)
+    logger.info(f"AI 觸發判斷: is_group={is_group}, is_reply_to_bot={is_reply_to_bot}, force={force_trigger}, content={content[:50]!r}, should_trigger={should_trigger}")
 
     if not should_trigger:
         logger.debug(f"訊息不觸發 AI: {content[:50]}...")
@@ -822,6 +910,13 @@ async def process_message_with_ai(
         # 注意：此 timeout 是整體 Claude CLI 的執行時間，包含所有工具呼叫
         # 當 nanobanana MCP 完全失敗時（timeout/錯誤），會觸發 FLUX fallback
         # Gemini 模型間的 fallback（Pro → Flash）由 nanobanana MCP 內部自動處理
+        # 注入語音設定所需的 context（group_id, agent_id）
+        voice_mcp_env: dict[str, str] = {}
+        if line_group_id:
+            voice_mcp_env["CTOS_GROUP_ID"] = str(line_group_id)
+        if agent and agent.get("id"):
+            voice_mcp_env["CTOS_AGENT_ID"] = str(agent["id"])
+
         response = await call_claude(
             prompt=user_message,
             model=model,
@@ -831,6 +926,7 @@ async def process_message_with_ai(
             tools=all_tools,
             required_mcp_servers=required_mcp_servers,
             ctos_user_id=ctos_user_id,
+            extra_mcp_env=voice_mcp_env or None,
         )
 
         # 計算耗時
@@ -924,6 +1020,9 @@ async def process_message_with_ai(
                     ai_response = await auto_prepare_generated_images(
                         ai_response, response.tool_calls
                     )
+                    ai_response = auto_extract_voice_messages(
+                        ai_response, response.tool_calls
+                    )
                     # 繼續後續的發送流程（不 return）
                 else:
                     # 超時但有已完成的工具結果，嘗試用結果做 fallback 總結
@@ -956,11 +1055,20 @@ async def process_message_with_ai(
                 ai_response, response.tool_calls
             )
 
+            # 自動補上語音標記（AI 可能沒把 VOICE_MESSAGE 帶到回覆中）
+            logger.info("auto_extract_voice_messages 前: tool_calls=%d, VOICE_MESSAGE in response=%s",
+                        len(response.tool_calls or []), "[VOICE_MESSAGE:" in (ai_response or ""))
+            ai_response = auto_extract_voice_messages(
+                ai_response, response.tool_calls
+            )
+            logger.info("auto_extract_voice_messages 後: VOICE_MESSAGE in response=%s",
+                        "[VOICE_MESSAGE:" in (ai_response or ""))
+
         # 標記訊息已處理
         await mark_message_ai_processed(message_uuid)
 
         # 解析 AI 回應，提取檔案訊息標記
-        text_response, file_messages = parse_ai_response(ai_response)
+        text_response, file_messages, voice_messages = parse_ai_response(ai_response)
 
         # skip_send 模式：不發送，由呼叫端自行處理（如語音合併回覆）
         if skip_send:
@@ -970,20 +1078,21 @@ async def process_message_with_ai(
         # 群組對話時，mention 發問的用戶
         line_message_ids = []
         reply_success = False
-        if reply_token and (text_response or file_messages):
+        if reply_token and (text_response or file_messages or voice_messages):
             try:
                 line_message_ids = await send_ai_response(
                     reply_token=reply_token,
                     text=text_response,
                     file_messages=file_messages,
                     mention_line_user_id=line_user_id if is_group else None,
+                    voice_messages=voice_messages,
                 )
                 reply_success = True
             except Exception as e:
                 logger.warning(f"回覆訊息失敗（token 可能已過期）: {e}")
 
         # Reply 失敗時 fallback 到 push message（合併發送）
-        if not reply_success and (text_response or file_messages):
+        if not reply_success and (text_response or file_messages or voice_messages):
             logger.info("嘗試使用 push message 發送訊息...")
             # 取得發送目標（個人對話用 line_user_id，群組用 line_group_external_id）
             push_target = None
@@ -993,25 +1102,53 @@ async def process_message_with_ai(
                 push_target = line_user_id
 
             if push_target:
-                # 建立訊息列表（合併文字和圖片訊息）
-                from linebot.v3.messaging import TextMessage as LBTextMessage, ImageMessage as LBImageMessage
+                # 建立訊息列表（合併文字、圖片、語音訊息）
+                from linebot.v3.messaging import (
+                    TextMessage as LBTextMessage,
+                    ImageMessage as LBImageMessage,
+                    AudioMessage as LBAudioMessage,
+                )
 
-                push_message_list: list[LBTextMessage | LBImageMessage] = []
+                push_message_list: list[LBTextMessage | LBImageMessage | LBAudioMessage] = []
 
                 # 文字訊息放在前面（超過 LINE 上限時自動分割）
                 if text_response:
                     for chunk in _split_long_text(text_response):
                         push_message_list.append(LBTextMessage(text=chunk))
 
-                # 圖片訊息放在後面
+                # 圖片訊息
                 for file_info in file_messages:
                     if file_info.get("type") == "image" and file_info.get("url"):
-                        # 優先使用 original_url（HTTPS），Line API 要求必須是 HTTPS URL
                         img_url = file_info.get("original_url") or file_info["url"]
                         push_message_list.append(LBImageMessage(
                             original_content_url=img_url,
                             preview_image_url=file_info.get("preview_url") or img_url,
                         ))
+
+                # 語音訊息
+                if voice_messages:
+                    from ..config import settings as app_settings
+                    base_url = app_settings.public_url.rstrip("/")
+                    for voice_info in voice_messages:
+                        file_id = voice_info.get("file_id")
+                        duration_ms = voice_info.get("duration_ms") or 5000
+                        engine = voice_info.get("engine", "edge")
+                        voice_name = voice_info.get("voice", "")
+                        if not file_id:
+                            continue
+                        audio_url = f"{base_url}/api/voice/tts/{file_id}.m4a"
+                        tts_label = f"🎙️ {engine}・{voice_name}" if voice_name else f"🎙️ {engine}"
+                        if duration_ms <= LINE_AUDIO_MAX_DURATION_MS:
+                            push_message_list.append(LBTextMessage(text=tts_label))
+                            push_message_list.append(LBAudioMessage(
+                                original_content_url=audio_url,
+                                duration=duration_ms,
+                            ))
+                        else:
+                            duration_sec = duration_ms // 1000
+                            push_message_list.append(LBTextMessage(
+                                text=f"{tts_label}（{duration_sec}秒）\n{audio_url}",
+                            ))
 
                 # 合併發送所有訊息
                 if push_message_list:
@@ -1200,7 +1337,7 @@ async def get_conversation_context(
                 WHERE m.bot_group_id = $1
                   AND ($3::uuid IS NULL OR m.id != $3)
                   AND m.message_type IN ('text', 'image', 'file', 'audio')
-                  AND (m.content IS NOT NULL OR m.message_type IN ('image', 'file'))
+                  AND (m.content IS NOT NULL OR m.message_type IN ('image', 'file', 'audio'))
                 ORDER BY m.created_at DESC
                 LIMIT $2
                 """,
@@ -1222,7 +1359,7 @@ async def get_conversation_context(
                   AND ($3::uuid IS NULL OR m.id != $3)
                   AND m.bot_group_id IS NULL
                   AND m.message_type IN ('text', 'image', 'file', 'audio')
-                  AND (m.content IS NOT NULL OR m.message_type IN ('image', 'file'))
+                  AND (m.content IS NOT NULL OR m.message_type IN ('image', 'file', 'audio'))
                   AND (
                     u.conversation_reset_at IS NULL
                     OR m.created_at > u.conversation_reset_at
@@ -1332,6 +1469,12 @@ async def get_conversation_context(
                         content = f"[上傳檔案: {file_name}（不支援舊版格式，請轉存為 .docx/.xlsx/.pptx）]"
                     else:
                         content = f"[上傳檔案: {file_name}（無法讀取此類型）]"
+            elif row["message_type"] == "audio":
+                # 語音訊息：有轉錄文字就顯示，沒有就標記辨識失敗
+                if row["content"]:
+                    content = row["content"]
+                else:
+                    content = "[語音訊息：辨識失敗]"
             else:
                 content = row["content"]
 
@@ -1383,7 +1526,8 @@ async def build_system_prompt(
   · Google Docs: https://docs.google.com/document/d/{id}/... → 轉成 https://docs.google.com/document/d/{id}/export?format=txt
   · Google Sheets: https://docs.google.com/spreadsheets/d/{id}/... → 轉成 https://docs.google.com/spreadsheets/d/{id}/export?format=csv
   · Google Slides: https://docs.google.com/presentation/d/{id}/... → 轉成 https://docs.google.com/presentation/d/{id}/export?format=txt
-  · 轉換後再用 WebFetch 讀取""")
+  · 轉換後再用 WebFetch 讀取
+- ⚠️ WebFetch fallback 規則：如果 WebFetch 回傳的內容是空白、只有 Loading 提示、或明顯是 SPA 空殼（缺乏實質文字），你必須改用 browse_webpage 重新擷取""")
 
     # WebSearch 工具說明
     if "WebSearch" in all_tools:
@@ -1568,6 +1712,7 @@ async def handle_text_message(
     reply_token: str | None,
     quoted_message_id: str | None = None,
     skip_send: bool = False,
+    force_trigger: bool = False,
 ) -> str | None:
     """
     處理文字訊息的 Webhook 入口
@@ -1641,4 +1786,5 @@ async def handle_text_message(
         quoted_message_id=quoted_message_id,
         bot_user_id=bot_user_id,
         skip_send=skip_send,
+        force_trigger=force_trigger,
     )

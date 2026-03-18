@@ -4,3 +4,6 @@
 [submodule "extends/erpnext"]
 	path = extends/erpnext
 	url = https://github.com/yazelin/ching-tech-erpnext.git
+[submodule "extends/law"]
+	path = extends/law
+	url = https://github.com/yazelin/ching-tech-law.git
