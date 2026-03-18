@@ -19,6 +19,50 @@ from .constants import MENTION_KEY, MENTION_PLACEHOLDER
 logger = logging.getLogger("linebot")
 
 
+async def _record_bot_push(
+    message_id: str,
+    to: str,
+    msg_type: str,
+    content: str | None = None,
+) -> None:
+    """push 訊息自動記錄到 bot_messages（確保 reply 觸發能運作）"""
+    try:
+        from ...database import get_connection
+        from .message_store import get_or_create_bot_user
+
+        bot_user_uuid = await get_or_create_bot_user()
+
+        # 判斷 to 是 group（C 開頭）還是 user（U 開頭）
+        group_uuid = None
+        if to.startswith("C"):
+            async with get_connection() as conn:
+                row = await conn.fetchrow(
+                    "SELECT id FROM bot_groups WHERE platform_group_id = $1",
+                    to,
+                )
+                if row:
+                    group_uuid = row["id"]
+
+        async with get_connection() as conn:
+            await conn.execute(
+                """
+                INSERT INTO bot_messages (
+                    message_id, bot_user_id, bot_group_id,
+                    message_type, content, is_from_bot
+                )
+                VALUES ($1, $2, $3, $4, $5, true)
+                ON CONFLICT (message_id) DO NOTHING
+                """,
+                message_id,
+                bot_user_uuid,
+                group_uuid,
+                msg_type,
+                content,
+            )
+    except Exception:
+        logger.warning(f"記錄 push 訊息失敗: {message_id}", exc_info=True)
+
+
 async def reply_text(
     reply_token: str,
     text: str,
@@ -165,7 +209,9 @@ async def push_text(
         )
         logger.info(f"推送訊息到 {to}: {text[:50]}...")
         if response and response.sent_messages:
-            return response.sent_messages[0].id, None
+            msg_id = response.sent_messages[0].id
+            await _record_bot_push(msg_id, to, "text", text)
+            return msg_id, None
         return None, "未知錯誤：無回應"
     except Exception as e:
         logger.error(f"推送訊息失敗: {e}")
@@ -200,7 +246,9 @@ async def push_image(
         )
         logger.info(f"推送圖片到 {to}: {image_url}")
         if response and response.sent_messages:
-            return response.sent_messages[0].id, None
+            msg_id = response.sent_messages[0].id
+            await _record_bot_push(msg_id, to, "image")
+            return msg_id, None
         return None, "未知錯誤：無回應"
     except Exception as e:
         logger.error(f"推送圖片失敗: {e}")
@@ -247,6 +295,7 @@ async def push_messages(
             if response and response.sent_messages:
                 for msg in response.sent_messages:
                     sent_message_ids.append(msg.id)
+                    await _record_bot_push(msg.id, to, "text")
 
             logger.info(f"推送 {len(batch)} 則訊息到 {to}")
 
@@ -289,7 +338,9 @@ async def push_audio(
         )
         logger.info(f"推送音訊到 {to}: {audio_url}")
         if response and response.sent_messages:
-            return response.sent_messages[0].id, None
+            msg_id = response.sent_messages[0].id
+            await _record_bot_push(msg_id, to, "audio")
+            return msg_id, None
         return None, "未知錯誤：無回應"
     except Exception as e:
         logger.error(f"推送音訊失敗: {e}")
