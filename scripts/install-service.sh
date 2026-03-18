@@ -301,6 +301,9 @@ fi
 # ===================
 # 依賴安裝與建置
 # ===================
+echo "安裝系統依賴..."
+apt-get install -y ffmpeg > /dev/null 2>&1 && echo "ffmpeg 安裝完成" || echo "警告：ffmpeg 安裝失敗，語音功能將無法使用"
+
 echo "安裝後端 Python 依賴（含語音模組）..."
 sudo -u ${RUN_USER} bash -c "cd ${BACKEND_DIR} && ${UV_BIN} sync --extra voice"
 
