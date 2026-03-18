@@ -158,15 +158,36 @@ mcp_servers:
 
 啟動獨立進程作為 MCP Server，透過 stdio 通訊。`${PROJECT_ROOT}` 自動替換為專案根目錄。
 
-**何時用外部 MCP Server vs in-process**：
+**三種工具提供方式的選擇**：
 
-| 條件 | 用外部 MCP Server | 用 in-process mcp_tools |
-|------|---|---|
-| 需要主系統 DB | ✗ | ✓ |
-| 串接外部 API | ✓ | ✓ |
-| 已有獨立 PyPI 套件 | ✓ | ✗ |
-| 需要程序隔離（穩定性） | ✓ | ✗ |
-| 效能敏感 | ✗ | ✓ |
+| 條件 | 外部 MCP Server | in-process mcp_tools | Skill Script |
+|------|---|---|---|
+| 需要主系統 DB | ✗ | ✓ | ✗ |
+| 串接外部 API | ✓ | ✓ | ✓ |
+| 已有獨立 PyPI 套件 | ✓ | ✗ | ✗ |
+| 需要程序隔離（穩定性） | ✓ | ✗ | ✓（獨立 process） |
+| 效能敏感 | ✗ | ✓ | ✗ |
+| 讀取本機檔案/快取 | ✗ | ✓ | ✓ |
+| 不需改主系統程式碼 | ✓ | ✓ | ✓ |
+
+#### Skill Script 模式
+
+除了 MCP 工具外，extends 模組也可以透過 **Skill Script** 提供工具。AI 透過 `run_skill_script` 呼叫 `skills/{name}/scripts/*.py` 腳本。
+
+```
+skills/
+└── my-skill/
+    ├── SKILL.md          # Skill 定義（allowed-tools 包含 run_skill_script）
+    └── scripts/
+        ├── _common.py    # 共用工具函式
+        └── my_query.py   # 工具腳本
+```
+
+**Script 接收 stdin 輸入（JSON），輸出結果到 stdout**。適用於不需要向 MCP Server 註冊工具、只需要 AI 透過 `run_skill_script` 呼叫的場景（如讀取本機快取資料、檔案處理）。
+
+**何時用 Skill Script vs MCP 工具**：
+- 工具需要被其他 MCP 客戶端（如 Claude Code CLI）直接呼叫 → 用 MCP 工具
+- 工具只在 Bot AI 對話中使用、透過 `run_skill_script` 呼叫即可 → 用 Skill Script
 
 #### `lifespan`（生命週期）
 
@@ -293,13 +314,13 @@ CTHIS_DATA_PATH=/mnt/nas/ctos/external-data/cthis-jfmskin/data
 
 ## 現有模組參考
 
-| 模組 | 類型 | 使用的 contributes.yaml 欄位 | 說明 |
-|------|------|------|------|
-| **law** | git submodule | `module_id` + `mcp_tools` | 律師事務所 AI 工作流，12 個 in-process MCP 工具 |
-| **his** | git submodule | `lifespan` | 展望 HIS 整合，背景輪詢 DBF 資料 |
-| **erpnext** | git submodule | `module_id` + `mcp_servers` | ERPNext ERP 整合，外部 MCP Server |
-| **printer** | native | `mcp_servers` | 列印功能，外部 MCP Server |
-| **voice** | native | `lifespan` + `routers` | 語音 STT/TTS，背景服務 + API 路由 |
+| 模組 | 類型 | 使用的 contributes.yaml 欄位 | 工具提供方式 | 說明 |
+|------|------|------|------|------|
+| **law** | git submodule | `module_id` + `mcp_tools` | in-process MCP 工具（12 個） | 律師事務所 AI 工作流 |
+| **his** | git submodule | `module_id` + `lifespan` | Skill Script（5 個腳本） | 展望 HIS 整合，背景輪詢 DBF 資料 |
+| **erpnext** | git submodule | `module_id` + `mcp_servers` | 外部 MCP Server | ERPNext ERP 整合 |
+| **printer** | native | `module_id` + `mcp_servers` | 外部 MCP Server | 列印功能 |
+| **voice** | native | `module_id` + `lifespan` + `routers` | 主系統 in-process MCP 工具 | 語音 STT/TTS |
 
 ## 開發新模組的步驟
 
