@@ -209,7 +209,11 @@ def _do_translate(
             raise RuntimeError("GEMINI_API_KEY 未設定")
 
         from google import genai
-        client = genai.Client(api_key=api_key)
+        import httpx
+        client = genai.Client(
+            api_key=api_key,
+            http_options={"timeout": 120_000},  # 120 秒 timeout
+        )
 
         # 切 chunk
         chunks = _split_chunks(source_text)
