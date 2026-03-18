@@ -80,7 +80,7 @@ def _trigger_proactive_push(job_id: str, skill: str) -> None:
 
 # --- Chunk 切分 ---
 
-CHUNK_SIZE = 20_000  # 每 chunk 約 20,000 字元
+CHUNK_SIZE = 5_000  # 每 chunk 約 5,000 字元（避免 Gemini API hang）
 
 
 def _split_chunks(text: str) -> list[str]:
