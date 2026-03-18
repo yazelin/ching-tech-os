@@ -35,6 +35,7 @@ def _find_status_file(skill: str, job_id: str) -> Path | None:
         "research-skill": "research",
         "media-downloader": "videos",
         "media-transcription": "transcriptions",
+        "media-translation": "translations",
     }.get(skill)
 
     if not skill_subdir:
@@ -93,6 +94,20 @@ def _build_message(skill: str, status: dict) -> str:
             lines.append(f"\n{preview}")
         if ctos_path:
             lines.append(f"\n完整逐字稿：{ctos_path}")
+        lines.append(f"（job_id: {job_id}）")
+        return "\n".join(lines)
+
+    if skill == "media-translation":
+        source_filename = status.get("source_filename", "")
+        ctos_path = status.get("ctos_path", "")
+        warnings = status.get("warnings", [])
+        lines = ["✅ 翻譯完成"]
+        if source_filename:
+            lines.append(f"來源：{source_filename}")
+        if ctos_path:
+            lines.append(f"翻譯檔：{ctos_path}")
+        if warnings:
+            lines.append(f"⚠️ {len(warnings)} 段翻譯失敗，保留原文")
         lines.append(f"（job_id: {job_id}）")
         return "\n".join(lines)
 
