@@ -6,6 +6,10 @@ metadata:
   ctos:
     requires_app: file-manager
     mcp_servers: ching-tech-os
+  openclaw:
+    requires:
+      env:
+        - GEMINI_API_KEY
 ---
 
 【長文翻譯（Gemini 背景執行）】
