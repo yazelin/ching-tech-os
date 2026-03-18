@@ -304,6 +304,9 @@ fi
 echo "安裝後端 Python 依賴..."
 sudo -u ${RUN_USER} bash -c "cd ${BACKEND_DIR} && ${UV_BIN} sync"
 
+echo "安裝 Playwright Chromium（browse_webpage 工具需要）..."
+sudo -u ${RUN_USER} bash -c "cd ${BACKEND_DIR} && ${UV_BIN} run playwright install chromium" || echo "警告：Playwright Chromium 安裝失敗，browse_webpage 工具將無法使用"
+
 echo "安裝前端依賴..."
 sudo -u ${RUN_USER} bash -c "export PATH=${NODE_BIN_DIR}:\$PATH && cd ${PROJECT_DIR} && npm install"
 sudo -u ${RUN_USER} bash -c "export PATH=${NODE_BIN_DIR}:\$PATH && cd ${PROJECT_DIR}/frontend && npm install"
