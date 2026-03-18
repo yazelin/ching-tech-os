@@ -26,8 +26,9 @@
   - `skills/`：AI Skills 系統
   - `utils/`：工具函式
   - `migrations/versions/`：Alembic migration 檔案
-- `extends/`：外部模組（git submodule）
+- `extends/`：外部模組（git submodule），開發規範見 `docs/extends-module.md`
   - `his/`：展望 HIS 整合（private repo）
+  - `law/`：律師事務所 AI 工作流（private repo）
 - `docker/`：Docker Compose 設定
 - `data/`：知識庫資料
 - `docs/`：技術文件
@@ -327,6 +328,7 @@ cd docker && docker compose up -d
 ### docs/ 目錄結構
 ```
 docs/
+├── extends-module.md        # Extends 外部模組開發指南（contributes.yaml 規格、MCP 工具、Skills）
 ├── ai-agent-design.md       # AI Agent 架構設計
 ├── ai-management.md         # AI 管理系統
 ├── backend.md               # 後端開發指南、API 參考
