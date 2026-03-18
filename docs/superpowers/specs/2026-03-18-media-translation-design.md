@@ -10,8 +10,15 @@ AI 在 Line Bot 中收到長文翻譯需求時，錯誤使用了 claude-code-acp
 
 支援兩種輸入（二擇一）：
 
-1. **NAS 檔案路徑**：`source_path`（ctos:// 路徑），讀取檔案內容翻譯
+1. **NAS 檔案路徑**：`source_path`（ctos:// 路徑），讀取純文字檔（`.md`、`.txt`）
 2. **直接文字**：`text` 欄位，直接翻譯傳入的文字
+
+限制：僅支援純文字檔案，不支援 PDF、Word 等格式（可先用 `read_document` 擷取文字再傳入 `text`）。
+
+### 輸入大小限制
+
+- `source_path`：檔案大小上限 2 MB
+- `text`：字元數上限 500,000 字元
 
 ## 翻譯引擎
 
@@ -47,7 +54,10 @@ AI 呼叫 run_skill_script(skill="media-translation", script="translate", input=
   ↓
 os.fork()
   ├─ 父程序：立即回傳 { success: true, job_id, status: "started" }
-  └─ 子程序（os.setsid 脫離）：
+  └─ 子程序：
+       os.setsid()          # 脫離父程序 session
+       os.chdir(job_dir)    # 防止 tmpdir 被刪
+       重導向 stdin→/dev/null, stdout/stderr→worker.log
        ↓
      讀取來源內容（ctos_path → 實際檔案路徑，或直接用 text）
        ↓
@@ -83,7 +93,7 @@ os.fork()
 
 ### 輸出位置
 
-- 來源是 NAS 檔案 → 翻譯檔存在來源旁邊，檔名加語言後綴（如 `transcript_zh-TW.md`）
+- 來源是 NAS 檔案 → 翻譯檔存在來源旁邊，檔名加語言後綴（如 `transcript_zh-TW.md`）；若已存在則覆蓋
 - 來源是純文字 → 存到 `ctos://linebot/translations/YYYY-MM-DD/{job_id}/translation.md`
 
 ### status.json 結構
@@ -94,6 +104,7 @@ os.fork()
   "status": "translating",
   "progress": "3/12",
   "source_path": "ctos://...",
+  "source_filename": "transcript.md",
   "target_language": "zh-TW",
   "model": "gemini-2.5-flash",
   "output_path": null,
@@ -126,19 +137,26 @@ os.fork()
 ```
 
 若 `target_language` 為 null（自動偵測模式）：
+- 使用第一個 chunk 偵測來源語言，決定翻譯方向
+- 偵測結果套用到所有後續 chunk（確保一致性）
 
+偵測 prompt（僅第一個 chunk）：
 ```
 你是專業翻譯。偵測以下內容的主要語言：
 - 若主要是英文或中英夾雜，翻譯成繁體中文
 - 若主要是繁體中文，翻譯成英文
 （其餘規則同上）
+
+請在翻譯結果的第一行以 [DETECTED_LANG:xx] 格式標示偵測到的目標語言（如 [DETECTED_LANG:zh-TW]），方便後續 chunk 使用。
 ```
+後續 chunk 使用偵測到的語言，走標準翻譯 prompt。
 
 ## Chunk 策略
 
-- 每 500 行為一個 chunk
+- 以字元數為主：每 chunk 約 20,000 字元（約 500 行普通文字）
 - 優先在空行處切分，避免切斷段落中間
-- 最後不足 500 行的尾巴作為最後一個 chunk
+- 若找不到空行，則在最近的換行處切分
+- 最後不足門檻的尾巴作為最後一個 chunk
 
 ## 錯誤處理
 
@@ -151,7 +169,7 @@ os.fork()
 同步查詢翻譯進度：
 
 - 輸入：`{ "job_id": "a1b2c3d4" }`
-- 輸出：status.json 內容 + 完成時提供 `file_path`（絕對路徑）
+- 輸出：status.json 內容 + 完成時提供 `file_path`（絕對路徑）和 `ctos_path`
 - 逾時判定：30 分鐘無更新視為 failed
 - 搜尋最近 7 天的日期目錄
 
@@ -169,6 +187,7 @@ os.fork()
 ✅ 翻譯完成
 來源：{source_filename}
 翻譯檔：{ctos_path}
+⚠️ {N} 段翻譯失敗，保留原文    ← 僅 warnings 非空時顯示
 （job_id: {job_id}）
 ```
 
