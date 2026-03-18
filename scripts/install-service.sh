@@ -301,8 +301,8 @@ fi
 # ===================
 # 依賴安裝與建置
 # ===================
-echo "安裝後端 Python 依賴..."
-sudo -u ${RUN_USER} bash -c "cd ${BACKEND_DIR} && ${UV_BIN} sync"
+echo "安裝後端 Python 依賴（含語音模組）..."
+sudo -u ${RUN_USER} bash -c "cd ${BACKEND_DIR} && ${UV_BIN} sync --extra voice"
 
 echo "安裝 Playwright Chromium（browse_webpage 工具需要）..."
 sudo -u ${RUN_USER} bash -c "cd ${BACKEND_DIR} && ${UV_BIN} run playwright install chromium" || echo "警告：Playwright Chromium 安裝失敗，browse_webpage 工具將無法使用"
