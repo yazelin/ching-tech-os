@@ -43,6 +43,7 @@ const DesktopModule = (function() {
     'settings':       { src: './js/settings.js',       globalName: 'SettingsApp' },
     'linebot':        { src: './js/linebot.js',        globalName: 'LineBotApp' },
     'task-scheduler': { src: './js/task-scheduler.js', globalName: 'TaskSchedulerApp' },
+    'voice':          { src: './js/voice-app.js',     globalName: 'VoiceApp' },
   };
   let appLoaders = { ...fallbackAppLoaders };
 

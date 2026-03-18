@@ -177,7 +177,7 @@ class TestRestrictedPolicy:
             ),
             patch(
                 "ching_tech_os.services.bot.ai.parse_ai_response",
-                return_value=("您好！我是擎添工業的 AI 助理。", []),
+                return_value=("您好！我是擎添工業的 AI 助理。", [], []),
             ),
         ):
             result = await handle_restricted_mode(
@@ -233,7 +233,7 @@ class TestRestrictedPolicy:
             ),
             patch(
                 "ching_tech_os.services.bot.ai.parse_ai_response",
-                return_value=("回覆內容", []),
+                return_value=("回覆內容", [], []),
             ),
         ):
             # bot_user_id=None → 不檢查 rate limit
@@ -358,7 +358,7 @@ class TestDebugCommand:
             ),
             patch(
                 "ching_tech_os.services.bot.ai.parse_ai_response",
-                return_value=("系統狀態正常", []),
+                return_value=("系統狀態正常", [], []),
             ),
         ):
             reply = await router.dispatch(command, args, ctx)
@@ -532,7 +532,7 @@ class TestRateLimiterIntegration:
             ),
             patch(
                 "ching_tech_os.services.bot.ai.parse_ai_response",
-                return_value=("OK", []),
+                return_value=("OK", [], []),
             ),
         ):
             result = await handle_restricted_mode(

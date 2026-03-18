@@ -477,6 +477,7 @@ def _patch_process_base(monkeypatch: pytest.MonkeyPatch) -> dict:
     monkeypatch.setattr(linebot_ai, "extract_nanobanana_error", lambda _calls: None)
     monkeypatch.setattr(linebot_ai, "check_nanobanana_timeout", lambda _calls: False)
     monkeypatch.setattr(linebot_ai, "auto_prepare_generated_images", AsyncMock(side_effect=lambda text, _calls: text))
+    monkeypatch.setattr(linebot_ai, "auto_extract_voice_messages", lambda text, _calls: text)
     monkeypatch.setattr(linebot_ai, "save_bot_response", AsyncMock(side_effect=[uuid4(), uuid4(), uuid4()]))
     monkeypatch.setattr(linebot_ai, "save_file_record", AsyncMock())
     monkeypatch.setattr(linebot_ai, "reply_text", AsyncMock())
@@ -510,6 +511,7 @@ async def test_process_message_with_ai_success_push_fallback_and_quote_text(monk
                 "name": "圖1.jpg",
                 "nas_path": "ai-images/a.jpg",
             }],
+            [],
         ),
     )
 
@@ -576,7 +578,7 @@ async def test_process_message_with_ai_start_research_appends_job_id(monkeypatch
             )
         ),
     )
-    monkeypatch.setattr(linebot_ai, "parse_ai_response", lambda text: (text, []))
+    monkeypatch.setattr(linebot_ai, "parse_ai_response", lambda text: (text, [], []))
     send_ai_response = AsyncMock(return_value=["mid"])
     monkeypatch.setattr(linebot_ai, "send_ai_response", send_ai_response)
 
@@ -599,7 +601,7 @@ async def test_process_message_with_ai_research_check_disables_web_tools(monkeyp
     monkeypatch.setattr(linebot_ai, "get_message_content_by_line_message_id", AsyncMock(return_value=None))
     call_claude = AsyncMock(return_value=_mock_claude_response(success=True, message="進度查詢完成"))
     monkeypatch.setattr(linebot_ai, "call_claude", call_claude)
-    monkeypatch.setattr(linebot_ai, "parse_ai_response", lambda text: (text, []))
+    monkeypatch.setattr(linebot_ai, "parse_ai_response", lambda text: (text, [], []))
     monkeypatch.setattr(linebot_ai, "send_ai_response", AsyncMock(return_value=["mid"]))
 
     await linebot_ai.process_message_with_ai(
@@ -664,7 +666,7 @@ async def test_process_message_with_ai_check_research_feedback_overrides_model_t
             )
         ),
     )
-    monkeypatch.setattr(linebot_ai, "parse_ai_response", lambda text: (text, []))
+    monkeypatch.setattr(linebot_ai, "parse_ai_response", lambda text: (text, [], []))
     send_ai_response = AsyncMock(return_value=["mid"])
     monkeypatch.setattr(linebot_ai, "send_ai_response", send_ai_response)
 
@@ -714,6 +716,7 @@ async def test_process_message_with_ai_nanobanana_fallback_success(monkeypatch: 
                 "name": "cat.jpg",
                 "nas_path": "ai-images/cat.jpg",
             }],
+            [],
         ),
     )
     monkeypatch.setattr(linebot_ai, "send_ai_response", AsyncMock(return_value=["mid1", "mid2"]))
@@ -742,7 +745,8 @@ async def test_process_message_with_ai_failed_response_with_generated_images(mon
     monkeypatch.setattr(linebot_ai, "check_nanobanana_timeout", lambda _calls: False)
     monkeypatch.setattr(linebot_ai, "extract_generated_images_from_tool_calls", lambda _calls: ["img1"])
     monkeypatch.setattr(linebot_ai, "auto_prepare_generated_images", AsyncMock(return_value="補救訊息"))
-    monkeypatch.setattr(linebot_ai, "parse_ai_response", lambda _text: ("補救文字", []))
+    monkeypatch.setattr(linebot_ai, "auto_extract_voice_messages", lambda text, _calls: text)
+    monkeypatch.setattr(linebot_ai, "parse_ai_response", lambda _text: ("補救文字", [], []))
     monkeypatch.setattr(linebot_ai, "send_ai_response", AsyncMock(return_value=["mid"]))
 
     result = await linebot_ai.process_message_with_ai(

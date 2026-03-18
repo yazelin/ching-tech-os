@@ -197,6 +197,9 @@ async def test_handle_update_routing(monkeypatch: pytest.MonkeyPatch) -> None:
         text="hello",
         photo=None,
         document=None,
+        voice=None,
+        audio=None,
+        video_note=None,
         reply_to_message=None,
         message_id=10,
     )
@@ -217,6 +220,9 @@ async def test_handle_update_routing(monkeypatch: pytest.MonkeyPatch) -> None:
         text=None,
         photo=[SimpleNamespace()],
         document=None,
+        voice=None,
+        audio=None,
+        video_note=None,
         reply_to_message=None,
         message_id=11,
     )
@@ -487,6 +493,7 @@ async def test_handle_text_with_ai_success(monkeypatch: pytest.MonkeyPatch) -> N
         lambda _msg: (
             "AI 回覆",
             [{"type": "image", "url": "https://img", "nas_path": "nas/img.jpg", "name": "img.jpg"}],
+            [],
         ),
     )
     monkeypatch.setattr(handler, "save_file_record", AsyncMock())

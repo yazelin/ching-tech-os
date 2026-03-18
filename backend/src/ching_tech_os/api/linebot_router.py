@@ -274,7 +274,7 @@ async def process_message_event(event: MessageEvent) -> None:
                 message_type = "text"  # 讓後續走文字 AI 流程
                 # 回寫轉錄文字到資料庫（讓對話歷史可查）
                 try:
-                    from ..services.db import get_connection
+                    from ..database import get_connection
                     async with get_connection() as conn:
                         await conn.execute(
                             "UPDATE bot_messages SET content = $1 WHERE id = $2",
@@ -301,7 +301,22 @@ async def process_message_event(event: MessageEvent) -> None:
                         await push_text(line_user_id, err_msg)
 
     # 如果是文字訊息，進行存取控制檢查並觸發 AI 處理
+    is_voice_origin = isinstance(message, AudioMessageContent)
     if message_type == "text" and content:
+        # 群組語音自動觸發：查詢群組設定
+        voice_auto_trigger = False
+        if is_group and is_voice_origin and group_uuid:
+            try:
+                from ..database import get_connection as _get_conn
+                async with _get_conn() as conn:
+                    row = await conn.fetchrow(
+                        "SELECT voice_auto_trigger FROM bot_groups WHERE id = $1",
+                        group_uuid,
+                    )
+                    voice_auto_trigger = row["voice_auto_trigger"] if row else False
+            except Exception as e:
+                logger.warning("查詢 voice_auto_trigger 失敗: %s", e)
+
         # 存取控制檢查
         has_access, deny_reason = await check_line_access(user_uuid, group_uuid)
 
@@ -312,7 +327,8 @@ async def process_message_event(event: MessageEvent) -> None:
                     is_reply_to_bot = False
                     if quoted_message_id:
                         is_reply_to_bot = await is_bot_message(quoted_message_id)
-                    if not should_trigger_ai(content, is_group, is_reply_to_bot):
+                    # 語音自動觸發開啟時跳過 @提及 檢查
+                    if not voice_auto_trigger and not should_trigger_ai(content, is_group, is_reply_to_bot):
                         return  # 未被 @提及 也未回覆機器人，靜默忽略
 
                 # 身份分流：根據策略決定拒絕或進入受限模式
@@ -401,85 +417,17 @@ async def process_message_event(event: MessageEvent) -> None:
             return
 
         # 通過存取控制，觸發 AI 處理
-        is_voice_origin = isinstance(message, AudioMessageContent)
-
-        if is_voice_origin:
-            # 語音訊息：skip_send 讓 AI 不自行回覆，由這裡合併文字+語音一次 reply
-            ai_reply = await handle_text_message(
-                message_id=message.id,
-                message_uuid=message_uuid,
-                content=content,
-                line_user_id=line_user_id,
-                line_group_id=group_uuid,
-                reply_token=event.reply_token,
-                quoted_message_id=quoted_message_id,
-                skip_send=True,
-            )
-
-            if ai_reply:
-                from ..services.bot.voice_bridge import get_voice_tts
-                from ..services.bot_line import reply_messages, push_messages, push_text
-                from ..services.bot_line.messaging import create_text_message_with_mention
-                from ..config import settings
-
-                # 建立文字訊息
-                mention_id = line_user_id if is_group else None
-                messages = [create_text_message_with_mention(ai_reply, mention_id)]
-
-                # 生成 TTS 語音
-                voice_tts = get_voice_tts()
-                if voice_tts:
-                    try:
-                        tts_result = await voice_tts.synthesize(ai_reply)
-                        if tts_result.file_id and not tts_result.error:
-                            from linebot.v3.messaging import AudioMessage as LineAudioMessage
-                            base_url = settings.public_url.rstrip("/")
-                            audio_url = f"{base_url}/api/voice/tts/{tts_result.file_id}.mp3"
-                            messages.append(LineAudioMessage(
-                                original_content_url=audio_url,
-                                duration=tts_result.duration_ms or 5000,
-                            ))
-                    except Exception as e:
-                        logger.warning("TTS 生成失敗（僅回覆文字）: %s", e)
-
-                # 合併回覆（文字 + 語音一次 reply）
-                reply_success = False
-                if event.reply_token:
-                    try:
-                        await reply_messages(event.reply_token, messages)
-                        reply_success = True
-                    except Exception as e:
-                        logger.warning("語音合併回覆失敗（token 可能已過期）: %s", e)
-
-                # Fallback: push
-                if not reply_success:
-                    push_target = line_user_id if not is_group else None
-                    if is_group and group_uuid:
-                        from ..services.linebot_ai import get_line_group_external_id
-                        push_target = await get_line_group_external_id(group_uuid)
-                    if push_target:
-                        try:
-                            await push_messages(push_target, messages)
-                        except Exception as e:
-                            logger.warning("語音 push fallback 失敗: %s", e)
-
-                # 儲存 Bot 回應到資料庫
-                from ..services.bot_line.message_store import save_bot_response
-                await save_bot_response(
-                    group_uuid=group_uuid,
-                    content=ai_reply,
-                    responding_to_line_user_id=line_user_id if not is_group else None,
-                )
-        else:
-            ai_reply = await handle_text_message(
-                message_id=message.id,
-                message_uuid=message_uuid,
-                content=content,
-                line_user_id=line_user_id,
-                line_group_id=group_uuid,
-                reply_token=event.reply_token,
-                quoted_message_id=quoted_message_id,
-            )
+        # 語音訊息走正常 AI 流程（TTS 由 AI 透過 text_to_speech 工具主動呼叫）
+        ai_reply = await handle_text_message(
+            message_id=message.id,
+            message_uuid=message_uuid,
+            content=content,
+            line_user_id=line_user_id,
+            line_group_id=group_uuid,
+            reply_token=event.reply_token,
+            quoted_message_id=quoted_message_id,
+            force_trigger=voice_auto_trigger if is_voice_origin else False,
+        )
 
 
 async def process_media_message(

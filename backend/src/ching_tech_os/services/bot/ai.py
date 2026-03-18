@@ -16,36 +16,46 @@ logger = logging.getLogger("bot.ai")
 # ============================================================
 
 
-def parse_ai_response(response: str) -> tuple[str, list[dict]]:
-    """解析 AI 回應，提取文字和檔案訊息
+def parse_ai_response(response: str) -> tuple[str, list[dict], list[dict]]:
+    """解析 AI 回應，提取文字、檔案訊息和語音訊息
 
     Args:
         response: AI 回應原始文字
 
     Returns:
-        (text, files): 純文字回覆和檔案訊息列表
+        (text, files, voices): 純文字回覆、檔案訊息列表、語音訊息列表
     """
     if not response:
-        return "", []
+        return "", [], []
 
-    # 匹配 [FILE_MESSAGE:{...}] 標記（非貪婪匹配到最後的 }]）
-    pattern = r'\[FILE_MESSAGE:(\{.*?\})\]'
+    # 匹配 [FILE_MESSAGE:{...}] 標記
+    file_pattern = r'\[FILE_MESSAGE:(\{.*?\})\]'
     files = []
-
-    for match in re.finditer(pattern, response):
+    for match in re.finditer(file_pattern, response):
         try:
             file_info = json.loads(match.group(1))
             files.append(file_info)
         except json.JSONDecodeError as e:
             logger.warning(f"解析 FILE_MESSAGE 失敗: {e}")
 
-    # 移除標記，保留純文字
-    text = re.sub(pattern, '', response).strip()
+    # 匹配 [VOICE_MESSAGE:{...}] 標記
+    voice_pattern = r'\[VOICE_MESSAGE:(\{.*?\})\]'
+    voices = []
+    for match in re.finditer(voice_pattern, response):
+        try:
+            voice_info = json.loads(match.group(1))
+            voices.append(voice_info)
+        except json.JSONDecodeError as e:
+            logger.warning(f"解析 VOICE_MESSAGE 失敗: {e}")
+
+    # 移除所有標記，保留純文字
+    text = re.sub(file_pattern, '', response)
+    text = re.sub(voice_pattern, '', text).strip()
 
     # 清理多餘的空行
     text = re.sub(r'\n{3,}', '\n\n', text)
 
-    return text, files
+    return text, files, voices
 
 
 # ============================================================

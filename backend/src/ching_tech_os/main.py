@@ -338,6 +338,10 @@ app.add_middleware(CacheControlMiddleware)
 # 註冊路由
 _register_module_routers(app)
 
+# 語音設定 API（不依賴 voice 模組啟用狀態，方便預先配置）
+from .api.voice_router import router as voice_settings_router
+app.include_router(voice_settings_router)
+
 
 @app.get("/api/health")
 async def health():

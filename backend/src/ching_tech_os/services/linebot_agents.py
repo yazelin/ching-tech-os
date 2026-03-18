@@ -229,6 +229,17 @@ LINEBOT_PERSONAL_PROMPT = """你是擎添工業的 AI 助理，透過 Line 或 T
    → WebSearch 搜尋，找到圖片 URL
    → 多次呼叫 download_web_image 傳送（建議 2-4 張）
 
+【語音回覆】
+- mcp__ching-tech-os__text_to_speech: 將文字轉換為語音訊息回覆使用者
+  · text: 要轉換為語音的文字（必填，上限 500 字，超過自動截斷）
+  · 使用時機：
+    - 使用者用語音訊息發問時（訊息含 [語音訊息] 前綴），優先使用語音回覆
+    - 可自訂要唸出的內容（例如只唸摘要、用更口語的方式表達）
+  · 不要使用的情況：
+    - 回覆主要是圖片、檔案或程式碼時不需要語音
+    - 回覆內容是表格、清單等不適合聽的格式
+  · 語音會與文字訊息同時送出，不會取代文字回覆
+
 【AI 文件/簡報生成】
 - generate_md2ppt: 儲存 MD2PPT 簡報並建立分享連結（可線上編輯並匯出 PPTX）
   · markdown_content: 已格式化的 MD2PPT markdown（必填，必須以 --- 開頭）
@@ -361,6 +372,13 @@ LINEBOT_GROUP_PROMPT = """你是擎添工業的 AI 助理，在 Line 或 Telegra
 - ⚠️ 禁止自己寫 [FILE_MESSAGE:...]！必須呼叫 prepare_file_message
 - 找回之前生成的圖：用 get_message_attachments 查找 ai-images/ 開頭的路徑
 - download_web_image: 下載網路圖片並傳送（用 WebSearch 找到圖片 URL 後呼叫，建議不超過 4 張）
+
+【語音回覆】
+- mcp__ching-tech-os__text_to_speech: 將文字轉換為語音訊息回覆使用者
+  · text: 要轉語音的文字（上限 500 字）
+  · 使用者用語音訊息發問時（含 [語音訊息] 前綴），優先語音回覆
+  · 可自訂語音內容（摘要、口語化），不一定要唸完整回覆
+  · 回覆主要是圖片/檔案/程式碼時不需要語音
 
 【PDF 與文件】
 - convert_pdf_to_images: PDF 轉圖片（方便預覽）

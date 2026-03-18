@@ -1,0 +1,161 @@
+/* ── Voice App 語音設定 ────────────────────────────── */
+
+.voice-app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 16px;
+  gap: 16px;
+  overflow-y: auto;
+}
+
+.voice-app-header {
+  flex-shrink: 0;
+}
+
+.voice-app-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+}
+
+/* 標籤 */
+.voice-label {
+  display: block;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+/* 下拉選單 */
+.voice-select {
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  font-size: 14px;
+  outline: none;
+  cursor: pointer;
+}
+
+.voice-select:focus {
+  border-color: var(--color-primary);
+}
+
+.voice-select option {
+  background-color: var(--window-bg);
+  color: var(--text-primary);
+}
+
+.voice-select optgroup {
+  background-color: var(--bg-secondary);
+  color: var(--text-muted);
+  font-style: normal;
+}
+
+/* 文字輸入 */
+.voice-input {
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  font-size: 14px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.voice-input:focus {
+  border-color: var(--color-primary);
+}
+
+.voice-input::placeholder {
+  color: var(--text-muted);
+}
+
+/* 滑桿 */
+.voice-slider {
+  width: 100%;
+  accent-color: var(--color-primary);
+}
+
+.voice-slider-value {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+/* 欄位 */
+.voice-field {
+  margin-bottom: 4px;
+}
+
+/* 繼承提示 */
+.voice-inherit-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* 按鈕群組 */
+.voice-btn-group {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.voice-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.voice-btn:hover {
+  background: var(--bg-surface-dark);
+}
+
+.voice-btn-primary {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
+}
+
+.voice-btn-primary:hover {
+  background: var(--color-primary-hover);
+}
+
+/* 播放區域 */
+.voice-player-area {
+  margin-top: 8px;
+  min-height: 24px;
+}
+
+.voice-loading,
+.voice-playing {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.voice-playing {
+  color: var(--color-success);
+}

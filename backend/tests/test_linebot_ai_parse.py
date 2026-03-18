@@ -47,26 +47,29 @@ class TestParseAiResponse:
 
     def test_empty_response(self):
         """空回應"""
-        text, files = parse_ai_response("")
+        text, files, voices = parse_ai_response("")
         assert text == ""
         assert files == []
+        assert voices == []
 
     def test_none_response(self):
         """None 回應"""
-        text, files = parse_ai_response(None)
+        text, files, voices = parse_ai_response(None)
         assert text == ""
         assert files == []
+        assert voices == []
 
     def test_plain_text_only(self):
         """純文字回應（無 FILE_MESSAGE）"""
-        text, files = parse_ai_response("這是一段普通回覆")
+        text, files, voices = parse_ai_response("這是一段普通回覆")
         assert text == "這是一段普通回覆"
         assert files == []
+        assert voices == []
 
     def test_single_image_file_message(self):
         """包含一個圖片 FILE_MESSAGE"""
         response = '好的，圖片已生成！\n\n[FILE_MESSAGE:{"type":"image","url":"https://example.com/img.jpg","name":"test.jpg"}]'
-        text, files = parse_ai_response(response)
+        text, files, voices = parse_ai_response(response)
         assert text == "好的，圖片已生成！"
         assert len(files) == 1
         assert files[0]["type"] == "image"
@@ -79,14 +82,14 @@ class TestParseAiResponse:
             '[FILE_MESSAGE:{"type":"image","url":"https://example.com/1.jpg","name":"1.jpg"}]\n'
             '[FILE_MESSAGE:{"type":"image","url":"https://example.com/2.jpg","name":"2.jpg"}]'
         )
-        text, files = parse_ai_response(response)
+        text, files, voices = parse_ai_response(response)
         assert text == "以下是兩張圖片："
         assert len(files) == 2
 
     def test_file_type_message(self):
         """包含檔案類型 FILE_MESSAGE"""
         response = '請下載：\n[FILE_MESSAGE:{"type":"file","url":"https://example.com/doc.pdf","name":"report.pdf","size":"2.5MB"}]'
-        text, files = parse_ai_response(response)
+        text, files, voices = parse_ai_response(response)
         assert text == "請下載："
         assert files[0]["type"] == "file"
         assert files[0]["name"] == "report.pdf"
@@ -94,14 +97,14 @@ class TestParseAiResponse:
     def test_invalid_json_in_file_message(self):
         """FILE_MESSAGE 中的 JSON 格式無效"""
         response = '回覆文字\n[FILE_MESSAGE:{invalid json}]'
-        text, files = parse_ai_response(response)
+        text, files, voices = parse_ai_response(response)
         assert "回覆文字" in text
         assert files == []
 
     def test_cleans_extra_newlines(self):
         """清理多餘空行"""
         response = '第一行\n\n\n\n\n第二行'
-        text, files = parse_ai_response(response)
+        text, files, voices = parse_ai_response(response)
         assert text == "第一行\n\n第二行"
 
     def test_mixed_text_and_file_messages(self):
@@ -111,7 +114,7 @@ class TestParseAiResponse:
             '[FILE_MESSAGE:{"type":"image","url":"https://img.com/a.jpg","name":"a.jpg"}]\n\n'
             '還有文字'
         )
-        text, files = parse_ai_response(response)
+        text, files, voices = parse_ai_response(response)
         assert "這裡有圖片" in text
         assert "還有文字" in text
         assert len(files) == 1

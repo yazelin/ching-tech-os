@@ -16,6 +16,7 @@ from ...database import get_connection
 from ..linebot_agents import get_linebot_agent
 from ..linebot_ai import (
     auto_prepare_generated_images,
+    auto_extract_voice_messages,
     build_system_prompt,
     get_conversation_context,
     log_linebot_ai_call,
@@ -529,8 +530,8 @@ async def _handle_voice(
     message, chat_id: str, chat, user,
     is_group: bool, adapter: TelegramBotAdapter,
 ) -> None:
-    """處理語音訊息：STT → AI → TTS"""
-    from ..bot.voice_bridge import get_voice_stt, get_voice_tts
+    """處理語音訊息：STT → AI（TTS 由 AI 透過 text_to_speech 工具主動呼叫）"""
+    from ..bot.voice_bridge import get_voice_stt
 
     voice_stt = get_voice_stt()
     if not voice_stt:
@@ -631,24 +632,10 @@ async def _handle_voice(
         text = reply_context + text
 
     try:
-        ai_reply = await _handle_text_with_ai(
+        await _handle_text_with_ai(
             text, chat_id, user, message.message_id,
             bot_user_id, bot_group_id, is_group, adapter,
         )
-
-        # TTS 語音回覆
-        voice_tts = get_voice_tts()
-        if voice_tts and ai_reply:
-            try:
-                tts_result = await voice_tts.synthesize(ai_reply)
-                if tts_result.audio_bytes and not tts_result.error:
-                    await adapter.send_voice(
-                        chat_id,
-                        tts_result.audio_bytes,
-                        duration=tts_result.duration_ms,
-                    )
-            except Exception as e:
-                logger.warning("TTS 語音回覆失敗: %s", e)
     except Exception as e:
         logger.error(f"語音 AI 處理失敗: {e}", exc_info=True)
         await adapter.send_text(chat_id, "抱歉，處理訊息時發生錯誤，請稍後再試。")
@@ -1006,13 +993,16 @@ async def _handle_text_with_ai(
         await adapter.send_text(chat_id, "AI 回應失敗，請稍後再試。")
         return
 
-    # 5. 處理生成的圖片
+    # 5. 處理生成的圖片 + 語音標記
     ai_message = await auto_prepare_generated_images(
         response.message, response.tool_calls
     )
+    ai_message = auto_extract_voice_messages(
+        ai_message, response.tool_calls
+    )
 
-    # 6. 解析回應（分離文字和檔案）
-    reply_text, files = parse_ai_response(ai_message)
+    # 6. 解析回應（分離文字、檔案、語音）
+    reply_text, files, voices = parse_ai_response(ai_message)
 
     # 7. 發送回覆（文字失敗不影響後續圖片/檔案發送）
     if reply_text:
@@ -1050,8 +1040,35 @@ async def _handle_text_with_ai(
         except Exception as e:
             logger.warning(f"發送檔案失敗: {e}")
 
+    # 語音訊息
+    for voice_info in voices:
+        file_id = voice_info.get("file_id")
+        duration_ms = voice_info.get("duration_ms") or 5000
+        if file_id:
+            try:
+                from ..bot.voice_bridge import get_voice_tts
+                voice_tts = get_voice_tts()
+                if voice_tts:
+                    import os
+                    mount = os.environ.get("CTOS_MOUNT_PATH", "/mnt/nas/ctos")
+                    # 搜尋音檔（在日期子目錄中）
+                    from pathlib import Path
+                    tts_root = Path(mount) / "voice" / "tts"
+                    audio_bytes = None
+                    for date_dir in tts_root.iterdir():
+                        if not date_dir.is_dir():
+                            continue
+                        file_path = date_dir / f"{file_id}.mp3"
+                        if file_path.exists():
+                            audio_bytes = file_path.read_bytes()
+                            break
+                    if audio_bytes:
+                        await adapter.send_voice(chat_id, audio_bytes, duration=duration_ms)
+            except Exception as e:
+                logger.warning(f"發送語音回覆失敗: {e}")
+
     # 沒有任何回覆內容時的 fallback
-    if not reply_text and not files:
+    if not reply_text and not files and not voices:
         reply_text = "（AI 沒有產生回覆內容）"
         await adapter.send_text(chat_id, reply_text)
 

@@ -220,7 +220,7 @@ async def _handle_debug(ctx: CommandContext) -> str | None:
         logger.warning("記錄 /debug AI Log 失敗", exc_info=True)
 
     # 解析回應
-    reply_text, _files = parse_ai_response(response.message)
+    reply_text, _files, _voices = parse_ai_response(response.message)
 
     if not reply_text:
         return "診斷完成，但未產生回報內容。"

@@ -275,7 +275,7 @@ def _restricted_mode_patches(agent=None, ai_reply="你好！有什麼可以幫�
         ),
         patch(
             "ching_tech_os.services.bot.ai.parse_ai_response",
-            return_value=(ai_reply, []),
+            return_value=(ai_reply, [], []),
         ),
     ):
         yield
