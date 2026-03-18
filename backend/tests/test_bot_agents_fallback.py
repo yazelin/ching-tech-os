@@ -41,7 +41,7 @@ async def test_generate_tools_prompt_fallback(monkeypatch: pytest.MonkeyPatch):
     )
     result = await bot_agents.generate_tools_prompt({"project-management": True})
     assert "【對話附件管理】" in result
-    assert "【專案管理】（使用 ERPNext）" in result
+    # ERPNext 模組化後，專案管理 prompt 已移至 extends/erpnext
     assert "【Script Tools】" in result
 
 
@@ -128,7 +128,7 @@ async def test_get_tools_for_user_fallback(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(bot_agents, "get_skill_manager", lambda: _SM())
     tools = await bot_agents.get_tools_for_user({"project-management": True})
     assert "Read" in tools
-    assert "mcp__erpnext__list_documents" in tools
+    # ERPNext 工具已移至 extends/erpnext，fallback 不再包含
     warning.assert_called_once()
 
 

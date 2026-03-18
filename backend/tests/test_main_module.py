@@ -182,19 +182,14 @@ async def test_pages_and_short_share_url(monkeypatch: pytest.MonkeyPatch, tmp_pa
     html1 = await main.short_share_url("t1")
     assert "KB - 擎添工業" in html1.body.decode("utf-8")
 
+    # ERPNext 模組化後，project 類型不再有專屬 OG 標題，回傳預設值
     monkeypatch.setattr(
         share_module,
         "get_link_info",
         AsyncMock(return_value={"resource_type": "project", "resource_id": "2"}),
     )
-    monkeypatch.setattr(
-        services_pkg,
-        "project_service",
-        SimpleNamespace(get_project=AsyncMock(return_value={"name": "P1", "description": "D"})),
-        raising=False,
-    )
     html2 = await main.short_share_url("t2")
-    assert "P1 - 擎添工業專案" in html2.body.decode("utf-8")
+    assert "擎添工業 - 分享內容" in html2.body.decode("utf-8")
 
     monkeypatch.setattr(
         share_module,

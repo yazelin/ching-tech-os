@@ -85,20 +85,17 @@ class TestGenerateUsageTipsPrompt:
         tips = generate_usage_tips_prompt({})
         assert tips == ""
 
-    def test_project_tips(self):
-        """專案管理使用提示（已遷移至 ERPNext）"""
-        tips = generate_usage_tips_prompt({"project-management": True})
-        assert "mcp__erpnext__list_documents" in tips
-
     def test_knowledge_tips(self):
         """知識庫使用提示"""
         tips = generate_usage_tips_prompt({"knowledge-base": True})
         assert "search_knowledge" in tips
 
-    def test_inventory_tips(self):
-        """庫存管理使用提示（已遷移至 ERPNext）"""
-        tips = generate_usage_tips_prompt({"inventory-management": True})
-        assert "mcp__erpnext__get_stock_balance" in tips
+    def test_erpnext_permissions_no_tips(self):
+        """ERPNext 模組化後，project-management / inventory-management 不再產生 tips"""
+        tips_project = generate_usage_tips_prompt({"project-management": True})
+        tips_inventory = generate_usage_tips_prompt({"inventory-management": True})
+        assert tips_project == ""
+        assert tips_inventory == ""
 
 
 class TestAgentConstants:

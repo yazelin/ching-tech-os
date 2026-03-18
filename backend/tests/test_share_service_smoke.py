@@ -165,8 +165,6 @@ async def test_get_public_resource_password_and_content(monkeypatch: pytest.Monk
 @pytest.mark.asyncio
 async def test_resource_title_and_link_info(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(share, "get_knowledge", lambda _rid: SimpleNamespace(title="KB"))
-    monkeypatch.setattr(share, "get_project", AsyncMock(return_value=SimpleNamespace(name="PRJ")))
-    monkeypatch.setattr(share, "get_project_attachment_info", AsyncMock(return_value={"filename": "a.pdf"}))
     monkeypatch.setattr(share.settings, "ctos_mount_path", str(tmp_path / "ctos"))
     monkeypatch.setattr(share.settings, "nas_mount_path", str(tmp_path))
 
@@ -175,8 +173,6 @@ async def test_resource_title_and_link_info(monkeypatch: pytest.MonkeyPatch, tmp
     fp.write_bytes(b"x")
 
     assert await share.get_resource_title("knowledge", "k1") == "KB"
-    assert await share.get_resource_title("project", str(uuid4())) == "PRJ"
-    assert await share.get_resource_title("project_attachment", str(uuid4())) == "a.pdf"
     assert await share.get_resource_title("content", "", "memo.txt") == "memo.txt"
     assert await share.get_resource_title("unknown", "x") == "未知資源"
 
@@ -216,22 +212,6 @@ async def test_get_public_resource_for_non_content_types(monkeypatch: pytest.Mon
     assert res_kb.type == "knowledge"
     assert res_kb.data["attachments"][0]["path"] == "local/images/a.png"
 
-    project = SimpleNamespace(
-        id=uuid4(),
-        name="專案A",
-        description="desc",
-        status="active",
-        start_date=now,
-        end_date=None,
-        milestones=[SimpleNamespace(name="M1", milestone_type="phase", planned_date=now, actual_date=None, status="pending")],
-        members=[SimpleNamespace(name="王小明", role="pm")],
-    )
-    monkeypatch.setattr(share, "get_project", AsyncMock(return_value=project))
-    conn.fetchrow = AsyncMock(return_value=_row(resource_type="project", resource_id=str(uuid4()), password_hash=None))
-    res_project = await share.get_public_resource("tk-project")
-    assert res_project.type == "project"
-    assert res_project.data["members"][0]["name"] == "王小明"
-
     nas_file = tmp_path / "demo.bin"
     nas_file.write_bytes(b"123456")
     monkeypatch.setattr(share, "validate_nas_file_path", lambda _rid: nas_file)
@@ -241,15 +221,6 @@ async def test_get_public_resource_for_non_content_types(monkeypatch: pytest.Mon
     assert res_nas.data["file_name"] == "demo.bin"
     assert res_nas.data["download_url"] == "/api/public/tk-nas/download"
 
-    monkeypatch.setattr(
-        share,
-        "get_project_attachment_info",
-        AsyncMock(return_value={"filename": "r.pdf", "file_type": "application/pdf", "file_size": 2048}),
-    )
-    conn.fetchrow = AsyncMock(return_value=_row(resource_type="project_attachment", resource_id=str(uuid4()), password_hash=None))
-    res_att = await share.get_public_resource("tk-att")
-    assert res_att.type == "project_attachment"
-    assert res_att.data["file_size_str"] == "2.00 KB"
 
 
 @pytest.mark.asyncio
@@ -263,11 +234,6 @@ async def test_get_public_resource_non_content_error_paths(monkeypatch: pytest.M
     with pytest.raises(share.ResourceNotFoundError):
         await share.get_public_resource("e-kb")
 
-    conn.fetchrow = AsyncMock(return_value=_row(resource_type="project", resource_id=str(uuid4()), password_hash=None))
-    monkeypatch.setattr(share, "get_project", AsyncMock(side_effect=share.ProjectNotFoundError("x")))
-    with pytest.raises(share.ResourceNotFoundError):
-        await share.get_public_resource("e-project")
-
     conn.fetchrow = AsyncMock(return_value=_row(resource_type="nas_file", resource_id="x", password_hash=None))
     monkeypatch.setattr(share, "validate_nas_file_path", lambda _rid: (_ for _ in ()).throw(share.NasFileNotFoundError("missing")))
     with pytest.raises(share.ResourceNotFoundError):
@@ -278,29 +244,15 @@ async def test_get_public_resource_non_content_error_paths(monkeypatch: pytest.M
     with pytest.raises(share.ResourceNotFoundError):
         await share.get_public_resource("e-nas2")
 
-    conn.fetchrow = AsyncMock(return_value=_row(resource_type="project_attachment", resource_id=str(uuid4()), password_hash=None))
-    monkeypatch.setattr(share, "get_project_attachment_info", AsyncMock(side_effect=share.ResourceNotFoundError("missing")))
-    with pytest.raises(share.ResourceNotFoundError):
-        await share.get_public_resource("e-att1")
-
-    conn.fetchrow = AsyncMock(return_value=_row(resource_type="project_attachment", resource_id=str(uuid4()), password_hash=None))
-    monkeypatch.setattr(share, "get_project_attachment_info", AsyncMock(side_effect=RuntimeError("boom")))
-    with pytest.raises(share.ResourceNotFoundError):
-        await share.get_public_resource("e-att2")
-
     conn.fetchrow = AsyncMock(return_value=_row(resource_type="unknown_type", password_hash=None))
     with pytest.raises(share.ShareError):
         await share.get_public_resource("e-unknown")
 
 
 @pytest.mark.asyncio
-async def test_attachment_info_and_link_info_expired(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_link_info_expired(monkeypatch: pytest.MonkeyPatch) -> None:
     conn = AsyncMock()
     monkeypatch.setattr(share, "get_connection", lambda: _CM(conn))
-
-    conn.fetchrow = AsyncMock(return_value=None)
-    with pytest.raises(share.ResourceNotFoundError):
-        await share.get_project_attachment_info(str(uuid4()))
 
     conn.fetchrow = AsyncMock(return_value={
         "resource_type": "content",
@@ -357,30 +309,3 @@ async def test_public_resource_size_format_branches(monkeypatch: pytest.MonkeyPa
     res_kb = await share.get_public_resource("tok-kb")
     assert res_kb.data["file_size_str"].endswith("KB")
 
-    # project_attachment: MB / bytes / 未知
-    conn.fetchrow = AsyncMock(return_value=_row(resource_type="project_attachment", resource_id=str(uuid4()), password_hash=None))
-    monkeypatch.setattr(
-        share,
-        "get_project_attachment_info",
-        AsyncMock(return_value={"filename": "big.pdf", "file_type": "application/pdf", "file_size": 3 * 1024 * 1024}),
-    )
-    att_mb = await share.get_public_resource("att-mb")
-    assert att_mb.data["file_size_str"].endswith("MB")
-
-    conn.fetchrow = AsyncMock(return_value=_row(resource_type="project_attachment", resource_id=str(uuid4()), password_hash=None))
-    monkeypatch.setattr(
-        share,
-        "get_project_attachment_info",
-        AsyncMock(return_value={"filename": "small.txt", "file_type": "text/plain", "file_size": 12}),
-    )
-    att_bytes = await share.get_public_resource("att-bytes")
-    assert att_bytes.data["file_size_str"] == "12 bytes"
-
-    conn.fetchrow = AsyncMock(return_value=_row(resource_type="project_attachment", resource_id=str(uuid4()), password_hash=None))
-    monkeypatch.setattr(
-        share,
-        "get_project_attachment_info",
-        AsyncMock(return_value={"filename": "unknown.bin", "file_type": "application/octet-stream", "file_size": 0}),
-    )
-    att_unknown = await share.get_public_resource("att-unknown")
-    assert att_unknown.data["file_size_str"] == "未知"
