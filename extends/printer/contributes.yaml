@@ -1,5 +1,6 @@
 # printer 模組對主系統的貢獻宣告
-# 需在 .env 的 ENABLED_MODULES 中加入 "printer" 才會啟用
+# 主系統啟動時掃描 extends/*/contributes.yaml 自動整合
+# 欄位規格詳見 docs/extends-module.md
 
 module_id: printer
 

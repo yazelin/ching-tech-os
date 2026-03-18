@@ -1,9 +1,17 @@
+# voice 模組對主系統的貢獻宣告
+# 主系統啟動時掃描 extends/*/contributes.yaml 自動整合
+# 欄位規格詳見 docs/extends-module.md
+
+module_id: voice
+
+# 背景服務：預載 Whisper STT 模型
 lifespan:
   startup:
     callable: voice_startup.startup
   shutdown:
     callable: voice_startup.shutdown
 
+# TTS 音檔下載 API
 routers:
   - module: tts_router
     attr: router
@@ -11,3 +19,6 @@ routers:
       prefix: /api/voice
       tags:
         - voice
+
+# 注意：MCP 工具（text_to_speech）目前在主系統 services/mcp/voice_tools.py
+# TODO: 未來遷移至此模組後改為 mcp_tools: core/mcp_tools.py
