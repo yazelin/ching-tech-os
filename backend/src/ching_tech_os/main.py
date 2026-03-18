@@ -105,6 +105,9 @@ async def _start_extends_modules(fastapi_app: FastAPI | None = None) -> list:
     if not extends_root.is_dir():
         return shutdown_fns
 
+    # 收集 extends 模組的 in-process MCP 工具路徑（供 MCP server 載入）
+    extends_mcp_tools: dict[str, str] = {}  # module_name → absolute path
+
     for contrib_path in sorted(extends_root.glob("*/contributes.yaml")):
         module_dir = contrib_path.parent
         module_name = module_dir.name
@@ -182,6 +185,20 @@ async def _start_extends_modules(fastapi_app: FastAPI | None = None) -> list:
                     _log.info("extends/%s router 註冊: %s.%s", module_name, router_module, router_attr)
                 except Exception as e:
                     _log.warning("extends/%s router 註冊失敗 (%s): %s", module_name, router_module, e)
+
+        # 收集 in-process MCP 工具路徑
+        raw_mcp_tools = config.get("mcp_tools")
+        if isinstance(raw_mcp_tools, str):
+            tools_path = (module_dir / raw_mcp_tools).resolve()
+            if tools_path.is_file():
+                extends_mcp_tools[module_name] = str(tools_path)
+            else:
+                _log.warning("extends/%s mcp_tools 路徑不存在: %s", module_name, raw_mcp_tools)
+
+    # 將收集到的 extends MCP 工具路徑存到模組級變數，供 MCP server 載入
+    if extends_mcp_tools:
+        from .services.mcp import load_extends_mcp_tools
+        load_extends_mcp_tools(extends_mcp_tools)
 
     return shutdown_fns
 
