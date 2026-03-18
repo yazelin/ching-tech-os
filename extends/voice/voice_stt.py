@@ -155,8 +155,11 @@ async def transcribe_for_bot(
     abs_path = f"{base}/{nas_path}"
 
     if not Path(abs_path).exists():
-        logger.error("音訊檔案不存在: %s", abs_path)
-        return TranscribeResult(mode="sync", text=None, job_id=None, error="音訊檔案不存在")
+        # CIFS 掛載可能有短暫快取延遲，等待後重試一次
+        await asyncio.sleep(1)
+        if not Path(abs_path).exists():
+            logger.error("音訊檔案不存在: %s", abs_path)
+            return TranscribeResult(mode="sync", text=None, job_id=None, error="音訊檔案不存在")
 
     # 判斷 duration
     duration = _get_duration_seconds(nas_path, duration_ms, file_size, platform)
