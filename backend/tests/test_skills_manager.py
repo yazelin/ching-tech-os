@@ -68,10 +68,9 @@ async def test_skill_manager_end_to_end(monkeypatch: pytest.MonkeyPatch, tmp_pat
             "  ctos:\n"
             "    requires_app: file-manager\n"
             "    mcp_servers: \"s1 s2\"\n"
-            "  openclaw:\n"
             "    requires:\n"
             "      env: [TEST_ENV, SECRET_KEY]\n"
-            "    primaryEnv: PRIMARY_ENV\n"
+            "      primaryEnv: PRIMARY_ENV\n"
         ),
         body="external prompt",
     )
@@ -150,12 +149,12 @@ async def test_skill_manager_end_to_end(monkeypatch: pytest.MonkeyPatch, tmp_pat
     ok2 = await mgr.update_skill_metadata("missing", requires_app="x")
     assert ok2 is False
 
-    # import openclaw
-    src = tmp_path / "openclaw"
+    # import external skill
+    src = tmp_path / "external-skill"
     _write_skill_md(src, "name: imported\ndescription: imported skill\nmetadata: {}\n", body="b")
     (src / "references").mkdir()
     (src / "references" / "a.md").write_text("x", encoding="utf-8")
-    dest = mgr.import_openclaw_skill(src)
+    dest = mgr.import_external_skill(src)
     assert dest.exists()
 
     # remove + reload

@@ -116,7 +116,7 @@ async def run_skill_script(
     if not script_path:
         return json.dumps({"success": False, "error": f"Script not found: {skill}/{script}"}, ensure_ascii=False)
 
-    # 取得環境變數覆寫（從 SKILL.md metadata.openclaw.requires.env）
+    # 取得環境變數覆寫（從 SKILL.md metadata.ctos.requires.env）
     env_overrides = sm.get_skill_env_overrides(skill_obj)
 
     skill_dir = await sm.get_skill_dir(skill)

@@ -72,7 +72,7 @@ class Skill:
     references: list[str] = field(default_factory=list)
     scripts: list[str] = field(default_factory=list)
     assets: list[str] = field(default_factory=list)
-    source: str = "native"  # native | openclaw | claude-code
+    source: str = "native"  # native | imported | claude-code
     skill_dir: Path | None = None
 
 
@@ -320,8 +320,8 @@ class SkillManager:
             self._native_skills_dir,
         )
 
-    def import_openclaw_skill(self, skill_path: Path) -> Path:
-        """從 OpenClaw / Agent Skills 標準 SKILL.md 匯入。
+    def import_external_skill(self, skill_path: Path) -> Path:
+        """從外部 SKILL.md 格式匯入 skill。
 
         匯入後管理員需手動設定 metadata.ctos 的權限和 MCP servers。
 
@@ -353,7 +353,7 @@ class SkillManager:
             }
 
         # 標記來源
-        config["source"] = "openclaw"
+        config["source"] = "imported"
 
         # 寫出 SKILL.md
         fm_text = yaml.dump(
@@ -375,7 +375,7 @@ class SkillManager:
                     shutil.rmtree(dest_sub)
                 shutil.copytree(src_sub, dest_sub)
 
-        logger.info(f"匯入 OpenClaw skill: {name} → {dest_dir}")
+        logger.info(f"匯入外部 skill: {name} → {dest_dir}")
 
         # 重設載入狀態
         self._loaded = False
@@ -693,15 +693,26 @@ class SkillManager:
     })
 
     def get_skill_env_overrides(self, skill: "Skill") -> dict[str, str]:
-        """從 SKILL.md metadata.openclaw.requires.env 取得需要繼承的 .env 變數
+        """從 SKILL.md metadata.ctos.requires.env 取得需要繼承的 .env 變數
 
         有 blocklist 防止 skill 存取敏感變數。
+        向後相容：也讀取舊格式 metadata.openclaw.requires.env。
         """
         env = {}
         metadata = skill.metadata or {}
-        openclaw_meta = metadata.get("openclaw") or {}
-        requires = openclaw_meta.get("requires") or {}
-        env_keys = requires.get("env") or []
+
+        # 優先讀 metadata.ctos.requires，向後相容 fallback 讀 metadata.openclaw
+        ctos_meta = metadata.get("ctos") or {}
+        ctos_requires = ctos_meta.get("requires") or {}
+        env_keys = ctos_requires.get("env") or []
+        primary_env = ctos_requires.get("primaryEnv")
+
+        if not env_keys and not primary_env:
+            # fallback: 舊格式 metadata.openclaw
+            legacy_meta = metadata.get("openclaw") or {}
+            legacy_requires = legacy_meta.get("requires") or {}
+            env_keys = legacy_requires.get("env") or []
+            primary_env = legacy_meta.get("primaryEnv")
 
         def _process_key(key: str, is_primary: bool = False) -> None:
             log_source = f"primaryEnv '{key}'" if is_primary else f"環境變數 '{key}'"
@@ -718,9 +729,8 @@ class SkillManager:
             _process_key(key)
 
         # primaryEnv 也繼承（同樣受 blocklist 限制）
-        primary = openclaw_meta.get("primaryEnv")
-        if primary and primary not in env:
-            _process_key(primary, is_primary=True)
+        if primary_env and primary_env not in env:
+            _process_key(primary_env, is_primary=True)
 
         return env
 
