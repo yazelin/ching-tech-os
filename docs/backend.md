@@ -357,6 +357,8 @@ uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8088 --reload
 | BOT_DEFAULT_RESTRICTED_AGENT | （空） | 預設受限 Agent ID |
 | BOT_DEBUG_MODEL | sonnet | /debug 指令使用的模型 |
 | BOT_CMD_DISABLED | （空） | 停用指令（逗號分隔） |
+| INTENT_GUARD_ENABLED | false | Intent Guard 意圖守門員全域開關 |
+| ANTHROPIC_API_KEY | （空） | Anthropic API Key（Intent Guard 用，無則 fallback 到 CLI） |
 | BOT_RATE_LIMIT_ENABLED | false | 受限模式頻率限制開關 |
 | BOT_RATE_LIMIT_HOURLY | 10 | 每小時上限 |
 | BOT_RATE_LIMIT_DAILY | 50 | 每日上限 |

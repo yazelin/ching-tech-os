@@ -78,6 +78,24 @@ AI Agent 設定表，每個 Agent 綁定一個 System Prompt。
 |-----|------|------|
 | `user_selectable` | string | 設為 `"true"` 時，此 Agent 可透過 `/agent` 指令切換 |
 
+**Intent Guard 設定**（任意 Agent 均可使用，需全域 `INTENT_GUARD_ENABLED=true`）：
+
+| Key | 類型 | 說明 |
+|-----|------|------|
+| `intent_guard.enabled` | bool | 是否啟用 Intent Guard |
+| `intent_guard.description` | string | Agent 服務描述 |
+| `intent_guard.allowed_topics` | array | 允許的主題 |
+| `intent_guard.blocked_topics` | array | 禁止的主題 |
+| `intent_guard.allow_keywords` | array | 關鍵字白名單 |
+| `intent_guard.block_keywords` | array | 關鍵字黑名單 |
+| `intent_guard.reject_message` | string | 拒絕訊息 |
+| `intent_guard.direct_rules` | array | 可直接回答的情境 |
+| `intent_guard.examples` | array | 訓練範例 |
+| `intent_guard.min_check_length` | int | 最短檢查長度（預設 2） |
+| `intent_guard.timeout` | int | 超時秒數（預設 15） |
+
+詳見 [AI Agent 設計 - Intent Guard](ai-agent-design.md#intent-guard意圖守門員)
+
 **bot-restricted Agent 專用設定**：
 
 | Key | 類型 | 說明 |

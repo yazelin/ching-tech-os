@@ -178,6 +178,8 @@ class Settings:
         for s in _get_env("BOT_CMD_DISABLED", "").split(",")
         if s.strip()
     ]
+    # Intent Guard（意圖守門員）全域開關
+    intent_guard_enabled: bool = _get_env_bool("INTENT_GUARD_ENABLED", False)
     # 頻率限制開關（僅在 restricted 模式下生效）
     bot_rate_limit_enabled: bool = _get_env_bool("BOT_RATE_LIMIT_ENABLED", True)
     # 每小時訊息上限（未綁定用戶）

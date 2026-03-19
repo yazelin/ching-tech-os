@@ -228,6 +228,22 @@ GET /api/bot/messages?group_id=xxx&page=1&page_size=50
 
 ## AI 處理邏輯
 
+### Intent Guard（意圖守門員）
+
+在 AI 處理前，系統會進行意圖過濾（若 Agent 有啟用 `settings.intent_guard`）：
+
+1. 全域檢查：`INTENT_GUARD_ENABLED` 環境變數
+2. Agent 檢查：`settings.intent_guard.enabled`
+3. 關鍵字快速匹配（`allow_keywords` / `block_keywords`，不需 AI）
+4. Haiku AI 意圖分類
+
+三種判定結果：
+- **allow**：放行進入主 AI 流程
+- **reject**：直接回覆 `reject_message`，不進主 Agent
+- **direct**：由 Haiku 直接回覆，不進主 Agent
+
+已綁定和未綁定用戶都會過 Guard。詳見 [AI Agent 設計 - Intent Guard](ai-agent-design.md#intent-guard意圖守門員)。
+
 ### 觸發條件
 
 - **個人對話**：所有訊息都觸發 AI 處理

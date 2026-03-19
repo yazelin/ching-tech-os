@@ -203,6 +203,61 @@ BOT_UNBOUND_USER_POLICY = reject | restricted
 - 頻率限制未啟用時仍記錄使用量供統計分析
 - **Fail-open**：頻率限制檢查失敗時允許通過
 
+## Intent Guard（意圖守門員）
+
+在訊息進入主 Agent 前進行輕量意圖過濾，使用 Haiku 快速判斷用戶訊息是否在服務範圍內。
+
+### 流程
+
+```
+用戶訊息 → Rate Limiter → Intent Guard (Haiku) → 主 Agent (Sonnet/Opus)
+                              │
+                              ├── allow  → 正常進入主 Agent
+                              ├── reject → 直接回覆拒絕訊息（不走主 Agent）
+                              └── direct → Haiku 直接回覆（不走主 Agent）
+```
+
+### 啟用條件（雙重控制）
+
+- **全域開關**：`INTENT_GUARD_ENABLED=true`（預設 false）
+- **Agent 級**：Agent `settings.intent_guard.enabled = true`
+
+兩者都啟用才會觸發。沒有設定 `intent_guard` 的 Agent 完全不受影響。
+
+### 判定順序
+
+1. 短訊息跳過（`min_check_length`）→ allow
+2. `allow_keywords` 命中 → allow（不呼叫 AI）
+3. `block_keywords` 命中 → reject（不呼叫 AI）
+4. Haiku AI 分類 → allow / reject / direct
+
+### AI 呼叫方式
+
+- 優先用 Anthropic SDK 直接呼叫（需 `ANTHROPIC_API_KEY`，~1 秒）
+- 無 API Key 時 fallback 到 `call_claude` CLI（~10 秒）
+
+### settings.intent_guard 設定格式
+
+| Key | 類型 | 說明 |
+|-----|------|------|
+| `enabled` | bool | 是否啟用 |
+| `description` | string | Agent 服務描述（用於 Haiku prompt） |
+| `allowed_topics` | array | 允許的主題 |
+| `blocked_topics` | array | 禁止的主題 |
+| `allow_keywords` | array | 關鍵字白名單（命中即放行，不需 AI） |
+| `block_keywords` | array | 關鍵字黑名單（命中即拒絕，不需 AI） |
+| `reject_message` | string | 拒絕時的回覆訊息 |
+| `direct_rules` | array | 可直接回答的情境描述 |
+| `examples` | array | 訓練範例（message/action/reason/response） |
+| `min_check_length` | int | 最短檢查長度（預設 2） |
+| `timeout` | int | AI 判斷超時秒數（預設 15） |
+
+### 設計原則
+
+- **Fail-open**：Guard 失敗（timeout/error/invalid JSON）時自動放行
+- **已綁定 + 未綁定用戶都過 Guard**（插入於 `linebot_ai.py` 和 `identity_router.py`）
+- 相關檔案：`services/bot/intent_guard.py`
+
 ## 斜線指令系統（CommandRouter）
 
 ### 架構

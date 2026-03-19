@@ -58,6 +58,7 @@ services/bot/ai.py                 ← parse_ai_response()
 services/bot/commands.py           ← CommandRouter 斜線指令路由框架
 services/bot/command_handlers.py   ← 內建指令（/start、/help、/reset、/debug、/agent）
 services/bot/identity_router.py    ← 未綁定用戶身份分流（reject / restricted）
+services/bot/intent_guard.py       ← Intent Guard 意圖守門員（Haiku 前置過濾）
 services/bot/rate_limiter.py       ← 受限模式頻率限制（bot_usage_tracking）
 services/bot/media.py              ← 媒體處理
 services/bot/message.py            ← 訊息處理
@@ -338,6 +339,13 @@ services/scheduler.py      ← APScheduler 任務定義
    - `services/linebot_agents.py`（`set_group_restricted_agent`、`get_restricted_agent`）
    - `services/bot/identity_router.py`（`handle_restricted_mode` 支援動態 Agent）
 3. settings（rate_limit、disclaimer 等）始終從 `bot-restricted` 讀取，AI prompt/tools/model 從實際選用的 Agent 讀取
+
+### 「設定 Intent Guard 意圖過濾」
+1. 在「AI 管理」中找到目標 Agent，編輯 `settings` JSONB
+2. 加入 `intent_guard` 物件（含 `enabled`、`allowed_topics`、`blocked_topics`、`reject_message` 等）
+3. 確認環境變數 `INTENT_GUARD_ENABLED=true`
+4. 相關程式碼：`services/bot/intent_guard.py`
+5. 插入點：`services/linebot_ai.py`（已綁定）、`services/bot/identity_router.py`（受限模式）
 
 ### 「修改 Bot AI 行為」
 1. `services/bot/agents.py`（prompt 模板）

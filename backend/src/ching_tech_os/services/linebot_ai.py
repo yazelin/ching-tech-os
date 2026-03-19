@@ -747,6 +747,29 @@ async def process_message_with_ai(
         # agent 保證非 None
         agent_name = agent.get("name", "")
 
+        # Intent Guard：在主 Agent 之前快速判斷意圖
+        _guard_settings = (agent.get("settings") or {}).get("intent_guard", {})
+        if _guard_settings.get("enabled"):
+            from .bot.intent_guard import check_intent
+
+            guard_result = await check_intent(content, agent)
+            if guard_result.action in ("reject", "direct"):
+                _guard_reply = (
+                    guard_result.direct_response
+                    if guard_result.action == "direct"
+                    else guard_result.reject_message
+                )
+                logger.info(
+                    "Intent Guard %s: agent=%s, reason=%s, duration=%dms",
+                    guard_result.action,
+                    agent_name,
+                    guard_result.reason,
+                    guard_result.duration_ms,
+                )
+                if _guard_reply and reply_token and not skip_send:
+                    await reply_text(reply_token, _guard_reply)
+                return _guard_reply
+
         # 從 Agent 取得 model 和基礎 prompt
         model = agent.get("model", "opus").replace("claude-", "")  # claude-sonnet -> sonnet
         # 安全取得 system_prompt（處理 None 和非 dict 情況）

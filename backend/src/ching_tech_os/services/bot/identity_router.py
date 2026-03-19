@@ -198,6 +198,29 @@ async def handle_restricted_mode(
         if not allowed:
             return deny_msg
 
+    # Intent Guard：在 AI 呼叫前檢查用戶意圖
+    agent_settings = (agent or {}).get("settings") or {}
+    if agent_settings.get("intent_guard", {}).get("enabled"):
+        from .intent_guard import check_intent
+
+        guard_result = await check_intent(content, agent)
+        if guard_result.action == "reject":
+            logger.info(
+                "Intent Guard reject: agent=%s, reason=%s, duration=%dms",
+                agent.get("name"),
+                guard_result.reason,
+                guard_result.duration_ms,
+            )
+            return guard_result.reject_message
+        if guard_result.action == "direct":
+            logger.info(
+                "Intent Guard direct: agent=%s, reason=%s, duration=%dms",
+                agent.get("name"),
+                guard_result.reason,
+                guard_result.duration_ms,
+            )
+            return guard_result.direct_response
+
     # 2. 取得 model
     # 若使用自訂 Agent，用 Agent 自身的 model；若使用 bot-restricted，才 fallback 到環境變數
     if agent.get("name") != "bot-restricted":
