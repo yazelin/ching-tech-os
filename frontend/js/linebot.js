@@ -339,6 +339,59 @@ const LineBotApp = (function () {
         }
     }
 
+    // 載入黑名單
+    async function loadBlocklist(page = 1) {
+        state.loading = true;
+        renderLoading('blocklist');
+
+        try {
+            const data = await api(`/users?blocked=true&limit=20&offset=${(page - 1) * 20}${platformQuery()}`);
+            state.blocklist = data.items;
+            state.pagination.blocklist = { page, total: data.total };
+            renderBlocklist();
+        } catch (error) {
+            console.error('載入黑名單失敗:', error);
+            renderError('blocklist', '載入黑名單失敗');
+        } finally {
+            state.loading = false;
+        }
+    }
+
+    // 封鎖用戶
+    async function blockUser(userId) {
+        const reason = prompt('請輸入封鎖原因（可留空）：');
+        if (reason === null) return; // 取消
+
+        try {
+            await api(`/users/${userId}/block`, {
+                method: 'PATCH',
+                body: JSON.stringify({ reason: reason || null }),
+            });
+            // 重新載入用戶列表和黑名單
+            loadUsers(state.pagination.users.page);
+            if (state.currentTab === 'blocklist') loadBlocklist(state.pagination.blocklist.page);
+        } catch (error) {
+            console.error('封鎖用戶失敗:', error);
+            alert('封鎖用戶失敗');
+        }
+    }
+
+    // 解除封鎖
+    async function unblockUser(userId) {
+        if (!confirm('確定要解除此用戶的封鎖嗎？')) return;
+
+        try {
+            await api(`/users/${userId}/unblock`, {
+                method: 'PATCH',
+            });
+            // 重新載入黑名單
+            loadBlocklist(state.pagination.blocklist.page);
+        } catch (error) {
+            console.error('解除封鎖失敗:', error);
+            alert('解除封鎖失敗');
+        }
+    }
+
     // 載入訊息列表
     async function loadMessages(groupId = null, page = 1) {
         state.loading = true;
@@ -695,12 +748,82 @@ const LineBotApp = (function () {
                             ? `<span class="linebot-binding-badge bound">✓ 已綁定 ${user.bound_display_name || user.bound_username}</span>`
                             : '<span class="linebot-binding-badge unbound">未綁定</span>'
                         }
+                        ${user.is_blocked
+                            ? '<span class="linebot-binding-badge blocked">已封鎖</span>'
+                            : ''
+                        }
                     </div>
                 </div>
+                ${!user.is_blocked ? `
+                    <div class="linebot-user-actions">
+                        <button class="linebot-block-btn" data-user-id="${user.id}" title="封鎖用戶">
+                            <span class="icon">${typeof getIcon !== 'undefined' ? getIcon('account-cancel') : '🚫'}</span>
+                        </button>
+                    </div>
+                ` : ''}
             </div>
         `).join('');
 
         renderPagination('users');
+
+        // 綁定封鎖按鈕事件
+        container.querySelectorAll('.linebot-block-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                blockUser(btn.dataset.userId);
+            });
+        });
+    }
+
+    // 渲染黑名單列表
+    function renderBlocklist() {
+        const container = document.querySelector('.linebot-blocklist-list');
+        if (!container) return;
+
+        if (state.blocklist.length === 0) {
+            container.innerHTML = `
+                <div class="linebot-empty">
+                    <div class="linebot-empty-icon">✅</div>
+                    <div class="linebot-empty-text">目前沒有被封鎖的用戶</div>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = state.blocklist.map(user => `
+            <div class="linebot-user-card linebot-blocked-card" data-id="${user.id}">
+                <div class="linebot-user-avatar">
+                    ${user.picture_url
+                        ? `<img src="${user.picture_url}" alt="${user.display_name || '用戶'}" loading="lazy">`
+                        : '👤'
+                    }
+                </div>
+                <div class="linebot-user-info">
+                    <div class="linebot-user-name">${platformBadge(user.platform_type)} ${user.display_name || '未知用戶'}</div>
+                    <div class="linebot-user-status linebot-blocked-reason">
+                        封鎖原因：${user.blocked_reason ? escapeHtml(user.blocked_reason) : '未填寫'}
+                    </div>
+                    <div class="linebot-user-status">
+                        封鎖時間：${user.blocked_at ? new Date(user.blocked_at).toLocaleString() : '未知'}
+                    </div>
+                </div>
+                <div class="linebot-user-actions">
+                    <button class="linebot-unblock-btn" data-user-id="${user.id}" title="解除封鎖">
+                        <span class="icon">${typeof getIcon !== 'undefined' ? getIcon('account-check') : '✅'}</span> 解除封鎖
+                    </button>
+                </div>
+            </div>
+        `).join('');
+
+        renderPagination('blocklist');
+
+        // 綁定解除封鎖按鈕事件
+        container.querySelectorAll('.linebot-unblock-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                unblockUser(btn.dataset.userId);
+            });
+        });
     }
 
     // 渲染訊息列表
@@ -891,6 +1014,8 @@ const LineBotApp = (function () {
             loadMessages();
         } else if (tab === 'files') {
             loadFiles();
+        } else if (tab === 'blocklist') {
+            loadBlocklist();
         }
     }
 
@@ -917,6 +1042,9 @@ const LineBotApp = (function () {
         } else if (tab === 'files') {
             state.files = [];
             loadFiles();
+        } else if (tab === 'blocklist') {
+            state.blocklist = [];
+            loadBlocklist();
         }
         // binding 不受平台篩選影響（已顯示所有平台）
     }
@@ -932,11 +1060,13 @@ const LineBotApp = (function () {
         state.files = [];
         state.selectedGroup = null;
         state.bindingStatus = null;
+        state.blocklist = [];
         state.pagination = {
             groups: { page: 1, total: 0 },
             users: { page: 1, total: 0 },
             messages: { page: 1, total: 0 },
             files: { page: 1, total: 0 },
+            blocklist: { page: 1, total: 0 },
         };
 
         container.innerHTML = `
@@ -947,6 +1077,7 @@ const LineBotApp = (function () {
                     <button class="linebot-tab" data-tab="users">用戶</button>
                     <button class="linebot-tab" data-tab="messages">訊息</button>
                     <button class="linebot-tab" data-tab="files">檔案</button>
+                    <button class="linebot-tab" data-tab="blocklist">黑名單</button>
                 </div>
 
                 <div class="linebot-platform-filter">
@@ -1017,6 +1148,11 @@ const LineBotApp = (function () {
                             <div class="linebot-files-grid"></div>
                             <div class="linebot-pagination linebot-pagination-files"></div>
                         </div>
+                    </div>
+                    <!-- 黑名單面板 -->
+                    <div class="linebot-panel" data-panel="blocklist">
+                        <div class="linebot-blocklist-list"></div>
+                        <div class="linebot-pagination linebot-pagination-blocklist"></div>
                     </div>
                 </div>
             </div>

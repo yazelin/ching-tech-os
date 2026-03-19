@@ -1261,6 +1261,62 @@
     }
 }
 
+/* 黑名單 */
+.linebot-blocked-card {
+    border-left: 3px solid var(--color-error);
+}
+
+.linebot-blocked-reason {
+    color: var(--color-error);
+}
+
+.linebot-binding-badge.blocked {
+    background: var(--color-error);
+    color: #fff;
+}
+
+.linebot-user-actions {
+    display: flex;
+    align-items: center;
+    margin-left: auto;
+    padding-left: 12px;
+}
+
+.linebot-block-btn,
+.linebot-unblock-btn {
+    background: none;
+    border: 1px solid var(--border-light);
+    border-radius: 6px;
+    padding: 4px 10px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: all 0.2s;
+}
+
+.linebot-block-btn:hover {
+    border-color: var(--color-error);
+    color: var(--color-error);
+}
+
+.linebot-unblock-btn {
+    border-color: var(--color-success);
+    color: var(--color-success);
+}
+
+.linebot-unblock-btn:hover {
+    background: var(--color-success);
+    color: #fff;
+}
+
+.linebot-user-card {
+    display: flex;
+    align-items: center;
+}
+
 /* 桌面版隱藏返回按鈕 */
 .linebot-back-btn {
     display: none;
