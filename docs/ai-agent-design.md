@@ -203,6 +203,30 @@ BOT_UNBOUND_USER_POLICY = reject | restricted
 - 頻率限制未啟用時仍記錄使用量供統計分析
 - **Fail-open**：頻率限制檢查失敗時允許通過
 
+## 月度 Token 用量上限
+
+按用戶限制受限模式的月度 token 用量，防止單一用戶消耗整月預算。
+
+### 機制
+
+- 複用 `bot_usage_tracking` 表，`period_type='monthly_tokens'`，`period_key='2026-03'`
+- AI 呼叫前檢查額度，超額直接拒絕
+- AI 呼叫後累加實際 token 數（input + output）
+- Fail-open：檢查失敗不阻擋
+
+### settings 設定
+
+| Key | 類型 | 說明 |
+|-----|------|------|
+| `monthly_token_limit` | int | 月度 token 上限（0 = 不限制） |
+| `monthly_token_limit_msg` | string | 超額訊息（支援 `{limit}`、`{count}` 變數） |
+
+### 流程位置
+
+```
+Rate Limiter → Token 額度檢查 → Intent Guard → 主 Agent → 累加 token
+```
+
 ## Intent Guard（意圖守門員）
 
 在訊息進入主 Agent 前進行輕量意圖過濾，使用 Haiku 快速判斷用戶訊息是否在服務範圍內。

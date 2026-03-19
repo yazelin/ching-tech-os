@@ -196,6 +196,104 @@ async def record_usage(bot_user_id: str) -> None:
         logger.exception("記錄使用量失敗")
 
 
+def _current_monthly_key() -> str:
+    """取得當月的 period_key（如 '2026-03'）"""
+    now = datetime.now(timezone.utc)
+    return now.strftime("%Y-%m")
+
+
+async def check_monthly_tokens(
+    bot_user_id: str,
+    monthly_limit: int,
+    custom_message: str | None = None,
+) -> tuple[bool, str | None]:
+    """檢查月度 token 額度
+
+    Args:
+        bot_user_id: bot_users.id (UUID 字串)
+        monthly_limit: 月度 token 上限（0 或負數表示不限制）
+        custom_message: 自訂超額訊息（支援 {limit}、{count} 變數）
+
+    Returns:
+        (是否允許, 拒絕訊息) - 允許時拒絕訊息為 None
+    """
+    if not monthly_limit or monthly_limit <= 0:
+        return True, None
+
+    monthly_key = _current_monthly_key()
+
+    try:
+        async with get_connection() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT message_count FROM bot_usage_tracking
+                WHERE bot_user_id = $1
+                  AND period_type = 'monthly_tokens'
+                  AND period_key = $2
+                """,
+                bot_user_id,
+                monthly_key,
+            )
+            current_tokens = row["message_count"] if row else 0
+
+            if current_tokens >= monthly_limit:
+                if custom_message:
+                    msg = custom_message.format_map(
+                        _SafeFormatMap(
+                            limit=str(monthly_limit), count=str(current_tokens)
+                        )
+                    )
+                else:
+                    msg = (
+                        f"您本月的使用額度已達上限（{monthly_limit:,} tokens）。\n"
+                        "請下個月再試，或綁定帳號以獲得完整服務。"
+                    )
+                return False, msg
+
+            return True, None
+
+    except Exception:
+        logger.exception("月度 token 額度檢查失敗，允許通過（fail-open）")
+        return True, None
+
+
+async def record_token_usage(
+    bot_user_id: str,
+    input_tokens: int | None,
+    output_tokens: int | None,
+) -> None:
+    """記錄 token 用量（UPSERT 月度計數器）
+
+    Args:
+        bot_user_id: bot_users.id (UUID 字串)
+        input_tokens: 輸入 token 數
+        output_tokens: 輸出 token 數
+    """
+    total = (input_tokens or 0) + (output_tokens or 0)
+    if total <= 0:
+        return
+
+    monthly_key = _current_monthly_key()
+
+    try:
+        async with get_connection() as conn:
+            await conn.execute(
+                """
+                INSERT INTO bot_usage_tracking
+                    (bot_user_id, period_type, period_key, message_count)
+                VALUES ($1, 'monthly_tokens', $2, $3)
+                ON CONFLICT (bot_user_id, period_type, period_key)
+                DO UPDATE SET message_count = bot_usage_tracking.message_count + $3,
+                             updated_at = NOW()
+                """,
+                bot_user_id,
+                monthly_key,
+                total,
+            )
+    except Exception:
+        logger.exception("記錄 token 用量失敗")
+
+
 async def cleanup_old_tracking(days: int = 30) -> int:
     """清理過期的使用量追蹤資料
 

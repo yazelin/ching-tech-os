@@ -78,6 +78,13 @@ AI Agent 設定表，每個 Agent 綁定一個 System Prompt。
 |-----|------|------|
 | `user_selectable` | string | 設為 `"true"` 時，此 Agent 可透過 `/agent` 指令切換 |
 
+**月度 Token 上限**（受限模式 Agent 用）：
+
+| Key | 類型 | 說明 |
+|-----|------|------|
+| `monthly_token_limit` | int | 月度 token 上限（0 = 不限制） |
+| `monthly_token_limit_msg` | string | 超額訊息（支援 `{limit}`、`{count}` 變數） |
+
 **Intent Guard 設定**（任意 Agent 均可使用，需全域 `INTENT_GUARD_ENABLED=true`）：
 
 | Key | 類型 | 說明 |

@@ -198,8 +198,22 @@ async def handle_restricted_mode(
         if not allowed:
             return deny_msg
 
-    # Intent Guard：在 AI 呼叫前檢查用戶意圖
+    # 月度 token 額度檢查
     agent_settings = (agent or {}).get("settings") or {}
+    monthly_limit = agent_settings.get("monthly_token_limit", 0)
+    if bot_user_id and monthly_limit:
+        from .rate_limiter import check_monthly_tokens
+
+        monthly_msg = agent_settings.get("monthly_token_limit_msg")
+        allowed, deny_msg = await check_monthly_tokens(
+            bot_user_id,
+            monthly_limit=monthly_limit,
+            custom_message=monthly_msg,
+        )
+        if not allowed:
+            return deny_msg
+
+    # Intent Guard：在 AI 呼叫前檢查用戶意圖
     if agent_settings.get("intent_guard", {}).get("enabled"):
         from .intent_guard import check_intent
 
@@ -337,6 +351,16 @@ async def handle_restricted_mode(
         )
 
     duration_ms = int((time.time() - start_time) * 1000)
+
+    # 記錄 token 用量（月度計數器）
+    if bot_user_id and isinstance(getattr(response, "input_tokens", None), int):
+        from .rate_limiter import record_token_usage
+
+        await record_token_usage(
+            bot_user_id,
+            input_tokens=response.input_tokens,
+            output_tokens=response.output_tokens,
+        )
 
     # 10. 記錄 AI Log
     if message_uuid:
