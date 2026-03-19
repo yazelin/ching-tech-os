@@ -83,8 +83,22 @@ def test_load_mcp_servers_and_build(monkeypatch: pytest.MonkeyPatch, tmp_path: P
             self.args = args
             self.env = env
 
+    class _HttpHeader:
+        def __init__(self, name: str, value: str) -> None:
+            self.name = name
+            self.value = value
+
+    class _HttpMcpServer:
+        def __init__(self, name: str, url: str, headers: list, type: str = "http") -> None:
+            self.name = name
+            self.url = url
+            self.headers = headers
+            self.type = type
+
     schema_mod.EnvVariable = _EnvVariable
     schema_mod.McpServerStdio = _McpServerStdio
+    schema_mod.HttpMcpServer = _HttpMcpServer
+    schema_mod.HttpHeader = _HttpHeader
     monkeypatch.setitem(sys.modules, "acp", acp_mod)
     monkeypatch.setitem(sys.modules, "acp.schema", schema_mod)
 
@@ -99,16 +113,23 @@ def test_load_mcp_servers_and_build(monkeypatch: pytest.MonkeyPatch, tmp_path: P
                         "args": ["-m", "demo"],
                         "env": {"A": "1"},
                     },
-                    "skip-http": {"type": "http"},
+                    "github": {
+                        "type": "http",
+                        "url": "https://api.githubcopilot.com/mcp/",
+                        "headers": {"Authorization": "Bearer test-token"},
+                    },
                 }
             }
         ),
         encoding="utf-8",
     )
     servers = claude_agent._load_mcp_servers_from_file(str(valid_file))
-    assert len(servers) == 1
+    assert len(servers) == 2
     assert servers[0].name == "ching-tech-os"
     assert servers[0].env[0].name == "A"
+    assert servers[1].name == "github"
+    assert servers[1].url == "https://api.githubcopilot.com/mcp/"
+    assert servers[1].headers[0].name == "Authorization"
 
     monkeypatch.setattr(
         claude_agent,
