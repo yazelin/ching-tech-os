@@ -56,6 +56,8 @@ from ..services.bot_line import (
     list_messages,
     list_users,
     list_users_with_binding,
+    block_user,
+    unblock_user,
     list_files,
     get_group_by_id,
     get_user_by_id,
@@ -662,12 +664,15 @@ async def api_delete_group(
 @router.get("/users", response_model=LineUserListResponse)
 async def api_list_users(
     platform_type: str | None = Query(None, description="平台類型過濾（line, telegram）"),
+    blocked: bool | None = Query(None, description="封鎖狀態過濾（true=已封鎖）"),
     limit: int = 50,
     offset: int = 0,
     session: SessionData = Depends(get_current_session),
 ):
     """列出用戶"""
-    items, total = await list_users(platform_type=platform_type, limit=limit, offset=offset)
+    items, total = await list_users(
+        platform_type=platform_type, blocked=blocked, limit=limit, offset=offset,
+    )
     return LineUserListResponse(
         items=[LineUserResponse(**item) for item in items],
         total=total,
@@ -681,6 +686,32 @@ async def api_get_user(
 ):
     """取得用戶詳情"""
     user = await get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return LineUserResponse(**user)
+
+
+@router.patch("/users/{user_id}/block")
+async def api_block_user(
+    user_id: UUID,
+    body: dict | None = None,
+    session: SessionData = Depends(get_current_session),
+):
+    """封鎖用戶"""
+    reason = (body or {}).get("reason") if body else None
+    user = await block_user(user_id, reason=reason)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return LineUserResponse(**user)
+
+
+@router.patch("/users/{user_id}/unblock")
+async def api_unblock_user(
+    user_id: UUID,
+    session: SessionData = Depends(get_current_session),
+):
+    """解除封鎖"""
+    user = await unblock_user(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return LineUserResponse(**user)

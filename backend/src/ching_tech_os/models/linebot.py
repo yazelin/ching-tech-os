@@ -109,6 +109,10 @@ class LineUserResponse(LineUserBase):
     # 綁定狀態（來自 JOIN users）
     bound_username: str | None = None
     bound_display_name: str | None = None
+    # 黑名單
+    is_blocked: bool = False
+    blocked_at: datetime | None = None
+    blocked_reason: str | None = None
 
 
 class LineUserListResponse(BaseModel):

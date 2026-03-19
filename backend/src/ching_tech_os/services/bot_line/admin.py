@@ -1,6 +1,7 @@
 """Line Bot 管理查詢功能"""
 
 import logging
+from datetime import datetime, timezone
 from uuid import UUID
 
 from ...database import get_connection
@@ -127,6 +128,7 @@ async def list_messages(
 
 async def list_users(
     platform_type: str | None = None,
+    blocked: bool | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> tuple[list[dict], int]:
@@ -134,6 +136,7 @@ async def list_users(
 
     Args:
         platform_type: 平台類型過濾（line, telegram）
+        blocked: 封鎖狀態過濾（True=已封鎖, False=未封鎖, None=全部）
         limit: 最大數量
         offset: 偏移量
     """
@@ -145,6 +148,11 @@ async def list_users(
         if platform_type is not None:
             conditions.append(f"platform_type = ${param_idx}")
             params.append(platform_type)
+            param_idx += 1
+
+        if blocked is not None:
+            conditions.append(f"is_blocked = ${param_idx}")
+            params.append(blocked)
             param_idx += 1
 
         where_clause = " AND ".join(conditions) if conditions else "1=1"
@@ -196,6 +204,82 @@ async def get_user_by_id(
             user_id,
         )
         return dict(row) if row else None
+
+
+async def block_user(
+    user_id: UUID,
+    reason: str | None = None,
+) -> dict | None:
+    """封鎖用戶
+
+    Args:
+        user_id: bot_users UUID
+        reason: 封鎖原因
+
+    Returns:
+        更新後的用戶資料，或 None（用戶不存在）
+    """
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            """
+            UPDATE bot_users
+            SET is_blocked = true,
+                blocked_at = $2,
+                blocked_reason = $3,
+                updated_at = NOW()
+            WHERE id = $1
+            RETURNING *
+            """,
+            user_id,
+            datetime.now(timezone.utc),
+            reason,
+        )
+        return dict(row) if row else None
+
+
+async def unblock_user(
+    user_id: UUID,
+) -> dict | None:
+    """解除封鎖
+
+    Args:
+        user_id: bot_users UUID
+
+    Returns:
+        更新後的用戶資料，或 None（用戶不存在）
+    """
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            """
+            UPDATE bot_users
+            SET is_blocked = false,
+                blocked_at = NULL,
+                blocked_reason = NULL,
+                updated_at = NOW()
+            WHERE id = $1
+            RETURNING *
+            """,
+            user_id,
+        )
+        return dict(row) if row else None
+
+
+async def is_user_blocked(bot_user_id: str) -> bool:
+    """檢查用戶是否被封鎖（用 bot_user_id UUID 字串查詢）
+
+    Args:
+        bot_user_id: bot_users.id UUID 字串
+    """
+    try:
+        async with get_connection() as conn:
+            row = await conn.fetchrow(
+                "SELECT is_blocked FROM bot_users WHERE id = $1",
+                bot_user_id,
+            )
+            return bool(row and row["is_blocked"])
+    except Exception:
+        logger.exception("檢查封鎖狀態失敗（fail-open）")
+        return False
 
 
 async def bind_group_to_project(

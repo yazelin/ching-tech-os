@@ -138,6 +138,8 @@ from .admin import (
     delete_group,
     update_group_settings,
     list_users_with_binding,
+    block_user,
+    unblock_user,
 )
 
 # === memory ===

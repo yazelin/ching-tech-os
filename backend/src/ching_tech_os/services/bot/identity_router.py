@@ -165,6 +165,14 @@ async def handle_restricted_mode(
     from ..linebot_agents import get_mcp_servers_for_user, get_restricted_agent
     from ..bot.ai import parse_ai_response
 
+    # 0. 黑名單檢查（最早執行，封鎖用戶不做任何處理）
+    if bot_user_id:
+        from ..bot_line.admin import is_user_blocked
+
+        if await is_user_blocked(bot_user_id):
+            logger.info("用戶已封鎖: bot_user_id=%s", bot_user_id)
+            return None  # 靜默忽略，不回覆
+
     # 1. 取得受限模式 Agent（支援群組自訂，fallback 到 bot-restricted）
     agent = await get_restricted_agent(bot_group_id=bot_group_id)
     if not agent:
