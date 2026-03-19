@@ -6,7 +6,7 @@ allowed-tools: mcp__nanobanana__generate_image mcp__nanobanana__edit_image mcp__
 metadata:
   ctos:
     requires_app: ai-assistant
-    mcp_servers: nanobanana ching-tech-os
+    mcp_servers: nanobanana ching-tech-os github asana
 ---
 
 【AI 圖片生成】

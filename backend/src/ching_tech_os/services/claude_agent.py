@@ -208,12 +208,12 @@ class ClaudeResponse:
 # ============================================================
 
 def _load_mcp_servers_from_file(path: str) -> list:
-    """從 .mcp.json 載入 MCP server 設定，轉為 ACP McpServerStdio 格式"""
+    """從 .mcp.json 載入 MCP server 設定，支援 stdio 和 http 類型"""
     if not os.path.exists(path):
         return []
 
     try:
-        from acp.schema import McpServerStdio, EnvVariable
+        from acp.schema import McpServerStdio, HttpMcpServer, HttpHeader, EnvVariable
     except ImportError:
         logger.warning("acp.schema not available, skipping MCP server loading")
         return []
@@ -237,6 +237,19 @@ def _load_mcp_servers_from_file(path: str) -> list:
                 command=config.get("command", ""),
                 args=config.get("args", []),
                 env=env_vars,
+            ))
+        elif server_type == "http":
+            # HTTP MCP Server（如 GitHub）
+            headers = []
+            for k, v in config.get("headers", {}).items():
+                # 展開環境變數（如 ${GITHUB_PERSONAL_ACCESS_TOKEN}）
+                expanded = os.path.expandvars(v)
+                headers.append(HttpHeader(name=k, value=expanded))
+            servers.append(HttpMcpServer(
+                name=name,
+                url=config.get("url", ""),
+                headers=headers,
+                type="http",
             ))
     return servers
 
