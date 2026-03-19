@@ -228,7 +228,7 @@ async def check_monthly_tokens(
                 """
                 SELECT message_count FROM bot_usage_tracking
                 WHERE bot_user_id = $1
-                  AND period_type = 'monthly_tokens'
+                  AND period_type = 'm_tokens'
                   AND period_key = $2
                 """,
                 bot_user_id,
@@ -281,7 +281,7 @@ async def record_token_usage(
                 """
                 INSERT INTO bot_usage_tracking
                     (bot_user_id, period_type, period_key, message_count)
-                VALUES ($1, 'monthly_tokens', $2, $3)
+                VALUES ($1, 'm_tokens', $2, $3)
                 ON CONFLICT (bot_user_id, period_type, period_key)
                 DO UPDATE SET message_count = bot_usage_tracking.message_count + $3,
                              updated_at = NOW()

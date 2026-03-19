@@ -955,6 +955,16 @@ async def process_message_with_ai(
         # 計算耗時
         duration_ms = int((time.time() - start_time) * 1000)
 
+        # 記錄 token 用量（月度計數器，所有用戶都記錄供統計）
+        if bot_user_id and isinstance(getattr(response, "input_tokens", None), int):
+            from .bot.rate_limiter import record_token_usage
+
+            await record_token_usage(
+                bot_user_id,
+                input_tokens=response.input_tokens,
+                output_tokens=response.output_tokens,
+            )
+
         # 記錄 AI Log
         await log_linebot_ai_call(
             message_uuid=message_uuid,

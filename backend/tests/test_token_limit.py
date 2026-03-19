@@ -154,7 +154,7 @@ class TestRecordTokenUsage:
             await record_token_usage("user-1", input_tokens=1000, output_tokens=200)
             conn.execute.assert_called_once()
             sql = conn.execute.call_args[0][0]
-            assert "monthly_tokens" in sql
+            assert "m_tokens" in sql
             # 第三個參數是 total tokens = 1200
             assert conn.execute.call_args[0][3] == 1200
 
