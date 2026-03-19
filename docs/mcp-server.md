@@ -9,12 +9,13 @@ MCP Server 提供一組 AI 工具，可供：
 - Line Bot AI 助理（直接呼叫）
 - 其他 MCP 客戶端
 
-## 近期重點（2026-02）
+## 近期重點（2026-03）
 
-- MCP 工具改為**條件載入**：`core` 工具永遠載入，其餘依 `ENABLED_MODULES` 判斷是否註冊。
+- MCP 工具已完成**模組化重構**：從單一 `mcp_server.py` 拆分為 `services/mcp/` 子模組，依功能分類為獨立檔案。
+- 工具改為**條件載入**：`core` 工具（memory、message）永遠載入，其餘依 `ENABLED_MODULES` 判斷是否註冊。
 - Skill 可透過 `contributes.mcp_tools` 動態掛入工具模組，不需改核心 static import。
+- Extends 模組（如 `law`）也可透過 `contributes.yaml` 的 `mcp_tools` 欄位提供 in-process MCP 工具。
 - Skills 路由策略預設為 `script-first`：優先執行 `run_skill_script`，必要時才走 MCP fallback。
-- 若要降低預設載入成本，可在 `.mcp.json` 僅保留實際會用到的外部 server（例如先不載入 `erpnext` / `printer` / `nanobanana`）。
 
 ## 設定
 
@@ -40,81 +41,99 @@ cd backend
 uv run python -m ching_tech_os.mcp_cli
 ```
 
+## 架構說明
+
+### 檔案結構
+
+```
+backend/src/ching_tech_os/
+├── mcp_cli.py                  # CLI 入口點（stdio 模式）
+└── services/
+    ├── mcp_server.py           # 向後相容模組（re-export，過渡期保留）
+    └── mcp/                    # MCP 工具模組（模組化架構）
+        ├── __init__.py               # 模組入口：載入 core 工具、條件載入其他模組
+        ├── server.py                 # FastMCP 實例、共用輔助函數、工具存取介面
+        ├── knowledge_tools.py        # 知識庫工具（搜尋、新增、附件等）
+        ├── media_tools.py            # 媒體工具（下載網路圖片/檔案、PDF 轉圖片）
+        ├── memory_tools.py           # 自訂記憶工具（core，永遠載入）
+        ├── message_tools.py          # 訊息相關工具（core，永遠載入）
+        ├── nas_tools.py              # NAS 檔案工具（搜尋、讀取、發送、圖書館）
+        ├── presentation_tools.py     # 簡報/文件生成、列印工具
+        ├── scheduler_tools.py        # 排程管理工具
+        ├── share_tools.py            # 分享連結工具
+        ├── skill_script_tools.py     # AI Skills 腳本執行
+        ├── voice_tools.py            # 語音合成工具（text_to_speech）
+        └── web_tools.py              # 網頁擷取工具（browse_webpage）
+```
+
+### 模組載入機制
+
+`__init__.py` 控制工具的載入流程：
+
+1. **Core 工具**（永遠載入）：`memory_tools`、`message_tools`
+2. **條件載入**（依 `ENABLED_MODULES`）：透過 `modules.py` 的 `mcp_module` 欄位指定，如 `knowledge_tools`、`nas_tools` 等
+3. **無條件載入**：`voice_tools`、`web_tools`（獨立於模組系統，載入失敗不影響其他工具）
+4. **Skill MCP 工具**：Skill 透過 `contributes.yaml` 的 `mcp_tools` 欄位提供工具模組，動態載入
+5. **Extends MCP 工具**：Extends 模組（如 `law`）透過 `contributes.yaml` 的 `mcp_tools` 欄位提供 in-process 工具，由 `load_extends_mcp_tools()` 載入
+
+### 向後相容
+
+`services/mcp_server.py` 為過渡期保留的相容模組，所有 API 都 re-export 自 `services/mcp/`。新程式碼應直接 `from services.mcp import ...`。
+
+### 工具定義方式
+
+各工具檔案 import `server.py` 的共用 `mcp` 實例，使用 FastMCP decorator 註冊工具：
+
+```python
+from .server import mcp, ensure_db_connection, check_mcp_tool_permission
+
+@mcp.tool()
+async def my_tool(param1: str, param2: int = 10) -> str:
+    """
+    工具說明
+
+    Args:
+        param1: 參數1說明
+        param2: 參數2說明，預設 10
+    """
+    await ensure_db_connection()
+    # ...
+    return "結果"
+```
+
+Schema 會自動從 type hints 和 docstring 生成。
+
+### 共用輔助函數（server.py）
+
+| 函數 | 用途 |
+|------|------|
+| `ensure_db_connection()` | 確保資料庫連線池已初始化（懶初始化） |
+| `resolve_ctos_user_id(ctos_user_id)` | 解析使用者 ID，fallback 讀取 `CTOS_USER_ID` 環境變數 |
+| `resolve_agent_allowed_shared_sources()` | 從環境變數讀取 Agent 允許的 NAS shared 來源限制 |
+| `resolve_agent_allowed_library_paths()` | 從環境變數讀取 Agent 允許的 library 子路徑限制 |
+| `check_mcp_tool_permission(tool_name, ctos_user_id)` | 檢查使用者的工具權限 |
+| `check_project_member_permission(project_id, user_id)` | 檢查使用者是否為專案成員 |
+| `to_taipei_time(dt)` | 將 datetime 轉換為台北時區 (UTC+8) |
+
+### 工具存取介面
+
+`server.py` 提供以下函數供其他服務使用（如 Line Bot AI、Telegram Bot）：
+
+- `get_mcp_tools()` - 取得工具定義列表（符合 Claude API 格式）
+- `get_mcp_tool_names(exclude_group_only)` - 取得工具名稱列表
+- `execute_tool(tool_name, arguments)` - 執行工具
+
+這讓 Bot AI 和其他服務可以直接呼叫工具，無需透過 MCP 協議。
+
 ## 可用工具
 
-### 專案管理
+### 知識庫（knowledge_tools.py）
 
 | 工具名稱 | 說明 | 參數 |
 |----------|------|------|
-| `query_project` | 查詢專案資訊 | `project_id`（UUID）, `keyword`（搜尋） |
-| `create_project` | 建立新專案 | `name`（必填）, `description`, `start_date`, `end_date` |
-| `update_project` ⚠️ | 更新專案資訊 | `project_id`（必填）, `ctos_user_id`（必填）, `name`, `description`, `status`, `start_date`, `end_date` |
-| `add_project_member` | 新增專案成員 | `project_id`（必填）, `name`（必填）, `role`, `company`, `email`, `phone`, `notes`, `is_internal`（預設 True）, `ctos_user_id`（自動綁定） |
-| `update_project_member` ⚠️ | 更新成員資訊 | `member_id`（必填）, `ctos_user_id`（必填）, `project_id`, `name`, `role`, `company`, `email`, `phone`, `notes`, `is_internal`, `bind_to_caller` |
-| `add_project_milestone` | 新增專案里程碑 | `project_id`（必填）, `name`（必填）, `milestone_type`, `planned_date`, `actual_date`, `status`, `notes` |
-| `update_milestone` ⚠️ | 更新里程碑 | `milestone_id`（必填）, `ctos_user_id`（必填）, `project_id`, `name`, `milestone_type`, `planned_date`, `actual_date`, `status`, `notes` |
-| `get_project_milestones` | 取得專案里程碑 | `project_id`（必填）, `status`（過濾）, `limit` |
-| `add_project_meeting` ⚠️ | 新增會議記錄 | `project_id`（必填）, `title`（必填）, `ctos_user_id`（必填）, `meeting_date`, `location`, `attendees`, `content` |
-| `update_project_meeting` ⚠️ | 更新會議記錄 | `meeting_id`（必填）, `ctos_user_id`（必填）, `project_id`, `title`, `meeting_date`, `location`, `attendees`, `content` |
-| `get_project_meetings` | 取得專案會議記錄 | `project_id`（必填）, `limit` |
-| `get_project_members` | 取得專案成員 | `project_id`（必填）, `is_internal`（過濾） |
-
-> ⚠️ 標記的工具需要權限控制，必須傳入 `ctos_user_id` 參數，且只有專案成員才能操作。
-
-### 專案連結
-
-| 工具名稱 | 說明 | 參數 |
-|----------|------|------|
-| `add_project_link` | 新增專案連結 | `project_id`（必填）, `title`（必填）, `url`（必填）, `description` |
-| `get_project_links` | 取得專案連結列表 | `project_id`（必填）, `limit` |
-| `update_project_link` | 更新專案連結 | `link_id`（必填）, `project_id`, `title`, `url`, `description` |
-| `delete_project_link` | 刪除專案連結 | `link_id`（必填）, `project_id` |
-
-### 專案附件
-
-| 工具名稱 | 說明 | 參數 |
-|----------|------|------|
-| `add_project_attachment` | 從 NAS 路徑添加附件到專案 | `project_id`（必填）, `nas_path`（必填，從 get_message_attachments 或 search_nas_files 取得）, `description` |
-| `get_project_attachments` | 取得專案附件列表 | `project_id`（必填）, `limit` |
-| `update_project_attachment` | 更新專案附件描述 | `attachment_id`（必填）, `project_id`, `description` |
-| `delete_project_attachment` | 刪除專案附件 | `attachment_id`（必填）, `project_id` |
-
-### 發包期程
-
-| 工具名稱 | 說明 | 參數 |
-|----------|------|------|
-| `add_delivery_schedule` | 新增發包記錄 | `project_id`（必填）, `vendor`（必填，廠商名稱）, `item`（必填，料件名稱）, `quantity`, `order_date`, `expected_delivery_date`, `status`（pending/ordered/delivered/completed）, `notes` |
-| `update_delivery_schedule` | 更新發包記錄 | `delivery_id` 或 `project_id` + `vendor` + `item`（模糊匹配）, `status`, `actual_delivery_date`, `expected_delivery_date`, `quantity`, `notes` |
-| `get_delivery_schedules` | 查詢發包列表 | `project_id`（必填）, `status`（過濾）, `vendor`（過濾）, `limit` |
-
-### 物料/庫存管理
-
-| 工具名稱 | 說明 | 參數 |
-|----------|------|------|
-| `query_inventory` | 查詢物料/庫存 | `keyword`（搜尋名稱、型號或規格）, `item_id`（查詢特定物料詳情）, `category`（類別過濾）, `vendor`（廠商過濾）, `low_stock`（只顯示庫存不足）, `limit` |
-| `add_inventory_item` | 新增物料 | `name`（必填）, `model`（型號）, `specification`（規格）, `unit`（單位）, `category`（類別）, `default_vendor`（預設廠商）, `storage_location`（存放庫位，如 A-1-3）, `min_stock`（最低庫存量）, `notes` |
-| `update_inventory_item` | 更新物料資訊 | `item_id` 或 `item_name`（擇一）, `name`, `model`, `specification`, `unit`, `category`, `default_vendor`, `storage_location`, `min_stock`, `notes` |
-| `record_inventory_in` | 記錄進貨 | `quantity`（必填）, `item_id` 或 `item_name`（擇一）, `vendor`（廠商）, `project_id` 或 `project_name`（關聯專案）, `transaction_date`, `notes` |
-| `record_inventory_out` | 記錄出貨/領料 | `quantity`（必填）, `item_id` 或 `item_name`（擇一）, `project_id` 或 `project_name`（關聯專案）, `transaction_date`, `notes` |
-| `adjust_inventory` | 庫存調整（盤點校正） | `new_quantity`（必填）, `reason`（必填，如「盤點調整」）, `item_id` 或 `item_name`（擇一） |
-
-> **庫存低量警示**：當物料設定了 `min_stock` 且目前庫存低於此值，`query_inventory` 會顯示 ⚠️ 警示。使用 `low_stock=true` 可只查詢庫存不足的物料。
-
-### 訂購記錄
-
-| 工具名稱 | 說明 | 參數 |
-|----------|------|------|
-| `add_inventory_order` | 新增訂購記錄 | `order_quantity`（必填）, `item_id` 或 `item_name`（擇一）, `order_date`, `expected_delivery_date`, `vendor`, `project_id` 或 `project_name`, `notes` |
-| `update_inventory_order` | 更新訂購記錄 | `order_id`（必填）, `order_quantity`, `order_date`, `expected_delivery_date`, `actual_delivery_date`, `status`（pending/ordered/delivered/cancelled）, `vendor`, `project_id`, `notes` |
-| `get_inventory_orders` | 查詢訂購記錄 | `item_id` 或 `item_name`（擇一）, `status`（過濾）, `limit` |
-
-### 知識庫
-
-| 工具名稱 | 說明 | 參數 |
-|----------|------|------|
-| `search_knowledge` | 搜尋知識庫 | `query`（必填）, `project`, `category`, `limit`, `ctos_user_id`（傳入可搜尋個人知識） |
-| `get_knowledge_item` | 取得知識庫文件完整內容 | `kb_id`（必填，如 kb-001） |
-| `update_knowledge_item` | 更新知識庫文件 | `kb_id`（必填）, `title`, `content`, `category`, `scope`（global/personal）, `topics`, `projects`, `roles`, `level`, `type`, `ctos_user_id`（改為 personal 時必填） |
+| `search_knowledge` | 搜尋知識庫 | `query`（必填）, `project`, `category`, `limit`, `line_user_id`, `ctos_user_id` |
+| `get_knowledge_item` | 取得知識庫文件完整內容 | `kb_id`（必填）, `ctos_user_id` |
+| `update_knowledge_item` | 更新知識庫文件 | `kb_id`（必填）, `title`, `content`, `category`, `scope`, `topics`, `projects`, `roles`, `level`, `type`, `ctos_user_id` |
 | `delete_knowledge_item` | 刪除知識庫文件 | `kb_id`（必填） |
 | `add_note` | 新增筆記到知識庫 | `title`（必填）, `content`（必填）, `category`, `topics`, `project`, `line_group_id`, `line_user_id`, `ctos_user_id` |
 | `add_note_with_attachments` | 新增筆記並加入附件 | `title`（必填）, `content`（必填）, `attachments`（必填，NAS 路徑列表）, `category`, `topics`, `project`, `line_group_id`, `line_user_id`, `ctos_user_id` |
@@ -124,25 +143,18 @@ uv run python -m ching_tech_os.mcp_cli
 > - `line_group_id` + 群組已綁定專案 → `project`（專案知識）
 > - 其他情況 → `global`（全域知識）
 
-### 知識庫附件
+### 知識庫附件（knowledge_tools.py）
 
 | 工具名稱 | 說明 | 參數 |
 |----------|------|------|
-| `add_attachments_to_knowledge` | 為現有知識新增附件 | `kb_id`（必填）, `attachments`（必填，NAS 路徑列表）, `descriptions`（附件描述列表） |
-| `get_knowledge_attachments` | 取得知識庫附件列表 | `kb_id`（必填） |
-| `update_knowledge_attachment` | 更新附件說明 | `kb_id`（必填）, `attachment_index`（必填）, `description` |
-| `read_knowledge_attachment` | 讀取知識庫附件的文字內容 | `kb_id`（必填）, `attachment_index`（預設 0）, `max_chars`（預設 15000） |
+| `add_attachments_to_knowledge` | 為現有知識新增附件 | `kb_id`（必填）, `attachments`（必填，NAS 路徑列表）, `descriptions`, `ctos_user_id` |
+| `get_knowledge_attachments` | 取得知識庫附件列表 | `kb_id`（必填）, `ctos_user_id` |
+| `update_knowledge_attachment` | 更新附件說明 | `kb_id`（必填）, `attachment_index`（必填）, `description`, `ctos_user_id` |
+| `read_knowledge_attachment` | 讀取知識庫附件的文字內容 | `kb_id`（必填）, `attachment_index`（預設 0）, `max_chars`（預設 15000）, `ctos_user_id` |
 
 > **附件內容讀取**：`read_knowledge_attachment` 可讀取 Word/Excel/PowerPoint/PDF 等文件格式的附件內容，方便 AI 分析或回答問題。
 
-### Line Bot
-
-| 工具名稱 | 說明 | 參數 |
-|----------|------|------|
-| `summarize_chat` | 取得群組聊天記錄 | `line_group_id`（必填）, `hours`, `max_messages` |
-| `get_message_attachments` | 查詢對話中的附件 | `line_user_id`, `line_group_id`, `days`, `file_type`, `limit` |
-
-### 自訂記憶
+### 自訂記憶（memory_tools.py）— Core
 
 | 工具名稱 | 說明 | 參數 |
 |----------|------|------|
@@ -153,18 +165,28 @@ uv run python -m ching_tech_os.mcp_cli
 
 > **自訂記憶**：用戶可以設定自訂記憶讓 AI 記住特定指示（如回覆風格、稱呼方式等）。每個群組/用戶的記憶獨立管理，可隨時啟用或停用。
 
-### NAS 檔案
+### Line Bot / 訊息（message_tools.py）— Core
 
 | 工具名稱 | 說明 | 參數 |
 |----------|------|------|
-| `search_nas_files` | 搜尋 NAS 共享檔案 | `keywords`（必填，逗號分隔）, `file_types`（副檔名，如 pdf,xlsx）, `limit` |
-| `get_nas_file_info` | 取得 NAS 檔案詳細資訊 | `file_path`（必填，/mnt/nas/projects/... 路徑） |
-| `read_document` | 讀取文件內容（Word/Excel/PowerPoint/PDF） | `file_path`（必填）, `max_chars`（預設 50000） |
-| `prepare_file_message` | 準備檔案訊息供 Line Bot 回覆 | `file_path`（必填） |
+| `summarize_chat` | 取得群組聊天記錄 | `line_group_id`（必填）, `hours`, `max_messages` |
+| `get_message_attachments` | 查詢對話中的附件 | `line_user_id`, `line_group_id`, `days`, `file_type`, `limit` |
+
+### NAS 檔案（nas_tools.py）
+
+| 工具名稱 | 說明 | 參數 |
+|----------|------|------|
+| `search_nas_files` | 搜尋 NAS 共享檔案 | `keywords`（必填，逗號分隔）, `file_types`（副檔名，如 pdf,xlsx）, `limit`, `ctos_user_id` |
+| `get_nas_file_info` | 取得 NAS 檔案詳細資訊 | `file_path`（必填）, `ctos_user_id` |
+| `read_document` | 讀取文件內容（Word/Excel/PowerPoint/PDF） | `file_path`（必填）, `max_chars`（預設 50000）, `ctos_user_id` |
+| `prepare_file_message` | 準備檔案訊息供 Line Bot 回覆 | `file_path`（必填）, `ctos_user_id` |
+| `send_nas_file` | 透過 Bot 發送 NAS 檔案給使用者 | `file_path`（必填）, `line_user_id`, `line_group_id`, `telegram_chat_id`, `ctos_user_id` |
+| `list_library_folders` | 瀏覽擎添圖書館的資料夾結構 | `path`（子路徑）, `max_depth`（預設 2）, `ctos_user_id` |
+| `archive_to_library` | 將檔案歸檔至擎添圖書館 | `source_path`（必填）, `category`（必填）, `filename`（必填）, `folder`, `ctos_user_id` |
 
 > **文件讀取支援格式**：`read_document` 可讀取 `.docx`、`.xlsx`、`.pptx`、`.pdf` 檔案，將內容轉為純文字供 AI 分析。不支援舊版格式（`.doc`、`.xls`、`.ppt`）和加密文件。
 
-### 分享功能
+### 分享功能（share_tools.py）
 
 | 工具名稱 | 說明 | 參數 |
 |----------|------|------|
@@ -173,11 +195,22 @@ uv run python -m ching_tech_os.mcp_cli
 
 > **密碼保護**：分享連結可設定 4 位數密碼保護，5 次輸入錯誤後將鎖定 30 分鐘。
 
-### 簡報生成
+### 媒體工具（media_tools.py）
 
 | 工具名稱 | 說明 | 參數 |
 |----------|------|------|
-| `generate_presentation` | 生成 PowerPoint 簡報 | `topic`, `num_slides`, `style`, `include_images`, `image_source`, `outline_json`, `design_json` |
+| `download_web_image` | 下載網路圖片到 NAS | `url`（必填）, `ctos_user_id` |
+| `download_web_file` | 下載網路檔案到 NAS | `url`（必填）, `filename`, `ctos_user_id` |
+| `convert_pdf_to_images` | 將 PDF 轉為圖片 | `pdf_path`（必填）, `pages`（預設 "all"） |
+
+### 簡報/文件生成（presentation_tools.py）
+
+| 工具名稱 | 說明 | 參數 |
+|----------|------|------|
+| `generate_presentation` | 生成 PowerPoint 簡報 | `topic`, `num_slides`, `theme`, `include_images`, `image_source`, `outline_json`, `design_json` |
+| `generate_md2ppt` | 產生 MD2PPT 格式簡報 | `markdown_content`（必填）, `ctos_user_id` |
+| `generate_md2doc` | 產生 MD2DOC 格式文件 | `markdown_content`（必填）, `ctos_user_id` |
+| `prepare_print_file` | 將虛擬路徑轉換為可列印的絕對路徑 | `file_path`（必填）, `ctos_user_id` |
 
 #### 基本用法（指定主題）
 
@@ -185,7 +218,7 @@ uv run python -m ching_tech_os.mcp_cli
 result = await execute_tool("generate_presentation", {
     "topic": "AI 在製造業的應用",
     "num_slides": 5,
-    "style": "tech",          # professional/casual/creative/minimal/dark/tech/nature/warm/elegant
+    "theme": "uncover",
     "include_images": True,
     "image_source": "pexels"  # pexels/huggingface/nanobanana
 })
@@ -238,26 +271,21 @@ result = await execute_tool("generate_presentation", {
 })
 ```
 
-#### 預設風格
+#### MD2PPT/MD2DOC 使用範例
 
-| 風格 | 說明 | 適用場景 |
-|------|------|----------|
-| `professional` | 淺藍灰背景、深海軍藍標題 | 客戶提案、正式報告 |
-| `casual` | 花白背景、森林綠標題 | 內部分享、教育訓練 |
-| `creative` | 淡紫背景、紫羅蘭標題 | 創意提案、品牌展示 |
-| `minimal` | 純白背景、近黑標題 | 技術文件、學術報告 |
-| `dark` | 深藍黑背景、淺灰白標題 | 投影展示、晚間活動 |
-| `tech` | 深空藍背景、青色標題 | 科技新創、產品發布 |
-| `nature` | 薄荷白背景、深森林綠標題 | 環保、健康主題 |
-| `warm` | 奶油白背景、磚紅標題 | 激勵演講、活動推廣 |
-| `elegant` | 象牙白背景、深金棕標題 | 奢華品牌、高端提案 |
+```python
+# 產生簡報
+result = await execute_tool("generate_md2ppt", {
+    "markdown_content": "# AI 解決方案\n\n## 產品特色\n- 智慧分析\n- 自動化流程"
+})
+# 回傳：分享連結 + 4 位數密碼
 
-### MD2PPT/MD2DOC 文件轉換
-
-| 工具名稱 | 說明 | 參數 |
-|----------|------|------|
-| `generate_md2ppt` | 產生 MD2PPT 格式簡報 | `content`（必填，要轉換的內容或主題）, `style`（選填，風格需求如「科技藍」「簡約深色」） |
-| `generate_md2doc` | 產生 MD2DOC 格式文件 | `content`（必填，要轉換的內容） |
+# 產生文件
+result = await execute_tool("generate_md2doc", {
+    "markdown_content": "# 設備操作 SOP\n\n## 開機步驟\n1. 檢查電源..."
+})
+# 回傳：分享連結 + 4 位數密碼
+```
 
 > **與 generate_presentation 的差異**：
 > - `generate_presentation`：直接生成 PowerPoint 檔案（使用 Marp）
@@ -268,39 +296,32 @@ result = await execute_tool("generate_presentation", {
 > - 支援更豐富的排版功能（圖表、雙欄、動畫等）
 > - 可匯出為多種格式（PPTX、Word、PDF）
 
-#### 使用範例
-
-```python
-# 產生簡報
-result = await execute_tool("generate_md2ppt", {
-    "content": "介紹我們公司的 AI 解決方案，包含產品特色和應用案例",
-    "style": "科技藍"
-})
-# 回傳：分享連結 + 4 位數密碼
-
-# 產生文件
-result = await execute_tool("generate_md2doc", {
-    "content": "撰寫設備操作 SOP，包含開機、操作流程、關機步驟"
-})
-# 回傳：分享連結 + 4 位數密碼
-```
-
-### NAS 檔案發送
+### 排程管理（scheduler_tools.py）
 
 | 工具名稱 | 說明 | 參數 |
 |----------|------|------|
-| `send_nas_file` | 透過 Bot 發送 NAS 檔案給使用者 | `file_path`（必填）, `line_user_id`, `line_group_id` |
-| `archive_to_library` | 將 NAS 檔案歸檔到資料庫管理 | `source_path`（必填）, `category`（必填）, `description` |
+| `manage_scheduled_task` | 管理動態排程任務（create/update/delete/enable/disable） | `action`（必填）, `name`, `description`, `trigger_type`, `trigger_config`, `executor_type`, `executor_config`, `task_id`, `is_enabled`, `ctos_user_id` |
+| `list_scheduled_tasks` | 查詢排程列表（含動態與靜態排程） | `is_enabled`, `include_static`（預設 true）, `ctos_user_id` |
 
-### 媒體工具
+> **排程管理**需要管理員權限（`ctos_user_id` 必須對應管理員帳號）。
+
+### 語音合成（voice_tools.py）
 
 | 工具名稱 | 說明 | 參數 |
 |----------|------|------|
-| `download_web_image` | 下載網路圖片到 NAS | `url`（必填）, `ctos_user_id` |
-| `download_web_file` | 下載網路檔案到 NAS | `url`（必填）, `filename`, `ctos_user_id` |
-| `convert_pdf_to_images` | 將 PDF 轉為圖片 | `pdf_path`（必填）, `pages`（預設 "all"） |
+| `text_to_speech` | 將文字轉換為語音檔案 | `text`（必填，上限 500 字）, `ctos_user_id` |
 
-### AI Skills
+> **使用時機**：使用者用語音訊息發問時，優先使用語音回覆。需要 extends/voice 模組安裝。
+
+### 網頁擷取（web_tools.py）
+
+| 工具名稱 | 說明 | 參數 |
+|----------|------|------|
+| `browse_webpage` | 用瀏覽器開啟網頁並擷取渲染後內容 | `url`（必填，僅 HTTPS）, `max_length`（預設 8000）, `timeout`（預設 30000ms）, `ctos_user_id` |
+
+> **適用場景**：JavaScript 渲染的 SPA 網站（如 React、Next.js）。一般靜態網頁請優先使用 WebFetch。
+
+### AI Skills（skill_script_tools.py）
 
 | 工具名稱 | 說明 | 參數 |
 |----------|------|------|
@@ -310,13 +331,6 @@ result = await execute_tool("generate_md2doc", {
 >
 > 目前 native `base`、`file-manager` 也已採 script-first，並以 `script_mcp_fallback` 對應回舊 MCP tool。
 > fallback 僅在 script 明確回傳 `fallback_required`（或 `allow_fallback: true`）時觸發；參數驗證錯誤不會 fallback。
-> 仍高度依賴外部 MCP 的 skill（如 `project`、`inventory`、`printer`、`ai-assistant`）建議維持 MCP 模式並獨立規劃模組化遷移。
-
-### 列印
-
-| 工具名稱 | 說明 | 參數 |
-|----------|------|------|
-| `prepare_print_file` | 準備檔案供列印 | `file_path`（必填）, `ctos_user_id` |
 
 ### AI 圖片生成（外部 MCP Server）
 
@@ -335,8 +349,6 @@ result = await execute_tool("generate_md2doc", {
 
 ```bash
 # 確保 .mcp.json 已設定
-claude "查詢最近的專案"
-claude "建立一個新專案叫做「測試專案」"
 claude "幫我搜尋知識庫中關於水切爐的資料"
 claude "找一下亦達 layout 的 pdf"
 claude "畫一隻可愛的貓"  # AI 圖片生成（需設定 nanobanana）
@@ -347,124 +359,45 @@ Claude 會自動使用對應的 MCP 工具執行操作。
 ### 透過程式碼呼叫
 
 ```python
-from ching_tech_os.services.mcp_server import get_mcp_tools, execute_tool
+from ching_tech_os.services.mcp import get_mcp_tools, execute_tool
 
 # 取得工具列表（符合 Claude API 格式）
 tools = await get_mcp_tools()
 
 # 執行工具
-result = await execute_tool("query_project", {"keyword": "測試"})
+result = await execute_tool("search_knowledge", {"query": "水切爐"})
 print(result)
 
-# 建立專案
-result = await execute_tool("create_project", {
-    "name": "新專案",
-    "description": "專案描述",
-    "start_date": "2026-01-01"
-})
-
-# 新增成員
-result = await execute_tool("add_project_member", {
-    "project_id": "uuid-here",
-    "name": "張三",
-    "role": "專案經理",
-    "is_internal": True
+# 新增筆記
+result = await execute_tool("add_note", {
+    "title": "會議紀錄",
+    "content": "今日討論事項...",
+    "category": "meeting"
 })
 ```
-
-## 架構說明
-
-### 檔案結構
-
-```
-backend/src/ching_tech_os/
-├── mcp_cli.py              # CLI 入口點
-└── services/
-    ├── mcp_server.py       # MCP Server 入口（向下相容）
-    └── mcp/                # MCP 工具模組（依功能分類）
-        ├── server.py             # FastMCP Server 定義
-        ├── knowledge_tools.py    # 知識庫工具
-        ├── media_tools.py        # 媒體工具（下載、轉換）
-        ├── memory_tools.py       # 自訂記憶工具
-        ├── message_tools.py      # 訊息相關工具
-        ├── nas_tools.py          # NAS 檔案工具（搜尋、發送、歸檔）
-        ├── presentation_tools.py # 簡報/列印工具
-        ├── share_tools.py        # 分享連結工具
-        └── skill_script_tools.py # AI Skills 腳本執行
-```
-
-### 工具定義方式
-
-使用 FastMCP 的 decorator 定義工具：
-
-```python
-from mcp.server.fastmcp import FastMCP
-
-mcp = FastMCP("ching-tech-os")
-
-@mcp.tool()
-async def my_tool(param1: str, param2: int = 10) -> str:
-    """
-    工具說明
-
-    Args:
-        param1: 參數1說明
-        param2: 參數2說明，預設 10
-    """
-    return f"結果: {param1}, {param2}"
-```
-
-Schema 會自動從 type hints 和 docstring 生成。
-
-### 工具存取介面
-
-`mcp_server.py` 提供以下函數供其他服務使用：
-
-- `get_mcp_tools()` - 取得工具定義列表（符合 Claude API 格式）
-- `get_mcp_tool_names(exclude_group_only)` - 取得工具名稱列表
-- `execute_tool(tool_name, arguments)` - 執行工具
-
-這讓 Line Bot AI 和其他服務可以直接呼叫工具，無需透過 MCP 協議。
 
 ## 權限控制
 
-標記 ⚠️ 的工具需要權限控制：
-
 ### 機制說明
 
-1. **用戶關聯**：Line 用戶透過 `line_users.user_id` 關聯到 CTOS 用戶
-2. **成員關聯**：專案成員透過 `project_members.user_id` 關聯到 CTOS 用戶
-3. **權限檢查**：呼叫工具時傳入 `ctos_user_id`，系統檢查該用戶是否為專案成員
+1. **工具權限**：`check_mcp_tool_permission()` 會根據使用者角色和權限設定，檢查是否允許呼叫特定工具
+2. **專案權限**：`check_project_member_permission()` 檢查使用者是否為專案成員
+3. **環境變數 Fallback**：`resolve_ctos_user_id()` 在 AI 未傳入 `ctos_user_id` 時，自動讀取 `CTOS_USER_ID` 環境變數
+4. **Agent 存取限制**：`resolve_agent_allowed_shared_sources()` 和 `resolve_agent_allowed_library_paths()` 可限制受限 Agent 的檔案存取範圍
 
 ### 錯誤訊息
 
-- 未關聯 CTOS 帳號：「請聯繫管理員關聯帳號」
-- 非專案成員：「您不是此專案的成員，無法進行此操作」
-
-### 自動綁定
-
-`add_project_member` 支援自動綁定功能：
-
-```python
-# 新增成員並自動綁定到呼叫者的 CTOS 帳號
-result = await execute_tool("add_project_member", {
-    "project_id": "uuid-here",
-    "name": "張三",
-    "is_internal": True,
-    "ctos_user_id": 1  # 傳入 ctos_user_id 自動綁定
-})
-```
-
-- 若已存在同名成員但未綁定，會自動完成綁定
-- 綁定後該成員即可使用需要權限的工具
+- 未關聯 CTOS 帳號：使用預設權限判斷
+- 工具已停用（遷移至 ERPNext）：回傳停用訊息
+- 權限不足：回傳需要的功能權限名稱
 
 ## 新增工具
 
-1. 在 `mcp_server.py` 中使用 `@mcp.tool()` 裝飾器定義函數
-2. 使用 type hints 定義參數類型
-3. 在 docstring 中描述工具和參數
-4. 如果需要資料庫連線，使用 `await ensure_db_connection()`
-5. 如果需要權限控制，加入 `ctos_user_id` 參數並呼叫 `check_project_member_permission()`
+1. 在對應的工具檔案（或建立新檔案）中使用 `@mcp.tool()` 裝飾器定義函數
+2. Import `server.py` 的共用元件：`mcp`, `ensure_db_connection`, `check_mcp_tool_permission` 等
+3. 使用 type hints 定義參數類型，在 docstring 中描述工具和參數
+4. 如果建立新檔案，需在 `modules.py` 的對應模組中設定 `mcp_module` 路徑
+5. 如果需要權限控制，加入 `ctos_user_id` 參數並呼叫 `check_mcp_tool_permission()`
 6. 更新 `linebot_agents.py` 中的 prompt（讓 Line Bot AI 知道新工具）
 7. 建立新的 migration 更新資料庫中的 prompt
 8. 執行 `alembic upgrade head` 套用變更
@@ -472,10 +405,14 @@ result = await execute_tool("add_project_member", {
 範例：
 
 ```python
+from .server import mcp, ensure_db_connection, check_mcp_tool_permission
+from ...database import get_connection
+
 @mcp.tool()
 async def my_new_tool(
     required_param: str,
     optional_param: int = 5,
+    ctos_user_id: int | None = None,
 ) -> str:
     """
     工具功能說明
@@ -483,10 +420,28 @@ async def my_new_tool(
     Args:
         required_param: 必填參數說明
         optional_param: 選填參數說明，預設 5
+        ctos_user_id: CTOS 用戶 ID
     """
     await ensure_db_connection()
+
+    # 權限檢查（視需要）
+    allowed, error_msg = await check_mcp_tool_permission("my_new_tool", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
     async with get_connection() as conn:
         # 執行資料庫查詢
         ...
     return "結果"
 ```
+
+### Extends 模組提供 MCP 工具
+
+Extends 模組可在 `contributes.yaml` 中指定 `mcp_tools` 欄位，提供 in-process MCP 工具：
+
+```yaml
+# extends/my-module/contributes.yaml
+mcp_tools: core/mcp_tools.py
+```
+
+工具檔案會由 `load_extends_mcp_tools()` 在啟動時動態載入，支援相對 import（如 `from .services import ...`）。

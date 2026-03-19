@@ -22,7 +22,13 @@ backend/
 │       ├── 009_add_bot_usage_tracking.py      # 未綁定用戶使用量追蹤表
 │       ├── 010_add_bot_restricted_settings.py # bot-restricted Agent 預設 settings
 │       ├── 011_add_active_agent_id.py         # bot_users/bot_groups 新增 active_agent_id
-│       └── 012_add_restricted_agent_id.py     # bot_users/bot_groups 新增 restricted_agent_id
+│       ├── 012_add_restricted_agent_id.py     # bot_users/bot_groups 新增 restricted_agent_id
+│       ├── 013_create_scheduled_tasks.py      # 排程任務表（APScheduler 持久化）
+│       ├── 014_add_proactive_push_settings.py # bot_settings 新增主動推送設定
+│       ├── 015_update_jfmskin_agents.py       # 杰膚美 Agent prompt/工具更新（資料變更）
+│       ├── 016_add_voice_auto_trigger.py      # bot_groups 新增語音自動觸發開關
+│       ├── 017_voice_module_independence.py   # users/bot_groups/ai_agents 新增 voice_settings
+│       └── 018_add_law_tables.py              # 律師事務所模組（law_parties/law_cases）
 ```
 
 ## 資料庫連線設定
@@ -62,6 +68,7 @@ CREATE TABLE users (
     is_active BOOLEAN NOT NULL DEFAULT TRUE,  -- 帳號是否啟用
     must_change_password BOOLEAN NOT NULL DEFAULT FALSE,  -- 強制變更密碼
     password_changed_at TIMESTAMPTZ,          -- 最後密碼變更時間
+    voice_settings JSONB,                    -- 語音設定（migration 017）
     created_at TIMESTAMPTZ DEFAULT NOW(),     -- 建立時間
     last_login_at TIMESTAMPTZ                 -- 最後登入時間
 );
@@ -162,6 +169,8 @@ CREATE TABLE bot_settings (
 | telegram | `bot_token` | Bot Token（加密） |
 | telegram | `webhook_secret` | Webhook Secret（加密） |
 | telegram | `admin_chat_id` | 管理員 Chat ID |
+| line | `proactive_push_enabled` | 主動推送開關（預設 false）（migration 014） |
+| telegram | `proactive_push_enabled` | 主動推送開關（預設 true）（migration 014） |
 
 ### bot_usage_tracking 表
 
@@ -194,6 +203,88 @@ CREATE TABLE bot_usage_tracking (
 | `error_message` | AI 處理失敗時的錯誤訊息 |
 
 > Migration 010 使用 JSONB merge（`defaults || COALESCE(settings, '{}')`）寫入預設值，已存在的 key 不會被覆蓋。
+
+### scheduled_tasks 表
+
+儲存動態排程定義，支援 Agent 執行和 Skill Script 呼叫（migration 013）。
+
+```sql
+CREATE TABLE scheduled_tasks (
+    id UUID PRIMARY KEY,
+    name VARCHAR(128) UNIQUE NOT NULL,        -- 排程名稱
+    description TEXT,                          -- 說明
+    trigger_type VARCHAR(16) NOT NULL,         -- 觸發類型（cron / interval）
+    trigger_config JSONB NOT NULL,             -- 觸發設定（cron 表達式等）
+    executor_type VARCHAR(16) NOT NULL,        -- 執行類型（agent / skill_script）
+    executor_config JSONB NOT NULL,            -- 執行設定（prompt / skill 名稱等）
+    is_enabled BOOLEAN NOT NULL DEFAULT TRUE,  -- 是否啟用
+    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    last_run_at TIMESTAMPTZ,                   -- 最後執行時間
+    next_run_at TIMESTAMPTZ,                   -- 下次執行時間
+    last_run_success BOOLEAN,                  -- 最後執行是否成功
+    last_run_error TEXT,                        -- 最後執行錯誤訊息
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX ix_scheduled_tasks_is_enabled ON scheduled_tasks(is_enabled);
+```
+
+### law_parties 表
+
+律師事務所模組 — 當事人資料（migration 018，extends/law 使用）。
+
+```sql
+CREATE TABLE law_parties (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,          -- 姓名
+    id_number VARCHAR(255),              -- 身分證字號（加密儲存）
+    party_type VARCHAR(20),              -- natural_person / legal_entity
+    phone VARCHAR(30),
+    email VARCHAR(100),
+    address TEXT,
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+### law_cases 表
+
+律師事務所模組 — 案件資料（migration 018）。
+
+```sql
+CREATE TABLE law_cases (
+    id SERIAL PRIMARY KEY,
+    case_number VARCHAR(50),                    -- 案號
+    case_name VARCHAR(200) NOT NULL,            -- 案件名稱
+    case_type VARCHAR(20) NOT NULL,             -- civil / criminal / administrative / family
+    court VARCHAR(50),                          -- 法院
+    role VARCHAR(20),                           -- plaintiff / defendant / third_party
+    status VARCHAR(20) DEFAULT 'active',        -- active / closed / appealing
+    lawyer_name VARCHAR(50),                    -- 承辦律師
+    folder_path TEXT,                           -- NAS 資料夾路徑
+    next_court_date DATE,                       -- 下次開庭日期
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+### law_case_parties 表
+
+律師事務所模組 — 案件-當事人關聯表（migration 018）。
+
+```sql
+CREATE TABLE law_case_parties (
+    id SERIAL PRIMARY KEY,
+    case_id INTEGER NOT NULL REFERENCES law_cases(id) ON DELETE CASCADE,
+    party_id INTEGER NOT NULL REFERENCES law_parties(id) ON DELETE CASCADE,
+    role VARCHAR(20) NOT NULL,          -- plaintiff / defendant / third_party / witness
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(case_id, party_id, role)
+);
+```
 
 > **v0.3.0 變更**：移除多租戶架構（`tenants`、`tenant_admins` 表），所有資料表的 `tenant_id` 欄位已移除。使用者角色簡化為 `admin` / `user`。
 >

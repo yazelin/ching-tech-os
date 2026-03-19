@@ -1,6 +1,6 @@
 # Line Bot 整合
 
-> **注意**：資料庫表格已從 `line_*` 改名為 `bot_*`（如 `bot_messages`、`bot_groups`、`bot_users`）。
+> **注意**：資料庫表格已從 `line_*` 改名為 `bot_*`（如 `bot_messages`、`bot_groups`、`bot_users`、`bot_files`）。
 > 服務層新增 `services/bot/` 核心模組，包含平台無關的 adapter、message、media、ai、agents 等抽象。
 
 Line Bot 整合功能，實現 Line 訊息儲存、AI 助理回應、知識庫管理與公開分享。
@@ -41,7 +41,7 @@ Line Platform
 │         │                          │                             │
 │         ▼                          ▼                             │
 │  ┌─────────────┐    ┌─────────────────────────────────────────┐ │
-│  │ linebot.py  │    │ mcp_server.py                           │ │
+│  │ bot_line/   │    │ mcp_server.py                           │ │
 │  │ - 儲存訊息  │    │ - 專案：query/create/add_member/...     │ │
 │  │ - 用戶管理  │    │ - 知識庫：search/get/update/add_note/...│ │
 │  │ - 群組管理  │    │ - 附件：add/get/update_attachment       │ │
@@ -52,7 +52,7 @@ Line Platform
 │         ▼                                                        │
 │  ┌─────────────┐    ┌─────────────┐                             │
 │  │ PostgreSQL  │    │ NAS 檔案    │                             │
-│  │ line_*      │    │ 附件儲存    │                             │
+│  │ bot_*       │    │ 附件儲存    │                             │
 │  └─────────────┘    └─────────────┘                             │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -74,6 +74,7 @@ Line Platform
 | NAS 檔案搜尋 | 搜尋並發送 NAS 共享檔案（圖片直接發送） |
 | 媒體下載 | 從網路下載影片/音訊檔案到 NAS |
 | 逐字稿轉錄 | 將影片/音訊轉錄為逐字稿文字 |
+| 語音合成 | 文字轉語音（TTS），可設定群組自動語音觸發 |
 | 公開分享 | 建立知識庫/專案/檔案的公開連結分享給外部人員 |
 | 群組 Mention | 群組對話回覆時 @ 提及發問用戶，讓用戶收到通知 |
 | 回覆引用 | 回覆文字訊息時自動帶入被回覆的內容 |
@@ -83,54 +84,112 @@ Line Platform
 | Agent 切換 | /agent 指令切換對話使用的 AI Agent（僅管理員，支援群組和個人） |
 | 受限模式 Agent | /agent restricted 指令設定群組中未綁定用戶使用的 AI Agent |
 | 受限模式設定 | 未綁定用戶的歡迎訊息、綁定提示、頻率限制訊息等可自訂 |
+| 排程任務 | 管理定時推播、排程工作等自動化任務 |
+| 網頁瀏覽 | 透過 AI 瀏覽網頁擷取內容 |
+| 檔案庫歸檔 | 將 NAS 檔案歸檔至檔案庫（Library） |
 
 ## 資料表
 
-### line_groups
+### bot_groups
 群組資訊，可綁定專案。
 
 | 欄位 | 類型 | 說明 |
 |------|------|------|
 | id | UUID | 內部 ID |
-| line_group_id | VARCHAR(64) | Line 群組 ID |
+| platform_group_id | VARCHAR(64) | 平台群組 ID |
 | name | VARCHAR(256) | 群組名稱 |
+| picture_url | TEXT | 群組頭像 |
+| member_count | INTEGER | 成員數量 |
 | project_id | UUID | 綁定的專案 |
 | is_active | BOOLEAN | 是否使用中 |
+| allow_ai_response | BOOLEAN | 是否允許 AI 回應 |
+| platform_type | VARCHAR(20) | 平台類型（line/telegram） |
+| active_agent_id | UUID | 已綁定用戶的 Agent 偏好（FK → ai_agents） |
+| restricted_agent_id | UUID | 未綁定用戶的 Agent 偏好（FK → ai_agents） |
+| voice_settings | JSON | 語音合成設定 |
+| voice_auto_trigger | BOOLEAN | 是否自動觸發語音回應 |
 
-### line_users
+### bot_users
 用戶資訊。
 
 | 欄位 | 類型 | 說明 |
 |------|------|------|
 | id | UUID | 內部 ID |
-| line_user_id | VARCHAR(64) | Line 用戶 ID |
+| platform_user_id | VARCHAR(64) | 平台用戶 ID |
 | display_name | VARCHAR(256) | 顯示名稱 |
+| picture_url | TEXT | 用戶頭像 |
+| status_message | TEXT | 狀態訊息 |
+| language | VARCHAR(16) | 語言 |
 | user_id | INTEGER | 對應的系統用戶 |
+| is_friend | BOOLEAN | 是否為好友 |
+| conversation_reset_at | TIMESTAMPTZ | 對話重置時間 |
+| platform_type | VARCHAR(20) | 平台類型（line/telegram） |
+| active_agent_id | UUID | Agent 偏好（FK → ai_agents） |
+| restricted_agent_id | UUID | 受限模式 Agent 偏好（FK → ai_agents，預留） |
 
-### line_messages
+### bot_messages
 所有訊息記錄。
 
 | 欄位 | 類型 | 說明 |
 |------|------|------|
 | id | UUID | 內部 ID |
-| message_id | VARCHAR(64) | Line 訊息 ID |
-| line_user_id | UUID | 發送者 |
-| line_group_id | UUID | 群組（NULL=個人） |
+| message_id | VARCHAR(64) | 平台訊息 ID |
+| bot_user_id | UUID | 發送者（FK → bot_users） |
+| bot_group_id | UUID | 群組（NULL=個人，FK → bot_groups） |
 | message_type | VARCHAR(32) | 訊息類型 |
 | content | TEXT | 訊息內容 |
+| file_id | UUID | 關聯檔案（FK → bot_files） |
+| is_from_bot | BOOLEAN | 是否為 Bot 發送 |
 | ai_processed | BOOLEAN | 是否已 AI 處理 |
+| platform_type | VARCHAR(20) | 平台類型（line/telegram） |
 
-### line_files
+### bot_files
 檔案記錄。
 
 | 欄位 | 類型 | 說明 |
 |------|------|------|
 | id | UUID | 內部 ID |
-| message_id | UUID | 關聯訊息 |
+| message_id | UUID | 關聯訊息（FK → bot_messages） |
 | file_type | VARCHAR(32) | 檔案類型（image/file/video/audio） |
-| file_name | VARCHAR(256) | 原始檔名 |
-| file_size | BIGINT | 檔案大小 |
+| file_name | VARCHAR(512) | 原始檔名 |
+| file_size | INTEGER | 檔案大小 |
+| mime_type | VARCHAR(128) | MIME 類型 |
 | nas_path | TEXT | NAS 儲存路徑 |
+| thumbnail_path | TEXT | 縮圖路徑 |
+| duration | INTEGER | 媒體時長（秒） |
+| platform_type | VARCHAR(20) | 平台類型（line/telegram） |
+
+### bot_group_memories
+群組自訂記憶。
+
+| 欄位 | 類型 | 說明 |
+|------|------|------|
+| id | UUID | 內部 ID |
+| bot_group_id | UUID | 群組（FK → bot_groups） |
+| title | VARCHAR(128) | 記憶標題 |
+| content | TEXT | 記憶內容 |
+| is_active | BOOLEAN | 是否啟用 |
+
+### bot_user_memories
+用戶自訂記憶。
+
+| 欄位 | 類型 | 說明 |
+|------|------|------|
+| id | UUID | 內部 ID |
+| bot_user_id | UUID | 用戶（FK → bot_users） |
+| title | VARCHAR(128) | 記憶標題 |
+| content | TEXT | 記憶內容 |
+| is_active | BOOLEAN | 是否啟用 |
+
+### bot_usage_tracking
+未綁定用戶的使用量追蹤（頻率限制用）。
+
+| 欄位 | 類型 | 說明 |
+|------|------|------|
+| bot_user_id | UUID | 用戶（FK → bot_users） |
+| period_type | VARCHAR | 週期類型（hourly/daily） |
+| period_key | VARCHAR | 週期 key |
+| message_count | INTEGER | 訊息計數 |
 
 ## API 端點
 
@@ -152,7 +211,7 @@ DELETE /api/bot/groups/{group_id}/bind-project
 DELETE /api/bot/groups/{group_id}
 ```
 
-> **刪除群組**：刪除群組會級聯刪除相關訊息（`line_messages`）和檔案記錄（`line_files`），但 NAS 實體檔案不會被刪除。
+> **刪除群組**：刪除群組會級聯刪除相關訊息（`bot_messages`）和檔案記錄（`bot_files`），但 NAS 實體檔案不會被刪除。
 
 ### 用戶管理
 
@@ -300,6 +359,10 @@ AI 助理可使用的工具（完整列表見 [docs/mcp-server.md](mcp-server.md
 - `prepare_file_message` - 準備檔案訊息供回覆
 - `read_document` - 讀取文件內容（Word/Excel/PowerPoint/PDF）
 
+**NAS 檔案庫**
+- `list_library_folders` - 列出檔案庫資料夾
+- `archive_to_library` - 將 NAS 檔案歸檔至檔案庫
+
 **分享功能**
 - `create_share_link` - 建立公開分享連結（支援知識庫、專案、NAS 檔案）
 
@@ -319,6 +382,16 @@ AI 助理可使用的工具（完整列表見 [docs/mcp-server.md](mcp-server.md
 - `download_web_file` - 下載網路檔案到 NAS
 - `convert_pdf_to_images` - 將 PDF 轉為圖片
 - `send_nas_file` - 透過 Bot 發送 NAS 檔案
+
+**語音合成**
+- `text_to_speech` - 文字轉語音（TTS）
+
+**網頁瀏覽**
+- `browse_webpage` - 瀏覽網頁並擷取內容
+
+**排程任務**
+- `manage_scheduled_task` - 管理排程任務（建立、更新、刪除）
+- `list_scheduled_tasks` - 列出排程任務
 
 **AI 圖片生成**（需設定 nanobanana MCP Server，支援 Hugging Face FLUX 備用）
 - `mcp__nanobanana__generate_image` - 根據文字描述生成圖片
@@ -382,7 +455,7 @@ AI：（顯示生成的圖片）
 **編輯 AI 生成的圖片**
 ```
 用戶：（回覆 Bot 發送的圖片）把背景改成藍色
-AI：（查詢 line_files 取得原圖路徑）
+AI：（查詢 bot_files 取得原圖路徑）
 AI：（使用 edit_image 編輯圖片）
 AI：已修改背景顏色 👇
 AI：（顯示編輯後的圖片）
@@ -510,7 +583,7 @@ NAS/{linebot_path}/
 │       └── ...
 ```
 
-檔案路徑記錄在 `line_files.nas_path`，可透過 `get_message_attachments` 工具查詢。
+檔案路徑記錄在 `bot_files.nas_path`，可透過 `get_message_attachments` 工具查詢。
 
 ## 文件讀取
 
