@@ -228,6 +228,10 @@ GET /api/bot/messages?group_id=xxx&page=1&page_size=50
 
 ## AI 處理邏輯
 
+### 黑名單檢查
+
+受限模式最先執行黑名單檢查。`bot_users.is_blocked = true` 的用戶訊息靜默忽略，不進入任何後續流程。管理員可在 Bot 管理的「黑名單」tab 封鎖/解封用戶。
+
 ### Intent Guard（意圖守門員）
 
 在 AI 處理前，系統會進行意圖過濾（若 Agent 有啟用 `settings.intent_guard`）：

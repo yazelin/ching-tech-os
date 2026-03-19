@@ -33,14 +33,21 @@ ChingTech OS 是擎添工業內部使用的整合式工作平台，以 Web 技�
 | 專案管理 | 完成 | 專案、成員、會議、附件、連結、里程碑、發包期程管理、廠商主檔 |
 | 物料/庫存管理 | 完成 | 物料主檔（型號、存放庫位）、進出貨記錄、庫存查詢、盤點調整、低庫存警示、訂購記錄 |
 | 記憶管理 | 完成 | Line Bot 群組/個人自訂記憶、記憶啟用/停用 |
-| Line Bot | 完成 | 群組管理、訊息記錄、用戶綁定、AI 對話整合、MCP 工具、NAS 檔案搜尋與發送、AI 圖片生成（含 Hugging Face FLUX 備用）、文件讀取、群組 @ 提及回覆、回覆引用、自訂記憶、物料/庫存管理、簡報生成、MD2PPT/MD2DOC 文件轉換、統一斜線指令（/start、/help、/reset、/debug、/agent）、歡迎訊息（加好友時自動推送） |
+| Line Bot | 完成 | 群組管理、訊息記錄、用戶綁定、AI 對話整合、MCP 工具、NAS 檔案搜尋與發送、AI 圖片生成（含 Hugging Face FLUX 備用）、文件讀取、群組 @ 提及回覆、回覆引用、自訂記憶、物料/庫存管理、簡報生成、MD2PPT/MD2DOC 文件轉換、統一斜線指令（/start、/help、/reset、/debug、/agent）、歡迎訊息（加好友時自動推送）、Intent Guard 意圖過濾、月度 Token 上限、黑名單管理 |
 | Telegram Bot | 完成 | Telegram 私訊/群組 AI 對話、帳號綁定、圖片/檔案接收、回覆引用、與 Line Bot 共用 MCP 工具、AI Agent 和斜線指令 |
 | 訊息中心 | 完成 | 系統訊息、登入記錄追蹤、未讀狀態管理 |
 | 使用者管理 | 完成 | CTOS 本地帳號管理、建立/編輯/重設密碼/停用/啟用/刪除使用者、清除密碼恢復 NAS 認證、功能權限設定 |
 | 系統設定 | 完成 | 亮色/暗色主題切換、Bot 憑證管理 |
 | AI Skills | 完成 | base/file-manager（script-first）、影片/音訊下載（media-downloader）、逐字稿轉錄（media-transcription）、Hub 安裝（ClawHub/SkillHub）、Skill script fallback 策略、背景研究（research-skill + Brave Search） |
 
-## 近期架構更新（2026-02）
+## 近期架構更新（2026-03）
+
+- **Intent Guard（意圖守門員）**：輕量前置過濾機制，使用 Haiku 在主 Agent 之前快速判斷用戶意圖。支援 allow/reject/direct 三種判定，各產業模組可透過 Agent settings 自訂過濾規則。全域開關 `INTENT_GUARD_ENABLED` + Agent 級雙重控制。
+- **月度 Token 用量上限**：按用戶限制受限模式的月度 token 消耗（`monthly_token_limit`），防止單一用戶消耗整月預算。已綁定用戶記錄但不限制。
+- **黑名單機制**：管理員可在 Bot 管理介面手動封鎖/解封用戶。封鎖用戶的訊息靜默忽略，不進入 AI 處理。前端新增「黑名單」tab。
+- **GitHub + Asana MCP 整合**：Bot Agent 可直接操作 GitHub Issues/PR 和 Asana 看板任務。
+
+### 2026-02
 
 - **Bot 多模式平台**：未綁定用戶可選擇 `restricted` 模式（受限 AI 對話）或 `reject` 模式（拒絕並提示綁定），透過 `BOT_UNBOUND_USER_POLICY` 環境變數控制。受限模式支援頻率限制（`BOT_RATE_LIMIT_HOURLY` / `BOT_RATE_LIMIT_DAILY`）。所有面向用戶的文字（歡迎訊息、綁定提示、超限訊息、免責聲明、錯誤訊息）皆可透過 `bot-restricted` Agent 的 `settings` JSONB 欄位自訂，方便不同部署場景使用。
 - **統一斜線指令**：LINE 和 Telegram 共用 CommandRouter 框架，統一 `/start`、`/help`、`/reset`、`/debug`、`/agent` 指令。支援透過 `BOT_CMD_DISABLED` 環境變數停用特定指令。`/help` 動態列出可用指令（依平台、角色、啟用狀態過濾）。

@@ -203,6 +203,34 @@ BOT_UNBOUND_USER_POLICY = reject | restricted
 - 頻率限制未啟用時仍記錄使用量供統計分析
 - **Fail-open**：頻率限制檢查失敗時允許通過
 
+## 黑名單機制
+
+管理員可手動封鎖/解封未綁定用戶，封鎖用戶的訊息靜默忽略。
+
+### 資料欄位
+
+`bot_users` 表新增：`is_blocked`(bool)、`blocked_at`(timestamp)、`blocked_reason`(text)
+
+### 流程位置
+
+```
+用戶訊息 → 黑名單檢查 → Rate Limiter → Token 額度 → Intent Guard → 主 Agent
+               │
+               └── is_blocked=true → return None（靜默忽略）
+```
+
+### API
+
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| PATCH | `/api/bot/users/{id}/block` | 封鎖（body: `{"reason": "..."}` 可選） |
+| PATCH | `/api/bot/users/{id}/unblock` | 解封 |
+| GET | `/api/bot/users?blocked=true` | 列出被封鎖的用戶 |
+
+### 前端
+
+Bot 管理新增「黑名單」tab，用戶 tab 卡片新增封鎖按鈕。
+
 ## 月度 Token 用量上限
 
 按用戶限制受限模式的月度 token 用量，防止單一用戶消耗整月預算。

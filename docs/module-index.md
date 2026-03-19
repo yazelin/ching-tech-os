@@ -340,6 +340,13 @@ services/scheduler.py      ← APScheduler 任務定義
    - `services/bot/identity_router.py`（`handle_restricted_mode` 支援動態 Agent）
 3. settings（rate_limit、disclaimer 等）始終從 `bot-restricted` 讀取，AI prompt/tools/model 從實際選用的 Agent 讀取
 
+### 「封鎖/解封 Bot 用戶」
+1. 前端 Bot 管理 →「用戶」tab → 點擊封鎖按鈕
+2. 或「黑名單」tab → 解除封鎖
+3. API：`PATCH /api/bot/users/{id}/block` / `/unblock`
+4. 後端邏輯：`services/bot_line/admin.py`（`block_user`、`unblock_user`、`is_user_blocked`）
+5. 攔截點：`services/bot/identity_router.py` 開頭檢查 `is_blocked`
+
 ### 「設定 Intent Guard 意圖過濾」
 1. 在「AI 管理」中找到目標 Agent，編輯 `settings` JSONB
 2. 加入 `intent_guard` 物件（含 `enabled`、`allowed_topics`、`blocked_topics`、`reject_message` 等）
