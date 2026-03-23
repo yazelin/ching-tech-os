@@ -147,6 +147,46 @@ async def test_notify_push_exception_is_silent(monkeypatch: pytest.MonkeyPatch) 
     await svc.notify_job_complete("line", "U123", False, None, "msg")  # 不應拋例外
 
 
+# ── _push_line ────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_push_line_error_logged() -> None:
+    """push_text 回傳錯誤時記錄 warning"""
+    with patch(
+        "ching_tech_os.services.bot_line.messaging.push_text",
+        AsyncMock(return_value=(None, "額度已滿")),
+    ):
+        await svc._push_line("U123", "test")  # 不應拋例外
+
+
+@pytest.mark.asyncio
+async def test_push_line_success() -> None:
+    """push_text 成功"""
+    with patch(
+        "ching_tech_os.services.bot_line.messaging.push_text",
+        AsyncMock(return_value=("msg-1", None)),
+    ):
+        await svc._push_line("U123", "test")  # 不應拋例外
+
+
+# ── _push_telegram with token ────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_push_telegram_with_token() -> None:
+    """有 token 時建立 adapter 並發送"""
+    with patch(
+        "ching_tech_os.services.bot_settings.get_bot_credentials",
+        AsyncMock(return_value={"bot_token": "fake-token"}),
+    ):
+        with patch(
+            "ching_tech_os.services.bot_telegram.adapter.TelegramBotAdapter",
+        ) as MockAdapter:
+            mock_instance = AsyncMock()
+            MockAdapter.return_value = mock_instance
+            await svc._push_telegram("chat123", "msg")
+            mock_instance.send_text.assert_awaited_once()
+
+
 # ── _push_telegram ───────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio

@@ -22,6 +22,34 @@ body
     assert body == "body"
 
 
+def test_parse_skill_md_app_not_dict() -> None:
+    """contributes.app 不是 dict 時應被忽略"""
+    text = """---
+name: demo
+contributes:
+  app: "not-a-dict"
+---
+
+body
+"""
+    config, _ = parse_skill_md(text, skill_name="demo")
+    assert "app" not in config["contributes"]
+
+
+def test_parse_skill_md_frontmatter_not_dict() -> None:
+    """frontmatter 解析為非 dict 時重置為空"""
+    text = """---
+- item1
+- item2
+---
+
+body
+"""
+    config, body = parse_skill_md(text, skill_name="test")
+    assert config == {}
+    assert body == "body"
+
+
 def test_parse_skill_md_drops_invalid_contributes_app() -> None:
     text = """---
 name: demo

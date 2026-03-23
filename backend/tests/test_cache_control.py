@@ -68,6 +68,18 @@ def _create_app(*, preset_cache_control: str | None = None) -> FastAPI:
     async def health():
         return JSONResponse({"status": "healthy"})
 
+    @test_app.get("/fonts/inter.woff2")
+    async def font():
+        return PlainTextResponse("font data")
+
+    @test_app.get("/css/main.css")
+    async def css():
+        return PlainTextResponse("body {}")
+
+    @test_app.get("/some/other/path")
+    async def other():
+        return PlainTextResponse("other")
+
     @test_app.get("/api/preset")
     async def preset():
         """模擬已設定 cache-control 的端點"""
@@ -195,3 +207,31 @@ async def test_existing_cache_control_not_overridden():
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         resp = await c.get("/api/preset")
         assert resp.headers["cache-control"] == "public, max-age=3600"
+
+
+# === 靜態資源（不可變快取）===
+
+@pytest.mark.asyncio
+async def test_immutable_font():
+    """字型檔應為不可變長期快取"""
+    resp = await _get("/fonts/inter.woff2")
+    assert "immutable" in resp.headers["cache-control"]
+    assert "31536000" in resp.headers["cache-control"]
+
+
+# === JS/CSS 快取（每次驗證 ETag）===
+
+@pytest.mark.asyncio
+async def test_css_revalidate():
+    """CSS 檔應為 no-cache（每次驗證）"""
+    resp = await _get("/css/main.css")
+    assert resp.headers["cache-control"] == "no-cache"
+
+
+# === 其他路徑（無 cache-control）===
+
+@pytest.mark.asyncio
+async def test_other_path_no_cache_header():
+    """非 API 且非靜態的路徑不設定 cache-control"""
+    resp = await _get("/some/other/path")
+    assert "cache-control" not in resp.headers
