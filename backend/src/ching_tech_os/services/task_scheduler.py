@@ -328,30 +328,44 @@ async def _execute_agent_task(task_name: str, config: dict, fallback_user_id: in
 
 
 async def _execute_skill_script_task(task_name: str, config: dict, fallback_user_id: int | None = None) -> None:
-    """執行 Skill Script 模式排程"""
-    from .mcp.skill_script_tools import run_skill_script
+    """執行 Skill Script 模式排程（系統權限，跳過使用者權限檢查）"""
+    from ..skills import get_skill_manager
+    from ..skills.script_runner import ScriptRunner
 
     skill = config["skill"]
     script = config["script"]
     input_data = config.get("input", "")
-    ctos_user_id = config.get("ctos_user_id") or fallback_user_id
 
-    result = await run_skill_script(
-        skill=skill,
-        script=script,
-        input=input_data,
-        ctos_user_id=ctos_user_id,
+    sm = get_skill_manager()
+
+    # 驗證 skill 和 script 存在
+    skill_obj = await sm.get_skill(skill)
+    if not skill_obj:
+        raise RuntimeError(f"Skill not found: {skill}")
+    if not await sm.has_scripts(skill):
+        raise RuntimeError(f"Skill '{skill}' has no scripts")
+    script_path = await sm.get_script_path(skill, script)
+    if not script_path:
+        raise RuntimeError(f"Script not found: {skill}/{script}")
+
+    skill_dir = await sm.get_skill_dir(skill)
+    if not skill_dir:
+        raise RuntimeError(f"Skill directory not found: {skill}")
+
+    # 取得環境變數覆寫
+    env_overrides = sm.get_skill_env_overrides(skill_obj)
+
+    # 排程任務 = 系統行為，直接執行不檢查使用者權限
+    runner = ScriptRunner(skill_dir.parent)
+    result = await runner.execute_path(
+        script_path, skill, input=input_data, env_overrides=env_overrides
     )
 
-    # run_skill_script 回傳 JSON 字串
-    import json
-
-    try:
-        parsed = json.loads(result)
-        if isinstance(parsed, dict) and not parsed.get("success", True):
-            raise RuntimeError(f"Skill Script 執行失敗: {parsed.get('error', result)}")
-    except (json.JSONDecodeError, TypeError):
-        pass  # 非 JSON 回傳視為成功
+    # execute_path 回傳 dict: {success, output, error, duration_ms}
+    if not result.get("success", False):
+        raise RuntimeError(
+            f"Skill Script 執行失敗: {result.get('error', result.get('output', ''))}"
+        )
 
 
 async def _execute_dynamic_task_wrapper(task_id: UUID) -> None:
