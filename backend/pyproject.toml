@@ -46,6 +46,9 @@ dependencies = [
     "faster-whisper>=1.0.0",
     "opencc-python-reimplemented>=0.1.7",
     "dbfread>=2.0.7",
+    "onvif-zeep>=0.2.12",
+    "python-dvr>=0.0.1",
+    "openai-whisper>=20250625",
 ]
 
 [project.optional-dependencies]

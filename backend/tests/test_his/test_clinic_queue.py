@@ -32,10 +32,11 @@ class TestGetQueueStatus:
         for item in queues:
             assert "period_id" in item
             assert "doctor_name" in item
+            assert "seen" in item
             assert "completed" in item
             assert "total" in item
-            assert item["completed"] >= 0
-            assert item["total"] >= item["completed"]
+            assert item["seen"] >= item["completed"]
+            assert item["total"] >= item["seen"]
 
     @pytest.mark.asyncio
     async def test_no_data_date(self, dbf_data_path):
