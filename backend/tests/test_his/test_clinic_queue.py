@@ -24,9 +24,12 @@ class TestGetQueueStatus:
             target_date=date(2026, 2, 28),
             dbf_base_path=str(dbf_data_path),
         )
-        assert isinstance(result, list)
-        assert len(result) > 0
-        for item in result:
+        assert isinstance(result, dict)
+        assert result["actual_date"] == date(2026, 2, 28)
+        assert result["is_fallback"] is False
+        queues = result["queues"]
+        assert len(queues) > 0
+        for item in queues:
             assert "period_id" in item
             assert "doctor_name" in item
             assert "completed" in item
@@ -36,12 +39,12 @@ class TestGetQueueStatus:
 
     @pytest.mark.asyncio
     async def test_no_data_date(self, dbf_data_path):
-        """無看診資料的日期"""
+        """無看診資料的日期（含前一天也沒資料）"""
         result = await get_queue_status(
             target_date=date(2020, 1, 1),
             dbf_base_path=str(dbf_data_path),
         )
-        assert result == []
+        assert result["queues"] == []
 
     @pytest.mark.asyncio
     async def test_multiple_periods(self, dbf_data_path):
@@ -50,7 +53,7 @@ class TestGetQueueStatus:
             target_date=date(2026, 2, 28),
             dbf_base_path=str(dbf_data_path),
         )
-        period_ids = [r["period_id"] for r in result]
+        period_ids = [r["period_id"] for r in result["queues"]]
         # 應該有 "15"（上午）和 "03"（下午）
         assert "15" in period_ids
         assert "03" in period_ids
