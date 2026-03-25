@@ -1,0 +1,7 @@
+module_id: nvr
+
+routers:
+  - module: api.nvr_snapshot
+    attr: router
+    kwargs:
+      prefix: /api/nvr
