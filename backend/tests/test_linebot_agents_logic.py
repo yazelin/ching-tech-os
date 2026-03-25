@@ -102,7 +102,11 @@ class TestAgentConstants:
     """測試 Agent 名稱常數"""
 
     def test_personal_agent_name(self):
-        assert AGENT_LINEBOT_PERSONAL == "linebot-personal"
+        # 值由 BOT_DEFAULT_PERSONAL_AGENT 環境變數決定，預設 linebot-personal
+        assert isinstance(AGENT_LINEBOT_PERSONAL, str)
+        assert len(AGENT_LINEBOT_PERSONAL) > 0
 
     def test_group_agent_name(self):
-        assert AGENT_LINEBOT_GROUP == "linebot-group"
+        # 值由 BOT_DEFAULT_GROUP_AGENT 環境變數決定，預設 linebot-group
+        assert isinstance(AGENT_LINEBOT_GROUP, str)
+        assert len(AGENT_LINEBOT_GROUP) > 0

@@ -367,7 +367,7 @@ async def test_process_message_with_ai_agent_not_found(monkeypatch: pytest.Monke
         line_user_id="U1",
         reply_token="r1",
     )
-    assert result is not None and "Agent 'linebot-personal' 不存在" in result
+    assert result is not None and "不存在" in result
     reply_text.assert_awaited_once()
 
 

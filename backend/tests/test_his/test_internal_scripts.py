@@ -29,9 +29,12 @@ def _run_script(name: str, input_data: dict | None = None) -> str:
     assert script_path.exists(), f"Script 不存在: {script_path}"
 
     env = os.environ.copy()
-    # 確保 CTHIS_DATA_PATH 有設定
-    if "CTHIS_DATA_PATH" not in env:
-        env["CTHIS_DATA_PATH"] = "/mnt/nas/ctos/external-data/cthis-jfmskin/data"
+    # 使用測試專用路徑（獨立於 .env 的正式路徑）
+    test_data = os.environ.get(
+        "CTHIS_TEST_DATA_PATH",
+        "/mnt/nas/ctos/external-data/cthis-jfmskin/data",
+    )
+    env["CTHIS_DATA_PATH"] = test_data
 
     stdin_data = json.dumps(input_data) if input_data else ""
     result = subprocess.run(
