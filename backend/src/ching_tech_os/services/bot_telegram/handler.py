@@ -346,6 +346,8 @@ async def handle_update(update: Update, adapter: TelegramBotAdapter) -> None:
         msg_type = "image"
     elif message.voice or message.audio or message.video_note:
         msg_type = "audio"
+    elif message.video:
+        msg_type = "video"
     elif message.document:
         msg_type = "file"
     elif message.text:
@@ -377,8 +379,8 @@ async def handle_update(update: Update, adapter: TelegramBotAdapter) -> None:
                     and message.reply_to_message.from_user.is_bot):
                 return
         await _handle_voice(message, chat_id, chat, user, is_group, adapter)
-    elif msg_type in ("image", "file"):
-        # 圖片和檔案：群組中需要回覆 Bot 訊息才觸發
+    elif msg_type in ("image", "video", "file"):
+        # 圖片、影片和檔案：群組中需要回覆 Bot 訊息才觸發
         if is_group:
             if not (message.reply_to_message and message.reply_to_message.from_user
                     and message.reply_to_message.from_user.is_bot):
@@ -698,6 +700,10 @@ async def _handle_media(
         nas_path = await download_telegram_photo(
             adapter.bot, message, message_uuid, chat_id, is_group
         )
+    elif msg_type == "video":
+        nas_path = await download_telegram_document(
+            adapter.bot, message, message_uuid, chat_id, is_group
+        )
     elif msg_type == "file":
         nas_path = await download_telegram_document(
             adapter.bot, message, message_uuid, chat_id, is_group
@@ -722,6 +728,13 @@ async def _handle_media(
         else:
             await adapter.send_text(chat_id, "圖片處理失敗。")
             return
+    elif msg_type == "video":
+        # 影片：告知 AI 檔案存放位置
+        video_obj = message.video
+        duration_info = f"，長度約 {video_obj.duration} 秒" if video_obj and video_obj.duration else ""
+        ai_prompt = f"[上傳影片: NAS 路徑 {nas_path}{duration_info}]"
+        if caption:
+            ai_prompt += f"\nuser: {caption}"
     else:
         from ..bot_line import ensure_temp_file
         from ..bot.media import is_readable_file

@@ -1369,8 +1369,8 @@ async def get_conversation_context(
                 LEFT JOIN bot_files f ON f.message_id = m.id
                 WHERE m.bot_group_id = $1
                   AND ($3::uuid IS NULL OR m.id != $3)
-                  AND m.message_type IN ('text', 'image', 'file', 'audio')
-                  AND (m.content IS NOT NULL OR m.message_type IN ('image', 'file', 'audio'))
+                  AND m.message_type IN ('text', 'image', 'video', 'file', 'audio')
+                  AND (m.content IS NOT NULL OR m.message_type IN ('image', 'video', 'file', 'audio'))
                 ORDER BY m.created_at DESC
                 LIMIT $2
                 """,
@@ -1391,8 +1391,8 @@ async def get_conversation_context(
                 WHERE u.platform_user_id = $1
                   AND ($3::uuid IS NULL OR m.id != $3)
                   AND m.bot_group_id IS NULL
-                  AND m.message_type IN ('text', 'image', 'file', 'audio')
-                  AND (m.content IS NOT NULL OR m.message_type IN ('image', 'file', 'audio'))
+                  AND m.message_type IN ('text', 'image', 'video', 'file', 'audio')
+                  AND (m.content IS NOT NULL OR m.message_type IN ('image', 'video', 'file', 'audio'))
                   AND (
                     u.conversation_reset_at IS NULL
                     OR m.created_at > u.conversation_reset_at
@@ -1502,6 +1502,14 @@ async def get_conversation_context(
                         content = f"[上傳檔案: {file_name}（不支援舊版格式，請轉存為 .docx/.xlsx/.pptx）]"
                     else:
                         content = f"[上傳檔案: {file_name}（無法讀取此類型）]"
+            elif row["message_type"] == "video":
+                # 影片訊息：顯示 NAS 路徑（content 已在上傳時回寫）
+                if row["content"]:
+                    content = row["content"]
+                elif row["nas_path"]:
+                    content = f"[上傳影片: NAS 路徑 {row['nas_path']}]"
+                else:
+                    content = "[上傳影片：檔案路徑不明]"
             elif row["message_type"] == "audio":
                 # 語音訊息：有轉錄文字就顯示，沒有就標記辨識失敗
                 if row["content"]:

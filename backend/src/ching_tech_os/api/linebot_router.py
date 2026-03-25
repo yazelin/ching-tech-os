@@ -259,6 +259,22 @@ async def process_message_event(event: MessageEvent) -> None:
             duration=duration,
         )
 
+    # 影片訊息：將 NAS 路徑寫入 content，讓 AI 知道檔案存放位置
+    if message_type == "video" and nas_path:
+        duration_info = f"，長度約 {duration // 1000} 秒" if duration else ""
+        content = f"[上傳影片: NAS 路徑 {nas_path}{duration_info}]"
+        message_type = "text"  # 讓後續走 AI 流程
+        # 回寫到資料庫（對話歷史可查）
+        try:
+            from ..database import get_connection
+            async with get_connection() as conn:
+                await conn.execute(
+                    "UPDATE bot_messages SET content = $1 WHERE id = $2",
+                    content, message_uuid,
+                )
+        except Exception as e:
+            logger.warning("回寫影片資訊失敗: %s", e)
+
     # 語音訊息：STT 轉錄後走文字 AI 流程
     if message_type == "audio" and nas_path:
         from ..services.bot.voice_bridge import get_voice_stt, get_voice_tts
