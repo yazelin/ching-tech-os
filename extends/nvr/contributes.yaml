@@ -5,3 +5,7 @@ routers:
     attr: router
     kwargs:
       prefix: /api/nvr
+  - module: api.nvr_status
+    attr: router
+    kwargs:
+      prefix: /api/nvr

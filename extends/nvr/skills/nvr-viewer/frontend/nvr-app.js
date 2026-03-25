@@ -5,12 +5,56 @@ window.NVRViewerApp = (function () {
   'use strict';
 
   var TOTAL_CHANNELS = 16;
-  var REFRESH_INTERVAL = 2000;
+  var REFRESH_INTERVAL = 3000; // 3 秒刷新（降低 NVR 負擔）
   var API_BASE = window.API_BASE || '';
 
   var windowId = null;
   var refreshTimer = null;
   var selectedChannel = null;
+  var recordingChannels = {}; // {channel: {recording, seconds, since}}
+
+  function recDot(channel) {
+    var info = recordingChannels[channel];
+    if (info && info.recording) {
+      var sec = Math.round(info.seconds || 0);
+      return '<span class="nvr-rec-dot" title="錄製中 ' + sec + '秒">⏺</span> ';
+    }
+    return '';
+  }
+
+  function fetchRecordingStatus() {
+    var headers = {};
+    var token = (typeof LoginModule !== 'undefined' && LoginModule.getToken && LoginModule.getToken()) || localStorage.getItem('chingtech_token');
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+
+    fetch(API_BASE + '/api/nvr/recording-status', { headers: headers })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data && data.channels) {
+          data.channels.forEach(function (ch) {
+            recordingChannels[ch.channel] = ch;
+          });
+          // 更新畫面上的錄製指示（不重建整個 DOM）
+          var container = document.getElementById('nvr-content');
+          if (container) {
+            container.querySelectorAll('.nvr-cell').forEach(function (cell) {
+              var chNum = parseInt(cell.getAttribute('data-channel'));
+              var label = cell.querySelector('.nvr-cell-label');
+              if (label) {
+                var info = recordingChannels[chNum];
+                var chLabel = 'CH' + (chNum < 10 ? '0' : '') + chNum;
+                if (info && info.recording) {
+                  label.innerHTML = '<span class="nvr-rec-dot">⏺</span> ' + chLabel;
+                } else {
+                  label.textContent = chLabel;
+                }
+              }
+            });
+          }
+        }
+      })
+      .catch(function () {});
+  }
 
   function getSnapshotUrl(channel) {
     return API_BASE + '/api/nvr/snapshot/' + channel + '?t=' + Date.now();
@@ -47,13 +91,13 @@ window.NVRViewerApp = (function () {
       for (var ch = 1; ch <= TOTAL_CHANNELS; ch++) {
         html += '<div class="nvr-cell" data-channel="' + ch + '">' +
           '<img src="' + getSnapshotUrl(ch) + '" alt="CH' + (ch < 10 ? '0' : '') + ch + '" onerror="this.style.display=\'none\'">' +
-          '<div class="nvr-cell-label">CH' + (ch < 10 ? '0' : '') + ch + '</div>' +
+          '<div class="nvr-cell-label">' + recDot(ch) + 'CH' + (ch < 10 ? '0' : '') + ch + '</div>' +
           '</div>';
       }
     } else {
       html += '<div class="nvr-cell" data-channel="' + selectedChannel + '">' +
         '<img src="' + getSnapshotUrl(selectedChannel) + '" alt="CH' + (selectedChannel < 10 ? '0' : '') + selectedChannel + '">' +
-        '<div class="nvr-cell-label">CH' + (selectedChannel < 10 ? '0' : '') + selectedChannel + '</div>' +
+        '<div class="nvr-cell-label">' + recDot(selectedChannel) + 'CH' + (selectedChannel < 10 ? '0' : '') + selectedChannel + '</div>' +
         '</div>';
     }
 
@@ -120,7 +164,11 @@ window.NVRViewerApp = (function () {
 
   function startRefresh() {
     stopRefresh();
-    refreshTimer = setInterval(refreshImages, REFRESH_INTERVAL);
+    refreshTimer = setInterval(function () {
+      refreshImages();
+      fetchRecordingStatus();
+    }, REFRESH_INTERVAL);
+    fetchRecordingStatus(); // 立即拉一次
   }
 
   function stopRefresh() {

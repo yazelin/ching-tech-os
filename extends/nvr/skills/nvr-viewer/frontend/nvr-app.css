@@ -114,3 +114,14 @@
   background: var(--color-success);
   margin-right: 4px;
 }
+
+.nvr-rec-dot {
+  color: #ff3333;
+  animation: nvr-blink 1s infinite;
+  font-size: 10px;
+}
+
+@keyframes nvr-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
