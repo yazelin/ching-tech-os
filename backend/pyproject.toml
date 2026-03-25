@@ -49,6 +49,7 @@ dependencies = [
     "onvif-zeep>=0.2.12",
     "python-dvr>=0.0.1",
     "openai-whisper>=20250625",
+    "silero-vad>=6.2.1",
 ]
 
 [project.optional-dependencies]
