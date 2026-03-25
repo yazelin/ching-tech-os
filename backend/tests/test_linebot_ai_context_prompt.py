@@ -68,15 +68,15 @@ async def test_get_conversation_context_group_branches(monkeypatch: pytest.Monke
     )
 
     joined = "\n".join((item["content"] or "") for item in context)
-    assert "[上傳圖片（最近）: /tmp/img_latest.jpg]" in joined
-    assert "[圖片暫存已過期" in joined
-    assert "[上傳 PDF（最近）: /tmp/report.pdf（文字版: /tmp/report.txt）]" in joined
-    assert "[上傳 PDF: /tmp/scan.pdf（純圖片，無文字）]" in joined
-    assert "[上傳檔案: /tmp/a.txt]" in joined
+    assert "[上傳圖片（最近）: /tmp/img_latest.jpg（NAS: nas/img_latest.jpg）]" in joined
+    assert "圖片暫存已過期" in joined and "NAS 路徑: nas/img_old.jpg" in joined
+    assert "上傳 PDF（最近）: /tmp/report.pdf（文字版: /tmp/report.txt" in joined and "NAS: nas/report.pdf" in joined
+    assert "上傳 PDF: /tmp/scan.pdf（純圖片，無文字" in joined and "NAS: nas/scan.pdf" in joined
+    assert "[上傳檔案: /tmp/a.txt（NAS: nas/a.txt）]" in joined
     assert "big.txt" in joined and "過大無法讀取內容" in joined and "NAS 路徑: nas/big.txt" in joined
-    assert "gone.txt 暫存已過期" in joined
-    assert "legacy.doc（不支援舊版格式" in joined
-    assert "video.mp4（無法讀取此類型）" in joined
+    assert "gone.txt 暫存已過期" in joined and "NAS 路徑: nas/gone.txt" in joined
+    assert "legacy.doc（不支援舊版格式" in joined and "NAS: nas/legacy.doc" in joined
+    assert "video.mp4（無法直接讀取" in joined and "NAS: nas/video.mp4" in joined
     assert any(item["role"] == "assistant" and item["content"] == "bot text" for item in context)
     assert any(item["sender"] == "小美" for item in context if item["content"] == "user text")
     assert len(images) == 1 and images[0]["line_message_id"] == "img_latest"

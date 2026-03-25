@@ -187,7 +187,18 @@ BASE_TOOLS_PROMPT = """【對話附件管理】
    - 內容主要是 JavaScript 程式碼或 <script> 標籤，缺乏實際文字
    - 包含 __next、__nuxt、React、Vue 等 SPA 框架標記但無實質內容
    - 你判斷回傳的內容明顯不是完整的網頁內容
-3. 用戶明確要求「用瀏覽器開」時，直接使用 browse_webpage，跳過 WebFetch"""
+3. 用戶明確要求「用瀏覽器開」時，直接使用 browse_webpage，跳過 WebFetch
+
+⚠️ 網路 PDF/文件處理（必須遵守）：
+WebFetch 無法讀取 PDF 等二進位檔案（會拿到亂碼）。遇到網路上的 PDF 時：
+1. 用 download_web_file 下載到本地
+2. 用 read_document 讀取內容（或 convert_pdf_to_images 轉圖片）
+絕對不要用 WebFetch 直接讀取 .pdf URL，一定會失敗。
+
+⚠️ NAS 路徑格式：
+對話歷史中的 NAS 路徑格式為 `users/xxx/...` 或 `groups/xxx/...`。
+使用 MCP 工具時需加前綴 `ctos://linebot/files/`，完整格式為：
+`ctos://linebot/files/{nas_path}`"""
 
 # AI 文件生成工具說明（對應 app: ai-assistant）
 AI_DOCUMENT_TOOLS_PROMPT = """【AI 文件/簡報生成】
@@ -385,6 +396,8 @@ async def _generate_script_tools_prompt(
         skills = await sm.get_skills_for_user(app_permissions, role=role)
 
         lines = []
+        # 收集被 script 取代的 MCP 工具名稱（用於提示）
+        replaced_tools: list[str] = []
         for skill in skills:
             if not skill.scripts:
                 continue
@@ -401,14 +414,30 @@ async def _generate_script_tools_prompt(
                 f'script="<script_name>", input="...")'
             )
 
+            # 取得 fallback 對應，記錄被取代的工具
+            fallback_map = await sm.get_script_fallback_map(skill.name)
+            for tool_name in fallback_map.values():
+                replaced_tools.append(tool_name)
+
         if not lines:
             return ""
 
-        return (
+        header = (
             "【Script Tools】\n"
             "以下 skill 提供可執行的 script，使用 run_skill_script 工具呼叫："
-            + "\n".join(lines)
         )
+
+        # 加入被取代工具的說明，避免 AI 誤以為工具不可用
+        if replaced_tools:
+            replaced_list = "、".join(f"`{t}`" for t in replaced_tools)
+            header += (
+                f"\n\n⚠️ 注意：{replaced_list} 等功能已整合至 Script Tools，"
+                "請透過 run_skill_script 呼叫，不要直接搜尋這些工具名稱。"
+                "其他工具（如知識庫的 add_note、add_note_with_attachments、"
+                "search_knowledge 等）仍可直接使用，未受影響。"
+            )
+
+        return header + "\n".join(lines)
     except (OSError, ValueError, RuntimeError) as e:
         logger.warning(f"生成 Script Tools prompt 失敗: {e}")
         return ""
@@ -451,6 +480,12 @@ def generate_usage_tips_prompt(
 
     if not tips:
         return ""
+
+    # ToolSearch 使用指引（有工具才加）
+    tips.append(
+        f"{len(tips)+1}. 使用 ToolSearch 時，用 select: 語法精準取得工具（如 `select:mcp__ching-tech-os__search_knowledge`），"
+        "避免模糊搜尋浪費呼叫次數"
+    )
 
     return "使用工具的流程：\n" + "\n".join(tips)
 

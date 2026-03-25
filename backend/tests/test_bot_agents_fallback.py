@@ -87,11 +87,19 @@ async def test_generate_script_tools_prompt_paths(monkeypatch: pytest.MonkeyPatc
                 return []
             return [{"name": "run", "description": None}]
 
+        async def get_script_fallback_map(self, skill_name: str):
+            if skill_name == "runner":
+                return {"run": "some_mcp_tool"}
+            return {}
+
     monkeypatch.setattr(bot_agents, "get_skill_manager", lambda: _SM())
     prompt = await bot_agents._generate_script_tools_prompt({})
     assert "runner" in prompt
     assert 'run_skill_script(skill="runner"' in prompt
     assert "執行 runner 的腳本 run" in prompt
+    # 確認有被取代工具的提示說明
+    assert "some_mcp_tool" in prompt
+    assert "run_skill_script" in prompt
 
 
 @pytest.mark.asyncio

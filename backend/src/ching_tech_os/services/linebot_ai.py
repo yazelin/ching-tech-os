@@ -1437,19 +1437,20 @@ async def get_conversation_context(
                     row["line_message_id"], row["nas_path"]
                 )
                 if temp_path:
-                    # 暫存成功，標記最新的圖片
+                    # 暫存成功，標記最新的圖片，附上 NAS 路徑
+                    nas_info = f"（NAS: {row['nas_path']}）"
                     if row["line_message_id"] == latest_image_id:
-                        content = f"[上傳圖片（最近）: {temp_path}]"
+                        content = f"[上傳圖片（最近）: {temp_path}{nas_info}]"
                     else:
-                        content = f"[上傳圖片: {temp_path}]"
+                        content = f"[上傳圖片: {temp_path}{nas_info}]"
                     # 記錄圖片資訊（暫存成功才加入）
                     images.append({
                         "line_message_id": row["line_message_id"],
                         "nas_path": row["nas_path"],
                     })
                 else:
-                    # 暫存失敗，提示使用 MCP 工具
-                    content = "[圖片暫存已過期，若要加入知識庫請使用 get_message_attachments]"
+                    # 暫存失敗，提供 NAS 路徑
+                    content = f"[圖片暫存已過期，NAS 路徑: {row['nas_path']}]"
             elif row["message_type"] == "file" and row["nas_path"]:
                 # 檔案訊息：根據是否可讀取決定顯示方式
                 file_name = row["file_name"] or "unknown"
@@ -1473,18 +1474,19 @@ async def get_conversation_context(
                             pdf_path, txt_path = parse_pdf_temp_path(temp_path)
                             is_recent = row["line_message_id"] == latest_file_id
 
+                            nas_info = f"，NAS: {row['nas_path']}"
                             if pdf_path != temp_path:
                                 # 是 PDF 特殊格式
                                 if txt_path:
                                     prefix = "上傳 PDF（最近）" if is_recent else "上傳 PDF"
-                                    content = f"[{prefix}: {pdf_path}（文字版: {txt_path}）]"
+                                    content = f"[{prefix}: {pdf_path}（文字版: {txt_path}{nas_info}）]"
                                 else:
                                     prefix = "上傳 PDF（最近）" if is_recent else "上傳 PDF"
-                                    content = f"[{prefix}: {pdf_path}（純圖片，無文字）]"
+                                    content = f"[{prefix}: {pdf_path}（純圖片，無文字{nas_info}）]"
                             else:
                                 # 一般檔案
                                 prefix = "上傳檔案（最近）" if is_recent else "上傳檔案"
-                                content = f"[{prefix}: {temp_path}]"
+                                content = f"[{prefix}: {temp_path}（NAS: {row['nas_path']}）]"
                             # 記錄檔案資訊（暫存成功才加入）
                             files.append({
                                 "line_message_id": row["line_message_id"],
@@ -1493,15 +1495,14 @@ async def get_conversation_context(
                                 "file_size": file_size,
                             })
                         else:
-                            # 暫存失敗
-                            content = f"[檔案 {file_name} 暫存已過期，若要加入知識庫請使用 get_message_attachments]"
+                            # 暫存失敗，提供 NAS 路徑
+                            content = f"[檔案 {file_name} 暫存已過期，NAS 路徑: {row['nas_path']}]"
                 else:
                     # 不可讀取的檔案類型
                     if is_legacy_office_file(file_name):
-                        # 舊版 Office 格式，提示轉檔
-                        content = f"[上傳檔案: {file_name}（不支援舊版格式，請轉存為 .docx/.xlsx/.pptx）]"
+                        content = f"[上傳檔案: {file_name}（不支援舊版格式，NAS: {row['nas_path']}）]"
                     else:
-                        content = f"[上傳檔案: {file_name}（無法讀取此類型）]"
+                        content = f"[上傳檔案: {file_name}（無法直接讀取，NAS: {row['nas_path']}）]"
             elif row["message_type"] == "video":
                 # 影片訊息：顯示 NAS 路徑（content 已在上傳時回寫）
                 if row["content"]:
