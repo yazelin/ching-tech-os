@@ -262,7 +262,7 @@ async def process_message_event(event: MessageEvent) -> None:
     # 影片訊息：將 NAS 路徑寫入 content，讓 AI 知道檔案存放位置
     if message_type == "video" and nas_path:
         duration_info = f"，長度約 {duration // 1000} 秒" if duration else ""
-        content = f"[上傳影片: NAS 路徑 {nas_path}{duration_info}]"
+        content = f"[上傳影片: NAS 路徑 {nas_path}{duration_info}。請詢問使用者要轉逐字稿還是存檔，不要自動執行]"
         message_type = "text"  # 讓後續走 AI 流程
         # 回寫到資料庫（對話歷史可查）
         try:
