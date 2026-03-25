@@ -4,11 +4,15 @@
 """
 
 import asyncio
+import os
 from dataclasses import dataclass
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID, uuid4
 
 import pytest
+
+# 測試環境固定啟用所有模組，避免測試結果受 .env 的 ENABLED_MODULES 影響
+os.environ.setdefault("ENABLED_MODULES", "*")
 
 
 # pytest-asyncio 設定

@@ -17,14 +17,14 @@ metadata:
     app:
       id: nvr-viewer
       name: 監控畫面
-      icon: mdi-cctv
+      icon: video
       loader:
         src: frontend/nvr-app.js
         globalName: NVRViewerApp
       css: frontend/nvr-app.css
     permissions:
       nvr-viewer:
-        default: false
+        default: true
         display_name: 監控畫面
     api_routes:
       - module: api.nvr_snapshot

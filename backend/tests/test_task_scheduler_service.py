@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 from types import SimpleNamespace
 from collections import OrderedDict
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -285,11 +286,20 @@ async def test_execute_skill_script_task_success(monkeypatch: pytest.MonkeyPatch
         AsyncMock(),
     )
 
-    with patch("ching_tech_os.services.task_scheduler.get_connection"):
-        monkeypatch.setattr(
-            "ching_tech_os.services.mcp.skill_script_tools.run_skill_script",
-            AsyncMock(return_value=json.dumps({"success": True})),
-        )
+    # mock skill manager 和 script runner
+    mock_sm = MagicMock()
+    mock_sm.get_skill = AsyncMock(return_value=MagicMock(requires_app=None))
+    mock_sm.has_scripts = AsyncMock(return_value=True)
+    mock_sm.get_script_path = AsyncMock(return_value="/fake/path.py")
+    mock_sm.get_skill_dir = AsyncMock(return_value=Path("/fake/skill"))
+    mock_sm.get_skill_env_overrides = MagicMock(return_value={})
+
+    mock_runner_instance = MagicMock()
+    mock_runner_instance.execute_path = AsyncMock(return_value={"success": True, "output": "ok", "error": "", "duration_ms": 10})
+
+    with patch("ching_tech_os.services.task_scheduler.get_connection"), \
+         patch("ching_tech_os.skills.get_skill_manager", return_value=mock_sm), \
+         patch("ching_tech_os.skills.script_runner.ScriptRunner", return_value=mock_runner_instance):
 
         await task_scheduler.execute_dynamic_task(task_id)
 
