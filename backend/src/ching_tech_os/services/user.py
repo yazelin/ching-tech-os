@@ -70,7 +70,7 @@ async def get_user_for_auth(username: str) -> dict | None:
         row = await conn.fetchrow(
             """
             SELECT id, username, display_name, role,
-                   password_hash, must_change_password, is_active
+                   password_hash, must_change_password, is_active, preferences
             FROM users
             WHERE username = $1
             """,
