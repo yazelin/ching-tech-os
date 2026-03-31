@@ -21,6 +21,12 @@ SUPPORTED_EXTENSIONS = VIDEO_EXTENSIONS | AUDIO_EXTENSIONS
 VALID_MODELS = {"base", "small", "medium", "large-v3"}
 DEFAULT_MODEL = "small"
 
+# Groq API 設定
+GROQ_API_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
+GROQ_MODEL = "whisper-large-v3"
+GROQ_TIMEOUT = 120.0  # 異步轉錄可能是長音訊，給更多時間
+GROQ_MAX_FILE_SIZE = 25 * 1024 * 1024  # 免費 tier 上限 25MB
+
 
 def _get_ctos_mount_path() -> str:
     """取得 CTOS 掛載路徑。"""
@@ -128,6 +134,81 @@ def _format_timestamp(seconds: float) -> str:
     return f"[{minutes:02d}:{secs:02d}]"
 
 
+def _try_groq_transcribe(file_path: str) -> dict | None:
+    """嘗試使用 Groq Whisper API 轉錄，失敗回傳 None。
+
+    Returns:
+        {"text": str, "segments": [{"start", "end", "text"}], "duration": float} 或 None
+    """
+    api_key = os.environ.get("GROQ_API_KEY")
+    if not api_key:
+        return None
+
+    try:
+        import httpx
+    except ImportError:
+        return None
+
+    path = Path(file_path)
+    if not path.exists():
+        return None
+
+    # 檔案大小檢查（免費 tier 上限 25MB）
+    file_size = path.stat().st_size
+    if file_size > GROQ_MAX_FILE_SIZE:
+        print(f"[Groq] 檔案 {file_size / 1024 / 1024:.1f}MB 超過上限 25MB，跳過", flush=True)
+        return None
+
+    try:
+        with open(file_path, "rb") as f:
+            response = httpx.post(
+                GROQ_API_URL,
+                headers={"Authorization": f"Bearer {api_key}"},
+                files={"file": (path.name, f, "audio/mpeg")},
+                data={
+                    "model": GROQ_MODEL,
+                    "language": "zh",
+                    "response_format": "verbose_json",
+                    "timestamp_granularities[]": "segment",
+                    "temperature": "0.0",
+                },
+                timeout=GROQ_TIMEOUT,
+            )
+
+        if response.status_code == 429:
+            print(f"[Groq] rate limit，fallback 到本機轉錄", flush=True)
+            return None
+
+        if response.status_code != 200:
+            print(f"[Groq] API 錯誤 (HTTP {response.status_code}): {response.text[:200]}", flush=True)
+            return None
+
+        result = response.json()
+        text = result.get("text", "").strip()
+        segments = result.get("segments", [])
+        duration = result.get("duration", 0.0)
+
+        print(f"[Groq] 轉錄完成：{len(segments)} 個 segments，時長 {duration:.1f} 秒", flush=True)
+
+        return {
+            "text": text,
+            "segments": [
+                {
+                    "start": seg.get("start", 0.0),
+                    "end": seg.get("end", 0.0),
+                    "text": seg.get("text", "").strip(),
+                }
+                for seg in segments
+                if seg.get("text", "").strip()
+            ],
+            "duration": duration,
+        }
+
+    except Exception as e:
+        print(f"[Groq] 轉錄失敗: {e}，fallback 到本機", flush=True)
+        return None
+
+
 def _do_transcribe(
     job_dir: Path,
     status_path: Path,
@@ -178,23 +259,10 @@ def _do_transcribe(
             # 純音訊檔直接使用
             transcribe_input = str(source_file)
 
-        # 步驟 2：載入 Whisper 模型並轉錄
+        # 步驟 2：轉錄（Groq API 優先，fallback 本機 faster-whisper）
         status_data["status"] = "transcribing"
         _write_status(status_path, status_data)
 
-        from faster_whisper import WhisperModel
-
-        # 自動偵測裝置
-        device = "cpu"
-        compute_type = "int8"
-        if shutil.which("nvidia-smi"):
-            device = "cuda"
-            compute_type = "float16"
-
-        model = WhisperModel(model_name, device=device, compute_type=compute_type)
-        segments, info = model.transcribe(transcribe_input, language="zh")
-
-        # 步驟 3：收集 segments 並轉換繁體
         try:
             from opencc import OpenCC
             converter = OpenCC("s2twp")
@@ -203,36 +271,67 @@ def _do_transcribe(
 
         transcript_segments = []
         full_text_parts = []
-        last_status_update = time.monotonic()
-        for segment in segments:
-            text = segment.text.strip()
-            if not text:
-                continue
-            # 定期更新狀態檔以防止 check-transcription 判定逾時
-            if time.monotonic() - last_status_update > 30:
-                _write_status(status_path, status_data)
-                last_status_update = time.monotonic()
-            # 簡轉繁
-            if converter:
-                text = converter.convert(text)
-            transcript_segments.append({
-                "start": segment.start,
-                "end": segment.end,
-                "text": text,
-            })
-            full_text_parts.append(text)
+        duration = 0.0
+        used_engine = "local"
+
+        # 嘗試 Groq API
+        groq_result = _try_groq_transcribe(transcribe_input)
+        if groq_result is not None:
+            used_engine = "groq"
+            duration = groq_result["duration"]
+            for seg in groq_result["segments"]:
+                text = seg["text"]
+                if converter:
+                    text = converter.convert(text)
+                transcript_segments.append({
+                    "start": seg["start"],
+                    "end": seg["end"],
+                    "text": text,
+                })
+                full_text_parts.append(text)
+        else:
+            # Fallback：本機 faster-whisper
+            from faster_whisper import WhisperModel
+
+            device = "cpu"
+            compute_type = "int8"
+            if shutil.which("nvidia-smi"):
+                device = "cuda"
+                compute_type = "float16"
+
+            model = WhisperModel(model_name, device=device, compute_type=compute_type)
+            segments, info = model.transcribe(transcribe_input, language="zh")
+
+            last_status_update = time.monotonic()
+            for segment in segments:
+                text = segment.text.strip()
+                if not text:
+                    continue
+                # 定期更新狀態檔以防止 check-transcription 判定逾時
+                if time.monotonic() - last_status_update > 30:
+                    _write_status(status_path, status_data)
+                    last_status_update = time.monotonic()
+                if converter:
+                    text = converter.convert(text)
+                transcript_segments.append({
+                    "start": segment.start,
+                    "end": segment.end,
+                    "text": text,
+                })
+                full_text_parts.append(text)
+            duration = info.duration
 
         # 步驟 4：產生 transcript.md
-        duration = info.duration
         duration_formatted = _format_duration(duration)
         source_filename = source_file.name
+        engine_label = f"groq-{GROQ_MODEL}" if used_engine == "groq" else f"whisper-{model_name}"
 
         md_lines = [
             f"# 逐字稿：{source_filename}",
             "",
             f"> 來源：{source_ctos_path}",
             f"> 轉錄時間：{datetime.now().strftime('%Y-%m-%d %H:%M')}",
-            f"> 模型：whisper-{model_name}",
+            f"> 模型：{engine_label}",
             f"> 時長：{duration_formatted}",
             "",
             "---",
@@ -247,11 +346,11 @@ def _do_transcribe(
         transcript_path = job_dir / "transcript.md"
         transcript_path.write_text("\n".join(md_lines), encoding="utf-8")
 
-        # 步驟 5：清理暫存音軌
+        # 步驟 5：清理暫存音軌（原步驟 5）
         if audio_path and audio_path.exists():
             audio_path.unlink()
 
-        # 步驟 6：更新狀態為完成
+        # 步驟 6：更新狀態為完成（原步驟 6）
         date_str = job_dir.parent.name
         ctos_path = f"ctos://linebot/transcriptions/{date_str}/{job_id}/transcript.md"
         full_text = "".join(full_text_parts)

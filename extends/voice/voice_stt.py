@@ -1,7 +1,7 @@
 """語音轉文字（STT）服務
 
-短音訊（≤ 60 秒）使用 faster-whisper base 模型同步轉錄；
-長音訊（> 60 秒）委派給 media-transcription skill 非同步處理。
+短音訊（≤ 60 秒）同步轉錄，長音訊（> 60 秒）委派給 media-transcription skill 非同步處理。
+轉錄引擎優先使用 Groq Whisper large-v3 API，rate limit 或失敗時 fallback 到本機 faster-whisper。
 """
 
 from __future__ import annotations
@@ -93,30 +93,50 @@ def _get_duration_seconds(
 
 
 def _do_sync_transcribe(abs_path: str) -> str:
-    """在 thread 中執行同步轉錄（blocking）"""
+    """在 thread 中執行同步轉錄（blocking）
+
+    優先使用 Groq API，失敗時 fallback 到本機 faster-whisper base。
+    """
+    # 嘗試 Groq API
+    try:
+        from groq_stt import transcribe_file as groq_transcribe
+        groq_text = groq_transcribe(abs_path)
+        if groq_text:
+            # Groq 輸出可能是簡體，轉繁體
+            text = _convert_s2tw(groq_text)
+            logger.info("同步轉錄使用 Groq API 完成")
+            return text
+    except ImportError:
+        pass
+    except Exception as e:
+        logger.debug("Groq 轉錄失敗，fallback 本機: %s", e)
+
+    # Fallback：本機 faster-whisper
+    logger.info("使用本機 faster-whisper base 轉錄")
     global _whisper_model
     if _whisper_model is None:
         _load_model()
 
     segments, _info = _whisper_model.transcribe(abs_path, language="zh")
 
-    # 簡轉繁
-    converter = None
-    try:
-        from opencc import OpenCC
-        converter = OpenCC("s2twp")
-    except ImportError:
-        pass
-
     parts = []
     for segment in segments:
         text = segment.text.strip()
         if text:
-            if converter:
-                text = converter.convert(text)
+            text = _convert_s2tw(text)
             parts.append(text)
 
     return "".join(parts)
+
+
+def _convert_s2tw(text: str) -> str:
+    """簡體中文轉繁體中文（台灣用語）"""
+    try:
+        from opencc import OpenCC
+        converter = OpenCC("s2twp")
+        return converter.convert(text)
+    except ImportError:
+        return text
 
 
 def _load_model() -> None:
