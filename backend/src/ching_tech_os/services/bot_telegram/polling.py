@@ -39,7 +39,10 @@ async def run_telegram_polling() -> None:
     adapter: TelegramBotAdapter | None = None
     for attempt in range(5):
         try:
-            adapter = TelegramBotAdapter(token=settings.telegram_bot_token)
+            adapter = TelegramBotAdapter(
+                token=settings.telegram_bot_token,
+                base_url=settings.telegram_local_api_url or None,
+            )
             await adapter.ensure_bot_info()
             break
         except asyncio.CancelledError:
@@ -55,10 +58,13 @@ async def run_telegram_polling() -> None:
     # 建立專用 Bot 實例，read_timeout 必須大於 POLL_TIMEOUT
     # （adapter.bot 的預設 timeout 太短，不適合 long polling）
     from telegram import Bot
-    bot = Bot(
-        token=settings.telegram_bot_token,
-        request=HTTPXRequest(read_timeout=POLL_TIMEOUT + 10),
-    )
+    poll_kwargs: dict = {
+        "token": settings.telegram_bot_token,
+        "request": HTTPXRequest(read_timeout=POLL_TIMEOUT + 10),
+    }
+    if settings.telegram_local_api_url:
+        poll_kwargs["base_url"] = f"{settings.telegram_local_api_url}/bot{{token}}"
+    bot = Bot(**poll_kwargs)
 
     # 刪除現有 webhook，確保 getUpdates 可用
     try:

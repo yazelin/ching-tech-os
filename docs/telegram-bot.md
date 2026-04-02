@@ -151,6 +151,12 @@ TELEGRAM_BOT_TOKEN=your_telegram_bot_token        # 從 @BotFather 取得
 TELEGRAM_WEBHOOK_SECRET=your_webhook_secret        # 自訂字串，用於驗證 webhook
 TELEGRAM_ADMIN_CHAT_ID=your_admin_chat_id          # 管理員 Telegram ID（啟動通知）
 
+# Local Bot API Server（可選，突破 20MB 下載限制，支援 2GB 檔案接收）
+TELEGRAM_API_ID=your_api_id                        # 從 https://my.telegram.org 取得
+TELEGRAM_API_HASH=your_api_hash                    # 從 https://my.telegram.org 取得
+TELEGRAM_LOCAL_API_URL=http://localhost:8081        # Local API Server URL
+TELEGRAM_LOCAL_API_DATA_DIR=/tmp/telegram-bot-api   # Local API 資料目錄
+
 # Bot 多模式平台設定（LINE/Telegram 共用）
 BOT_UNBOUND_USER_POLICY=reject                     # reject | restricted
 BOT_RESTRICTED_MODEL=haiku                         # 受限模式使用的 AI 模型
@@ -174,6 +180,32 @@ BOT_RATE_LIMIT_DAILY=50                            # 每日上限（未綁定用
 
 應用程式啟動時自動以 long polling 模式拉取 Telegram 訊息，不需要 public URL 或 Nginx 代理。
 啟動時會自動刪除既有 webhook 設定（polling 與 webhook 不能同時使用）。
+
+### Local Bot API Server（可選）
+
+Telegram Bot API 預設限制 `getFile` 只能下載 20MB 以內的檔案。透過自架 [Local Bot API Server](https://github.com/tdlib/telegram-bot-api)，可將限制提升至 **2GB**，且檔案直接存在本機檔案系統。
+
+**啟動方式：**
+
+1. 到 [my.telegram.org](https://my.telegram.org) 取得 `api_id` 和 `api_hash`（免費，一個帳號一組，可多台共用）
+2. 在 `.env` 設定 `TELEGRAM_API_ID`、`TELEGRAM_API_HASH`、`TELEGRAM_LOCAL_API_URL`、`TELEGRAM_LOCAL_API_DATA_DIR`
+3. systemd 服務啟動時會自動偵測 `TELEGRAM_LOCAL_API_URL`，有設定才啟動 Local API container
+
+**架構差異：**
+
+```
+# 預設模式（20MB 限制）
+使用者 → Telegram 雲端 → api.telegram.org → 後端
+
+# Local API 模式（2GB 限制）
+使用者 → Telegram 雲端 → 自架 Local API Server → 後端（直接讀本機檔案）
+```
+
+**注意事項：**
+- `api_id`/`api_hash` 綁定 Telegram 帳號，可多台主機共用
+- 同一個 Bot Token 只能被一個 polling 實例使用
+- Local API 的資料目錄需設定 ACL 讓後端服務可讀取（systemd service 會自動處理）
+- 不設定 `TELEGRAM_LOCAL_API_URL` 時，程式碼完全走原路徑，無任何影響
 
 ## 程式碼結構
 

@@ -42,10 +42,10 @@ models/linebot.py                  ← 資料模型
 
 ```
 api/telegram_router.py             ← webhook 入口
-services/bot_telegram/polling.py   ← 長輪詢
-services/bot_telegram/handler.py   ← 更新處理（935 行）
-services/bot_telegram/adapter.py   ← TelegramBotAdapter
-services/bot_telegram/media.py     ← 媒體下載
+services/bot_telegram/polling.py   ← 長輪詢（支援 Local API base_url）
+services/bot_telegram/handler.py   ← 更新處理（影片/音訊用 ctos:// 路徑）
+services/bot_telegram/adapter.py   ← TelegramBotAdapter（支援 Local API base_url）
+services/bot_telegram/media.py     ← 媒體下載（支援 Local API 本機檔案讀取）
 services/linebot_ai.py             ← AI 回應（與 Line Bot 共用）
 ```
 

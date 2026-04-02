@@ -1,18 +1,50 @@
 """Telegram Bot 媒體處理
 
 下載 Telegram 圖片和檔案，儲存到 NAS 並記錄到 bot_files。
+支援 Local Bot API Server 模式（直接讀取本機檔案，突破 20MB 限制）。
 """
 
 import logging
 from datetime import datetime
+from pathlib import Path
 
 from telegram import Bot, Message
 
+from ...config import settings
 from ..bot_line import save_file_record, save_to_nas
 
 logger = logging.getLogger("bot_telegram.media")
 
 PLATFORM_TYPE = "telegram"
+
+
+CONTAINER_DATA_DIR = "/var/lib/telegram-bot-api/"
+
+
+async def _download_file_content(bot: Bot, file_id: str) -> bytes:
+    """下載 Telegram 檔案內容
+
+    Local API 模式：透過 Local API Server HTTP 端點下載（支援 2GB）
+    雲端 API 模式：透過官方 API 下載（限制 20MB）
+    """
+    file = await bot.get_file(file_id)
+
+    # Local API Server 模式：file_path 包含 container 內絕對路徑
+    # 替換為主機的 bind mount 路徑，直接讀取本機檔案
+    data_dir = settings.telegram_local_api_data_dir
+    if data_dir and file.file_path and CONTAINER_DATA_DIR in file.file_path:
+        idx = file.file_path.index(CONTAINER_DATA_DIR)
+        relative = file.file_path[idx + len(CONTAINER_DATA_DIR):]
+        local_path = Path(data_dir) / relative
+        if local_path.exists():
+            size = local_path.stat().st_size
+            logger.info(f"從本機讀取檔案: {local_path} ({size} bytes)")
+            return local_path.read_bytes()
+        else:
+            logger.warning(f"Local API 檔案不存在: {local_path}")
+
+    content = await file.download_as_bytearray()
+    return bytes(content)
 
 
 def _generate_telegram_nas_path(
@@ -69,9 +101,7 @@ async def download_telegram_photo(
 
     try:
         # 下載圖片
-        file = await bot.get_file(photo.file_id)
-        content = await file.download_as_bytearray()
-        content = bytes(content)
+        content = await _download_file_content(bot, photo.file_id)
 
         # 生成 NAS 路徑
         nas_path = _generate_telegram_nas_path(
@@ -131,9 +161,7 @@ async def download_telegram_voice(
 
     try:
         # 下載語音
-        file = await bot.get_file(voice.file_id)
-        content = await file.download_as_bytearray()
-        content = bytes(content)
+        content = await _download_file_content(bot, voice.file_id)
 
         # 副檔名：voice/audio 用 .ogg，video_note 用 .mp4
         ext = ".mp4" if message.video_note else ".ogg"
@@ -197,9 +225,7 @@ async def download_telegram_document(
 
     try:
         # 下載檔案
-        file = await bot.get_file(doc.file_id)
-        content = await file.download_as_bytearray()
-        content = bytes(content)
+        content = await _download_file_content(bot, doc.file_id)
 
         file_name = doc.file_name or "unknown"
         ext = ""

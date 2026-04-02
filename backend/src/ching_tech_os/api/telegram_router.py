@@ -29,7 +29,10 @@ def _get_adapter() -> TelegramBotAdapter:
     if _adapter is None:
         if not settings.telegram_bot_token:
             raise HTTPException(status_code=503, detail="Telegram Bot 未設定")
-        _adapter = TelegramBotAdapter(token=settings.telegram_bot_token)
+        _adapter = TelegramBotAdapter(
+            token=settings.telegram_bot_token,
+            base_url=settings.telegram_local_api_url or None,
+        )
     return _adapter
 
 

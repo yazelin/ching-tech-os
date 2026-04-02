@@ -5,6 +5,7 @@
 ChingTech OS 使用 Docker Compose 管理以下服務：
 - **PostgreSQL** - 資料庫
 - **code-server** - Web-based VS Code
+- **telegram-bot-api** - Telegram Local Bot API Server（可選，需啟用 profile）
 
 ## 檔案結構
 
@@ -103,6 +104,39 @@ docker compose down
 **工作目錄：**
 
 預設開啟 `/home/coder/SDD/ching-tech-os`
+
+### Telegram Local Bot API Server
+
+> 可選服務，使用 Docker Compose profiles 控制，預設不啟動。
+
+| 項目 | 值 |
+|------|---|
+| Image | `aiogram/telegram-bot-api` |
+| Container | `telegram-bot-api` |
+| Port | `8081` |
+| Profile | `telegram-local-api` |
+| Volume | bind mount（預設 `/tmp/telegram-bot-api`） |
+
+**用途：** 突破 Telegram Bot API 20MB 檔案下載限制，提升至 2GB。
+
+**環境變數：**
+
+| 變數 | 說明 |
+|------|------|
+| `TELEGRAM_API_ID` | 從 [my.telegram.org](https://my.telegram.org) 取得 |
+| `TELEGRAM_API_HASH` | 從 [my.telegram.org](https://my.telegram.org) 取得 |
+| `TELEGRAM_DATA_DIR` | 資料目錄（預設 `/tmp/telegram-bot-api`） |
+
+**啟動方式：**
+
+```bash
+# 手動啟動（需在 .env 設定 TELEGRAM_API_ID 和 TELEGRAM_API_HASH）
+COMPOSE_PROFILES=telegram-local-api docker compose --env-file ../.env up -d telegram-bot-api
+
+# systemd 自動啟動（偵測到 TELEGRAM_LOCAL_API_URL 時自動啟動）
+```
+
+**注意：** 資料目錄需設定 ACL 讓後端可讀取，systemd service 會自動處理。
 
 ---
 

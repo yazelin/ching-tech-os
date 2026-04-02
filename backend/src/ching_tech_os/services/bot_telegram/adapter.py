@@ -28,13 +28,18 @@ class TelegramBotAdapter:
 
     platform_type: str = "telegram"
 
-    def __init__(self, token: str):
+    def __init__(self, token: str, base_url: str | None = None):
         # 預設 read_timeout=5s 太短，AI 產圖等長時間操作容易超時
-        self.bot = Bot(
-            token=token,
-            request=HTTPXRequest(read_timeout=None, write_timeout=None),
-        )
+        kwargs: dict[str, Any] = {
+            "token": token,
+            "request": HTTPXRequest(read_timeout=None, write_timeout=None),
+        }
+        # 支援 Telegram Local Bot API Server（突破 20MB 下載限制）
+        if base_url:
+            kwargs["base_url"] = f"{base_url}/bot{{token}}"
+        self.bot = Bot(**kwargs)
         self._bot_username: str | None = None
+        self._local_api_url: str | None = base_url
 
     @property
     def bot_username(self) -> str | None:

@@ -209,6 +209,8 @@ class Settings:
     telegram_bot_token: str = _get_env("TELEGRAM_BOT_TOKEN", "")
     telegram_webhook_secret: str = _get_env("TELEGRAM_WEBHOOK_SECRET", "")
     telegram_admin_chat_id: str = _get_env("TELEGRAM_ADMIN_CHAT_ID", "")
+    telegram_local_api_url: str = _get_env("TELEGRAM_LOCAL_API_URL", "")
+    telegram_local_api_data_dir: str = _get_env("TELEGRAM_LOCAL_API_DATA_DIR", "")
 
     # ===================
     # 公開連結設定

@@ -301,6 +301,21 @@ async def _get_reply_context(message, bot=None) -> str:
     return await _extract_reply_from_message(reply, bot)
 
 
+# 可轉錄的影片/音訊副檔名
+_MEDIA_EXTENSIONS = {
+    ".mp4", ".mkv", ".webm", ".avi", ".mov",
+    ".mp3", ".m4a", ".wav", ".ogg", ".flac", ".aac",
+}
+
+
+def _is_media_file(filename: str) -> bool:
+    """判斷檔案是否為影片/音訊格式"""
+    if not filename or "." not in filename:
+        return False
+    ext = "." + filename.rsplit(".", 1)[-1].lower()
+    return ext in _MEDIA_EXTENSIONS
+
+
 def _prefix_user(text: str, user) -> str:
     """為文字加上 user[使用者名稱]: 前綴"""
     if user:
@@ -732,7 +747,7 @@ async def _handle_media(
         # 影片：告知 AI 檔案存放位置
         video_obj = message.video
         duration_info = f"，長度約 {video_obj.duration} 秒" if video_obj and video_obj.duration else ""
-        ai_prompt = f"[上傳影片: NAS 路徑 {nas_path}{duration_info}]"
+        ai_prompt = f"[上傳影片: ctos://linebot/files/{nas_path}{duration_info}]"
         if caption:
             ai_prompt += f"\nuser: {caption}"
     else:
@@ -753,6 +768,14 @@ async def _handle_media(
             else:
                 await adapter.send_text(chat_id, "檔案處理失敗。")
                 return
+        elif _is_media_file(file_name):
+            # 影片/音訊檔：告知 AI ctos:// 路徑，使用者可後續要求轉錄
+            ctos_path = f"ctos://linebot/files/{nas_path}"
+            ai_prompt = f"[上傳影片/音訊: {ctos_path}，檔名 {file_name}]"
+            if caption:
+                ai_prompt += f"\nuser: {caption}"
+            else:
+                ai_prompt += "\nuser: 我上傳了一個影片/音訊檔案"
         else:
             await adapter.send_text(
                 chat_id, f"已儲存檔案 {file_name}，但此格式無法由 AI 讀取。"

@@ -377,6 +377,10 @@ uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8088 --reload
 | TELEGRAM_BOT_TOKEN | （空） | Telegram Bot Token |
 | TELEGRAM_WEBHOOK_SECRET | （空） | Webhook 驗證密鑰 |
 | TELEGRAM_ADMIN_CHAT_ID | （空） | 管理員 Telegram ID（上線通知） |
+| TELEGRAM_API_ID | （空） | Telegram API ID（Local Bot API 用，從 my.telegram.org 取得） |
+| TELEGRAM_API_HASH | （空） | Telegram API Hash（Local Bot API 用） |
+| TELEGRAM_LOCAL_API_URL | （空） | Local Bot API Server URL（如 `http://localhost:8081`，突破 20MB 限制） |
+| TELEGRAM_LOCAL_API_DATA_DIR | （空） | Local API 資料目錄（如 `/tmp/telegram-bot-api`） |
 
 ### Skill 系統
 
