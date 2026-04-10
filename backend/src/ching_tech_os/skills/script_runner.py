@@ -102,7 +102,9 @@ class ScriptRunner:
         """根據副檔名組裝執行命令"""
         if script_path.suffix == ".py":
             if shutil.which("uv"):
-                return ["uv", "run", str(script_path)]
+                # 指定 --project 確保在 temp cwd 下仍能找到正確的虛擬環境
+                backend_dir = str(Path(settings.project_root) / "backend")
+                return ["uv", "run", "--project", backend_dir, str(script_path)]
             return ["python3", str(script_path)]
         elif script_path.suffix == ".sh":
             return ["bash", str(script_path)]
