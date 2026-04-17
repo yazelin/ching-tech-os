@@ -237,10 +237,11 @@ def guess_mime_type(content: bytes) -> str:
     if content[:4] == b"RIFF" and content[8:12] == b"WEBP":
         return "image/webp"
     if content[4:8] == b"ftyp":
-        # MP4 或 M4A
+        # MP4 或 M4A — 只有明確的 M4A brand 才是音訊，其他都是影片
         ftyp = content[8:12]
-        if ftyp in (b"M4A ", b"mp42", b"isom"):
+        if ftyp == b"M4A ":
             return "audio/m4a"
+        # isom, mp42, mp41, avc1 等都是 MP4 影片常見的 ftyp brand
         return "video/mp4"
 
     return "application/octet-stream"
