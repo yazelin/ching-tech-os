@@ -524,6 +524,9 @@ async def _handle_text(
             # group_not_allowed：靜默忽略
             return
 
+    # 保留原始用戶訊息文字（供偵測器使用，避免 prefix/reply-context 污染關鍵字判斷）
+    raw_text = text
+
     # 加上使用者名稱前綴（與 Line Bot 格式對齊）
     text = _prefix_user(text, user)
 
@@ -553,7 +556,7 @@ async def _handle_text(
                 user_id=str(user.id) if user else "",
                 group_id=str(bot_group_id) if bot_group_id else None,
                 quoted_message_id=quoted_id,
-                text=text,
+                text=raw_text,
             )
     if reference_image_paths:
         logger.info(
