@@ -139,6 +139,19 @@ class Settings:
     nanobanana_max_calls_per_request: int = _get_env_int("NANOBANANA_MAX_CALLS_PER_REQUEST", 1)
 
     # ===================
+    # Codex Image Service（自架，吃 ChatGPT 訂閱配額；設了就優先於 nanobanana）
+    # ===================
+    # Bearer key 從 codex-image-service admin 後台「Create API Key」取得（cimg_<random>）
+    # 純 text-to-image + image edit 都支援。失敗時自動退到 nanobanana / HF FLUX。
+    codex_image_base_url: str = _get_env("CODEX_IMAGE_BASE_URL", "")
+    codex_image_api_key: str = _get_env("CODEX_IMAGE_API_KEY", "")
+    codex_image_quality: str = _get_env("CODEX_IMAGE_QUALITY", "medium")  # low/medium/high/auto
+    # 單次 AI 回合中 codex_image 工具最多可呼叫次數（0 = 不限制）
+    codex_image_max_calls_per_request: int = _get_env_int(
+        "CODEX_IMAGE_MAX_CALLS_PER_REQUEST", 1
+    )
+
+    # ===================
     # Line Bot 設定
     # ===================
     line_channel_secret: str = _get_env("LINE_CHANNEL_SECRET", required=True)

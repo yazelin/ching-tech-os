@@ -496,6 +496,17 @@ async def call_claude(
             if normalized_name in _ALLOWED_TOOLS:
                 _tool_call_limits[normalized_name] = global_nanobanana_limit
 
+    # 同上：限制單回合 codex_image 呼叫次數，避免模型在 edit 模式下迴圈式微調
+    global_codex_limit = max(0, int(getattr(settings, "codex_image_max_calls_per_request", 0)))
+    if global_codex_limit > 0:
+        for tool_name in (
+            "mcp__ching-tech-os__codex_generate_image_tool",
+            "mcp__ching-tech-os__codex_edit_image_tool",
+        ):
+            normalized_name = tool_name.lower()
+            if normalized_name in _ALLOWED_TOOLS:
+                _tool_call_limits[normalized_name] = global_codex_limit
+
     # call-site 可覆蓋預設上限
     if tool_call_limits:
         for tool_name, limit in tool_call_limits.items():

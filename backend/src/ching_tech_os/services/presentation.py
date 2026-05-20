@@ -263,14 +263,56 @@ async def generate_nanobanana_image(keyword: str) -> Optional[bytes]:
         return None
 
 
+async def generate_codex_image(keyword: str) -> Optional[bytes]:
+    """使用自架 codex-image-service 生成簡報配圖（gpt-image-2，吃 ChatGPT 訂閱配額）"""
+    from .codex_image import generate_image_with_codex, is_codex_image_available
+
+    if not is_codex_image_available():
+        return None
+
+    prompt = (
+        f"Professional presentation slide image about {keyword}, "
+        "clean modern style, high quality, suitable for business presentation"
+    )
+    try:
+        image_path, error = await generate_image_with_codex(
+            prompt=prompt, aspect_ratio="16:9"
+        )
+        if error or not image_path:
+            logger.warning(f"Codex 簡報配圖失敗: {error}")
+            return None
+        full_path = f"{settings.linebot_local_path}/{image_path}"
+        with open(full_path, "rb") as f:
+            return f.read()
+    except Exception as exc:
+        logger.warning(f"Codex 簡報配圖錯誤: {exc}")
+        return None
+
+
 async def fetch_image(keyword: str, source: str = "pexels") -> Optional[bytes]:
-    """根據來源取得圖片"""
+    """根據來源取得圖片。
+
+    AI 配圖（source 不是 pexels）走「codex → nanobanana → huggingface」
+    階梯，前一個沒設定或失敗才往下試。明確指定 source=pexels 就還是用
+    Pexels 搜尋圖庫。
+    """
+    if source == "pexels":
+        return await fetch_pexels_image(keyword)
+
+    # codex 優先（自架，ChatGPT 訂閱配額）
+    codex_bytes = await generate_codex_image(keyword)
+    if codex_bytes:
+        return codex_bytes
+
+    # 退到原本的選擇：明確要 huggingface 才直接走 HF，否則 nanobanana
     if source == "huggingface":
         return await generate_huggingface_image(keyword)
-    elif source == "nanobanana":
-        return await generate_nanobanana_image(keyword)
-    else:
-        return await fetch_pexels_image(keyword)
+    nano_bytes = await generate_nanobanana_image(keyword)
+    if nano_bytes:
+        return nano_bytes
+
+    # 最後備援
+    return await generate_huggingface_image(keyword)
 
 
 # ============================================================

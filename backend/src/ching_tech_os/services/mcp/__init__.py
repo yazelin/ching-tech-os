@@ -24,6 +24,7 @@ from .server import (  # noqa: F401
 # core 工具永遠載入
 from . import memory_tools  # noqa: F401
 from . import message_tools  # noqa: F401
+from . import codex_image_tools  # noqa: F401
 
 logger = logging.getLogger(__name__)
 

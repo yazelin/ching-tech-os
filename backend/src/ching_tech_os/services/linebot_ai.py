@@ -819,6 +819,24 @@ async def process_message_with_ai(
             role=user_role,
         )
 
+        # 程式注入：codex-image-service 設定後，要求 Claude 把生圖 / 編圖
+        # 都優先走 codex 工具，nanobanana 才當 fallback。免動 DB 的 agent
+        # system prompt 就能切換到 ChatGPT 訂閱配額。
+        from .codex_image import is_codex_image_available
+        if is_codex_image_available():
+            codex_bias = (
+                "\n\n## 圖片生成 / 編輯工具優先序（系統強制）\n"
+                "當用戶要求生成、修改、編輯圖片時，**必須**先試以下工具：\n"
+                "- 純文字生圖 → `mcp__ching-tech-os__codex_generate_image_tool`\n"
+                "- 編輯既有圖（含 reply 圖片） → `mcp__ching-tech-os__codex_edit_image_tool`\n"
+                "\n"
+                "只有當上述 codex 工具回傳開頭為「Codex」的錯誤字串時，"
+                "才能改試 `mcp__nanobanana__generate_image` 或 `mcp__nanobanana__edit_image` 作為退路。\n"
+                "原因：codex 跑在我們自架的 codex-image-service、消耗的是 "
+                "ChatGPT 訂閱配額而非額外 Gemini credits。"
+            )
+            system_prompt = (system_prompt or "") + codex_bias
+
         # 取得對話歷史（20 則提供更好的上下文理解，包含圖片和檔案）
         # 排除當前訊息，避免重複（compose_prompt_with_history 會再加一次）
         history, images, files = await get_conversation_context(
