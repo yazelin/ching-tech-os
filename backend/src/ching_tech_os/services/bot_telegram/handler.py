@@ -533,20 +533,28 @@ async def _handle_text(
         text = reply_context + text
 
     # 多圖偵測（與 LINE handler 對齊）
-    from ..image_edit_detection import _detect_image_edit_references
+    from ..image_edit_detection import telegram_album_images, _detect_image_edit_references
     reference_image_paths: list[str] = []
     async with get_connection() as _det_conn:
-        quoted_id = None
-        reply_to = getattr(message, "reply_to_message", None)
-        if reply_to:
-            quoted_id = str(reply_to.message_id)
-        reference_image_paths = await _detect_image_edit_references(
-            _det_conn,
-            user_id=str(user.id) if user else "",
-            group_id=str(bot_group_id) if bot_group_id else None,
-            quoted_message_id=quoted_id,
-            text=text,
-        )
+        # Album branch first — Telegram albums share a media_group_id which
+        # is a stronger signal than the time-based heuristic.
+        reply_msg = getattr(message, "reply_to_message", None)
+        if reply_msg and getattr(reply_msg, "media_group_id", None):
+            reference_image_paths = await telegram_album_images(
+                _det_conn,
+                media_group_id=reply_msg.media_group_id,
+            )
+        if not reference_image_paths:
+            quoted_id = None
+            if reply_msg:
+                quoted_id = str(reply_msg.message_id)
+            reference_image_paths = await _detect_image_edit_references(
+                _det_conn,
+                user_id=str(user.id) if user else "",
+                group_id=str(bot_group_id) if bot_group_id else None,
+                quoted_message_id=quoted_id,
+                text=text,
+            )
     if reference_image_paths:
         logger.info(
             f"用戶 image edit 場景: {len(reference_image_paths)} 張 reference 圖",

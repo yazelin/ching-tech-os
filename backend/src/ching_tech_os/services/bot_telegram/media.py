@@ -118,13 +118,14 @@ async def download_telegram_photo(
             logger.error(f"儲存圖片到 NAS 失敗: {nas_path}")
             return None
 
-        # 記錄到 bot_files
+        # 記錄到 bot_files（同時儲存 media_group_id，供相冊短路偵測使用）
         await save_file_record(
             message_uuid=message_uuid,
             file_type="image",
             file_size=photo.file_size,
             mime_type="image/jpeg",
             nas_path=nas_path,
+            telegram_media_group_id=getattr(message, "media_group_id", None),
         )
 
         logger.info(f"已儲存 Telegram 圖片: {nas_path}")

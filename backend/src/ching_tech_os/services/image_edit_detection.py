@@ -168,3 +168,36 @@ async def _detect_image_edit_references(
             text[:30], len(paths), last_text_at,
         )
     return paths
+
+
+async def telegram_album_images(
+    conn: _AsyncpgLike,
+    media_group_id: str,
+) -> list[str]:
+    """Return reference temp paths for every image in a Telegram album.
+
+    Telegram delivers album uploads as separate messages that share a
+    media_group_id; this short-circuits the generic time-based heuristic
+    when the user explicitly replies to a member of an album.
+    """
+    rows = await conn.fetch(
+        """
+        SELECT m.message_id as line_message_id, f.nas_path
+        FROM bot_messages m
+        JOIN bot_files f ON f.message_id = m.id
+        WHERE f.telegram_media_group_id = $1
+          AND f.file_type = 'image'
+        ORDER BY m.created_at ASC
+        """,
+        media_group_id,
+    )
+    paths = []
+    for row in rows:
+        temp = await ensure_temp_image(row["line_message_id"], row["nas_path"])
+        if temp:
+            paths.append(temp)
+    logger.info(
+        "telegram album detect: media_group_id=%s → %d images",
+        media_group_id, len(paths),
+    )
+    return paths
