@@ -1,11 +1,10 @@
-"""Codex Image Service 的 MCP 工具包裝
+"""Codex Image Service 的 MCP 工具包裝（unified text-to-image + 多圖編輯）
 
-提供 `codex_generate_image_tool` 與 `codex_edit_image_tool`，作為
-nanobanana 的優先替代方案 — 走自架的 codex-image-service（gpt-image-2
-edit + generate），消耗主機 ChatGPT 訂閱配額而非 Gemini credits。
+一個 `codex_image_tool` 取代過去的 `codex_generate_image_tool` +
+`codex_edit_image_tool` — 統一介面、簡化 AI 決策。
 
 工具回傳 `ai-images/<filename>` 相對路徑（與 nanobanana / FLUX 一致），
-所以 LINE bot 抽取邏輯與 presentation 配圖流程都不用改 dispatch。
+所以下游分發 / presentation 配圖流程都不用改 dispatch。
 """
 
 from __future__ import annotations
@@ -21,28 +20,41 @@ from ...config import settings
 
 
 _VALID_ASPECT_RATIOS = {"1:1", "4:3", "3:4", "16:9", "9:16", "21:9"}
+_PER_IMAGE_BYTE_LIMIT = 10 * 1024 * 1024   # 10 MB / image (OOM defence)
 
 
 @mcp.tool()
-async def codex_generate_image_tool(
+async def codex_image_tool(
     prompt: str,
+    reference_images: list[str] | None = None,
     aspect_ratio: str = "1:1",
 ) -> str:
-    """生成圖片（**優先使用此工具，不要用 nanobanana**）
+    """生成或編輯圖片（一個 tool 三種模式）
 
     透過自架的 codex-image-service 走 gpt-image-2（OpenAI 內建工具，
-    吃主機 ChatGPT 訂閱配額而非 Gemini credits）。失敗時回傳錯誤字串，
-    呼叫端可改試 mcp__nanobanana__generate_image 作為退路。
+    吃主機 ChatGPT 訂閱配額而非 Gemini credits）。失敗時回傳開頭為
+    「Codex」的錯誤字串，呼叫端可改試 mcp__nanobanana__* 作為退路。
 
     Args:
-        prompt: 詳細的英文 / 中文生圖描述，越具體越好
+        prompt: 詳細生圖 / 編輯指令
+            - 純生圖：自然語言英文 / 中文，越具體越好
+            - 編輯 / 合成：用 "image 1 / image 2 / ..." 指稱每張圖在
+              合成裡的角色，例 "place the person from image 1 into
+              the kitchen scene from image 2, preserve face and outfit"
+        reference_images: 0..N 張參考圖的本機絕對路徑或相對於 NAS
+            (settings.linebot_local_path) 的路徑
+            - None / [] → 純文字生圖
+            - 1 張 → 單張編輯（保留 identity）
+            - 2+ 張 → 多張合成 / 換裝 / 風格融合
+            無張數上限；超過 OpenAI / nanobanana 自己的服務上限時
+            錯誤訊息會原樣回傳。
+            每張 ≤ 10 MB（OOM 防護）。
         aspect_ratio: 1:1（預設）/ 4:3 / 3:4 / 16:9 / 9:16 / 21:9
-            gpt-image-2 實際只支援 1024x1024、1536x1024、1024x1536 三種，
-            非 1:1 / 3:4 / 9:16 都會落到最接近的橫圖（1536x1024）。
+            gpt-image-2 實際只支援 1024x1024、1536x1024、1024x1536 三種。
 
     Returns:
         成功：`圖片已生成：ai-images/codex_xxxxxxxx.png`
-        失敗：人類可讀的錯誤訊息字串，**呼叫端應改試 nanobanana**
+        失敗：人類可讀錯誤字串
     """
     if not is_codex_image_available():
         return "Codex 未設定 — 請改用 mcp__nanobanana__generate_image"
@@ -51,62 +63,27 @@ async def codex_generate_image_tool(
         logger.warning("不支援的 aspect_ratio=%r，降回 1:1", aspect_ratio)
         aspect_ratio = "1:1"
 
+    reference_bytes_list: list[bytes] | None = None
+    if reference_images:
+        resolved_paths: list[Path] = []
+        for raw in reference_images:
+            p = Path(raw)
+            if not p.is_file():
+                nas_path = Path(settings.linebot_local_path) / raw.lstrip("/")
+                if nas_path.is_file():
+                    p = nas_path
+                else:
+                    return f"reference 圖檔不存在：{raw}"
+            if p.stat().st_size > _PER_IMAGE_BYTE_LIMIT:
+                return f"reference 圖 {raw} 超過 10 MB"
+            resolved_paths.append(p)
+        reference_bytes_list = [p.read_bytes() for p in resolved_paths]
+
     image_path, error = await generate_image_with_codex(
         prompt=prompt,
         aspect_ratio=aspect_ratio,
+        reference_bytes_list=reference_bytes_list,
     )
     if error:
         return f"Codex 生圖失敗：{error}"
     return f"圖片已生成：{image_path}"
-
-
-@mcp.tool()
-async def codex_edit_image_tool(
-    prompt: str,
-    reference_image: str,
-    aspect_ratio: str = "1:1",
-) -> str:
-    """編輯現有圖片（**優先使用此工具，不要用 nanobanana 的 edit_image**）
-
-    透過 codex-image-service 走 gpt-image-2 edit 模式。把 reference 圖
-    base64 encode 後 POST 給服務、由 Codex CLI 餵給內建 image_gen 工具。
-
-    Args:
-        prompt: 編輯指令（e.g.「把背景換成夜晚海邊」、「加上紅色蝴蝶結」）
-        reference_image: 既存圖片本機絕對路徑或相對於 NAS 的路徑
-            （例如 LINE 用戶上傳到 linebot/files/uploads/xxx.jpg）
-        aspect_ratio: 同 codex_generate_image_tool
-
-    Returns:
-        成功：`圖片已編輯：ai-images/codex_xxxxxxxx.png`
-        失敗：人類可讀錯誤字串
-    """
-    if not is_codex_image_available():
-        return "Codex 未設定 — 請改用 mcp__nanobanana__edit_image"
-
-    if aspect_ratio not in _VALID_ASPECT_RATIOS:
-        logger.warning("不支援的 aspect_ratio=%r，降回 1:1", aspect_ratio)
-        aspect_ratio = "1:1"
-
-    # 嘗試本機路徑；不存在就嘗試 NAS linebot_local_path 為前綴
-    ref_resolved = Path(reference_image)
-    if not ref_resolved.is_file():
-        nas_path = Path(settings.linebot_local_path) / reference_image.lstrip("/")
-        if nas_path.is_file():
-            ref_resolved = nas_path
-        else:
-            return f"reference 圖檔不存在：{reference_image}"
-
-    try:
-        ref_bytes = ref_resolved.read_bytes()
-    except OSError as exc:
-        return f"reference 圖檔讀取失敗：{exc}"
-
-    image_path, error = await generate_image_with_codex(
-        prompt=prompt,
-        aspect_ratio=aspect_ratio,
-        reference_bytes_list=[ref_bytes],
-    )
-    if error:
-        return f"Codex 編輯圖失敗：{error}"
-    return f"圖片已編輯：{image_path}"
