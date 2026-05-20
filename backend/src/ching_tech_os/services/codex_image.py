@@ -44,14 +44,16 @@ def is_codex_image_available() -> bool:
 async def generate_image_with_codex(
     prompt: str,
     aspect_ratio: str = "1:1",
-    reference_bytes: bytes | None = None,
+    reference_bytes_list: list[bytes] | None = None,
 ) -> tuple[str | None, str | None]:
-    """呼叫 codex-image-service 產圖；給 reference_bytes 時走 edit mode。
+    """呼叫 codex-image-service 產圖；給 reference_bytes_list 時走 edit mode。
 
     Args:
         prompt: 生圖 / 編輯指令
         aspect_ratio: 1:1 / 4:3 / 3:4 / 16:9 / 9:16 / 21:9
-        reference_bytes: 給 image edit 用的參考圖 bytes（None = 純文字生圖）
+        reference_bytes_list: 1+ 張參考圖 bytes（None / [] = 純文字生圖）
+            無張數上限；codex-image-service / OpenAI 自己拒絕超量。
+            單張 10 MB 的限制在 MCP tool 層做（這層不檢查 size）。
 
     Returns:
         (image_path, error_message)
@@ -65,14 +67,18 @@ async def generate_image_with_codex(
     api_key = settings.codex_image_api_key
     size = _CODEX_SIZE_BY_ASPECT.get(aspect_ratio, "1024x1024")
 
+    reference_bytes_list = reference_bytes_list or []
+
     payload: dict = {
         "prompt": prompt,
         "size": size,
         "quality": settings.codex_image_quality or "medium",
         "count": 1,
     }
-    if reference_bytes:
-        payload["reference_image_base64"] = base64.b64encode(reference_bytes).decode("ascii")
+    if reference_bytes_list:
+        payload["reference_images_base64"] = [
+            base64.b64encode(b).decode("ascii") for b in reference_bytes_list
+        ]
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -80,8 +86,9 @@ async def generate_image_with_codex(
     }
 
     logger.info(
-        "Codex 生圖 (mode=%s, aspect=%s, prompt=%s...)",
-        "edit" if reference_bytes else "generate",
+        "Codex 生圖 (mode=%s, refs=%d, aspect=%s, prompt=%s...)",
+        "edit" if reference_bytes_list else "generate",
+        len(reference_bytes_list),
         aspect_ratio,
         prompt[:60],
     )
@@ -137,28 +144,3 @@ async def generate_image_with_codex(
     logger.info("Codex 圖檔已存：%s（%d bytes）", image_path, len(png_resp.content))
     return f"ai-images/{filename}", None
 
-
-async def edit_image_with_codex(
-    prompt: str,
-    reference_path: str,
-    aspect_ratio: str = "1:1",
-) -> tuple[str | None, str | None]:
-    """方便的 image-edit wrapper：給檔案路徑而不是 bytes。
-
-    Args:
-        prompt: 編輯指令
-        reference_path: 既存圖片的本機路徑（絕對或相對 cwd）
-        aspect_ratio: 同上
-    """
-    ref_file = Path(reference_path)
-    if not ref_file.is_file():
-        return None, f"reference 圖檔不存在：{reference_path}"
-    try:
-        ref_bytes = ref_file.read_bytes()
-    except OSError as exc:
-        return None, f"reference 圖檔讀取失敗：{exc}"
-    return await generate_image_with_codex(
-        prompt=prompt,
-        aspect_ratio=aspect_ratio,
-        reference_bytes=ref_bytes,
-    )

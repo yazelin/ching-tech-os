@@ -14,7 +14,6 @@ from pathlib import Path
 
 from .server import mcp, logger
 from ..codex_image import (
-    edit_image_with_codex,
     generate_image_with_codex,
     is_codex_image_available,
 )
@@ -98,10 +97,15 @@ async def codex_edit_image_tool(
         else:
             return f"reference 圖檔不存在：{reference_image}"
 
-    image_path, error = await edit_image_with_codex(
+    try:
+        ref_bytes = ref_resolved.read_bytes()
+    except OSError as exc:
+        return f"reference 圖檔讀取失敗：{exc}"
+
+    image_path, error = await generate_image_with_codex(
         prompt=prompt,
-        reference_path=str(ref_resolved),
         aspect_ratio=aspect_ratio,
+        reference_bytes_list=[ref_bytes],
     )
     if error:
         return f"Codex 編輯圖失敗：{error}"
