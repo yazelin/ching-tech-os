@@ -36,6 +36,7 @@ async def save_file_record(
     mime_type: str | None = None,
     nas_path: str | None = None,
     duration: int | None = None,
+    telegram_media_group_id: str | None = None,
 ) -> UUID:
     """儲存檔案記錄，回傳檔案 UUID
 
@@ -47,15 +48,17 @@ async def save_file_record(
         mime_type: MIME 類型
         nas_path: NAS 儲存路徑
         duration: 音訊/影片長度（毫秒）
+        telegram_media_group_id: Telegram album 的 media_group_id（僅 Telegram 圖片使用）
     """
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
             INSERT INTO bot_files (
                 message_id, file_type, file_name,
-                file_size, mime_type, nas_path, duration
+                file_size, mime_type, nas_path, duration,
+                telegram_media_group_id
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING id
             """,
             message_uuid,
@@ -65,6 +68,7 @@ async def save_file_record(
             mime_type,
             nas_path,
             duration,
+            telegram_media_group_id,
         )
 
         # 更新訊息的 file_id

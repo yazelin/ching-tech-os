@@ -415,10 +415,30 @@ def _mock_claude_response(
 
 
 def _patch_process_base(monkeypatch: pytest.MonkeyPatch) -> dict:
+    from contextlib import asynccontextmanager
+    from unittest.mock import AsyncMock as _AsyncMock
+
     user_module = importlib.import_module("ching_tech_os.services.user")
     permissions_module = importlib.import_module("ching_tech_os.services.permissions")
     linebot_agents_module = importlib.import_module("ching_tech_os.services.linebot_agents")
     mcp_module = importlib.import_module("ching_tech_os.services.mcp")
+    image_edit_detection_module = importlib.import_module(
+        "ching_tech_os.services.image_edit_detection"
+    )
+
+    # Stub _detect_image_edit_references so tests don't hit the DB pool
+    monkeypatch.setattr(
+        image_edit_detection_module,
+        "_detect_image_edit_references",
+        _AsyncMock(return_value=[]),
+    )
+
+    # Stub get_connection so the `async with get_connection()` wrapper works
+    @asynccontextmanager
+    async def _fake_get_connection():
+        yield None
+
+    monkeypatch.setattr(linebot_ai, "get_connection", _fake_get_connection)
 
     monkeypatch.setattr(linebot_ai, "is_bot_message", AsyncMock(return_value=True))
     monkeypatch.setattr(linebot_ai, "should_trigger_ai", lambda *_args, **_kwargs: True)

@@ -524,6 +524,9 @@ async def _handle_text(
             # group_not_allowed：靜默忽略
             return
 
+    # 保留原始用戶訊息文字（供偵測器使用，避免 prefix/reply-context 污染關鍵字判斷）
+    raw_text = text
+
     # 加上使用者名稱前綴（與 Line Bot 格式對齊）
     text = _prefix_user(text, user)
 
@@ -531,6 +534,36 @@ async def _handle_text(
     reply_context = await _get_reply_context(message, bot=adapter.bot)
     if reply_context:
         text = reply_context + text
+
+    # 多圖偵測（與 LINE handler 對齊）
+    from ..image_edit_detection import telegram_album_images, _detect_image_edit_references
+    reference_image_paths: list[str] = []
+    async with get_connection() as _det_conn:
+        # Album branch first — Telegram albums share a media_group_id which
+        # is a stronger signal than the time-based heuristic.
+        reply_msg = getattr(message, "reply_to_message", None)
+        if reply_msg and getattr(reply_msg, "media_group_id", None):
+            reference_image_paths = await telegram_album_images(
+                _det_conn,
+                media_group_id=reply_msg.media_group_id,
+            )
+        if not reference_image_paths:
+            quoted_id = None
+            if reply_msg:
+                quoted_id = str(reply_msg.message_id)
+            reference_image_paths = await _detect_image_edit_references(
+                _det_conn,
+                user_id=str(user.id) if user else "",
+                group_id=str(bot_group_id) if bot_group_id else None,
+                quoted_message_id=quoted_id,
+                text=raw_text,
+            )
+    if reference_image_paths:
+        logger.info(
+            f"用戶 image edit 場景: {len(reference_image_paths)} 張 reference 圖",
+        )
+        paths_str = ", ".join(reference_image_paths)
+        text = f"[{len(reference_image_paths)} 張參考圖: {paths_str}]\n{text}"
 
     # AI 對話
     try:

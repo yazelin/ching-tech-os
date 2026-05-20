@@ -500,8 +500,7 @@ async def call_claude(
     global_codex_limit = max(0, int(getattr(settings, "codex_image_max_calls_per_request", 0)))
     if global_codex_limit > 0:
         for tool_name in (
-            "mcp__ching-tech-os__codex_generate_image_tool",
-            "mcp__ching-tech-os__codex_edit_image_tool",
+            "mcp__ching-tech-os__codex_image_tool",
         ):
             normalized_name = tool_name.lower()
             if normalized_name in _ALLOWED_TOOLS:

@@ -3,13 +3,13 @@
 import base64
 import struct
 import zlib
+from contextlib import contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from ching_tech_os.services.codex_image import (
     _CODEX_SIZE_BY_ASPECT,
-    edit_image_with_codex,
     generate_image_with_codex,
     is_codex_image_available,
 )
@@ -106,6 +106,44 @@ def _success_payload(image_url: str = "https://codex.example.com/codex-image/gen
     }
 
 
+def _ok_response():
+    """Build a fake httpx response shape codex-image-service returns on success."""
+    fake_resp = AsyncMock()
+    fake_resp.status_code = 200
+    fake_resp.json = lambda: {
+        "images": [{"url": "http://fake/img.png"}],
+    }
+    fake_resp.text = ""
+    return fake_resp
+
+
+def _ok_download():
+    fake_dl = AsyncMock()
+    fake_dl.status_code = 200
+    fake_dl.content = b"\x89PNG\r\n\x1a\nFAKE"
+    return fake_dl
+
+
+@contextmanager
+def patch_codex_post(post_resp):
+    """Patch both httpx.AsyncClient.post (the generate call) and .get (PNG download).
+
+    Captured payload exposed as captured['json']."""
+    captured = {}
+
+    async def _post(self, url, json=None, headers=None):
+        captured["json"] = json
+        captured["url"] = url
+        return post_resp
+
+    async def _get(self, url):
+        return _ok_download()
+
+    with patch("httpx.AsyncClient.post", new=_post), \
+         patch("httpx.AsyncClient.get", new=_get):
+        yield captured
+
+
 # ─ tests ────────────────────────────────────────────────────────────────────
 
 
@@ -178,44 +216,45 @@ class TestGenerateText:
 
 
 class TestEdit:
+    """Multi-image reference plumbing in generate_image_with_codex."""
+
     @pytest.mark.asyncio
-    async def test_edit_passes_base64_reference_in_body(self):
-        ref_bytes = _make_png_bytes()
-        post_resp = _mock_post_resp(200, json_body=_success_payload())
-        get_resp = _mock_get_resp(200, content=_make_png_bytes())
-        fake = _FakeClient(post_resp=post_resp, get_resp=get_resp)
-        with patch("ching_tech_os.services.codex_image.httpx.AsyncClient",
-                   side_effect=lambda **kw: fake):
-            path, error = await generate_image_with_codex(
-                "replace the background", reference_bytes=ref_bytes
+    async def test_single_reference_sent_as_one_element_array(self):
+        ref_bytes = b"\x89PNG\r\n\x1a\nA"
+        with patch_codex_post(_ok_response()) as captured:
+            await generate_image_with_codex(
+                "make it black and white",
+                reference_bytes_list=[ref_bytes],
             )
-        assert error is None
-        body = fake.post_calls[0][1]["json"]
-        assert "reference_image_base64" in body
-        assert base64.b64decode(body["reference_image_base64"]) == ref_bytes
+        body = captured["json"]
+        assert "reference_images_base64" in body
+        assert len(body["reference_images_base64"]) == 1
+        assert base64.b64decode(body["reference_images_base64"][0]) == ref_bytes
+        # Legacy singular field must not be set
+        assert "reference_image_base64" not in body
 
     @pytest.mark.asyncio
-    async def test_edit_helper_reads_file_off_disk(self, tmp_path):
-        ref_path = tmp_path / "ref.png"
-        ref_bytes = _make_png_bytes()
-        ref_path.write_bytes(ref_bytes)
-
-        post_resp = _mock_post_resp(200, json_body=_success_payload())
-        get_resp = _mock_get_resp(200, content=_make_png_bytes())
-        fake = _FakeClient(post_resp=post_resp, get_resp=get_resp)
-        with patch("ching_tech_os.services.codex_image.httpx.AsyncClient",
-                   side_effect=lambda **kw: fake):
-            path, error = await edit_image_with_codex(
-                "tweak it", reference_path=str(ref_path)
+    async def test_three_references_sent_as_array(self):
+        refs = [b"\x89PNG\r\n\x1a\nA", b"\x89PNG\r\n\x1a\nB", b"\x89PNG\r\n\x1a\nC"]
+        with patch_codex_post(_ok_response()) as captured:
+            await generate_image_with_codex(
+                "composite these",
+                reference_bytes_list=refs,
             )
-        assert error is None
-        body = fake.post_calls[0][1]["json"]
-        assert base64.b64decode(body["reference_image_base64"]) == ref_bytes
+        body = captured["json"]
+        assert "reference_images_base64" in body
+        assert len(body["reference_images_base64"]) == 3
+        for i, raw in enumerate(refs):
+            assert base64.b64decode(body["reference_images_base64"][i]) == raw
 
     @pytest.mark.asyncio
-    async def test_edit_helper_missing_file_returns_error(self):
-        path, error = await edit_image_with_codex(
-            "tweak it", reference_path="/nonexistent/file.png"
-        )
-        assert path is None
-        assert "不存在" in error
+    async def test_empty_or_none_omits_field_entirely(self):
+        for case in (None, []):
+            with patch_codex_post(_ok_response()) as captured:
+                await generate_image_with_codex(
+                    "pure text-to-image",
+                    reference_bytes_list=case,
+                )
+            body = captured["json"]
+            assert "reference_images_base64" not in body
+            assert "reference_image_base64" not in body
