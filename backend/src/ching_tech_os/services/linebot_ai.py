@@ -826,14 +826,26 @@ async def process_message_with_ai(
         if is_codex_image_available():
             codex_bias = (
                 "\n\n## 圖片生成 / 編輯工具優先序（系統強制）\n"
-                "當用戶要求生成、修改、編輯圖片時，**必須**先試以下工具：\n"
-                "- 純文字生圖 → `mcp__ching-tech-os__codex_generate_image_tool`\n"
-                "- 編輯既有圖（含 reply 圖片） → `mcp__ching-tech-os__codex_edit_image_tool`\n"
+                "當用戶要求生成、修改、編輯、合成圖片時，**必須**先試："
+                "`mcp__ching-tech-os__codex_image_tool`\n"
                 "\n"
-                "只有當上述 codex 工具回傳開頭為「Codex」的錯誤字串時，"
-                "才能改試 `mcp__nanobanana__generate_image` 或 `mcp__nanobanana__edit_image` 作為退路。\n"
-                "原因：codex 跑在我們自架的 codex-image-service、消耗的是 "
-                "ChatGPT 訂閱配額而非額外 Gemini credits。"
+                "三種使用模式：\n"
+                "- **純生圖**：`codex_image_tool(prompt=英文描述)`\n"
+                "- **單張編輯**：`codex_image_tool(prompt=英文edit指令, "
+                "reference_images=[圖片路徑])`\n"
+                "- **多圖合成 / 換裝 / 場景融合**："
+                "`codex_image_tool(prompt=英文合成指令含 'image 1 / image 2 / ...', "
+                "reference_images=[圖1路徑, 圖2路徑, ...])`\n"
+                "\n"
+                "用戶訊息開頭如有 `[N 張參考圖: <path1>, <path2>, ...]` 標註，"
+                "**就是已偵測到的多圖合成場景**，把那些路徑原樣帶進 "
+                "`reference_images` 即可；不要用 Read 工具讀圖（會浪費 token）。\n"
+                "\n"
+                "只有當 codex_image_tool 回傳開頭為「Codex」的錯誤字串時，"
+                "才能改試 `mcp__nanobanana__generate_image` 作為退路 "
+                "（nanobanana 也吃 `files=[路徑列表]` 做多圖）。\n"
+                "原因：codex 跑在自架的 codex-image-service、消耗 ChatGPT "
+                "訂閱配額而非 Gemini credits。"
             )
             system_prompt = (system_prompt or "") + codex_bias
 
@@ -843,48 +855,55 @@ async def process_message_with_ai(
             line_group_id, line_user_id, limit=20, exclude_message_id=message_uuid
         )
 
-        # 處理回覆舊訊息（quotedMessageId）- 圖片、檔案或文字
-        quoted_image_path = None
+        # 處理回覆舊訊息（quotedMessageId）- 圖片走多圖偵測器、檔案 / 文字保持原樣
+        from .image_edit_detection import _detect_image_edit_references
+        reference_image_paths: list[str] = []
         quoted_file_path = None
         quoted_text_content = None
-        if quoted_message_id:
-            # 先嘗試查詢圖片
-            image_info = await get_image_info_by_line_message_id(quoted_message_id)
-            if image_info and image_info.get("nas_path"):
-                # 確保圖片暫存存在
-                temp_path = await ensure_temp_image(quoted_message_id, image_info["nas_path"])
-                if temp_path:
-                    quoted_image_path = temp_path
-                    logger.info(f"用戶回覆圖片: {quoted_message_id} -> {temp_path}")
-            else:
-                # 嘗試查詢檔案
-                file_info = await get_file_info_by_line_message_id(quoted_message_id)
-                if file_info and file_info.get("nas_path") and file_info.get("file_name"):
-                    file_name = file_info["file_name"]
-                    file_size = file_info.get("file_size")
-                    if is_readable_file(file_name):
-                        if file_size and file_size > MAX_READABLE_FILE_SIZE:
-                            logger.info(f"用戶回覆檔案過大: {quoted_message_id} -> {file_name}")
-                        else:
-                            # 確保檔案暫存存在
-                            temp_path = await ensure_temp_file(
-                                quoted_message_id, file_info["nas_path"], file_name, file_size
-                            )
-                            if temp_path:
-                                quoted_file_path = temp_path
-                                logger.info(f"用戶回覆檔案: {quoted_message_id} -> {temp_path}")
+
+        # Multi-image / single-image reference detection (covers quoted-reply
+        # AND the implicit "drop N photos then 合成" pattern).
+        async with get_connection() as _det_conn:
+            reference_image_paths = await _detect_image_edit_references(
+                _det_conn,
+                user_id=line_user_id or "",
+                group_id=str(line_group_id) if line_group_id else None,
+                quoted_message_id=quoted_message_id,
+                text=content,
+            )
+        if reference_image_paths:
+            logger.info(
+                f"用戶 image edit 場景: {len(reference_image_paths)} 張 reference 圖",
+            )
+
+        # Only fall through to file / text quoted branches when the detector
+        # didn't pick this up as an image edit
+        if not reference_image_paths and quoted_message_id:
+            file_info = await get_file_info_by_line_message_id(quoted_message_id)
+            if file_info and file_info.get("nas_path") and file_info.get("file_name"):
+                file_name = file_info["file_name"]
+                file_size = file_info.get("file_size")
+                if is_readable_file(file_name):
+                    if file_size and file_size > MAX_READABLE_FILE_SIZE:
+                        logger.info(f"用戶回覆檔案過大: {quoted_message_id} -> {file_name}")
                     else:
-                        logger.info(f"用戶回覆檔案類型不支援: {quoted_message_id} -> {file_name}")
+                        temp_path = await ensure_temp_file(
+                            quoted_message_id, file_info["nas_path"], file_name, file_size
+                        )
+                        if temp_path:
+                            quoted_file_path = temp_path
+                            logger.info(f"用戶回覆檔案: {quoted_message_id} -> {temp_path}")
                 else:
-                    # 嘗試查詢文字訊息
-                    msg_info = await get_message_content_by_line_message_id(quoted_message_id)
-                    if msg_info and msg_info.get("content"):
-                        quoted_text_content = {
-                            "content": msg_info["content"],
-                            "display_name": msg_info.get("display_name", ""),
-                            "is_from_bot": msg_info.get("is_from_bot", False),
-                        }
-                        logger.info(f"用戶回覆文字: {quoted_message_id} -> {msg_info['content'][:50]}...")
+                    logger.info(f"用戶回覆檔案類型不支援: {quoted_message_id} -> {file_name}")
+            else:
+                msg_info = await get_message_content_by_line_message_id(quoted_message_id)
+                if msg_info and msg_info.get("content"):
+                    quoted_text_content = {
+                        "content": msg_info["content"],
+                        "display_name": msg_info.get("display_name", ""),
+                        "is_from_bot": msg_info.get("is_from_bot", False),
+                    }
+                    logger.info(f"用戶回覆文字: {quoted_message_id} -> {msg_info['content'][:50]}...")
 
         # 註：對話歷史中的圖片/檔案暫存已在 get_conversation_context 中處理
 
@@ -894,9 +913,10 @@ async def process_message_with_ai(
         else:
             user_message = f"user: {content}"
 
-        # 如果是回覆圖片、檔案或文字，在訊息開頭標註
-        if quoted_image_path:
-            user_message = f"[回覆圖片: {quoted_image_path}]\n{user_message}"
+        # 如果有偵測到參考圖、檔案或回覆文字，在訊息開頭標註
+        if reference_image_paths:
+            paths_str = ", ".join(reference_image_paths)
+            user_message = f"[{len(reference_image_paths)} 張參考圖: {paths_str}]\n{user_message}"
         elif quoted_file_path:
             # 使用共用函式解析 PDF 特殊格式
             pdf_path, txt_path = parse_pdf_temp_path(quoted_file_path)
