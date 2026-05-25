@@ -152,3 +152,66 @@ async def test_legacy_tool_names_no_longer_exported():
     from ching_tech_os.services.mcp import codex_image_tools
     assert not hasattr(codex_image_tools, "codex_generate_image_tool")
     assert not hasattr(codex_image_tools, "codex_edit_image_tool")
+
+
+@pytest.mark.asyncio
+async def test_absolute_path_outside_allowed_roots_rejected(
+    codex_enabled, tmp_path, monkeypatch,
+):
+    """系統檔案絕對路徑（/etc/passwd 等）必須被拒絕，避免 LFI。
+
+    PR #145 review security-high：reference_images 沒檢查路徑是否
+    在允許範圍內，AI 若被 prompt-injection 騙著傳系統路徑，
+    程式會 read_bytes() 整個檔案再上傳給 OpenAI。
+    """
+    # 設好 NAS 根目錄（讓 settings.linebot_local_path 指向 tmp_path）
+    monkeypatch.setattr("ching_tech_os.config.settings.ctos_mount_path", str(tmp_path))
+    monkeypatch.setattr("ching_tech_os.config.settings.line_files_nas_path", "")
+
+    # 在禁區建一個真實檔案：tmp_path 上一層
+    forbidden_dir = tmp_path.parent / "forbidden_root"
+    forbidden_dir.mkdir(exist_ok=True)
+    secret = forbidden_dir / "secret.png"
+    secret.write_bytes(b"\x89PNG\r\n\x1a\nSECRET")
+
+    from ching_tech_os.services.mcp.codex_image_tools import codex_image_tool
+    with patch(
+        "ching_tech_os.services.mcp.codex_image_tools.generate_image_with_codex",
+        new=AsyncMock(),
+    ) as gen:
+        result = await codex_image_tool(
+            prompt="edit",
+            reference_images=[str(secret)],
+        )
+    gen.assert_not_awaited()
+    assert "非法路徑" in result or "不存在" in result
+
+
+@pytest.mark.asyncio
+async def test_bot_images_temp_dir_accepted(codex_enabled, tmp_path, monkeypatch):
+    """`/tmp/bot-images/` 是 bot 下載 LINE/Telegram 圖片的固定暫存區，
+    必須被視為合法 root（detector 回傳的就是這條路徑）。"""
+    monkeypatch.setattr("ching_tech_os.config.settings.ctos_mount_path", str(tmp_path))
+    monkeypatch.setattr("ching_tech_os.config.settings.line_files_nas_path", "")
+
+    # 假裝 bot 已把圖片下載到 /tmp/bot-images（用 monkeypatch 改路徑常數，避免污染真實 /tmp）
+    fake_bot_dir = tmp_path / "fake-bot-images"
+    fake_bot_dir.mkdir()
+    img = fake_bot_dir / "618.jpg"
+    img.write_bytes(b"\x89PNG\r\n\x1a\nA")
+    monkeypatch.setattr(
+        "ching_tech_os.services.mcp.codex_image_tools._BOT_TEMP_IMAGE_DIR",
+        fake_bot_dir,
+    )
+
+    from ching_tech_os.services.mcp.codex_image_tools import codex_image_tool
+    with patch(
+        "ching_tech_os.services.mcp.codex_image_tools.generate_image_with_codex",
+        new=AsyncMock(return_value=("ai-images/x.png", None)),
+    ) as gen:
+        result = await codex_image_tool(
+            prompt="edit",
+            reference_images=[str(img)],
+        )
+    gen.assert_awaited_once()
+    assert "圖片已生成" in result
