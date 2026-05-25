@@ -21,6 +21,10 @@ SUPPORTED_EXTENSIONS = VIDEO_EXTENSIONS | AUDIO_EXTENSIONS
 VALID_MODELS = {"base", "small", "medium", "large-v3"}
 DEFAULT_MODEL = "small"
 
+# 分段轉錄設定（防止長音訊 OOM）
+CHUNK_DURATION_THRESHOLD = 1800  # 超過 30 分鐘使用分段轉錄
+CHUNK_SIZE_SECONDS = 600  # 每段 10 分鐘
+
 # Groq API 設定
 GROQ_API_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
 GROQ_MODEL = "whisper-large-v3"
@@ -209,6 +213,46 @@ def _try_groq_transcribe(file_path: str) -> dict | None:
         return None
 
 
+def _get_audio_duration(file_path: str) -> float | None:
+    """使用 ffprobe 取得音訊/影片時長（秒）。"""
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe", "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                file_path,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return float(result.stdout.strip())
+    except Exception:
+        pass
+    return None
+
+
+def _extract_chunk(source_file: str, output_path: str, start: float, duration: float) -> bool:
+    """從來源檔案擷取指定時間範圍的音訊片段（WAV 16kHz mono）。"""
+    try:
+        result = subprocess.run(
+            [
+                "ffmpeg", "-ss", str(start), "-i", source_file,
+                "-t", str(duration),
+                "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1",
+                "-y", output_path,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        return result.returncode == 0 and Path(output_path).exists()
+    except Exception:
+        return False
+
+
 def _do_transcribe(
     job_dir: Path,
     status_path: Path,
@@ -233,9 +277,19 @@ def _do_transcribe(
     audio_path = None
 
     try:
-        # 步驟 1：提取音軌（影片才需要）
+        # 步驟 1：判斷是否需要提取音軌
         ext = source_file.suffix.lower()
-        if ext in VIDEO_EXTENSIONS:
+        is_video = ext in VIDEO_EXTENSIONS
+
+        # 先取得時長，決定後續策略
+        total_dur = _get_audio_duration(str(source_file))
+        need_chunked = (
+            total_dur is not None
+            and total_dur > CHUNK_DURATION_THRESHOLD
+        )
+
+        if is_video and not need_chunked:
+            # 短影片：提取完整音軌（與原邏輯相同）
             status_data["status"] = "extracting_audio"
             _write_status(status_path, status_data)
 
@@ -255,6 +309,9 @@ def _do_transcribe(
             if not audio_path.exists():
                 raise RuntimeError("ffmpeg 未產生音訊檔")
             transcribe_input = str(audio_path)
+        elif is_video:
+            # 長影片：跳過全檔提取，後續由分段轉錄直接從影片逐段擷取
+            transcribe_input = str(source_file)
         else:
             # 純音訊檔直接使用
             transcribe_input = str(source_file)
@@ -299,27 +356,80 @@ def _do_transcribe(
                 device = "cuda"
                 compute_type = "float16"
 
-            model = WhisperModel(model_name, device=device, compute_type=compute_type)
-            segments, info = model.transcribe(transcribe_input, language="zh")
+            if need_chunked:
+                # 分段轉錄：逐段擷取音訊，避免一次載入整個長音訊導致 OOM
+                print(f"音訊時長 {total_dur:.0f} 秒，使用分段轉錄（每段 {CHUNK_SIZE_SECONDS} 秒）", flush=True)
+                duration = total_dur
 
-            last_status_update = time.monotonic()
-            for segment in segments:
-                text = segment.text.strip()
-                if not text:
-                    continue
-                # 定期更新狀態檔以防止 check-transcription 判定逾時
-                if time.monotonic() - last_status_update > 30:
+                model = WhisperModel(model_name, device=device, compute_type=compute_type)
+                chunk_index = 0
+                offset = 0.0
+
+                while offset < total_dur:
+                    chunk_path = str(job_dir / f"chunk_{chunk_index}.wav")
+                    chunk_len = min(CHUNK_SIZE_SECONDS, total_dur - offset)
+
+                    print(f"擷取分段 {chunk_index}: {_format_duration(offset)} ~ {_format_duration(offset + chunk_len)}", flush=True)
+                    if not _extract_chunk(transcribe_input, chunk_path, offset, chunk_len):
+                        print(f"分段 {chunk_index} 擷取失敗，跳過", flush=True)
+                        offset += CHUNK_SIZE_SECONDS
+                        chunk_index += 1
+                        continue
+
+                    # 轉錄此分段
+                    segments, _info = model.transcribe(chunk_path, language="zh")
+                    for segment in segments:
+                        text = segment.text.strip()
+                        if not text:
+                            continue
+                        if converter:
+                            text = converter.convert(text)
+                        transcript_segments.append({
+                            "start": segment.start + offset,
+                            "end": segment.end + offset,
+                            "text": text,
+                        })
+                        full_text_parts.append(text)
+
+                    # 刪除已處理的分段檔案，釋放磁碟空間
+                    try:
+                        Path(chunk_path).unlink()
+                    except Exception:
+                        pass
+
+                    # 更新狀態
+                    progress_pct = min(int((offset + chunk_len) / total_dur * 100), 99)
+                    status_data["progress"] = progress_pct
                     _write_status(status_path, status_data)
-                    last_status_update = time.monotonic()
-                if converter:
-                    text = converter.convert(text)
-                transcript_segments.append({
-                    "start": segment.start,
-                    "end": segment.end,
-                    "text": text,
-                })
-                full_text_parts.append(text)
-            duration = info.duration
+
+                    offset += CHUNK_SIZE_SECONDS
+                    chunk_index += 1
+
+                del model
+            else:
+                # 短音訊：直接一次轉錄
+                model = WhisperModel(model_name, device=device, compute_type=compute_type)
+                segments, info = model.transcribe(transcribe_input, language="zh")
+
+                last_status_update = time.monotonic()
+                for segment in segments:
+                    text = segment.text.strip()
+                    if not text:
+                        continue
+                    # 定期更新狀態檔以防止 check-transcription 判定逾時
+                    if time.monotonic() - last_status_update > 30:
+                        _write_status(status_path, status_data)
+                        last_status_update = time.monotonic()
+                    if converter:
+                        text = converter.convert(text)
+                    transcript_segments.append({
+                        "start": segment.start,
+                        "end": segment.end,
+                        "text": text,
+                    })
+                    full_text_parts.append(text)
+                duration = info.duration
+                del model
 
         # 步驟 4：產生 transcript.md
         duration_formatted = _format_duration(duration)
