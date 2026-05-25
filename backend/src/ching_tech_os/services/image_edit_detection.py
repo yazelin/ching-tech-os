@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import logging
 from typing import Protocol
+from uuid import UUID
 
 from .bot_line.file_handler import (
     ensure_temp_image,
@@ -58,6 +59,7 @@ async def _detect_image_edit_references(
     group_id: str | None,
     quoted_message_id: str | None,
     text: str,
+    current_message_uuid: UUID | None = None,
 ) -> list[str]:
     """Return absolute temp paths of reference images to attach to this turn.
 
@@ -69,6 +71,11 @@ async def _detect_image_edit_references(
         quoted_message_id:     LINE quotedMessageId or Telegram reply-to message
                                id (string); None when the user didn't reply
         text:                  the user's text message content (pre-cleanup)
+        current_message_uuid:  bot_messages.id of the *current* text turn — must
+                               be excluded from the anchor lookup. LINE persists
+                               the message before AI processing; without this,
+                               MAX(created_at) returns the current message and
+                               the image lookup always comes back empty.
 
     Returns:
         List of temp paths in chronological order (oldest first). Empty list
@@ -90,69 +97,41 @@ async def _detect_image_edit_references(
     if not any(kw in text for kw in _IMAGE_EDIT_KEYWORDS):
         return []
 
-    # Find the user's previous text-message timestamp (anchor for the batch)
-    if group_id is not None:
-        last_text_at = await conn.fetchval(
-            """
-            SELECT COALESCE(MAX(m.created_at), '1970-01-01'::timestamptz)
-            FROM bot_messages m
-            JOIN bot_users u ON m.bot_user_id = u.id
-            WHERE m.bot_group_id = $1
-              AND u.platform_user_id = $2
-              AND m.is_from_bot = false
-              AND m.message_type = 'text'
-              AND m.content IS NOT NULL
-              AND m.content <> ''
-            """,
-            group_id, user_id,
-        )
-        rows = await conn.fetch(
-            """
-            SELECT m.message_id as line_message_id, f.nas_path
-            FROM bot_messages m
-            JOIN bot_files f ON f.message_id = m.id
-            JOIN bot_users u ON m.bot_user_id = u.id
-            WHERE m.bot_group_id = $1
-              AND u.platform_user_id = $2
-              AND m.is_from_bot = false
-              AND m.message_type = 'image'
-              AND f.file_type = 'image'
-              AND m.created_at > $3
-            ORDER BY m.created_at ASC
-            """,
-            group_id, user_id, last_text_at,
-        )
-    else:
-        last_text_at = await conn.fetchval(
-            """
-            SELECT COALESCE(MAX(m.created_at), '1970-01-01'::timestamptz)
-            FROM bot_messages m
-            JOIN bot_users u ON m.bot_user_id = u.id
-            WHERE m.bot_group_id IS NULL
-              AND u.platform_user_id = $1
-              AND m.is_from_bot = false
-              AND m.message_type = 'text'
-              AND m.content IS NOT NULL
-              AND m.content <> ''
-            """,
-            user_id,
-        )
-        rows = await conn.fetch(
-            """
-            SELECT m.message_id as line_message_id, f.nas_path
-            FROM bot_messages m
-            JOIN bot_files f ON f.message_id = m.id
-            JOIN bot_users u ON m.bot_user_id = u.id
-            WHERE m.bot_group_id IS NULL
-              AND u.platform_user_id = $1
-              AND m.is_from_bot = false
-              AND m.message_type = 'image'
-              AND f.file_type = 'image'
-              AND m.created_at > $2
-            ORDER BY m.created_at ASC
-            """,
-            user_id, last_text_at,
-        )
+    # Find the user's previous text-message timestamp (anchor for the batch).
+    # `IS NOT DISTINCT FROM` handles NULL group_id in a single query; the
+    # `($4::uuid IS NULL OR m.id <> $4)` clause excludes the *current* message
+    # which LINE has already saved before reaching the detector.
+    last_text_at = await conn.fetchval(
+        """
+        SELECT COALESCE(MAX(m.created_at), '1970-01-01'::timestamptz)
+        FROM bot_messages m
+        JOIN bot_users u ON m.bot_user_id = u.id
+        WHERE m.bot_group_id IS NOT DISTINCT FROM $1
+          AND u.platform_user_id = $2
+          AND m.is_from_bot = false
+          AND m.message_type = 'text'
+          AND m.content IS NOT NULL
+          AND m.content <> ''
+          AND ($3::uuid IS NULL OR m.id <> $3)
+        """,
+        group_id, user_id, current_message_uuid,
+    )
+    rows = await conn.fetch(
+        """
+        SELECT m.message_id as line_message_id, f.nas_path
+        FROM bot_messages m
+        JOIN bot_files f ON f.message_id = m.id
+        JOIN bot_users u ON m.bot_user_id = u.id
+        WHERE m.bot_group_id IS NOT DISTINCT FROM $1
+          AND u.platform_user_id = $2
+          AND m.is_from_bot = false
+          AND m.message_type = 'image'
+          AND f.file_type = 'image'
+          AND m.created_at > $3
+        ORDER BY m.created_at ASC
+        """,
+        group_id, user_id, last_text_at,
+    )
 
     if not rows:
         return []
