@@ -197,3 +197,50 @@ class TestDetectImageEditReferences:
                 text="改一下",
             )
         assert result == ["/tmp/test/MSG_OK.jpg", "/tmp/test/MSG_OK2.jpg"]
+
+    async def test_current_message_uuid_passed_into_anchor_query(
+        self, mock_conn, patch_ensure_temp_image,
+    ):
+        """偵測器必須把 current_message_uuid 排除在「上一則文字」錨點 SQL 外。
+
+        LINE 流程會先把當前文字訊息寫進 bot_messages 再呼叫偵測器，若
+        anchor 查詢沒排除它，MAX(created_at) 永遠指向當前訊息，圖片
+        清單會回空陣列（PR #145 review high-priority bug）。
+        """
+        current_uuid = uuid4()
+        mock_conn.fetchval = AsyncMock(
+            return_value=datetime(2026, 5, 20, tzinfo=timezone.utc)
+        )
+        mock_conn.fetch = AsyncMock(return_value=[])
+        await _detect_image_edit_references(
+            mock_conn,
+            user_id="USR_X",
+            group_id=None,
+            quoted_message_id=None,
+            text="合成",
+            current_message_uuid=current_uuid,
+        )
+        # 驗證 SQL 參數含當前訊息 UUID
+        anchor_call = mock_conn.fetchval.await_args
+        assert current_uuid in anchor_call.args, (
+            f"current_message_uuid 必須傳進 anchor SQL；實際 args={anchor_call.args}"
+        )
+
+    async def test_current_message_uuid_optional_back_compat(
+        self, mock_conn, patch_ensure_temp_image,
+    ):
+        """不傳 current_message_uuid 也要能跑（Telegram handler 沒這個值）。"""
+        mock_conn.fetchval = AsyncMock(
+            return_value=datetime(2026, 5, 20, tzinfo=timezone.utc)
+        )
+        mock_conn.fetch = AsyncMock(return_value=[
+            {"line_message_id": "MSG_A", "nas_path": "/nas/a.jpg"},
+        ])
+        result = await _detect_image_edit_references(
+            mock_conn,
+            user_id="USR_X",
+            group_id=None,
+            quoted_message_id=None,
+            text="合成",
+        )
+        assert result == ["/tmp/test/MSG_A.jpg"]

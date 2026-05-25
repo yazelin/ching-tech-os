@@ -870,6 +870,7 @@ async def process_message_with_ai(
                 group_id=str(line_group_id) if line_group_id else None,
                 quoted_message_id=quoted_message_id,
                 text=content,
+                current_message_uuid=message_uuid,
             )
         if reference_image_paths:
             logger.info(
