@@ -22,6 +22,19 @@ from ...config import settings
 _VALID_ASPECT_RATIOS = {"1:1", "4:3", "3:4", "16:9", "9:16", "21:9"}
 _PER_IMAGE_BYTE_LIMIT = 10 * 1024 * 1024   # 10 MB / image (OOM defence)
 
+# LINE / Telegram 下載圖片的固定暫存區（detector 回傳的路徑會在此）。
+# 跟 services/bot/media.py 的 TEMP_IMAGE_DIR 對齊。
+_BOT_TEMP_IMAGE_DIR = Path("/tmp/bot-images")
+
+
+def _is_within(path: Path, root: Path) -> bool:
+    """Pathlib.is_relative_to() 在 3.9+ 才有；用 try/except 兼容語意。"""
+    try:
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
 
 @mcp.tool()
 async def codex_image_tool(
@@ -65,15 +78,25 @@ async def codex_image_tool(
 
     reference_bytes_list: list[bytes] | None = None
     if reference_images:
+        # AI 可能被 prompt-injection 騙著傳系統路徑（/etc/passwd 等），所以
+        # 只允許 NAS 根目錄與 bot 暫存區兩個 root，其餘一律拒絕。
+        allowed_roots = [
+            Path(settings.linebot_local_path).resolve(),
+            _BOT_TEMP_IMAGE_DIR.resolve(),
+        ]
         resolved_paths: list[Path] = []
         for raw in reference_images:
             p = Path(raw)
-            if not p.is_file():
-                nas_path = Path(settings.linebot_local_path) / raw.lstrip("/")
-                if nas_path.is_file():
-                    p = nas_path
-                else:
-                    return f"reference 圖檔不存在：{raw}"
+            if p.is_absolute():
+                p = p.resolve()
+            else:
+                p = (Path(settings.linebot_local_path) / raw.lstrip("/")).resolve()
+
+            if not p.is_file() or not any(
+                _is_within(p, root) for root in allowed_roots
+            ):
+                return f"reference 圖檔不存在或非法路徑：{raw}"
+
             if p.stat().st_size > _PER_IMAGE_BYTE_LIMIT:
                 return f"reference 圖 {raw} 超過 10 MB"
             resolved_paths.append(p)
