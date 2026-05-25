@@ -151,6 +151,7 @@ async def test_telegram_polling_paths(monkeypatch: pytest.MonkeyPatch) -> None:
     # 有 token，跑一輪更新後停止
     monkeypatch.setattr(polling.settings, "telegram_bot_token", "bot-token")
     monkeypatch.setattr(polling.settings, "telegram_admin_chat_id", "123")
+    monkeypatch.setattr(polling.settings, "telegram_local_api_url", "")
 
     fake_adapter = SimpleNamespace(
         ensure_bot_info=AsyncMock(),
@@ -159,11 +160,11 @@ async def test_telegram_polling_paths(monkeypatch: pytest.MonkeyPatch) -> None:
             send_message=AsyncMock(return_value=None),
         ),
     )
-    monkeypatch.setattr(polling, "TelegramBotAdapter", lambda token: fake_adapter)
+    monkeypatch.setattr(polling, "TelegramBotAdapter", lambda token, base_url=None: fake_adapter)
     monkeypatch.setattr(polling, "_notify_admin_startup", AsyncMock())
 
     class _PollBot:
-        def __init__(self, token=None, request=None) -> None:
+        def __init__(self, token=None, request=None, base_url=None) -> None:
             self.calls = 0
 
         async def delete_webhook(self):

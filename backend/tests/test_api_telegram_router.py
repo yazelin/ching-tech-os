@@ -28,16 +28,17 @@ def test_get_adapter_paths(monkeypatch: pytest.MonkeyPatch) -> None:
     created = []
 
     class _FakeAdapter:
-        def __init__(self, token: str) -> None:
-            created.append(token)
+        def __init__(self, token: str, base_url: str | None = None) -> None:
+            created.append((token, base_url))
             self.bot = SimpleNamespace()
 
     monkeypatch.setattr(telegram_router.settings, "telegram_bot_token", "bot-token")
+    monkeypatch.setattr(telegram_router.settings, "telegram_local_api_url", "")
     monkeypatch.setattr(telegram_router, "TelegramBotAdapter", _FakeAdapter)
     first = telegram_router._get_adapter()
     second = telegram_router._get_adapter()
     assert first is second
-    assert created == ["bot-token"]
+    assert created == [("bot-token", None)]
 
 
 def test_telegram_webhook_paths(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from ching_tech_os.config import settings
 from ching_tech_os.skills import script_runner as script_runner_module
 from ching_tech_os.skills.script_runner import ScriptRunner
 
@@ -59,7 +60,8 @@ def test_build_command_variants(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     txt_script = tmp_path / "run.txt"
 
     monkeypatch.setattr(script_runner_module.shutil, "which", lambda _cmd: "/usr/bin/uv")
-    assert runner._build_command(py_script) == ["uv", "run", str(py_script)]
+    backend_dir = str(Path(settings.project_root) / "backend")
+    assert runner._build_command(py_script) == ["uv", "run", "--project", backend_dir, str(py_script)]
 
     monkeypatch.setattr(script_runner_module.shutil, "which", lambda _cmd: None)
     assert runner._build_command(py_script) == ["python3", str(py_script)]

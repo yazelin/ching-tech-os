@@ -93,7 +93,8 @@ async def test_save_record_download_and_guess(monkeypatch: pytest.MonkeyPatch) -
     assert file_handler.guess_mime_type(b"\x89PNG\r\n\x1a\nabc") == "image/png"
     assert file_handler.guess_mime_type(b"GIF89aabc") == "image/gif"
     assert file_handler.guess_mime_type(b"RIFFxxxxWEBP") == "image/webp"
-    assert file_handler.guess_mime_type(b"xxxxftypisom") == "audio/m4a"
+    assert file_handler.guess_mime_type(b"xxxxftypisom") == "video/mp4"
+    assert file_handler.guess_mime_type(b"xxxxftypM4A ") == "audio/m4a"
     assert file_handler.guess_mime_type(b"unknown") == "application/octet-stream"
 
 
