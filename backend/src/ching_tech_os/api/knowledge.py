@@ -126,7 +126,12 @@ async def rebuild_knowledge_index(
     "/attachments/{path:path}",
     summary="取得 NAS 附件",
 )
-async def get_attachment(path: str) -> Response:
+async def get_attachment(
+    path: str,
+    session: SessionData = Depends(
+        require_app_permission("knowledge-base", allow_query_token=True)
+    ),
+) -> Response:
     """代理取得 NAS 上的附件
 
     Args:
@@ -153,7 +158,9 @@ async def get_attachment(path: str) -> Response:
 )
 async def get_local_asset(
     path: str,
-    session: SessionData = Depends(require_app_permission("knowledge-base")),
+    session: SessionData = Depends(
+        require_app_permission("knowledge-base", allow_query_token=True)
+    ),
 ) -> Response:
     """取得本機知識庫附件
 

@@ -6,7 +6,15 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from ..config import settings
-from ..models.auth import LoginRequest, LoginResponse, LogoutResponse, ErrorResponse
+from ..models.auth import (
+    ApiTokenCreateRequest,
+    ApiTokenCreateResponse,
+    ApiTokenListResponse,
+    LoginRequest,
+    LoginResponse,
+    LogoutResponse,
+    ErrorResponse,
+)
 from ..models.login_record import DeviceInfo as LoginRecordDeviceInfo, DeviceType, GeoLocation
 from ..models.message import MessageSeverity, MessageSource
 from ..services.session import session_manager, SessionData
@@ -45,6 +53,20 @@ def get_token(
     return credentials.credentials
 
 
+async def _resolve_session(token: str) -> SessionData | None:
+    """解析 token 為 SessionData
+
+    支援兩種 token：
+    - 一般 session token（web 登入，UUID）
+    - PAT 長效 API token（ctos_pat_ 前綴，供 CLI / 自動化工具）
+    """
+    from ..services.api_token import TOKEN_PREFIX, verify_api_token
+
+    if token.startswith(TOKEN_PREFIX):
+        return await verify_api_token(token)
+    return await session_manager.get_session(token)
+
+
 async def get_current_session(token: str = Depends(get_token)) -> SessionData:
     """驗證 token 並取得目前 session
 
@@ -54,7 +76,7 @@ async def get_current_session(token: str = Depends(get_token)) -> SessionData:
     Raises:
         HTTPException: 若 token 無效或過期
     """
-    session = await session_manager.get_session(token)
+    session = await _resolve_session(token)
     if session is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -92,7 +114,7 @@ async def get_session_from_token_or_query(
             detail="未授權，請重新登入",
         )
 
-    session = await session_manager.get_session(actual_token)
+    session = await _resolve_session(actual_token)
     if session is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -401,6 +423,89 @@ async def logout(token: str = Depends(get_token)) -> LogoutResponse:
     """登出並清除 session"""
     await session_manager.delete_session(token)
     return LogoutResponse(success=True)
+
+
+# ============================================================
+# API Token（PAT）管理
+# ============================================================
+
+
+@router.post("/tokens", response_model=ApiTokenCreateResponse, status_code=status.HTTP_201_CREATED)
+async def create_token(
+    request: ApiTokenCreateRequest,
+    session: SessionData = Depends(get_current_session),
+) -> ApiTokenCreateResponse:
+    """建立長效 API token（PAT）
+
+    需要以 web 登入 session 換發，不可用 PAT 換發 PAT。
+    token 僅在此回應中出現一次，請妥善保存。
+    """
+    from ..services.api_token import create_api_token
+
+    if session.auth_type == "pat":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="不可使用 API token 換發新 token，請以帳號密碼登入後再操作",
+        )
+    if session.user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="使用者記錄不存在，無法建立 token",
+        )
+    if not request.name.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="token 名稱不可為空",
+        )
+
+    token, info = await create_api_token(
+        user_id=session.user_id,
+        name=request.name.strip(),
+        scopes=request.scopes,
+        expires_days=request.expires_days,
+        read_only=request.read_only,
+    )
+    return ApiTokenCreateResponse(success=True, token=token, info=info)
+
+
+@router.get("/tokens", response_model=ApiTokenListResponse)
+async def list_tokens(
+    session: SessionData = Depends(get_current_session),
+) -> ApiTokenListResponse:
+    """列出自己的 API token（不含 token 本體）"""
+    from ..services.api_token import list_api_tokens
+
+    if session.user_id is None:
+        return ApiTokenListResponse(success=True, tokens=[])
+    tokens = await list_api_tokens(session.user_id)
+    return ApiTokenListResponse(success=True, tokens=tokens)
+
+
+@router.delete("/tokens/{token_id}")
+async def revoke_token(
+    token_id: int,
+    session: SessionData = Depends(get_current_session),
+) -> dict:
+    """撤銷自己的 API token"""
+    from ..services.api_token import revoke_api_token
+
+    if session.auth_type == "pat":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="不可使用 API token 撤銷 token，請以帳號密碼登入後再操作",
+        )
+    if session.user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="token 不存在",
+        )
+    deleted = await revoke_api_token(session.user_id, token_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="token 不存在",
+        )
+    return {"success": True}
 
 
 # 密碼變更相關 models
