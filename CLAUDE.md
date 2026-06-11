@@ -16,6 +16,21 @@
 - **修改功能前**，先查閱 `docs/module-index.md` 快速定位相關檔案
 - 該檔案包含：後端/前端模組地圖、常見修改場景速查
 
+## Dev Tools（ctos CLI 與 skills）
+
+- **查正式機知識庫 / 圖書館**用 `ctos` CLI（不要直接 ssh 去讀檔）：
+  - 安裝：`uv tool install ./cli`（或 `uv tool install "git+https://github.com/yazelin/ching-tech-os.git#subdirectory=cli"`）
+  - 首次設定：`ctos login --url https://ching-tech.ddns.net/ctos`（互動式，請使用者自己在終端機執行；非互動環境用 `--username` + 環境變數 `CTOS_PASSWORD`）
+  - 常用：`ctos kb get kb-182`、`ctos kb search "關鍵字"`、`ctos lib ls`，完整指令見 `cli/README.md`
+- **本 repo 的 Claude Code project skills**（clone 即自動載入）：
+  - `ctos-kb`：查知識庫 / 圖書館（使用者提到 kb-NNN 時）
+  - `ctos-architecture`：加新功能 / 新 App / 新模組前的架構決策樹與逐檔 checklist
+  - `ctos-deploy`：部署機更新 runbook（負責人用）
+  - 想在任何資料夾都能用：複製 skill 目錄到 `~/.claude/skills/`
+- **新功能骨架**：`python scripts/scaffold.py app|extends|skill|validate`
+- **新同事環境設定**：`docs/dev-onboarding.md`
+- **部署更新**：負責人在部署機跑 `scripts/update-service.sh`
+
 ## 主要目錄結構
 - `frontend/`：前端資源（index.html、login.html、css、js、assets）
 - `backend/`：後端程式（src/ching_tech_os/、migrations/、pyproject.toml）
