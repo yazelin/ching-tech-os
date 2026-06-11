@@ -63,6 +63,21 @@ uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8088 --reload
 | POST | `/api/auth/login` | 登入（CTOS 密碼優先，NAS SMB 備用） |
 | POST | `/api/auth/logout` | 登出 |
 | POST | `/api/auth/change-password` | 變更密碼（一般使用者自行變更） |
+| POST | `/api/auth/tokens` | 建立長效 API token（PAT，需 web 登入 session） |
+| GET | `/api/auth/tokens` | 列出自己的 API token |
+| DELETE | `/api/auth/tokens/{id}` | 撤銷 API token |
+
+#### API Token（PAT）
+
+供 CLI 與自動化工具使用的長效 token，格式 `ctos_pat_xxx`，用法與 session token 相同
+（`Authorization: Bearer ctos_pat_xxx`）。安全特性：
+
+- 資料庫僅存 SHA-256 hash，token 只在建立時回傳一次
+- `scopes` 限縮可存取的 app（預設 `["knowledge-base"]`），與使用者當下實際權限取交集
+- `read_only=true`（預設）時，所有掛 `require_app_permission` 的端點拒絕非 GET 請求
+- 驗證後合成的 session 一律 `role="user"`、不帶 SMB 密碼：不可操作 admin 端點與 NAS
+- 不可用 PAT 換發或撤銷 PAT（防止外洩 token 自我複製）
+- 預設效期 180 天（`expires_days`，`null` 為永久）；使用者停用（`is_active=false`）即全部失效
 
 ### 使用者
 

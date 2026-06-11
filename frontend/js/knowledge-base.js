@@ -971,7 +971,6 @@ const KnowledgeBaseModule = (function() {
   function previewAttachment(kbId, path) {
     const url = getAttachmentUrl(path);
     const filename = path.split('/').pop();
-    const basePath = window.API_BASE || '';
 
     // 使用 FileOpener 統一入口開啟檔案
     if (typeof FileOpener !== 'undefined' && FileOpener.canOpen(filename)) {
@@ -979,8 +978,8 @@ const KnowledgeBaseModule = (function() {
       return;
     }
 
-    // 不支援的檔案類型 - 直接下載
-    window.open(`${basePath}${url}`, '_blank');
+    // 不支援的檔案類型 - 帶認證下載（附件端點需要登入）
+    FileUtils.downloadWithAuth(url, filename);
   }
 
   /**

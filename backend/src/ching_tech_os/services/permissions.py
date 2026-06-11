@@ -11,7 +11,7 @@
 import logging
 from typing import Any, Callable
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 
 from ..database import get_connection
 
@@ -614,7 +614,7 @@ def get_app_display_names() -> dict[str, str]:
 # ============================================================
 
 
-def require_app_permission(app_id: str) -> Callable:
+def require_app_permission(app_id: str, allow_query_token: bool = False) -> Callable:
     """建立要求特定 App 權限的 FastAPI dependency
 
     使用方式：
@@ -628,16 +628,32 @@ def require_app_permission(app_id: str) -> Callable:
 
     Args:
         app_id: 應用程式 ID（如 "project-management"、"knowledge-base"）
+        allow_query_token: 是否允許從 query parameter 取 token
+            （供 <img src>、window.open 等無法設定 header 的請求使用）
 
     Returns:
         FastAPI Depends 用的函數
     """
     # 延遲 import 避免循環依賴
-    from ..api.auth import get_current_session
+    from ..api.auth import get_current_session, get_session_from_token_or_query
     from ..models.auth import SessionData
 
-    async def checker(session: SessionData = Depends(get_current_session)) -> SessionData:
+    session_dependency = (
+        get_session_from_token_or_query if allow_query_token else get_current_session
+    )
+
+    async def checker(
+        request: Request,
+        session: SessionData = Depends(session_dependency),
+    ) -> SessionData:
         """檢查使用者是否有指定的 App 權限"""
+        # 唯讀 API token：拒絕寫入操作
+        if session.read_only and request.method not in ("GET", "HEAD", "OPTIONS"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="此 API token 為唯讀，無法執行寫入操作",
+            )
+
         # 管理員擁有所有權限
         if session.role == "admin":
             return session

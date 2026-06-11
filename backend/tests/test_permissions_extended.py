@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock
 
+from types import SimpleNamespace
+
 import pytest
 from fastapi import HTTPException
 
@@ -107,22 +109,23 @@ async def test_project_member_and_async_knowledge_permission(monkeypatch: pytest
 @pytest.mark.asyncio
 async def test_require_app_permission_checker(monkeypatch: pytest.MonkeyPatch) -> None:
     checker = permissions.require_app_permission("terminal")
+    req = SimpleNamespace(method="GET")
 
     # admin 直接通過
     s_admin = _session("admin")
-    assert (await checker(s_admin)).role == "admin"
+    assert (await checker(req, s_admin)).role == "admin"
 
     # session cache 命中
     s_cache = _session("user", app_permissions={"terminal": True})
-    assert (await checker(s_cache)).username == "u1"
+    assert (await checker(req, s_cache)).username == "u1"
 
     # cache 空，走 has_app_permission
     monkeypatch.setattr(permissions, "has_app_permission", lambda _r, _p, _a: True)
     s_calc = _session("user", app_permissions={})
-    assert (await checker(s_calc)).username == "u1"
+    assert (await checker(req, s_calc)).username == "u1"
 
     # 無權限
     monkeypatch.setattr(permissions, "has_app_permission", lambda _r, _p, _a: False)
     with pytest.raises(HTTPException) as e1:
-        await checker(_session("user", app_permissions={}))
+        await checker(req, _session("user", app_permissions={}))
     assert e1.value.status_code == 403 and "終端機" in e1.value.detail
