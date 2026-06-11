@@ -47,7 +47,7 @@ def _require_token() -> str:
 
 
 def _api(path: str, **kwargs):
-    """帶 token 的 API 請求，401 時提示重新登入"""
+    """帶 token 的 API 請求，401/403 時給出可行動的指引"""
     url = _require_url()
     token = _require_token()
     try:
@@ -55,6 +55,18 @@ def _api(path: str, **kwargs):
     except ApiError as e:
         if e.status == 401:
             _die("token 無效或已過期，請重新執行：ctos login")
+        if e.status == 403 and "唯讀" in e.detail:
+            _die(
+                f"API 錯誤（HTTP 403）：{e.detail}\n"
+                "目前的 token 是唯讀的。要使用寫入指令，請重新換發可寫 token：\n"
+                "  ctos login --read-write"
+            )
+        if e.status == 403 and "全域知識" in e.detail:
+            _die(
+                f"API 錯誤（HTTP 403）：{e.detail}\n"
+                "建立 global 知識需要 global_write 權限（請管理者在後台開），\n"
+                "或改用 --scope personal / --scope project。"
+            )
         _die(f"API 錯誤（HTTP {e.status}）：{e.detail}")
 
 
@@ -294,6 +306,112 @@ def cmd_kb_search(args: argparse.Namespace) -> None:
             print(f"           {snippet[:100]}")
 
 
+def _read_content_arg(args: argparse.Namespace) -> str | None:
+    """從 --content / --file 取得內容；--file - 代表讀 stdin
+
+    刻意不自動吃 stdin：非互動環境（Claude / CI）誤觸會把內容設成空字串。
+    """
+    if args.content is not None and args.file is not None:
+        _die("--content 與 --file 只能擇一")
+    if args.content is not None:
+        return args.content
+    if args.file is not None:
+        if args.file == "-":
+            return sys.stdin.read()
+        file_path = Path(args.file)
+        if not file_path.exists():
+            _die(f"找不到檔案：{args.file}")
+        return file_path.read_text(encoding="utf-8")
+    return None
+
+
+def _build_tags(args: argparse.Namespace) -> dict | None:
+    """從 --topic / --role / --level 組 tags，全部未提供時回 None"""
+    if not (args.topic or args.role or args.level):
+        return None
+    return {
+        "projects": [],
+        "roles": args.role or [],
+        "topics": args.topic or [],
+        "level": args.level,
+    }
+
+
+def cmd_kb_add(args: argparse.Namespace) -> None:
+    content = _read_content_arg(args)
+    if content is None:
+        _die("請以 --content <文字> 或 --file <路徑>（--file - 讀 stdin）提供內容")
+    if not args.title.strip():
+        _die("--title 不可為空")
+    if args.scope == "project" and not args.project_id:
+        _die("--scope project 需要一併提供 --project-id")
+
+    cfg = load_config()
+    body = {
+        "title": args.title.strip(),
+        "content": content,
+        "scope": args.scope,
+        "type": args.type,
+        "category": args.category,
+        "is_public": args.public,
+        "author": cfg.get("username") or "ctos-cli",
+    }
+    if args.project_id:
+        body["project_id"] = args.project_id
+    tags = _build_tags(args)
+    if tags:
+        body["tags"] = tags
+
+    kb = _api("/api/knowledge", method="POST", json_body=body)
+    if args.json:
+        print(json.dumps(kb, ensure_ascii=False, indent=2))
+        return
+    owner = f"（owner: {kb['owner']}）" if kb.get("owner") else ""
+    print(f"已建立 {kb['id']}: {kb['title']}")
+    print(f"範圍 {kb.get('scope')}{owner}")
+    if kb.get("scope") == "personal":
+        print("提醒：personal 條目只有你自己查得到，團隊要共用請用 --scope global 或 project。")
+
+
+def cmd_kb_update(args: argparse.Namespace) -> None:
+    content = _read_content_arg(args)
+
+    body: dict = {}
+    if args.title is not None:
+        body["title"] = args.title
+    if content is not None:
+        body["content"] = content
+    if args.scope is not None:
+        body["scope"] = args.scope
+    if args.type is not None:
+        body["type"] = args.type
+    if args.category is not None:
+        body["category"] = args.category
+    if args.public is not None:
+        body["is_public"] = args.public
+
+    tags = _build_tags(args)
+    if tags:
+        # tags 是整包取代：先讀現況合併，避免清掉沒指定的維度
+        current = _api(f"/api/knowledge/{args.kb_id}")
+        current_tags = current.get("tags") or {}
+        body["tags"] = {
+            "projects": current_tags.get("projects", []),
+            "roles": args.role or current_tags.get("roles", []),
+            "topics": args.topic or current_tags.get("topics", []),
+            "level": args.level if args.level is not None else current_tags.get("level"),
+        }
+
+    if not body:
+        _die("沒有提供任何要更新的欄位")
+
+    kb = _api(f"/api/knowledge/{args.kb_id}", method="PUT", json_body=body)
+    if args.json:
+        print(json.dumps(kb, ensure_ascii=False, indent=2))
+        return
+    print(f"已更新 {kb['id']}: {kb['title']}（範圍 {kb.get('scope')}）")
+
+
 def cmd_kb_attachments(args: argparse.Namespace) -> None:
     kb = _api(f"/api/knowledge/{args.kb_id}")
     attachments = kb.get("attachments") or []
@@ -405,6 +523,36 @@ def build_parser() -> argparse.ArgumentParser:
     p_search.add_argument("--topic", action="append", help="主題過濾（可重複）")
     p_search.add_argument("--json", action="store_true")
     p_search.set_defaults(func=cmd_kb_search)
+
+    p_add = kb_sub.add_parser("add", help="新增知識條目（需可寫 token：ctos login --read-write）")
+    p_add.add_argument("--title", required=True, help="標題")
+    p_add.add_argument("--content", help="內容（Markdown）")
+    p_add.add_argument("--file", help="從檔案讀內容；- 代表 stdin")
+    p_add.add_argument("--scope", default="personal", choices=["personal", "global", "project"], help="範圍（預設 personal；global 需 global_write 權限）")
+    p_add.add_argument("--project-id", help="專案 UUID（--scope project 時必填）")
+    p_add.add_argument("--type", default="note", help="類型（note/knowledge/reference 等，預設 note）")
+    p_add.add_argument("--category", default="technical", help="分類（technical/business/management，預設 technical）")
+    p_add.add_argument("--topic", action="append", help="主題標籤（可重複）")
+    p_add.add_argument("--role", action="append", help="角色標籤（可重複）")
+    p_add.add_argument("--level", help="層級（beginner/intermediate/advanced）")
+    p_add.add_argument("--public", action="store_true", help="允許未綁定用戶查詢（限 global）")
+    p_add.add_argument("--json", action="store_true")
+    p_add.set_defaults(func=cmd_kb_add)
+
+    p_upd = kb_sub.add_parser("update", help="更新知識條目（需可寫 token）")
+    p_upd.add_argument("kb_id", help="知識 ID（如 kb-182）")
+    p_upd.add_argument("--title", help="新標題")
+    p_upd.add_argument("--content", help="新內容（整篇取代）")
+    p_upd.add_argument("--file", help="從檔案讀新內容；- 代表 stdin")
+    p_upd.add_argument("--scope", choices=["personal", "global", "project"], help="變更範圍")
+    p_upd.add_argument("--type", help="變更類型")
+    p_upd.add_argument("--category", help="變更分類")
+    p_upd.add_argument("--topic", action="append", help="主題標籤（提供即整組取代主題，其他標籤維度保留）")
+    p_upd.add_argument("--role", action="append", help="角色標籤")
+    p_upd.add_argument("--level", help="層級")
+    p_upd.add_argument("--public", action=argparse.BooleanOptionalAction, default=None, help="--public / --no-public")
+    p_upd.add_argument("--json", action="store_true")
+    p_upd.set_defaults(func=cmd_kb_update)
 
     p_att = kb_sub.add_parser("attachments", help="列出 / 下載附件")
     p_att.add_argument("kb_id")

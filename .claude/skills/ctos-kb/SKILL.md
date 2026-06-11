@@ -35,6 +35,10 @@ ctos kb attachments kb-182 --download tmp/  # 全部下載到 tmp/
 ctos lib ls                  # 根目錄分類
 ctos lib ls 技術文件          # 瀏覽子目錄
 ctos lib get 技術文件/規格書.pdf --out tmp/
+
+# 寫入（需可寫 token：使用者要先 ctos login --read-write）
+ctos kb add --title "標題" --file note.md --scope global --topic 主題
+ctos kb update kb-123 --content "新內容" --topic 新主題
 ```
 
 ## 開發工作流（使用者說「我要開發 kb-182 的某功能」時）
@@ -48,6 +52,7 @@ ctos lib get 技術文件/規格書.pdf --out tmp/
 ## 注意事項
 
 - **scope 權限**：`scope: personal` 的條目只有 owner 看得到，API 回 404 不代表條目不存在。請使用者確認該條目是否為 global / project scope，或請 owner 調整。
-- token 預設唯讀（不能寫入知識庫）且只有 knowledge-base scope，效期 180 天。401 錯誤＝token 過期，請使用者重新 `ctos login`。
+- token 預設唯讀且只有 knowledge-base scope，效期 180 天。401 錯誤＝token 過期，請使用者重新 `ctos login`；用唯讀 token 跑 `kb add`/`kb update` 會收到 403 與換發指引（`ctos login --read-write`，互動式，要使用者自己跑）。
+- 寫入的 scope 規則：預設 personal（只有作者讀得到）；團隊共用要 `--scope global`（需 global_write 權限）或 `--scope project`（需 --project-id）。開發完把決策/心得寫回知識庫時，先問使用者要哪種 scope。
 - 搜尋結果的 `snippet` 是 ripgrep 匹配片段，要全文請再 `kb get`。
 - 服務網址等設定存於 `~/.ctos/config.json`，可用環境變數 `CTOS_URL` / `CTOS_TOKEN` 覆寫（CI / 自動化情境）。
