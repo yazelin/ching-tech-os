@@ -441,15 +441,15 @@ def cmd_kb_attachments(args: argparse.Namespace) -> None:
 
 
 # ============================================================
-# lib 子命令
+# lib / files 子命令
 # ============================================================
 
+# shared zone 的子來源（path_manager._shared_mounts）
+SHARED_SOURCES = ("projects", "circuits", "library")
 
-def cmd_lib_ls(args: argparse.Namespace) -> None:
-    sub = (args.path or "").strip("/")
-    full = f"{LIBRARY_ROOT}/{sub}" if sub else LIBRARY_ROOT
-    resp = _api(f"/api/files/shared/{full}/list")
-    if args.json:
+
+def _print_listing(resp: dict, as_json: bool) -> None:
+    if as_json:
         print(json.dumps(resp, ensure_ascii=False, indent=2))
         return
     if not resp.get("dirs") and not resp.get("files"):
@@ -462,15 +462,59 @@ def cmd_lib_ls(args: argparse.Namespace) -> None:
         print(f"  {f['name']}  ({size_kb:.1f} KB)")
 
 
-def cmd_lib_get(args: argparse.Namespace) -> None:
-    sub = args.path.strip("/")
-    content = _api(f"/api/files/shared/{LIBRARY_ROOT}/{sub}", raw=True)
-    filename = sub.split("/")[-1]
-    out = Path(args.out) if args.out else Path(filename)
+def _download_file(api_path: str, source_path: str, out_arg: str | None) -> None:
+    content = _api(api_path, raw=True)
+    filename = source_path.split("/")[-1]
+    out = Path(out_arg) if out_arg else Path(filename)
     if out.is_dir():
         out = out / filename
     out.write_bytes(content)
     print(f"已下載：{out}（{len(content)} bytes）")
+
+
+def cmd_lib_ls(args: argparse.Namespace) -> None:
+    sub = (args.path or "").strip("/")
+    full = f"{LIBRARY_ROOT}/{sub}" if sub else LIBRARY_ROOT
+    resp = _api(f"/api/files/shared/{full}/list")
+    _print_listing(resp, args.json)
+
+
+def cmd_lib_get(args: argparse.Namespace) -> None:
+    sub = args.path.strip("/")
+    _download_file(f"/api/files/shared/{LIBRARY_ROOT}/{sub}", sub, args.out)
+
+
+def _files_path(raw: str) -> str:
+    """驗證並正規化 files 路徑（<來源>/<子路徑>，來源見 SHARED_SOURCES）"""
+    path = raw.strip("/")
+    if not path:
+        _die(f"請指定路徑，來源可選：{', '.join(SHARED_SOURCES)}（如 projects/在案資料）")
+    source = path.split("/")[0]
+    if source not in SHARED_SOURCES:
+        _die(
+            f"未知的來源「{source}」，可用：{', '.join(SHARED_SOURCES)}\n"
+            f"範例：ctos files ls projects"
+        )
+    return path
+
+
+def cmd_files_ls(args: argparse.Namespace) -> None:
+    if not (args.path or "").strip("/"):
+        # 沒給路徑：列出可用來源
+        print("可用來源（公司 NAS 掛載區）：")
+        for s in SHARED_SOURCES:
+            print(f"  {s}/")
+        return
+    path = _files_path(args.path)
+    resp = _api(f"/api/files/shared/{path}/list")
+    _print_listing(resp, args.json)
+
+
+def cmd_files_get(args: argparse.Namespace) -> None:
+    path = _files_path(args.path)
+    if path == path.split("/")[0]:
+        _die("請指定檔案完整路徑（如 projects/某專案/layout.pdf）")
+    _download_file(f"/api/files/shared/{path}", path, args.out)
 
 
 # ============================================================
@@ -578,6 +622,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_lget.add_argument("path", help="檔案路徑（如 技術文件/規格書.pdf）")
     p_lget.add_argument("--out", help="輸出檔名或目錄")
     p_lget.set_defaults(func=cmd_lib_get)
+
+    p_files = sub.add_parser("files", help="公司 NAS 掛載區（projects / circuits / library）")
+    files_sub = p_files.add_subparsers(dest="files_command", required=True)
+
+    p_fls = files_sub.add_parser("ls", help="瀏覽目錄（不給路徑時列出可用來源）")
+    p_fls.add_argument("path", nargs="?", default="", help="路徑（如 projects/在案資料）")
+    p_fls.add_argument("--json", action="store_true")
+    p_fls.set_defaults(func=cmd_files_ls)
+
+    p_fget = files_sub.add_parser("get", help="下載檔案")
+    p_fget.add_argument("path", help="檔案路徑（如 circuits/某機台/線路圖.pdf）")
+    p_fget.add_argument("--out", help="輸出檔名或目錄")
+    p_fget.set_defaults(func=cmd_files_get)
 
     return parser
 

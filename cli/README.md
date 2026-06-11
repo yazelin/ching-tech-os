@@ -64,6 +64,8 @@ CTOS_PASSWORD=<密碼> ctos login --url https://ching-tech.ddns.net/ctos --usern
 | `ctos kb update <kb-id> [--title] [--content \| --file] [--scope] [--topic]...` | 更新知識條目（需可寫 token） |
 | `ctos lib ls [子路徑] [--json]` | 瀏覽圖書館目錄 |
 | `ctos lib get <路徑> [--out 檔名或目錄]` | 下載圖書館檔案 |
+| `ctos files ls [來源/子路徑] [--json]` | 瀏覽 NAS 掛載區（projects / circuits / library；不給路徑列出來源） |
+| `ctos files get <來源/路徑> [--out]` | 下載 NAS 掛載區檔案（如 `circuits/某機台/線路圖.pdf`） |
 
 ## 環境變數
 
