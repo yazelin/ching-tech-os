@@ -15,6 +15,7 @@
 import argparse
 import getpass
 import json
+import os
 import socket
 import sys
 from pathlib import Path
@@ -57,10 +58,25 @@ def _api(path: str, **kwargs):
         _die(f"API 錯誤（HTTP {e.status}）：{e.detail}")
 
 
-def _session_login(url: str) -> tuple[str, str]:
-    """互動式登入，回傳 (session_token, username)"""
-    username = input("帳號：").strip()
-    password = getpass.getpass("密碼：")
+def _session_login(url: str, username: str | None = None) -> tuple[str, str]:
+    """登入並回傳 (session_token, username)
+
+    帳號優先序：參數（--username）> 互動輸入
+    密碼優先序：環境變數 CTOS_PASSWORD > 互動輸入（getpass）
+    沒有互動式終端機（如 CI、Claude Code 的 ! 指令）時給出明確指引。
+    """
+    try:
+        if not username:
+            username = input("帳號：").strip()
+        password = os.environ.get("CTOS_PASSWORD") or getpass.getpass("密碼：")
+    except EOFError:
+        _die(
+            "無法互動輸入帳密（目前環境沒有終端機輸入）。\n"
+            "請改在一般終端機執行，或改用非互動方式：\n"
+            "  CTOS_PASSWORD=<密碼> ctos login --username <帳號> [--url <網址>]"
+        )
+    if not username:
+        _die("未提供帳號")
     resp = request(
         url,
         "/api/auth/login",
@@ -88,11 +104,17 @@ def _session_logout(url: str, session_token: str) -> None:
 
 def cmd_login(args: argparse.Namespace) -> None:
     cfg = load_config()
-    url = (args.url or get_url(cfg) or input("服務網址（如 https://ching-tech.ddns.net/ctos）：")).strip().rstrip("/")
+    url = args.url or get_url(cfg)
+    if not url:
+        try:
+            url = input("服務網址（如 https://ching-tech.ddns.net/ctos）：")
+        except EOFError:
+            _die("未提供服務網址，請加 --url <網址>")
+    url = url.strip().rstrip("/")
     if not url:
         _die("未提供服務網址")
 
-    session_token, username = _session_login(url)
+    session_token, username = _session_login(url, username=args.username)
 
     default_name = f"{getpass.getuser()}@{socket.gethostname()}"
     name = args.name or default_name
@@ -340,6 +362,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_login = sub.add_parser("login", help="登入並換發長效 API token")
     p_login.add_argument("--url", help="服務網址（如 https://ching-tech.ddns.net/ctos）")
+    p_login.add_argument("--username", help="帳號（非互動環境用，密碼走環境變數 CTOS_PASSWORD）")
     p_login.add_argument("--name", help="token 名稱（預設 使用者@主機名）")
     p_login.add_argument("--expires-days", type=int, default=180, help="token 效期天數（預設 180）")
     p_login.add_argument("--scope", action="append", help="token scope（可重複，預設 knowledge-base）")
