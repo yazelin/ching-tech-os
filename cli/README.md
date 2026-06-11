@@ -60,6 +60,8 @@ CTOS_PASSWORD=<密碼> ctos login --url https://ching-tech.ddns.net/ctos --usern
 | `ctos kb get <kb-id> [--json] [--content-only]` | 讀取知識條目 |
 | `ctos kb search <關鍵字> [--scope] [--type] [--category] [--project] [--topic]... [--json]` | 全文搜尋 |
 | `ctos kb attachments <kb-id> [--download [目錄]]` | 列出 / 下載附件 |
+| `ctos kb add --title T (--content C \| --file F) [--scope] [--topic]...` | 新增知識條目（需可寫 token） |
+| `ctos kb update <kb-id> [--title] [--content \| --file] [--scope] [--topic]...` | 更新知識條目（需可寫 token） |
 | `ctos lib ls [子路徑] [--json]` | 瀏覽圖書館目錄 |
 | `ctos lib get <路徑> [--out 檔名或目錄]` | 下載圖書館檔案 |
 
@@ -72,8 +74,26 @@ CTOS_PASSWORD=<密碼> ctos login --url https://ching-tech.ddns.net/ctos --usern
 | `CTOS_PASSWORD` | 非互動登入用密碼（只在 `ctos login` / `ctos token` 時讀取） |
 | `CTOS_CONFIG` | 覆寫設定檔路徑（預設 `~/.ctos/config.json`） |
 
+## 寫入知識庫
+
+`kb add` / `kb update` 需要**可寫 token**（預設換發的是唯讀）：
+
+```bash
+ctos login --read-write                       # 重新換發可寫 token
+ctos kb add --title "部署踩雷記錄" --file note.md --scope global --topic 部署
+echo "內容" | ctos kb add --title "標題" --file -   # 從 stdin
+```
+
+權限規則（伺服器端強制）：
+
+- `--scope personal`（預設）：自動掛 owner，只有自己讀得到
+- `--scope global`：需要 `global_write` 權限（請管理者在後台開），全員可讀
+- `--scope project`：需 `--project-id`，專案成員可編輯
+- 更新別人的條目：需要是 owner，或具 `global_write`，或 admin
+
 ## 安全說明
 
 - token 預設唯讀（伺服器端強制：非 GET 請求一律 403）、scope 只含 knowledge-base
+- 用唯讀 token 跑寫入指令會收到引導訊息（提示 `ctos login --read-write`）
 - token 外洩時：`ctos token revoke <id>`，或請管理者把帳號停用
 - `scope: personal` 的知識條目只有 owner 本人讀得到
