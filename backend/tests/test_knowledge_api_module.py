@@ -152,6 +152,10 @@ async def test_get_create_update_delete_history_version(monkeypatch: pytest.Monk
     session = _session()
     kb = _knowledge()
 
+    # 讀取權限檢查的細節由 test_knowledge_read_scope.py 專測，這裡放行
+    monkeypatch.setattr(knowledge_api, "get_user_preferences", AsyncMock(return_value={}))
+    monkeypatch.setattr(knowledge_api, "check_knowledge_permission_async", AsyncMock(return_value=True))
+
     monkeypatch.setattr(knowledge_api, "get_knowledge", lambda _id: kb)
     assert (await knowledge_api.get_single_knowledge("kb-1", session=session)).id == "kb-1"
 

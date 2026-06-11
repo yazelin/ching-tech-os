@@ -29,6 +29,10 @@ def _allow(monkeypatch: pytest.MonkeyPatch, allowed: bool = True):
         "check_mcp_tool_permission",
         AsyncMock(return_value=(allowed, "DENY")),
     )
+    # 條目層級權限檢查另以 test_mcp_knowledge_item_access.py 專測，這裡直接放行
+    monkeypatch.setattr(
+        knowledge_tools, "_check_item_access", AsyncMock(return_value=None)
+    )
 
 
 @pytest.mark.asyncio
