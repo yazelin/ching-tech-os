@@ -21,7 +21,7 @@
 - **查正式機知識庫 / 圖書館**用 `ctos` CLI（不要直接 ssh 去讀檔）：
   - 安裝：`uv tool install ./cli`（或 `uv tool install "git+https://github.com/yazelin/ching-tech-os.git#subdirectory=cli"`）
   - 首次設定：`ctos login --url https://ching-tech.ddns.net/ctos`（互動式，請使用者自己在終端機執行；非互動環境用 `--username` + 環境變數 `CTOS_PASSWORD`）
-  - 常用：`ctos kb get kb-182`、`ctos kb search "關鍵字"`、`ctos lib ls`，完整指令見 `cli/README.md`
+  - 常用：`ctos kb get kb-182`、`ctos kb search "關鍵字"`、`ctos lib ls`、`ctos files ls projects`（NAS 圖面）、`ctos erp stock <料號>`（庫存/BOM）、`ctos kb add`（寫回知識庫，需 `--read-write` token），完整指令見 `cli/README.md`
 - **本 repo 的 Claude Code project skills**（clone 即自動載入）：
   - `ctos-kb`：查知識庫 / 圖書館（使用者提到 kb-NNN 時）
   - `ctos-architecture`：加新功能 / 新 App / 新模組前的架構決策樹與逐檔 checklist
