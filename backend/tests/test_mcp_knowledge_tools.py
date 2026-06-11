@@ -29,6 +29,10 @@ def _allow(monkeypatch: pytest.MonkeyPatch, allowed: bool = True):
         "check_mcp_tool_permission",
         AsyncMock(return_value=(allowed, "DENY")),
     )
+    # 條目層級權限檢查另以 test_mcp_knowledge_item_access.py 專測，這裡直接放行
+    monkeypatch.setattr(
+        knowledge_tools, "_check_item_access", AsyncMock(return_value=None)
+    )
 
 
 @pytest.mark.asyncio
@@ -104,6 +108,12 @@ async def test_update_and_delete_item(monkeypatch: pytest.MonkeyPatch) -> None:
 
     conn = SimpleNamespace(fetchrow=AsyncMock(return_value={"username": "alice"}))
     monkeypatch.setattr(knowledge_tools, "get_connection", lambda: _ConnCtx(conn))
+    # update/delete 前會先 get_knowledge 做條目層級權限檢查（CI 環境沒有 dev 資料，必須 mock）
+    monkeypatch.setattr(
+        kb_service,
+        "get_knowledge",
+        lambda _id: SimpleNamespace(id="kb-001", scope="global", owner=None, project_id=None),
+    )
     monkeypatch.setattr(
         kb_service,
         "update_knowledge",

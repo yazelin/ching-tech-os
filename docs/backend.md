@@ -79,6 +79,12 @@ uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8088 --reload
 - 不可用 PAT 換發或撤銷 PAT（防止外洩 token 自我複製）
 - 預設效期 180 天（`expires_days`，`null` 為永久）；使用者停用（`is_active=false`）即全部失效
 
+#### 知識條目層級權限
+
+`scope: personal` 的條目僅 owner（與 admin）可讀，非 owner 透過任何讀取路徑
+（單篇 / 版本歷史 / 附件下載 / MCP 工具）一律回 404，與搜尋的過濾語意一致；
+寫入與刪除走 `check_knowledge_permission_async`（owner 或 global_write / global_delete）。
+
 ### 使用者
 
 | 方法 | 端點 | 說明 |

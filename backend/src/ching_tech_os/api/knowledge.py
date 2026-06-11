@@ -1,6 +1,7 @@
 """知識庫 API"""
 
 import mimetypes
+import re
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
@@ -42,6 +43,60 @@ from ching_tech_os.api.auth import get_current_session
 from ching_tech_os.models.auth import SessionData
 
 router = APIRouter(prefix="/api/knowledge", tags=["knowledge"])
+
+# 附件/asset 路徑中的知識 ID 樣式
+_ATTACHMENT_KB_ID_RE = re.compile(r"^kb-\d+$")
+_ASSET_KB_ID_RE = re.compile(r"^(kb-\d+)-")
+
+
+async def _ensure_read_access(kb: KnowledgeResponse, session: SessionData) -> None:
+    """檢查讀取權限，無權限時回 404（不洩漏 personal 條目的存在）
+
+    語意與 search_knowledge 的過濾一致：personal 條目僅 owner（與 admin）可讀，
+    global / project 條目所有人可讀。
+    """
+    preferences = await get_user_preferences(session.user_id) if session.user_id else None
+    allowed = await check_knowledge_permission_async(
+        session.role,
+        session.username,
+        preferences,
+        kb.owner,
+        kb.scope,
+        "read",
+        user_id=session.user_id,
+        project_id=kb.project_id,
+    )
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"知識 {kb.id} 不存在",
+        )
+
+
+async def _get_knowledge_with_read_access(kb_id: str, session: SessionData) -> KnowledgeResponse:
+    """取得知識並檢查讀取權限（404 統一處理）"""
+    try:
+        kb = get_knowledge(kb_id)
+    except KnowledgeNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"知識 {kb_id} 不存在",
+        )
+    await _ensure_read_access(kb, session)
+    return kb
+
+
+async def _check_attachment_read_access(kb_id: str, session: SessionData) -> None:
+    """附件下載前檢查所屬知識的讀取權限
+
+    找不到對應知識條目（孤兒檔案）時維持舊行為放行，
+    由檔案系統層自然回 404。
+    """
+    try:
+        kb = get_knowledge(kb_id)
+    except (KnowledgeNotFoundError, KnowledgeError):
+        return
+    await _ensure_read_access(kb, session)
 
 
 @router.get(
@@ -135,8 +190,12 @@ async def get_attachment(
     """代理取得 NAS 上的附件
 
     Args:
-        path: 附件路徑（不含 nas://knowledge/ 前綴）
+        path: 附件路徑（不含 nas://knowledge/ 前綴，格式 attachments 下為 {kb_id}/{filename}）
     """
+    # 附件路徑第一段為知識 ID 時，檢查所屬知識的讀取權限（personal 條目限 owner）
+    first_segment = path.split("/")[0]
+    if _ATTACHMENT_KB_ID_RE.match(first_segment):
+        await _check_attachment_read_access(first_segment, session)
     try:
         content = get_nas_attachment(path)
         filename = path.split("/")[-1]
@@ -168,6 +227,12 @@ async def get_local_asset(
         path: 附件路徑（如 images/kb-001-file.png）
     """
     from pathlib import Path
+
+    # 檔名以知識 ID 開頭時，檢查所屬知識的讀取權限（personal 條目限 owner）
+    filename_part = path.split("/")[-1]
+    kb_id_match = _ASSET_KB_ID_RE.match(filename_part)
+    if kb_id_match:
+        await _check_attachment_read_access(kb_id_match.group(1), session)
 
     # 安全檢查：防止路徑穿越攻擊
     if ".." in path:
@@ -212,16 +277,15 @@ async def get_single_knowledge(
 ) -> KnowledgeResponse:
     """取得單一知識的完整內容與元資料
 
+    personal 條目僅 owner（與 admin）可讀，其他人回 404。
+
     Args:
         kb_id: 知識 ID（如 kb-001）
     """
     try:
-        return get_knowledge(kb_id)
-    except KnowledgeNotFoundError:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"知識 {kb_id} 不存在",
-        )
+        return await _get_knowledge_with_read_access(kb_id, session)
+    except HTTPException:
+        raise
     except KnowledgeError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -411,6 +475,7 @@ async def get_knowledge_history(
 
     使用 git log --follow 追蹤檔案歷史（含重命名）。
     """
+    await _get_knowledge_with_read_access(kb_id, session)
     try:
         return get_history(kb_id)
     except KnowledgeNotFoundError:
@@ -439,6 +504,7 @@ async def get_knowledge_version(
 
     使用 git show 取得該版本的檔案內容。
     """
+    await _get_knowledge_with_read_access(kb_id, session)
     try:
         return get_version(kb_id, commit)
     except KnowledgeNotFoundError:

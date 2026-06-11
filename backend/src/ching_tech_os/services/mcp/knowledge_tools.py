@@ -15,6 +15,60 @@ from .server import (
 from ...database import get_connection
 
 
+async def _check_item_access(item, ctos_user_id: int | None, action: str) -> str | None:
+    """檢查對單一知識條目的存取權限（條目層級，工具層級權限另由 check_mcp_tool_permission 處理）
+
+    語意與 web API / search_knowledge 一致：
+    - 未綁定用戶：僅可讀 scope=global 且 is_public 的條目，不可寫
+    - 綁定用戶：走 check_knowledge_permission_async（personal 限 owner、
+      global/project 可讀、write/delete 需 owner 或 global_write/global_delete）
+
+    Args:
+        item: KnowledgeResponse（含 id/scope/owner/project_id/is_public）
+        ctos_user_id: CTOS 用戶 ID（None 表示未綁定）
+        action: read / write / delete
+
+    Returns:
+        None 表示允許；否則回傳給使用者的錯誤訊息
+        （read 被拒時回「找不到」，不洩漏 personal 條目的存在）
+    """
+    not_found_msg = f"找不到知識 {item.id}"
+
+    if ctos_user_id is None:
+        if action == "read" and item.scope == "global" and getattr(item, "is_public", False):
+            return None
+        if action == "read":
+            return not_found_msg
+        return "❌ 此操作需要綁定 CTOS 帳號"
+
+    async with get_connection() as conn:
+        user_row = await conn.fetchrow(
+            "SELECT username, role, preferences FROM users WHERE id = $1",
+            ctos_user_id,
+        )
+    if user_row is None:
+        return not_found_msg if action == "read" else "❌ 找不到您的帳號"
+
+    from ..permissions import check_knowledge_permission_async
+    from ..user import _parse_preferences
+
+    allowed = await check_knowledge_permission_async(
+        user_row["role"] or "user",
+        user_row["username"],
+        _parse_preferences(user_row["preferences"]),
+        item.owner,
+        item.scope,
+        action,
+        user_id=ctos_user_id,
+        project_id=item.project_id,
+    )
+    if allowed:
+        return None
+    if action == "read":
+        return not_found_msg
+    return f"❌ 您沒有{'刪除' if action == 'delete' else '編輯'}知識 {item.id} 的權限"
+
+
 async def _determine_knowledge_scope(
     line_group_id: str | None,
     line_user_id: str | None,
@@ -187,6 +241,11 @@ async def get_knowledge_item(
     try:
         item = kb_service.get_knowledge(kb_id)
 
+        # 條目層級權限：personal 條目限 owner
+        access_err = await _check_item_access(item, ctos_user_id, "read")
+        if access_err:
+            return access_err
+
         # 格式化輸出
         tags_str = ", ".join(item.tags.topics) if item.tags.topics else "無標籤"
         output = [
@@ -293,6 +352,12 @@ async def update_knowledge_item(
             tags=tags,
         )
 
+        # 條目層級權限：personal 條目限 owner 編輯
+        existing = kb_service.get_knowledge(kb_id)
+        access_err = await _check_item_access(existing, ctos_user_id, "write")
+        if access_err:
+            return access_err
+
         item = kb_service.update_knowledge(kb_id, update_data)
 
         scope_info = f"（{item.scope}）" if item.scope else ""
@@ -337,6 +402,11 @@ async def add_attachments_to_knowledge(
         knowledge = kb_service.get_knowledge(kb_id)
     except Exception:
         return f"找不到知識 {kb_id}"
+
+    # 條目層級權限：personal 條目限 owner 加附件
+    access_err = await _check_item_access(knowledge, ctos_user_id, "write")
+    if access_err:
+        return access_err
 
     # 取得目前附件數量（用來計算新附件的 index）
     current_attachment_count = len(knowledge.attachments)
@@ -402,6 +472,12 @@ async def delete_knowledge_item(
     from .. import knowledge as kb_service
 
     try:
+        # 條目層級權限：personal 條目限 owner 刪除
+        existing = kb_service.get_knowledge(kb_id)
+        access_err = await _check_item_access(existing, ctos_user_id, "delete")
+        if access_err:
+            return access_err
+
         kb_service.delete_knowledge(kb_id)
         return f"✅ 已刪除知識 {kb_id}"
 
@@ -434,6 +510,11 @@ async def get_knowledge_attachments(
 
     try:
         item = kb_service.get_knowledge(kb_id)
+
+        # 條目層級權限：personal 條目限 owner
+        access_err = await _check_item_access(item, ctos_user_id, "read")
+        if access_err:
+            return access_err
 
         if not item.attachments:
             return f"知識 {kb_id} 沒有附件"
@@ -488,6 +569,12 @@ async def update_knowledge_attachment(
     from pathlib import Path
 
     try:
+        # 條目層級權限：personal 條目限 owner 編輯
+        existing = kb_service.get_knowledge(kb_id)
+        access_err = await _check_item_access(existing, ctos_user_id, "write")
+        if access_err:
+            return access_err
+
         attachment = kb_service.update_attachment(
             kb_id=kb_id,
             attachment_idx=attachment_index,
@@ -532,6 +619,11 @@ async def read_knowledge_attachment(
 
     try:
         item = kb_service.get_knowledge(kb_id)
+
+        # 條目層級權限：personal 條目限 owner
+        access_err = await _check_item_access(item, ctos_user_id, "read")
+        if access_err:
+            return access_err
 
         if not item.attachments:
             return f"知識 {kb_id} 沒有附件"
