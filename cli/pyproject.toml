@@ -1,6 +1,6 @@
 [project]
 name = "ctos-cli"
-version = "0.1.1"
+version = "0.1.2"
 description = "ching-tech-os 知識庫 / 圖書館遠端存取 CLI"
 requires-python = ">=3.10"
 readme = "README.md"

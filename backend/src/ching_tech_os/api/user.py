@@ -134,6 +134,8 @@ async def get_current_user(
         is_admin=user_is_admin,
         permissions=UserPermissions(**permissions),
         role=session.role,
+        account_role=user.get("role") or "user",
+        auth_type=session.auth_type,
         has_password=has_password,
     )
 
@@ -171,6 +173,8 @@ async def update_current_user(
         is_admin=user_is_admin,
         permissions=UserPermissions(**permissions),
         role=session.role,
+        account_role=user.get("role") or "user",
+        auth_type=session.auth_type,
     )
 
 

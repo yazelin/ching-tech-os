@@ -21,7 +21,11 @@ class UserInfo(BaseModel):
     last_login_at: datetime | None
     is_admin: bool = False
     permissions: UserPermissions | None = None
-    role: str = "user"  # admin, user
+    role: str = "user"  # 本次 session 的有效角色（PAT 一律為 user）
+    # 帳號在資料庫中的實際角色（PAT 降權時與 role 不同）
+    account_role: str = "user"
+    # 認證型態：session（web 登入）或 pat（長效 API token）
+    auth_type: str = "session"
     # 密碼狀態
     has_password: bool = False  # 是否已設定密碼（用於顯示變更/設定密碼按鈕）
 

@@ -173,8 +173,16 @@ def cmd_whoami(_args: argparse.Namespace) -> None:
     print(f"帳號：{me.get('username', cfg.get('username', '?'))}")
     if me.get("display_name"):
         print(f"名稱：{me['display_name']}")
-    if me.get("role"):
-        print(f"角色：{me['role']}")
+
+    role = me.get("role")
+    account_role = me.get("account_role")
+    if role:
+        if me.get("auth_type") == "pat" and account_role and account_role != role:
+            # PAT 一律降權為 user，與帳號實際角色不同時標明，避免誤判帳號權限
+            print(f"角色：{role}（API token 降權；帳號實際角色：{account_role}）")
+        else:
+            print(f"角色：{role}")
+
     print(f"服務：{get_url() or '?'}")
     if cfg.get("token_name"):
         print(f"token：{cfg['token_name']}（id={cfg.get('token_id', '?')}）")

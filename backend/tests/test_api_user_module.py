@@ -75,6 +75,28 @@ async def test_get_current_user_and_not_found(monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.mark.asyncio
+async def test_get_current_user_pat_shows_account_role(monkeypatch: pytest.MonkeyPatch):
+    """PAT 降權時，role 為 session 角色（user），account_role 為帳號實際角色（admin）"""
+    monkeypatch.setattr(
+        user_api, "get_user_by_username", AsyncMock(return_value=_user_row(role="admin"))
+    )
+    monkeypatch.setattr(user_api, "_parse_preferences", lambda _p: {"apps": {}, "knowledge": {}})
+    monkeypatch.setattr(
+        user_api,
+        "get_user_permissions_for_role",
+        lambda _role, _prefs: {"apps": {}, "knowledge": {}},
+    )
+
+    pat_session = _session(role="user")
+    pat_session.auth_type = "pat"
+    user = await user_api.get_current_user(pat_session)
+    assert user.role == "user"
+    assert user.account_role == "admin"
+    assert user.auth_type == "pat"
+    assert user.is_admin is False  # PAT session 不具 admin 身分
+
+
+@pytest.mark.asyncio
 async def test_update_current_user_paths(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(user_api, "_parse_preferences", lambda _p: {"apps": {}, "knowledge": {}})
     monkeypatch.setattr(
