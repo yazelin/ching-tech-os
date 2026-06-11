@@ -207,6 +207,7 @@ ching-tech-os/
 │   └── pyproject.toml
 ├── docker/
 │   └── docker-compose.yml  # PostgreSQL、code-server
+├── cli/                    # ctos CLI（知識庫/圖書館遠端存取）
 ├── data/
 │   └── knowledge/          # 知識庫資料
 ├── docs/                   # 技術文件
@@ -218,6 +219,23 @@ ching-tech-os/
     ├── project.md          # 專案規範
     ├── specs/              # 功能規格
     └── changes/            # 變更提案
+```
+
+## Dev Tools（同事遠端開發）
+
+讓團隊成員在自己的開發機（含 Windows）上讀取 CTOS 資料並參與開發：
+
+| 工具 | 說明 |
+|------|------|
+| [cli/](cli/README.md) | `ctos` CLI — 登入一次換發長效 API token，遠端讀知識庫（`ctos kb get kb-182`）與圖書館（`ctos lib ls`） |
+| [.claude/skills/ctos-kb](.claude/skills/ctos-kb/SKILL.md) | Claude Code skill — 讓 Claude 自動用 ctos CLI 查知識庫，clone repo 即生效 |
+| `Authorization: Bearer ctos_pat_xxx` | 長效 API token（PAT）機制，詳見 [docs/backend.md](docs/backend.md) 的 API Token 章節 |
+
+```bash
+# 同事機器上的最小設定
+uv tool install "git+https://github.com/yazelin/ching-tech-os.git#subdirectory=cli"
+ctos login --url https://ching-tech.ddns.net/ctos
+ctos kb search "關鍵字"
 ```
 
 ## 文件
