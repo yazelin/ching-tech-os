@@ -10,9 +10,11 @@
 API 格式：
 - GET  /api/files/{zone}/{path:path}          - 讀取/預覽檔案
 - GET  /api/files/{zone}/{path:path}/download - 下載檔案
+- GET  /api/files/{zone}/{path:path}/list     - 列出目錄內容（不支援 NAS zone）
 """
 
 import mimetypes
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
 
@@ -20,6 +22,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, status
 from fastapi.responses import Response
 
 from ..models.auth import ErrorResponse, SessionData
+from ..models.files import DirectoryFile, DirectoryListResponse
 from ..services.path_manager import path_manager, StorageZone
 from ..services.smb import (
     create_smb_service,
@@ -273,8 +276,85 @@ async def _read_file_content(
     return content, filename, mime_type
 
 
-# 注意：/download 路由必須放在 /{path:path} 之前，
-# 否則 path:path 會貪婪匹配到 /download
+# 注意：/list、/download 路由必須放在 /{path:path} 之前，
+# 否則 path:path 會貪婪匹配到 /list、/download
+@router.get(
+    "/{zone}/{path:path}/list",
+    response_model=DirectoryListResponse,
+    responses={
+        400: {"model": ErrorResponse, "description": "無效的請求"},
+        401: {"model": ErrorResponse, "description": "未授權"},
+        404: {"model": ErrorResponse, "description": "目錄不存在"},
+    },
+)
+async def list_directory(
+    zone: str,
+    path: str,
+    session: SessionData = Depends(get_session_from_token_or_query),
+) -> DirectoryListResponse:
+    """列出目錄內容（不支援 NAS zone）
+
+    供 CLI 與自動化工具瀏覽 shared://library 等本機掛載區域。
+
+    Args:
+        zone: 儲存區域 (ctos, shared, temp, local)
+        path: 目錄相對路徑（如 library 或 library/技術文件）
+
+    Returns:
+        子目錄與檔案清單（隱藏檔排除）
+    """
+    storage_zone = _validate_zone(zone)
+    _check_path_traversal(path)
+
+    if storage_zone == StorageZone.NAS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="NAS zone 不支援目錄列表",
+        )
+    if not path:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="請指定目錄路徑",
+        )
+
+    try:
+        dir_path = _get_file_path(storage_zone, path)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+    if not dir_path.exists() or not dir_path.is_dir():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"目錄不存在：{path}",
+        )
+
+    dirs: list[str] = []
+    files: list[DirectoryFile] = []
+    for entry in sorted(dir_path.iterdir(), key=lambda p: p.name):
+        if entry.name.startswith("."):
+            continue
+        try:
+            if entry.is_dir():
+                dirs.append(entry.name)
+            else:
+                stat = entry.stat()
+                files.append(
+                    DirectoryFile(
+                        name=entry.name,
+                        size=stat.st_size,
+                        modified_at=datetime.fromtimestamp(stat.st_mtime),
+                    )
+                )
+        except OSError:
+            # 壞掉的 symlink 等異常項目直接略過
+            continue
+
+    return DirectoryListResponse(zone=zone, path=path, dirs=dirs, files=files)
+
+
 @router.get(
     "/{zone}/{path:path}/download",
     responses={
