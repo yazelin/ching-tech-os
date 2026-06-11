@@ -108,6 +108,12 @@ async def test_update_and_delete_item(monkeypatch: pytest.MonkeyPatch) -> None:
 
     conn = SimpleNamespace(fetchrow=AsyncMock(return_value={"username": "alice"}))
     monkeypatch.setattr(knowledge_tools, "get_connection", lambda: _ConnCtx(conn))
+    # update/delete 前會先 get_knowledge 做條目層級權限檢查（CI 環境沒有 dev 資料，必須 mock）
+    monkeypatch.setattr(
+        kb_service,
+        "get_knowledge",
+        lambda _id: SimpleNamespace(id="kb-001", scope="global", owner=None, project_id=None),
+    )
     monkeypatch.setattr(
         kb_service,
         "update_knowledge",
