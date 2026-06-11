@@ -185,15 +185,16 @@ class TestSaveVoiceSettings:
             assert resp.json()["ok"] is True
 
     def test_save_group_settings(self):
-        """儲存群組設定"""
+        """管理員儲存群組設定"""
         conn = AsyncMock()
+        conn.fetchval = AsyncMock(return_value="admin")
         conn.execute = AsyncMock()
 
         ctx = MagicMock()
         ctx.__aenter__ = AsyncMock(return_value=conn)
         ctx.__aexit__ = AsyncMock(return_value=False)
 
-        app = _override_auth(_mock_session())
+        app = _override_auth(_mock_session(role="admin"))
         with patch("ching_tech_os.api.voice_router.get_connection", return_value=ctx):
             client = TestClient(app)
             resp = client.put(
@@ -206,6 +207,25 @@ class TestSaveVoiceSettings:
                 },
             )
             assert resp.status_code == 200
+
+    def test_save_group_settings_non_admin(self):
+        """非管理員不能修改群組語音設定"""
+        conn = AsyncMock()
+        conn.fetchval = AsyncMock(return_value="user")
+        conn.execute = AsyncMock()
+
+        ctx = MagicMock()
+        ctx.__aenter__ = AsyncMock(return_value=conn)
+        ctx.__aexit__ = AsyncMock(return_value=False)
+
+        app = _override_auth(_mock_session(role="user"))
+        with patch("ching_tech_os.api.voice_router.get_connection", return_value=ctx):
+            client = TestClient(app)
+            resp = client.put(
+                "/api/voice/settings",
+                json={"scope": "group", "scope_id": "g1", "tts_engine": "edge", "tts_params": {}},
+            )
+            assert resp.status_code == 403
 
     def test_save_agent_settings_non_admin(self):
         """非管理員不能修改 Agent 設定"""
@@ -298,14 +318,16 @@ class TestDeleteVoiceSettings:
             assert resp.status_code == 200
 
     def test_delete_group_settings(self):
+        """管理員清除群組設定"""
         conn = AsyncMock()
+        conn.fetchval = AsyncMock(return_value="admin")
         conn.execute = AsyncMock()
 
         ctx = MagicMock()
         ctx.__aenter__ = AsyncMock(return_value=conn)
         ctx.__aexit__ = AsyncMock(return_value=False)
 
-        app = _override_auth(_mock_session())
+        app = _override_auth(_mock_session(role="admin"))
         with patch("ching_tech_os.api.voice_router.get_connection", return_value=ctx):
             client = TestClient(app)
             resp = client.request(
@@ -314,6 +336,26 @@ class TestDeleteVoiceSettings:
                 json={"scope": "group", "scope_id": "g1"},
             )
             assert resp.status_code == 200
+
+    def test_delete_group_settings_non_admin(self):
+        """非管理員不能清除群組語音設定"""
+        conn = AsyncMock()
+        conn.fetchval = AsyncMock(return_value="user")
+        conn.execute = AsyncMock()
+
+        ctx = MagicMock()
+        ctx.__aenter__ = AsyncMock(return_value=conn)
+        ctx.__aexit__ = AsyncMock(return_value=False)
+
+        app = _override_auth(_mock_session(role="user"))
+        with patch("ching_tech_os.api.voice_router.get_connection", return_value=ctx):
+            client = TestClient(app)
+            resp = client.request(
+                "DELETE",
+                "/api/voice/settings",
+                json={"scope": "group", "scope_id": "g1"},
+            )
+            assert resp.status_code == 403
 
     def test_delete_agent_non_admin(self):
         conn = AsyncMock()

@@ -7,13 +7,25 @@ from fastapi import FastAPI
 import pytest
 from unittest.mock import AsyncMock
 
+from datetime import datetime, timedelta
+
 from ching_tech_os.api import presentation as presentation_api
+from ching_tech_os.models.auth import SessionData
+
+
+def _fake_session() -> SessionData:
+    now = datetime.now()
+    return SessionData(
+        username="u1", password="", nas_host="h", user_id=1,
+        created_at=now, expires_at=now + timedelta(hours=1),
+    )
 
 
 @pytest.mark.asyncio
 async def test_presentation_generate_success_and_validation(monkeypatch: pytest.MonkeyPatch) -> None:
     app = FastAPI()
     app.include_router(presentation_api.router)
+    app.dependency_overrides[presentation_api.get_current_session] = _fake_session
     transport = ASGITransport(app=app)
 
     monkeypatch.setattr(
@@ -52,6 +64,7 @@ async def test_presentation_generate_success_and_validation(monkeypatch: pytest.
 async def test_presentation_generate_error_handling(monkeypatch: pytest.MonkeyPatch) -> None:
     app = FastAPI()
     app.include_router(presentation_api.router)
+    app.dependency_overrides[presentation_api.get_current_session] = _fake_session
     transport = ASGITransport(app=app)
 
     monkeypatch.setattr(

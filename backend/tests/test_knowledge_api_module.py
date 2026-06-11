@@ -249,6 +249,9 @@ async def test_get_create_update_delete_history_version(monkeypatch: pytest.Monk
 @pytest.mark.asyncio
 async def test_attachment_routes(monkeypatch: pytest.MonkeyPatch) -> None:
     session = _session()
+    # 附件寫入權限的細節由 test_knowledge_read_scope.py 專測，這裡放行聚焦附件 CRUD
+    monkeypatch.setattr(knowledge_api, "get_user_preferences", AsyncMock(return_value={}))
+    monkeypatch.setattr(knowledge_api, "check_knowledge_permission_async", AsyncMock(return_value=True))
     monkeypatch.setattr(knowledge_api, "get_knowledge", lambda _id: _knowledge(kb_id=_id))
 
     upload = UploadFile(file=BytesIO(b"abc"), filename="a.txt")

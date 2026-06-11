@@ -1,8 +1,10 @@
 """簡報生成 API"""
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from ..models.auth import SessionData
+from ..api.auth import get_current_session
 from ..services.presentation import generate_html_presentation
 
 router = APIRouter(prefix="/api/presentation", tags=["presentation"])
@@ -42,7 +44,10 @@ class PresentationResponse(BaseModel):
 
 
 @router.post("/generate", response_model=PresentationResponse, summary="生成簡報")
-async def api_generate_presentation(request: PresentationRequest) -> PresentationResponse:
+async def api_generate_presentation(
+    request: PresentationRequest,
+    session: SessionData = Depends(get_current_session),
+) -> PresentationResponse:
     """生成 Marp 簡報（HTML 或 PDF）
 
     有兩種使用方式：

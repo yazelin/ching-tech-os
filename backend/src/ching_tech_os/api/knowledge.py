@@ -99,6 +99,32 @@ async def _check_attachment_read_access(kb_id: str, session: SessionData) -> Non
     await _ensure_read_access(kb, session)
 
 
+async def _get_knowledge_with_write_access(kb_id: str, session: SessionData) -> KnowledgeResponse:
+    """取得知識並檢查寫入權限（附件 upload/update/delete 用）
+
+    404：不存在或無讀取權限（personal 非 owner，不洩漏存在）
+    403：讀得到但無寫入權限（personal 限 owner、global/project 需 owner 或 global_write）
+    """
+    kb = await _get_knowledge_with_read_access(kb_id, session)
+    preferences = await get_user_preferences(session.user_id) if session.user_id else None
+    can_write = await check_knowledge_permission_async(
+        session.role,
+        session.username,
+        preferences,
+        kb.owner,
+        kb.scope,
+        "write",
+        user_id=session.user_id,
+        project_id=kb.project_id,
+    )
+    if not can_write:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="您沒有修改此知識附件的權限",
+        )
+    return kb
+
+
 @router.get(
     "",
     response_model=KnowledgeListResponse,
@@ -532,15 +558,9 @@ async def upload_knowledge_attachment(
     """上傳附件
 
     小於 1MB 的檔案存本機（Git 追蹤），大於等於 1MB 存 NAS。
+    需要對該知識有寫入權限。
     """
-    # 確認知識存在
-    try:
-        get_knowledge(kb_id)
-    except KnowledgeNotFoundError:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"知識 {kb_id} 不存在",
-        )
+    await _get_knowledge_with_write_access(kb_id, session)
 
     try:
         content = await file.read()
@@ -569,18 +589,13 @@ async def delete_knowledge_attachment(
 ) -> None:
     """刪除附件
 
+    需要對該知識有寫入權限。
+
     Args:
         kb_id: 知識 ID
         attachment_idx: 附件索引（從 0 開始）
     """
-    # 確認知識存在
-    try:
-        get_knowledge(kb_id)
-    except KnowledgeNotFoundError:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"知識 {kb_id} 不存在",
-        )
+    await _get_knowledge_with_write_access(kb_id, session)
 
     try:
         delete_attachment(kb_id, attachment_idx)
@@ -604,19 +619,14 @@ async def update_knowledge_attachment(
 ) -> KnowledgeAttachment:
     """更新附件資訊（說明、類型）
 
+    需要對該知識有寫入權限。
+
     Args:
         kb_id: 知識 ID
         attachment_idx: 附件索引（從 0 開始）
         data: 更新資料
     """
-    # 確認知識存在
-    try:
-        get_knowledge(kb_id)
-    except KnowledgeNotFoundError:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"知識 {kb_id} 不存在",
-        )
+    await _get_knowledge_with_write_access(kb_id, session)
 
     try:
         return update_attachment(

@@ -197,6 +197,12 @@ async def save_voice_settings(
                 settings_json, user_id,
             )
         elif body.scope == "group" and body.scope_id:
+            # 群組設定需要管理員權限（群組層級設定屬管理行為）
+            role = await conn.fetchval(
+                "SELECT role FROM users WHERE id = $1", user_id,
+            )
+            if role != "admin":
+                raise HTTPException(status_code=403, detail="只有管理員可修改群組語音設定")
             await conn.execute(
                 "UPDATE bot_groups SET voice_settings = $1::json WHERE id = $2::uuid",
                 settings_json, body.scope_id,
@@ -235,6 +241,11 @@ async def delete_voice_settings(
                 "UPDATE users SET voice_settings = NULL WHERE id = $1", user_id,
             )
         elif body.scope == "group" and body.scope_id:
+            role = await conn.fetchval(
+                "SELECT role FROM users WHERE id = $1", user_id,
+            )
+            if role != "admin":
+                raise HTTPException(status_code=403, detail="只有管理員可修改群組語音設定")
             await conn.execute(
                 "UPDATE bot_groups SET voice_settings = NULL WHERE id = $1::uuid",
                 body.scope_id,
