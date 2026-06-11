@@ -2,6 +2,11 @@
 __pycache__/
 *.py[cod]
 *.so
+
+# 測試 coverage 暫存
+.coverage
+.coverage.*
+htmlcov/
 .Python
 *.egg-info/
 .eggs/
