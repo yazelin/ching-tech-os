@@ -139,10 +139,16 @@ async def search_messages(filter: MessageFilter) -> MessageListResponse:
         params.append(filter.category)
         param_idx += 1
 
-    # 使用者過濾
+    # 使用者過濾（管理員指定查特定人，嚴格相等）
     if filter.user_id:
         conditions.append(f"user_id = ${param_idx}")
         params.append(filter.user_id)
+        param_idx += 1
+
+    # 檢視者限縮（非管理員：只看發給自己的 + 全系統訊息，與未讀數語意一致）
+    if filter.restrict_to_user is not None:
+        conditions.append(f"(user_id = ${param_idx} OR user_id IS NULL)")
+        params.append(filter.restrict_to_user)
         param_idx += 1
 
     # 日期範圍過濾

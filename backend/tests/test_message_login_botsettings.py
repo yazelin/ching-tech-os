@@ -12,9 +12,18 @@ from fastapi.testclient import TestClient
 
 from ching_tech_os.api import login_records as login_records_api
 from ching_tech_os.api import message_events, messages as messages_api
+from ching_tech_os.models.auth import SessionData
 from ching_tech_os.models.login_record import DeviceInfo, DeviceType, GeoLocation, LoginRecordFilter
 from ching_tech_os.models.message import MarkReadRequest, MessageFilter, MessageSeverity, MessageSource
 from ching_tech_os.services import bot_settings, login_record, message
+
+
+def _fake_session(role: str = "admin", user_id: int = 1) -> SessionData:
+    now = datetime.now()
+    return SessionData(
+        username="u1", password="", nas_host="h", user_id=user_id,
+        role=role, created_at=now, expires_at=now + timedelta(hours=1),
+    )
 
 
 class _CM:
@@ -241,6 +250,9 @@ def test_messages_and_login_records_api_routes(monkeypatch: pytest.MonkeyPatch) 
     app = FastAPI()
     app.include_router(messages_api.router)
     app.include_router(login_records_api.router)
+    # smoke test 以管理員身分跑（可看全部），權限限縮另由 test_*_scoping 專測
+    app.dependency_overrides[messages_api.get_current_session] = lambda: _fake_session("admin")
+    app.dependency_overrides[login_records_api.get_current_session] = lambda: _fake_session("admin")
     client = TestClient(app)
 
     msg_resp = {
@@ -358,3 +370,57 @@ async def test_message_events_module(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(message_events, "_sio", None)
     await message_events.emit_new_message(3, "info", "system", "x", _now().isoformat())
     await message_events.emit_unread_count()
+
+
+def test_login_records_non_admin_scoping(monkeypatch: pytest.MonkeyPatch) -> None:
+    """非管理員只能查自己的登入記錄；查別人單筆回 404"""
+    app = FastAPI()
+    app.include_router(login_records_api.router)
+    app.dependency_overrides[login_records_api.get_current_session] = lambda: _fake_session("user", user_id=7)
+    client = TestClient(app)
+
+    captured = {}
+
+    async def _fake_search(filter):
+        captured["user_id"] = filter.user_id
+        return {"items": [], "total": 0, "page": 1, "limit": 20, "total_pages": 1}
+
+    monkeypatch.setattr(login_records_api, "search_login_records", _fake_search)
+    # 非 admin 即使傳 user_id=999 也被強制成自己的 7
+    client.get("/api/login-records?user_id=999")
+    assert captured["user_id"] == 7
+
+    # 取別人的單筆 → 404（不洩漏存在）
+    monkeypatch.setattr(
+        login_records_api, "get_login_record",
+        AsyncMock(return_value=SimpleNamespace(user_id=999)),
+    )
+    assert client.get("/api/login-records/1").status_code == 404
+
+
+def test_messages_non_admin_scoping(monkeypatch: pytest.MonkeyPatch) -> None:
+    """非管理員只看發給自己的 + 全系統訊息（restrict_to_user）"""
+    app = FastAPI()
+    app.include_router(messages_api.router)
+    app.dependency_overrides[messages_api.get_current_session] = lambda: _fake_session("user", user_id=7)
+    client = TestClient(app)
+
+    captured = {}
+
+    async def _fake_search(filter):
+        captured["user_id"] = filter.user_id
+        captured["restrict_to_user"] = filter.restrict_to_user
+        return {"items": [], "total": 0, "page": 1, "limit": 20, "total_pages": 1}
+
+    monkeypatch.setattr(messages_api, "search_messages", _fake_search)
+    # 非 admin 傳 user_id 被忽略，改用 restrict_to_user=自己
+    client.get("/api/messages?user_id=999")
+    assert captured["user_id"] is None
+    assert captured["restrict_to_user"] == 7
+
+    # 別人的私人訊息（user_id=999）→ 404；全系統訊息（user_id=None）→ 可看
+    monkeypatch.setattr(
+        messages_api, "get_message",
+        AsyncMock(return_value=SimpleNamespace(user_id=999)),
+    )
+    assert client.get("/api/messages/1").status_code == 404

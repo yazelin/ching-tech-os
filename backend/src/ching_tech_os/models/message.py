@@ -84,6 +84,8 @@ class MessageFilter(BaseModel):
     source: list[MessageSource] | None = None
     category: str | None = None
     user_id: int | None = None
+    # 非管理員檢視限縮：只看發給此人的 + 全系統訊息（user_id IS NULL）
+    restrict_to_user: int | None = None
     start_date: datetime | None = None
     end_date: datetime | None = None
     search: str | None = None
