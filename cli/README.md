@@ -38,11 +38,21 @@ ctos lib get 技術文件/規格書.pdf
 
 `ctos login` 會以帳號密碼登入一次，換發 PAT（personal access token）後立即登出 session；本機只保存 PAT（`~/.ctos/config.json`，權限 600），不保存密碼。
 
+### 非互動環境登入
+
+`ctos login` 預設互動輸入帳密，**沒有終端機輸入的環境**（CI、Claude Code 的 `!` 指令等）請改用：
+
+```bash
+CTOS_PASSWORD=<密碼> ctos login --url https://ching-tech.ddns.net/ctos --username <帳號>
+```
+
+密碼只從環境變數讀取、不接受命令列參數（避免留在 shell history 與 process list）。
+
 ## 指令一覽
 
 | 指令 | 說明 |
 |------|------|
-| `ctos login [--url URL] [--name 名稱] [--expires-days N] [--scope APP]... [--read-write]` | 登入並換發 API token |
+| `ctos login [--url URL] [--username 帳號] [--name 名稱] [--expires-days N] [--scope APP]... [--read-write]` | 登入並換發 API token |
 | `ctos logout` | 清除本機 token（伺服器端 token 需另行撤銷） |
 | `ctos whoami` | 顯示目前身份與 token 資訊 |
 | `ctos token list` | 列出自己的 API token（需重新輸入帳密） |
@@ -59,6 +69,7 @@ ctos lib get 技術文件/規格書.pdf
 |------|------|
 | `CTOS_URL` | 覆寫服務網址 |
 | `CTOS_TOKEN` | 覆寫 API token（CI / 自動化用） |
+| `CTOS_PASSWORD` | 非互動登入用密碼（只在 `ctos login` / `ctos token` 時讀取） |
 | `CTOS_CONFIG` | 覆寫設定檔路徑（預設 `~/.ctos/config.json`） |
 
 ## 安全說明
