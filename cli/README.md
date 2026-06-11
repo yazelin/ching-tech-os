@@ -66,6 +66,14 @@ CTOS_PASSWORD=<密碼> ctos login --url https://ching-tech.ddns.net/ctos --usern
 | `ctos lib get <路徑> [--out 檔名或目錄]` | 下載圖書館檔案 |
 | `ctos files ls [來源/子路徑] [--json]` | 瀏覽 NAS 掛載區（projects / circuits / library；不給路徑列出來源） |
 | `ctos files get <來源/路徑> [--out]` | 下載 NAS 掛載區檔案（如 `circuits/某機台/線路圖.pdf`） |
+| `ctos erp find <關鍵字>` | ERPNext 物料搜尋（比對料號與品名） |
+| `ctos erp item <料號>` | 物料明細（單位、採購價、交期） |
+| `ctos erp stock <料號> [--warehouse]` | 各倉庫存（含保留/在途） |
+| `ctos erp boms <料號>` / `ctos erp bom <BOM名>` | BOM 清單與明細 |
+
+ERP 查詢需要 token scope 含 `inventory-management`（0.1.5 起 `ctos login` 預設已涵蓋；
+舊 token 要用 erp 指令請重新 `ctos login`）。全部唯讀，走 CTOS 的 `/api/erp` proxy，
+ERPNext 憑證只存在伺服器端，不會發到個人機器。
 
 ## 環境變數
 

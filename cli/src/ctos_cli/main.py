@@ -67,6 +67,12 @@ def _api(path: str, **kwargs):
                 "建立 global 知識需要 global_write 權限（請管理者在後台開），\n"
                 "或改用 --scope personal / --scope project。"
             )
+        if e.status == 403 and "功能權限" in e.detail:
+            _die(
+                f"API 錯誤（HTTP 403）：{e.detail}\n"
+                "你的 token scope 可能不含這個功能。重新換發含該 scope 的 token：\n"
+                "  ctos login --scope knowledge-base --scope inventory-management"
+            )
         _die(f"API 錯誤（HTTP {e.status}）：{e.detail}")
 
 
@@ -138,7 +144,8 @@ def cmd_login(args: argparse.Namespace) -> None:
             token=session_token,
             json_body={
                 "name": name,
-                "scopes": args.scope or ["knowledge-base"],
+                # 預設涵蓋知識庫與 ERP 查詢（皆唯讀），要更收斂可自行指定 --scope
+                "scopes": args.scope or ["knowledge-base", "inventory-management"],
                 "expires_days": args.expires_days,
                 "read_only": not args.read_write,
             },
@@ -518,6 +525,102 @@ def cmd_files_get(args: argparse.Namespace) -> None:
 
 
 # ============================================================
+# erp 子命令（ERPNext 唯讀查詢，走 CTOS /api/erp proxy）
+# ============================================================
+
+
+def cmd_erp_find(args: argparse.Namespace) -> None:
+    resp = _api("/api/erp/items", params={"q": args.query, "limit": args.limit})
+    if args.json:
+        print(json.dumps(resp, ensure_ascii=False, indent=2))
+        return
+    items = resp.get("items", [])
+    if not items:
+        print("查無物料。")
+        return
+    for it in items:
+        disabled = "（停用）" if it.get("disabled") else ""
+        print(f"  {it['name']:<24} {it.get('item_name', '')}{disabled}  [{it.get('item_group', '')}] {it.get('stock_uom', '')}")
+
+
+def cmd_erp_item(args: argparse.Namespace) -> None:
+    resp = _api(f"/api/erp/items/{args.item_code}")
+    if args.json:
+        print(json.dumps(resp, ensure_ascii=False, indent=2))
+        return
+    it = resp.get("item", {})
+    print(f"料號：{it.get('name')}")
+    print(f"品名：{it.get('item_name')}")
+    if it.get("description"):
+        print(f"說明：{it['description']}")
+    print(f"群組：{it.get('item_group')}；單位：{it.get('stock_uom')}")
+    if it.get("last_purchase_rate") is not None:
+        print(f"最近採購價：{it['last_purchase_rate']}")
+    if it.get("lead_time_days"):
+        print(f"交期（天）：{it['lead_time_days']}")
+    if it.get("disabled"):
+        print("狀態：已停用")
+
+
+def cmd_erp_stock(args: argparse.Namespace) -> None:
+    params = {"item": args.item_code}
+    if args.warehouse:
+        params["warehouse"] = args.warehouse
+    resp = _api("/api/erp/stock", params=params)
+    if args.json:
+        print(json.dumps(resp, ensure_ascii=False, indent=2))
+        return
+    bins = resp.get("bins", [])
+    if not bins:
+        print(f"{args.item_code}：無庫存記錄。")
+        return
+    total = 0.0
+    print(f"{args.item_code} 庫存：")
+    for b in bins:
+        qty = b.get("actual_qty") or 0
+        total += qty
+        extra = []
+        if b.get("reserved_qty"):
+            extra.append(f"保留 {b['reserved_qty']}")
+        if b.get("ordered_qty"):
+            extra.append(f"在途 {b['ordered_qty']}")
+        extra_str = f"（{'、'.join(extra)}）" if extra else ""
+        print(f"  {b.get('warehouse', '?'):<30} {qty}{extra_str}")
+    print(f"合計：{total}")
+
+
+def cmd_erp_boms(args: argparse.Namespace) -> None:
+    resp = _api("/api/erp/boms", params={"item": args.item_code})
+    if args.json:
+        print(json.dumps(resp, ensure_ascii=False, indent=2))
+        return
+    boms = resp.get("boms", [])
+    if not boms:
+        print(f"{args.item_code}：沒有 BOM。")
+        return
+    for b in boms:
+        flags = []
+        if b.get("is_default"):
+            flags.append("預設")
+        if b.get("is_active"):
+            flags.append("啟用")
+        flag_str = f"（{'、'.join(flags)}）" if flags else ""
+        print(f"  {b['name']}{flag_str}")
+    print(f"明細：ctos erp bom <BOM 名稱>")
+
+
+def cmd_erp_bom(args: argparse.Namespace) -> None:
+    resp = _api(f"/api/erp/bom/{args.bom_name}")
+    if args.json:
+        print(json.dumps(resp, ensure_ascii=False, indent=2))
+        return
+    bom = resp.get("bom", {})
+    print(f"BOM：{bom.get('name')}（{bom.get('item')} {bom.get('item_name', '')} x {bom.get('quantity')}）")
+    for it in bom.get("items", []):
+        print(f"  {it.get('item_code'):<24} {it.get('item_name', '')}  x {it.get('qty')} {it.get('uom', '')}")
+
+
+# ============================================================
 # argparse
 # ============================================================
 
@@ -635,6 +738,36 @@ def build_parser() -> argparse.ArgumentParser:
     p_fget.add_argument("path", help="檔案路徑（如 circuits/某機台/線路圖.pdf）")
     p_fget.add_argument("--out", help="輸出檔名或目錄")
     p_fget.set_defaults(func=cmd_files_get)
+
+    p_erp = sub.add_parser("erp", help="ERPNext 查詢（物料 / 庫存 / BOM，唯讀）")
+    erp_sub = p_erp.add_subparsers(dest="erp_command", required=True)
+
+    p_efind = erp_sub.add_parser("find", help="關鍵字搜尋物料")
+    p_efind.add_argument("query", help="關鍵字（比對料號與品名）")
+    p_efind.add_argument("--limit", type=int, default=20)
+    p_efind.add_argument("--json", action="store_true")
+    p_efind.set_defaults(func=cmd_erp_find)
+
+    p_eitem = erp_sub.add_parser("item", help="物料明細")
+    p_eitem.add_argument("item_code", help="料號")
+    p_eitem.add_argument("--json", action="store_true")
+    p_eitem.set_defaults(func=cmd_erp_item)
+
+    p_estock = erp_sub.add_parser("stock", help="庫存查詢（各倉 Bin）")
+    p_estock.add_argument("item_code", help="料號")
+    p_estock.add_argument("--warehouse", help="倉庫過濾")
+    p_estock.add_argument("--json", action="store_true")
+    p_estock.set_defaults(func=cmd_erp_stock)
+
+    p_eboms = erp_sub.add_parser("boms", help="物料的 BOM 清單")
+    p_eboms.add_argument("item_code", help="料號")
+    p_eboms.add_argument("--json", action="store_true")
+    p_eboms.set_defaults(func=cmd_erp_boms)
+
+    p_ebom = erp_sub.add_parser("bom", help="BOM 明細（含組成物料）")
+    p_ebom.add_argument("bom_name", help="BOM 名稱（如 BOM-ITEM-001）")
+    p_ebom.add_argument("--json", action="store_true")
+    p_ebom.set_defaults(func=cmd_erp_bom)
 
     return parser
 
