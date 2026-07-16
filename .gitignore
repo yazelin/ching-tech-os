@@ -42,6 +42,7 @@ docker/code-server.git-credentials
 data/knowledge/entries/
 data/knowledge/assets/
 data/knowledge/index.json
+data/knowledge/attachments/
 
 # Projects data (attachments and runtime files)
 data/projects/
