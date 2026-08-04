@@ -64,6 +64,7 @@ services/bot/media.py              ← 媒體處理
 services/bot/message.py            ← 訊息處理
 services/ai_provider.py            ← Provider-neutral 回應型別與 AIProvider Protocol
 services/ai_router.py              ← call_ai()、ProviderRouter、readiness/sticky 邊界與 canary 判斷（目前安全回到 Claude）
+services/claude_usage.py           ← Claude OAuth usage snapshot、single-flight refresh 與 hysteresis 資料來源
 services/claude_agent.py           ← call_claude() AI 推論
 ```
 
@@ -76,6 +77,7 @@ services/linebot_agents.py         ← agent 定義、prompt 生成、工具分�
 services/bot/agents.py             ← prompt 模板（按功能分類）
 services/ai_provider.py            ← AIResponse、ToolCall 與 provider Protocol
 services/ai_router.py              ← Provider-neutral call_ai()、ProviderDecision 與 pre-start fallback（目前無 caller）
+services/claude_usage.py           ← Usage Monitor（unknown/fresh/stale/error、TTL/max-stale）
 services/claude_agent.py           ← Claude API 呼叫
 services/linebot_ai.py             ← AI 訊息處理流程
 services/ai_manager.py             ← AI 管理邏輯（859 行）

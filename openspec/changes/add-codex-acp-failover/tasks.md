@@ -26,13 +26,13 @@
 
 ## 3. Claude Usage Monitor（TDD）
 
-- [ ] 3.1 先新增 usage payload tests：5h/7d max、0–1/0–100 格式、malformed、out-of-range
-- [ ] 3.2 新增 unknown/fresh/stale/error snapshot model，保存 fetched time、last error 與 failure count
-- [ ] 3.3 實作 credentials/HTTP 讀取，確保 token、credentials 與完整錯誤 body 不進 log
-- [ ] 3.4 實作 single-flight refresh lock、TTL、max-stale 與週期 background task
-- [ ] 3.5 在 FastAPI lifespan 啟動/關閉 monitor；初次 refresh 有短 timeout 且不阻止服務啟動
-- [ ] 3.6 先新增並通過 90%/85% hysteresis、unknown/stale 與 concurrency tests
-- [ ] 3.7 新增 401、429、5xx、network timeout、missing credentials 與 cache recovery tests
+- [x] 3.1 先新增 usage payload tests：5h/7d max、0–1/0–100 格式、malformed、out-of-range
+- [x] 3.2 新增 unknown/fresh/stale/error snapshot model，保存 fetched time、last error 與 failure count
+- [x] 3.3 實作 credentials/HTTP 讀取，確保 token、credentials 與完整錯誤 body 不進 log
+- [x] 3.4 實作 single-flight refresh lock、TTL、max-stale 與週期 background task
+- [x] 3.5 在 FastAPI lifespan 啟動/關閉 monitor；初次 refresh 有短 timeout 且不阻止服務啟動
+- [x] 3.6 先新增並通過 90%/85% hysteresis、unknown/stale 與 concurrency tests
+- [x] 3.7 新增 401、429、5xx、network timeout、missing credentials 與 cache recovery tests
 
 ## 4. Codex Protocol Compatibility Spike
 

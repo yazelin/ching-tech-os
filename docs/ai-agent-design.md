@@ -63,7 +63,13 @@ ChingTech OS 的 AI 助手透過 `claude-code-acp`（ClaudeClient in-process）�
 | `AI_PROVIDER_CANARY_CONTEXTS` | `internal_admin,internal_test` | context exact-match allowlist |
 | `AI_PROVIDER_CANARY_AGENTS` | `test-agent` | Agent exact-match allowlist |
 
-在 Codex provider 與 usage monitor 尚未通過後續 gate 前，`codex` 會記錄 `codex_unready`，`auto` 會依 scope 記錄 `canary_not_allowed` 或 `usage_unknown`，實際 provider 仍為 Claude。`RoutingContext` 只供 router 判斷，不會傳入 prompt 或 provider。fake provider tests 已鎖住 readiness false/error/missing、fallback unavailable 與執行後禁止跨 provider retry。
+在 Codex provider 尚未通過後續 gate 前，`codex` 會在 pre-start fallback 記錄 `codex_unready`；`auto` 會依 scope 與 usage snapshot 產生 route reason，但實際 provider 仍為 Claude。`RoutingContext` 只供 router 判斷，不會傳入 prompt 或 provider。fake provider tests 已鎖住 readiness false/error/missing、fallback unavailable 與執行後禁止跨 provider retry。
+
+### Claude Usage Monitor
+
+`services/claude_usage.py` 以背景 single-flight request 更新記憶體快照，Router 不會在使用者請求路徑等待外部 Usage API。快照分為 unknown、fresh、stale、error；預設 TTL 60 秒、max-stale 300 秒。只有 `AI_PROVIDER_MODE=auto` 會在 FastAPI lifespan 啟動，forced Claude 不讀取 credentials。
+
+自動路由採 hysteresis：fresh utilization `>=90%` 選 Codex、已在 Codex 時必須 `<85%` 才切回 Claude；85%–90% 或 max-stale 內的 stale 快照維持前一個穩定 provider。unknown、error 或超過 max-stale 一律回 Claude。Codex provider 尚未註冊時，所有 Codex 決策仍在 pre-start readiness 階段回到 Claude。
 
 ## Agent 系統
 

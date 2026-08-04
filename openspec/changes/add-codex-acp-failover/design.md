@@ -128,6 +128,8 @@ usage monitor 由 FastAPI lifespan 啟動與關閉：
 
 router 只讀記憶體 snapshot，不在使用者 request critical path 等待遠端 usage API。
 
+**Phase 3 checkpoint（2026-08-04）**：已完成 `UsageSnapshot` 的 unknown/fresh/stale/error 狀態、5h/7d payload 正規化、single-flight refresh、TTL/max-stale、週期 task 與 90%/85% hysteresis。只有 `AI_PROVIDER_MODE=auto` 會在 FastAPI lifespan 啟動 monitor；預設 Claude 不讀 credentials。HTTP/credentials 的錯誤只保留安全 category，不記 token、完整 response body 或原始 network exception。Codex provider 尚未註冊，因此 auto 決策即使選到 Codex也只會在 pre-start readiness 階段安全回到 Claude。
+
 ### 6. Codex adapter 先走 ACP compatibility spike
 
 第一候選為 pin 版 `@agentclientprotocol/codex-acp` stdio adapter，因為 `ctos-lite` 已驗證基本可行，且 adapter 會轉接 Codex App Server。

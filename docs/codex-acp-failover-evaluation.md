@@ -274,6 +274,19 @@ Codex ACP 每個請求啟動 Node/Codex subprocess。需要：
 
 此 checkpoint 完成 Phase 2。關閉/預設 Claude 模式下，既有入口仍全部直呼 `call_claude()`，完整測試與既有 AI log 路徑無回歸。下一步進入 Phase 3 時，先只新增 usage payload 與 snapshot model 測試，不讀 credentials、不呼叫 HTTP，也不啟動 background task。
 
+### 6.8 Claude Usage Monitor checkpoint（2026-08-04）
+
+- 新增 `services/claude_usage.py`，將 5 小時與 7 天 utilization 正規化為 0–1 並取最大值；0–1、0–100、malformed、NaN/Inf 與 out-of-range 均有測試。
+- `UsageSnapshot` 明確區分 unknown、fresh、stale、error，保存 fetched/attempt time、安全錯誤分類與連續失敗次數；短期失敗保留最後有效值，超過 max-stale 則 fail closed 回 Claude。
+- refresh 使用 single-flight lock、60 秒 TTL、300 秒 max-stale 與週期 background task；Router 只讀記憶體，不在請求路徑等待 usage HTTP。
+- 只有 `AI_PROVIDER_MODE=auto` 才在 FastAPI lifespan 啟動 monitor；初次刷新受短 timeout 保護，missing credentials 或外部服務失敗不阻止系統啟動。
+- 401、429、5xx、network timeout、missing/invalid/unreadable credentials、invalid JSON、cache recovery 與 startup/cleanup 均有測試；log 不含 token、完整 response body 或原始 exception 內容。
+- `UsageRoutingPolicy` 已鎖定 `>=90%` 切 Codex、`<85%` 切回 Claude、85%–90% 維持穩定 provider；unknown/error 回 Claude，max-stale 內 stale 維持前一狀態。
+- focused：`67 passed`；`claude_usage.py` 98%、`ai_router.py` 100%。
+- 完整 `npm run ci:check`：`1335 passed, 10 skipped, 1 warning in 180.15s`，整體 coverage 85.95%。
+
+此 checkpoint 完成 Phase 3。尚未註冊 Codex provider、啟動 Codex subprocess 或遷移任何 caller；下一步只進行 ACP protocol compatibility spike 與唯讀 smoke。
+
 ## 7. 補完測試後的信心邊界
 
 補完測試可以讓團隊有把握「陸續開發」，但不能把所有階段視為同一種完成度：
