@@ -5,6 +5,7 @@
 
 import logging
 import os
+from collections.abc import Collection
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -44,6 +45,43 @@ def _get_env_bool(key: str, default: bool = False) -> bool:
     if value in ("false", "0", "no", "off"):
         return False
     return default
+
+
+def _get_env_choice(
+    key: str,
+    default: str,
+    allowed: Collection[str],
+) -> str:
+    """取得小寫選項設定；非法值明確告警並回到安全預設。"""
+    allowed_values = frozenset(str(item).strip().lower() for item in allowed)
+    normalized_default = default.strip().lower()
+    if normalized_default not in allowed_values:
+        raise ValueError(f"{key} 的預設值不在合法選項中")
+
+    value = _get_env(key, normalized_default).strip().lower()
+    if value in allowed_values:
+        return value
+
+    logger.error(
+        "環境變數 %s 的值 %r 無效，合法值為 %s；使用安全預設值 %s",
+        key,
+        value,
+        ", ".join(sorted(allowed_values)),
+        normalized_default,
+    )
+    return normalized_default
+
+
+def _get_env_lower_set(key: str, default: str = "") -> frozenset[str]:
+    """取得逗號分隔、不含空字串的小寫集合。"""
+    return frozenset(
+        item.strip().lower()
+        for item in _get_env(key, default).split(",")
+        if item.strip()
+    )
+
+
+AI_PROVIDER_MODES = frozenset({"claude", "codex", "auto"})
 
 
 class Settings:
@@ -86,6 +124,23 @@ class Settings:
     # ===================
     session_ttl_hours: int = _get_env_int("SESSION_TTL_HOURS", 8)
     session_cleanup_interval_minutes: int = 10
+
+    # ===================
+    # AI Provider 路由（Codex provider 尚未接入，所有 mode 目前皆安全回到 Claude）
+    # ===================
+    ai_provider_mode: str = _get_env_choice(
+        "AI_PROVIDER_MODE",
+        "claude",
+        AI_PROVIDER_MODES,
+    )
+    ai_provider_canary_contexts: frozenset[str] = _get_env_lower_set(
+        "AI_PROVIDER_CANARY_CONTEXTS",
+        "internal_admin,internal_test",
+    )
+    ai_provider_canary_agents: frozenset[str] = _get_env_lower_set(
+        "AI_PROVIDER_CANARY_AGENTS",
+        "test-agent",
+    )
 
     # ===================
     # 路徑設定
