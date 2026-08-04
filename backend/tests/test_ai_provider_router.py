@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import inspect
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
 import pytest
 
 from ching_tech_os import config
-from ching_tech_os.services import ai_provider, ai_router, claude_agent
+from ching_tech_os.services import ai_provider, ai_router, claude_agent, claude_usage
 
 
 class _FakeProvider:
@@ -137,6 +138,33 @@ def test_provider_mode_env_validation_falls_back_to_claude(
         "internal_admin",
         "internal_test",
     }
+
+
+def test_numeric_env_helpers_validate_without_changing_existing_int_behavior(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TEST_EXISTING_INT", "42")
+    assert config._get_env_int("TEST_EXISTING_INT", 7) == 42
+    monkeypatch.setenv("TEST_EXISTING_INT", "invalid")
+    assert config._get_env_int("TEST_EXISTING_INT", 7) == 7
+
+    monkeypatch.setenv("TEST_BOUNDED_FLOAT", "0.9")
+    assert config._get_env_float_bounded(
+        "TEST_BOUNDED_FLOAT", 0.5, minimum=0.0, maximum=1.0
+    ) == 0.9
+    monkeypatch.setenv("TEST_BOUNDED_FLOAT", "1.1")
+    assert config._get_env_float_bounded(
+        "TEST_BOUNDED_FLOAT", 0.5, minimum=0.0, maximum=1.0
+    ) == 0.5
+
+    monkeypatch.setenv("TEST_BOUNDED_INT", "60")
+    assert config._get_env_int_bounded(
+        "TEST_BOUNDED_INT", 30, minimum=5, maximum=300
+    ) == 60
+    monkeypatch.setenv("TEST_BOUNDED_INT", "oops")
+    assert config._get_env_int_bounded(
+        "TEST_BOUNDED_INT", 30, minimum=5, maximum=300
+    ) == 30
 
 
 def test_routing_context_normalizes_and_validates_values() -> None:
@@ -411,3 +439,67 @@ async def test_provider_router_fails_when_fallback_is_also_unready() -> None:
 
     assert codex.call_count == 0
     assert claude.call_count == 0
+
+
+def _usage_snapshot(state: str, utilization: float | None) -> claude_usage.UsageSnapshot:
+    now = datetime(2026, 8, 4, tzinfo=UTC)
+    return claude_usage.UsageSnapshot(
+        state=state,
+        utilization=utilization,
+        five_hour=utilization,
+        seven_day=utilization,
+        fetched_at=now if utilization is not None else None,
+        last_attempt_at=now if state != "unknown" else None,
+    )
+
+
+def test_usage_policy_applies_90_85_hysteresis() -> None:
+    policy = ai_router.UsageRoutingPolicy(switch_threshold=0.90, recovery_threshold=0.85)
+
+    assert policy.select(_usage_snapshot("fresh", 0.849)) == ("claude", "usage_below_threshold")
+    assert policy.select(_usage_snapshot("fresh", 0.899)) == ("claude", "usage_hysteresis")
+    assert policy.select(_usage_snapshot("fresh", 0.90)) == ("codex", "usage_threshold")
+    assert policy.select(_usage_snapshot("fresh", 0.85)) == ("codex", "usage_hysteresis")
+    assert policy.select(_usage_snapshot("fresh", 0.849)) == ("claude", "usage_recovered")
+
+    with pytest.raises(ValueError, match="thresholds"):
+        ai_router.UsageRoutingPolicy(switch_threshold=0.85, recovery_threshold=0.90)
+
+
+def test_usage_policy_handles_unknown_stale_and_error_safely() -> None:
+    policy = ai_router.UsageRoutingPolicy(switch_threshold=0.90, recovery_threshold=0.85)
+
+    assert policy.select(_usage_snapshot("unknown", None)) == ("claude", "usage_unknown")
+    assert policy.select(_usage_snapshot("fresh", 0.95))[0] == "codex"
+    assert policy.select(_usage_snapshot("stale", 0.95)) == ("codex", "usage_stale")
+    assert policy.select(_usage_snapshot("error", 0.95)) == ("claude", "usage_error")
+    assert policy.select(_usage_snapshot("stale", 0.95)) == ("claude", "usage_stale")
+
+
+def test_auto_route_decision_requires_canary_and_attaches_safe_fallback() -> None:
+    policy = ai_router.UsageRoutingPolicy(switch_threshold=0.90, recovery_threshold=0.85)
+    canary = ai_router.RoutingContext(context_type="internal_test")
+
+    denied = ai_router.select_provider_decision(
+        mode="auto",
+        routing_context=ai_router.RoutingContext(context_type="web"),
+        usage_snapshot=_usage_snapshot("fresh", 0.95),
+        policy=policy,
+        allowed_contexts=frozenset({"internal_test"}),
+        allowed_agents=frozenset(),
+    )
+    assert denied.provider_name == "claude"
+    assert denied.route_reason == "canary_not_allowed"
+
+    selected = ai_router.select_provider_decision(
+        mode="auto",
+        routing_context=canary,
+        usage_snapshot=_usage_snapshot("fresh", 0.95),
+        policy=policy,
+        allowed_contexts=frozenset({"internal_test"}),
+        allowed_agents=frozenset(),
+    )
+    assert selected.provider_name == "codex"
+    assert selected.route_reason == "usage_threshold"
+    assert selected.fallback_provider == "claude"
+    assert selected.fallback_reason == "codex_unready"

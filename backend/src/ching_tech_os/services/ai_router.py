@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -13,6 +14,7 @@ from typing import Any
 from ..config import AI_PROVIDER_MODES, settings
 from .ai_provider import AIProvider, AIResponse, DEFAULT_TIMEOUT, ToolNotifyCallback
 from .claude_agent import call_claude
+from .claude_usage import UsageSnapshot, claude_usage_monitor
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +141,42 @@ class RoutingContext:
         object.__setattr__(self, "agent_name", normalized_agent or None)
 
 
+class UsageRoutingPolicy:
+    """以 90%/85% hysteresis 維持單一穩定 provider 狀態。"""
+
+    def __init__(self, *, switch_threshold: float, recovery_threshold: float) -> None:
+        if not 0 <= recovery_threshold < switch_threshold <= 1:
+            raise ValueError("usage thresholds 必須符合 0 <= recovery < switch <= 1")
+        self.switch_threshold = switch_threshold
+        self.recovery_threshold = recovery_threshold
+        self._stable_provider = "claude"
+        self._lock = threading.Lock()
+
+    def select(self, snapshot: UsageSnapshot) -> tuple[str, str]:
+        with self._lock:
+            if snapshot.state == "unknown":
+                self._stable_provider = "claude"
+                return "claude", "usage_unknown"
+            if snapshot.state == "error" or snapshot.utilization is None:
+                self._stable_provider = "claude"
+                return "claude", "usage_error"
+            if snapshot.state == "stale":
+                return self._stable_provider, "usage_stale"
+
+            if snapshot.utilization >= self.switch_threshold:
+                self._stable_provider = "codex"
+                return "codex", "usage_threshold"
+            if snapshot.utilization < self.recovery_threshold:
+                reason = (
+                    "usage_recovered"
+                    if self._stable_provider == "codex"
+                    else "usage_below_threshold"
+                )
+                self._stable_provider = "claude"
+                return "claude", reason
+            return self._stable_provider, "usage_hysteresis"
+
+
 def is_canary_allowed(
     routing_context: RoutingContext | None,
     *,
@@ -163,30 +201,50 @@ def is_canary_allowed(
     )
 
 
-def _claude_route_reason(routing_context: RoutingContext | None) -> str:
-    """在 Codex/usage 尚未接入前，產生安全且可觀測的 Claude 路由原因。"""
-    mode = str(settings.ai_provider_mode).strip().lower()
+def select_provider_decision(
+    *,
+    mode: str,
+    routing_context: RoutingContext | None,
+    usage_snapshot: UsageSnapshot | None,
+    policy: UsageRoutingPolicy,
+    allowed_contexts: frozenset[str],
+    allowed_agents: frozenset[str],
+) -> ProviderDecision:
+    """在 provider 執行前，以設定、canary 與快照建立單次決策。"""
+    mode = str(mode).strip().lower()
     if mode not in AI_PROVIDER_MODES:
-        return "invalid_mode"
+        return ProviderDecision("claude", "invalid_mode")
     if mode == "claude":
-        return "forced_claude"
+        return ProviderDecision("claude", "forced_claude")
     if mode == "codex":
-        return "codex_unready"
+        return ProviderDecision(
+            "codex",
+            "forced_codex",
+            fallback_provider="claude",
+            fallback_reason="codex_unready",
+        )
     if not is_canary_allowed(
         routing_context,
-        allowed_contexts=settings.ai_provider_canary_contexts,
-        allowed_agents=settings.ai_provider_canary_agents,
+        allowed_contexts=allowed_contexts,
+        allowed_agents=allowed_agents,
     ):
-        return "canary_not_allowed"
-    return "usage_unknown"
+        return ProviderDecision("claude", "canary_not_allowed")
+
+    selected, reason = policy.select(usage_snapshot or UsageSnapshot())
+    if selected == "codex":
+        return ProviderDecision(
+            "codex",
+            reason,
+            fallback_provider="claude",
+            fallback_reason="codex_unready",
+        )
+    return ProviderDecision("claude", reason)
 
 
-def _safe_claude_decision(routing_context: RoutingContext | None) -> ProviderDecision:
-    """Codex/usage 尚未接入時，所有 mode 都建立固定 Claude 決策。"""
-    return ProviderDecision(
-        provider_name="claude",
-        route_reason=_claude_route_reason(routing_context),
-    )
+_usage_policy = UsageRoutingPolicy(
+    switch_threshold=settings.claude_usage_switch_threshold,
+    recovery_threshold=settings.claude_usage_recovery_threshold,
+)
 
 
 async def call_ai(
@@ -208,8 +266,17 @@ async def call_ai(
 
     ``routing_context`` 只保留給未來 router 判斷，不會傳入 prompt 或 provider。
     """
-    decision = _safe_claude_decision(routing_context)
-    return await _provider_router.execute(
+    mode = str(settings.ai_provider_mode).strip().lower()
+    usage_snapshot = claude_usage_monitor.snapshot() if mode == "auto" else None
+    decision = select_provider_decision(
+        mode=mode,
+        routing_context=routing_context,
+        usage_snapshot=usage_snapshot,
+        policy=_usage_policy,
+        allowed_contexts=settings.ai_provider_canary_contexts,
+        allowed_agents=settings.ai_provider_canary_agents,
+    )
+    response = await _provider_router.execute(
         decision,
         prompt=prompt,
         model=model,
@@ -224,3 +291,6 @@ async def call_ai(
         ctos_user_id=ctos_user_id,
         extra_mcp_env=extra_mcp_env,
     )
+    if usage_snapshot is not None:
+        response.usage_snapshot = usage_snapshot.as_metadata()
+    return response

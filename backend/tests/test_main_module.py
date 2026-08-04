@@ -97,6 +97,7 @@ async def test_lifespan_startup_shutdown(monkeypatch: pytest.MonkeyPatch, tmp_pa
     app = FastAPI()
 
     monkeypatch.setattr(main.settings, "bot_secret_key", "")
+    monkeypatch.setattr(main.settings, "ai_provider_mode", "auto")
     monkeypatch.setattr(main, "ensure_directories", Mock())
     monkeypatch.setattr(main, "init_db_pool", AsyncMock())
     monkeypatch.setattr(main, "close_db_pool", AsyncMock())
@@ -138,6 +139,9 @@ async def test_lifespan_startup_shutdown(monkeypatch: pytest.MonkeyPatch, tmp_pa
     monkeypatch.setattr(line_client_module, "close_line_client", AsyncMock())
     import ching_tech_os.services.claude_agent as claude_agent_module
     monkeypatch.setattr(claude_agent_module, "_WORKING_DIR_BASE", tmp_path / "claude-work")
+    import ching_tech_os.services.claude_usage as claude_usage_module
+    usage_monitor = SimpleNamespace(start=AsyncMock(), stop=AsyncMock())
+    monkeypatch.setattr(claude_usage_module, "claude_usage_monitor", usage_monitor)
 
     async with main.lifespan(app):
         assert hasattr(app.state, "clawhub_client")
@@ -147,6 +151,8 @@ async def test_lifespan_startup_shutdown(monkeypatch: pytest.MonkeyPatch, tmp_pa
     main.close_db_pool.assert_awaited_once()
     claw_client.close.assert_awaited_once()
     skill_client.close.assert_awaited_once()
+    usage_monitor.start.assert_awaited_once()
+    usage_monitor.stop.assert_awaited_once()
 
 
 @pytest.mark.asyncio
