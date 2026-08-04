@@ -36,13 +36,13 @@
 
 ## 4. Codex Protocol Compatibility Spike
 
-- [ ] 4.1 Pin 一個 `codex-acp` + Codex runtime 組合，保存 adapter/version/protocol fixture
-- [ ] 4.2 以 fake ACP connection 測試 repeated message chunks、tool progress 去重、token/model metadata 與 cancel
-- [ ] 4.3 建立真實唯讀 smoke fixture：純文字、重複文字、單一唯讀 MCP 工具、timeout/cancel
-- [ ] 4.4 驗證 stdio MCP 能完整傳遞 command/args/env
-- [ ] 4.5 驗證 HTTP MCP 能完整傳遞 URL/headers；若 Generic client 不支援，實作安全 schema conversion 或改走 App Server spike
-- [ ] 4.6 驗證 permission event 可取得 canonical server/tool identity；若只能模糊比對則停止正式 adapter 開發
-- [ ] 4.7 記錄 ACP 與直接 Codex App Server stdio 的差異，確認正式 provider protocol
+- [x] 4.1 Pin 一個 `codex-acp` + Codex runtime 組合，保存 adapter/version/protocol fixture
+- [x] 4.2 以 fake ACP connection 測試 repeated message chunks、tool progress 去重、token/model metadata 與 cancel
+- [x] 4.3 建立真實唯讀 smoke fixture：純文字、重複文字、單一唯讀 MCP 工具、timeout/cancel
+- [x] 4.4 驗證 stdio MCP 能完整傳遞 command/args/env
+- [x] 4.5 驗證 HTTP MCP 能完整傳遞 URL/headers；若 Generic client 不支援，實作安全 schema conversion 或改走 App Server spike
+- [x] 4.6 驗證 permission event 可取得 canonical server/tool identity；若只能模糊比對則停止正式 adapter 開發
+- [x] 4.7 記錄 ACP 與直接 Codex App Server stdio 的差異，確認正式 provider protocol
 
 ## 5. Codex Provider Adapter（TDD）
 
