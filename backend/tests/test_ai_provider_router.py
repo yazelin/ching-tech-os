@@ -270,7 +270,6 @@ async def test_call_ai_does_not_retry_after_claude_exception(
     ("mode", "routing_context", "expected_reason"),
     [
         ("claude", None, "forced_claude"),
-        ("codex", None, "codex_unready"),
         ("invalid-provider", None, "invalid_mode"),
         (
             "auto",
@@ -284,7 +283,7 @@ async def test_call_ai_does_not_retry_after_claude_exception(
         ),
     ],
 )
-async def test_call_ai_modes_remain_safely_on_claude_without_codex_provider(
+async def test_call_ai_modes_that_do_not_select_codex_remain_on_claude(
     monkeypatch: pytest.MonkeyPatch,
     mode: str,
     routing_context,
@@ -313,6 +312,53 @@ async def test_call_ai_modes_remain_safely_on_claude_without_codex_provider(
     assert result.provider == "claude"
     assert result.route_reason == expected_reason
     call_claude.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_call_ai_forced_codex_uses_registered_provider_and_forwards_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    response = ai_provider.AIResponse(success=True, message="Codex 回覆")
+    call_codex = AsyncMock(return_value=response)
+    monkeypatch.setattr(ai_router, "call_codex", call_codex)
+    monkeypatch.setattr(
+        ai_router.codex_provider, "is_ready", AsyncMock(return_value=True)
+    )
+    monkeypatch.setattr(ai_router.settings, "ai_provider_mode", "codex")
+    on_start = AsyncMock()
+    on_end = AsyncMock()
+
+    result = await ai_router.call_ai(
+        prompt="Codex 測試",
+        model="sonnet",
+        history=[{"role": "user", "content": "先前內容"}],
+        system_prompt="系統提示",
+        timeout=30,
+        tools=["mcp__ching-tech-os__search_knowledge"],
+        tool_call_limits={"mcp__ching-tech-os__search_knowledge": 1},
+        on_tool_start=on_start,
+        on_tool_end=on_end,
+        required_mcp_servers={"ching-tech-os"},
+        ctos_user_id=7,
+        extra_mcp_env={"CTOS_GROUP_ID": "g-1"},
+    )
+
+    assert result.provider == "codex"
+    assert result.route_reason == "forced_codex"
+    call_codex.assert_awaited_once_with(
+        prompt="Codex 測試",
+        model="sonnet",
+        history=[{"role": "user", "content": "先前內容"}],
+        system_prompt="系統提示",
+        timeout=30,
+        tools=["mcp__ching-tech-os__search_knowledge"],
+        tool_call_limits={"mcp__ching-tech-os__search_knowledge": 1},
+        on_tool_start=on_start,
+        on_tool_end=on_end,
+        required_mcp_servers={"ching-tech-os"},
+        ctos_user_id=7,
+        extra_mcp_env={"CTOS_GROUP_ID": "g-1"},
+    )
 
 
 @pytest.mark.asyncio

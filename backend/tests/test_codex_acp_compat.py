@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -19,7 +20,11 @@ from acp.schema import (
     ToolCallUpdate,
 )
 
-from ching_tech_os.services.codex_acp import CodexAcpClient, to_acp_mcp_server
+from ching_tech_os.services.codex_acp import (
+    CodexAcpClient,
+    _redact_diagnostics,
+    to_acp_mcp_server,
+)
 
 
 def test_runtime_versions_are_exactly_pinned() -> None:
@@ -41,6 +46,36 @@ def test_runtime_versions_are_exactly_pinned() -> None:
     assert fixture["versions"]["codex_acp"] == "1.1.9"
     assert fixture["versions"]["codex_cli"] == "0.146.0"
     assert all(fixture["validated"].values())
+
+
+def test_stderr_diagnostics_are_bounded_and_redacted() -> None:
+    client = CodexAcpClient()
+    client.stderr_max_bytes = 24
+    client._stderr_tail.extend(b"prefix Bearer very-secret")
+    overflow = len(client._stderr_tail) - client.stderr_max_bytes
+    del client._stderr_tail[:max(0, overflow)]
+
+    assert len(client._stderr_tail) <= 24
+    assert "very-secret" not in client.stderr_tail
+    assert "[REDACTED]" in client.stderr_tail
+    assert "token-value" not in _redact_diagnostics("access_token=token-value")
+
+
+@pytest.mark.asyncio
+async def test_stderr_reader_keeps_only_bounded_tail() -> None:
+    reader = asyncio.StreamReader()
+    reader.feed_data(b"old-data " + b"x" * 30)
+    reader.feed_data(b" Bearer newest-secret")
+    reader.feed_eof()
+    client = CodexAcpClient()
+    client.stderr_max_bytes = 32
+    client._process = SimpleNamespace(stderr=reader)
+
+    await client._drain_stderr()
+
+    assert len(client._stderr_tail) == 32
+    assert "old-data" not in client.stderr_tail
+    assert "newest-secret" not in client.stderr_tail
 
 
 def test_mcp_conversion_preserves_stdio_and_http_fields() -> None:

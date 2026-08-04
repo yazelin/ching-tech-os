@@ -1,7 +1,7 @@
 # Codex ACP 備援評估報告
 
 > 評估日期：2026-08-04
-> 狀態：Phase 0–4 完成；安全旁路、usage monitor 與 Codex ACP 相容層已受測，Codex Provider 尚未註冊，正式流量仍固定 Claude
+> 狀態：Phase 0–5 完成；安全旁路、usage monitor、ACP 相容層與 Codex Provider 已受測，正式流量仍固定 Claude且尚無 caller 遷移
 > 後續計畫：`openspec/changes/add-codex-acp-failover/`
 
 ## 1. 結論
@@ -304,6 +304,22 @@ ACP 與直接 App Server 的差異：App Server 提供原生 initialize/thread/s
 
 此 checkpoint 尚未把 Codex 註冊到 Router；Phase 5 將在相同 compatibility layer 上實作完整 provider contract、權限與資源治理。
 
+### 6.10 Codex Provider checkpoint（2026-08-04）
+
+Phase 5 已完成，Codex provider 已註冊至 `call_ai()` Router，但預設 `AI_PROVIDER_MODE=claude`，且所有正式入口仍直呼 `call_claude()`，所以現有流量不會啟動 Codex。
+
+- 完整 provider kwargs 與 `AIResponse` 契約已對齊；保留 history、system prompt、partial text、completed tool calls、token、actual model、tool timings 與 callback isolation。
+- 每請求使用隔離 session workdir；MCP 先依 canonical allowlist server 與 required set 取交集，再沿用主系統 merge/filter、stdio/HTTP transport 與 `CTOS_USER_ID`/Agent scope env injection。
+- permission 同時要求 ACP title、raw server/tool 與 allowlist canonical identity 精確一致；短名稱、Unknown、同名不同 server、缺少 namespace、tool-call-id correlation 不一致皆拒絕。
+- terminal、file-write 與 Codex native image fail closed；允許的圖片只能走既有 MCP，仍受 nanobanana/codex-image 全域及 call-site 次數上限。
+- subprocess 設為 read-only、on-request approval、multi-agent disabled、`NO_BROWSER=1`；並有 concurrency semaphore、獨立 queue timeout、circuit breaker、安全錯誤分類、有界且遮罩的 stderr tail。
+- timeout 會 cancel、保留 partial result，再 disconnect/terminate/kill 並清除 session 目錄；binary missing、auth、protocol、MCP startup、overload 與 callback failure 均有獨立測試。
+- Phase 5 focused：`64 passed`；`codex_agent.py` 94%，核心安全分支不是只依賴 aggregate coverage。
+- 完整後端：`1371 passed, 13 skipped, 1 warning in 114.60s`。
+- `npm run ci:check`：前端 build 通過；`1371 passed, 13 skipped, 1 warning in 180.43s`，整體 coverage 85.98%。
+
+這個 checkpoint 完成 adapter 本體，但不是正式啟用許可。Phase 6–9 的部署 preflight、service-user auth、可觀測性、caller canary、load test、kill-switch 演練與 24–72 小時觀察仍是 rollout gate。
+
 ## 7. 補完測試後的信心邊界
 
 補完測試可以讓團隊有把握「陸續開發」，但不能把所有階段視為同一種完成度：
@@ -311,7 +327,8 @@ ACP 與直接 App Server 的差異：App Server 提供原生 initialize/thread/s
 | 已完成條件 | 可以有把握進行的下一步 |
 |---|---|
 | Provider 契約、router、usage 與 permission 單元測試 | 開發 feature-flag 關閉的 router 與 Codex adapter |
-| stdio/HTTP MCP integration tests、真實唯讀 ACP smoke | 開啟內部 admin/test-agent canary |
+| stdio/HTTP MCP integration tests、真實唯讀 ACP smoke | 實作完整 Provider 與部署 readiness |
+| Provider、部署 preflight、可觀測性與 kill switch | 開啟內部 admin/test-agent canary |
 | Line/Telegram/Web 入口測試、工具副作用防重送測試 | 開啟 allowlist 使用者或 Agent canary |
 | systemd preflight、load test、監控與 kill switch | 小比例正式流量自動切換 |
 | 24–72 小時 canary 無安全與重複操作問題 | 逐步擴大支援入口 |

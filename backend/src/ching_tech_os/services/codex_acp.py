@@ -7,7 +7,9 @@ identity 遺失問題；provider 業務邏輯留在 ``codex_agent.py``。
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
+import re
 from typing import Any
 
 from acp.client.connection import ClientSideConnection
@@ -32,6 +34,16 @@ logger = logging.getLogger(__name__)
 
 MAX_ACP_FRAME_SIZE = 64 * 1024 * 1024
 TERMINAL_TOOL_STATUSES = frozenset({"completed", "failed"})
+_SECRET_PATTERNS = (
+    re.compile(r"(?i)(bearer\s+)[^\s,;]+"),
+    re.compile(r"(?i)((?:api[_-]?key|access[_-]?token|authorization)\s*[=:]\s*)[^\s,;]+"),
+)
+
+
+def _redact_diagnostics(value: str) -> str:
+    for pattern in _SECRET_PATTERNS:
+        value = pattern.sub(r"\1[REDACTED]", value)
+    return value
 
 
 def _as_plain_mapping(value: Any) -> dict[str, Any]:
@@ -115,6 +127,24 @@ class CodexAcpClient(GenericAcpClient):
         self.model_name: str | None = None
         self._active_tool_identity: dict[str, tuple[str, dict[str, Any]]] = {}
         self._terminal_tool_ids: set[str] = set()
+        self._stderr_tail = bytearray()
+        self._stderr_task: asyncio.Task[None] | None = None
+        self.stderr_max_bytes = 8192
+
+    @property
+    def stderr_tail(self) -> str:
+        """只暴露有界、可替換解碼的診斷尾端。"""
+        decoded = bytes(self._stderr_tail).decode("utf-8", errors="replace")
+        return _redact_diagnostics(decoded)
+
+    async def _drain_stderr(self) -> None:
+        if self._process is None or self._process.stderr is None:
+            return
+        while chunk := await self._process.stderr.read(4096):
+            self._stderr_tail.extend(chunk)
+            overflow = len(self._stderr_tail) - self.stderr_max_bytes
+            if overflow > 0:
+                del self._stderr_tail[:overflow]
 
     def _create_client_handler(self):
         handler = super()._create_client_handler()
@@ -287,13 +317,17 @@ class CodexAcpClient(GenericAcpClient):
             *self.args,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE,
             cwd=self.cwd,
             env=self.env,
             limit=MAX_ACP_FRAME_SIZE,
         )
         if self._process.stdin is None or self._process.stdout is None:
             raise RuntimeError("無法建立 Codex ACP subprocess pipes")
+        self._stderr_tail.clear()
+        self._stderr_task = asyncio.create_task(
+            self._drain_stderr(), name="codex-acp-stderr"
+        )
         self._connection = ClientSideConnection(
             to_client=self._create_client_handler(),
             input_stream=self._process.stdin,
@@ -314,6 +348,13 @@ class CodexAcpClient(GenericAcpClient):
         try:
             await super().disconnect()
         finally:
+            stderr_task = self._stderr_task
+            self._stderr_task = None
+            if stderr_task is not None:
+                if not stderr_task.done():
+                    stderr_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await stderr_task
             if process is not None:
                 for stream in (
                     getattr(process, "stdin", None),
