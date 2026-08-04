@@ -46,16 +46,16 @@
 
 ## 5. Codex Provider Adapter（TDD）
 
-- [ ] 5.1 先新增 Codex provider contract tests，涵蓋完整 `call_ai()` kwargs
-- [ ] 5.2 實作 per-request session workdir，沿用主系統 MCP merge/filter 與 env injection 規則
-- [ ] 5.3 實作 canonical permission guard；同名、Unknown、concurrent 或缺少 namespace 時 fail closed
-- [ ] 5.4 實作 terminal/file-write/native image deny，圖片必須走允許的 CTOS MCP 工具
-- [ ] 5.5 實作 tool-call limit、全域生圖上限、callbacks、tool timings 與 callback error isolation
-- [ ] 5.6 實作 message/tool event 去重、partial result、token、actual model 與 bounded stderr diagnostics
-- [ ] 5.7 實作 timeout cancel、disconnect、process terminate/kill 與所有路徑 cleanup tests
-- [ ] 5.8 實作 concurrency semaphore、queue timeout 與 provider circuit breaker
-- [ ] 5.9 新增 binary missing、auth expired、protocol mismatch、MCP startup failure、overload tests
-- [ ] 5.10 確認 Codex provider 核心安全分支皆有明確測試，不能只依 aggregate coverage
+- [x] 5.1 先新增 Codex provider contract tests，涵蓋完整 `call_ai()` kwargs
+- [x] 5.2 實作 per-request session workdir，沿用主系統 MCP merge/filter 與 env injection 規則
+- [x] 5.3 實作 canonical permission guard；同名、Unknown、concurrent 或缺少 namespace 時 fail closed
+- [x] 5.4 實作 terminal/file-write/native image deny，圖片必須走允許的 CTOS MCP 工具
+- [x] 5.5 實作 tool-call limit、全域生圖上限、callbacks、tool timings 與 callback error isolation
+- [x] 5.6 實作 message/tool event 去重、partial result、token、actual model 與 bounded stderr diagnostics
+- [x] 5.7 實作 timeout cancel、disconnect、process terminate/kill 與所有路徑 cleanup tests
+- [x] 5.8 實作 concurrency semaphore、queue timeout 與 provider circuit breaker
+- [x] 5.9 新增 binary missing、auth expired、protocol mismatch、MCP startup failure、overload tests
+- [x] 5.10 確認 Codex provider 核心安全分支皆有明確測試，不能只依 aggregate coverage
 
 ## 6. 部署與 Readiness
 

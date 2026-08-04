@@ -147,6 +147,8 @@ spike 必須先證明：
 
 **Phase 4 checkpoint（2026-08-04）— Go**：正式 protocol 選定 pin 版 `@agentclientprotocol/codex-acp` 1.1.9 + `@openai/codex` 0.146.0 + Python ACP 0.8.0。上游 adapter 本身由 App Server 轉接並支援 stdio/HTTP MCP；缺口位於 `claude-code-acp` Generic client 只轉 stdio、會以 substring 移除合法重複文字，並在 permission callback 遺失 active tool identity。`services/codex_acp.py` compatibility layer 已以 exact schema 補齊 HTTP headers、ordered delta、terminal progress 去重與 tool-call-id identity correlation。真實 read-only smoke 已通過文字、重複文字、stdio 工具、HTTP handshake、canonical permission identity、timeout/cancel 與 process cleanup，因此不需改走直接 App Server；若 pin 組合日後回歸，直接 App Server 仍是保留方案。
 
+**Phase 5 checkpoint（2026-08-04）**：`services/codex_agent.py` 已完成共用 response/kwargs、隔離 session、filtered stdio/HTTP MCP、framework identity env、canonical permission、工具與生圖上限、callbacks、partial result、timeout cleanup、bounded/redacted stderr、semaphore/queue timeout 與 circuit breaker。Router 已註冊 Codex，但 mode 預設 Claude且尚無正式 caller 使用 `call_ai()`。完整 CI 為 1371 passed/13 skipped、coverage 85.98%；下一階段仍須完成部署與 service-user auth readiness，不得直接啟用 canary。
+
 ### 7. MCP 組裝沿用主系統安全上下文
 
 Codex provider 必須使用與 Claude 相同的 session workdir、enabled extends、required server filtering 與環境注入來源。

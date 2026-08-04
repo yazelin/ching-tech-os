@@ -1,7 +1,4 @@
-"""Provider-neutral AI 呼叫旁路。
-
-目前固定委派 Claude；usage routing、canary 與 Codex provider 尚未接入。
-"""
+"""Provider-neutral AI 呼叫旁路。"""
 
 from __future__ import annotations
 
@@ -15,6 +12,7 @@ from ..config import AI_PROVIDER_MODES, settings
 from .ai_provider import AIProvider, AIResponse, DEFAULT_TIMEOUT, ToolNotifyCallback
 from .claude_agent import call_claude
 from .claude_usage import UsageSnapshot, claude_usage_monitor
+from .codex_agent import call_codex, codex_provider
 
 logger = logging.getLogger(__name__)
 
@@ -122,7 +120,21 @@ class _ClaudeProvider:
         return await call_claude(**provider_kwargs)
 
 
-_provider_router = ProviderRouter({"claude": _ClaudeProvider()})
+class _CodexProvider:
+    """保留可 monkeypatch 的 call_codex 邊界並委派 readiness。"""
+
+    provider_name = "codex"
+
+    async def is_ready(self) -> bool:
+        return await codex_provider.is_ready()
+
+    async def call(self, **provider_kwargs: Any) -> AIResponse:
+        return await call_codex(**provider_kwargs)
+
+
+_provider_router = ProviderRouter(
+    {"claude": _ClaudeProvider(), "codex": _CodexProvider()}
+)
 
 
 @dataclass(frozen=True)
@@ -262,7 +274,7 @@ async def call_ai(
     extra_mcp_env: dict[str, str] | None = None,
     routing_context: RoutingContext | None = None,
 ) -> AIResponse:
-    """以 provider-neutral 介面呼叫 AI，目前永遠固定使用 Claude。
+    """以 provider-neutral 介面呼叫 AI。
 
     ``routing_context`` 只保留給未來 router 判斷，不會傳入 prompt 或 provider。
     """

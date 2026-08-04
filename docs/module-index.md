@@ -63,9 +63,10 @@ services/bot/rate_limiter.py       ← 受限模式頻率限制（bot_usage_trac
 services/bot/media.py              ← 媒體處理
 services/bot/message.py            ← 訊息處理
 services/ai_provider.py            ← Provider-neutral 回應型別與 AIProvider Protocol
-services/ai_router.py              ← call_ai()、ProviderRouter、readiness/sticky 邊界與 canary 判斷（目前安全回到 Claude）
+services/ai_router.py              ← call_ai()、Claude/Codex registry、readiness/sticky 邊界與 canary 判斷
 services/claude_usage.py           ← Claude OAuth usage snapshot、single-flight refresh 與 hysteresis 資料來源
 services/codex_acp.py              ← Codex ACP compatibility layer（ordered delta、HTTP MCP、permission identity）
+services/codex_agent.py            ← Codex Provider（canonical permission、資源限制、timeout/cleanup）
 services/claude_agent.py           ← call_claude() AI 推論
 ```
 
@@ -80,6 +81,7 @@ services/ai_provider.py            ← AIResponse、ToolCall 與 provider Protoc
 services/ai_router.py              ← Provider-neutral call_ai()、ProviderDecision 與 pre-start fallback（目前無 caller）
 services/claude_usage.py           ← Usage Monitor（unknown/fresh/stale/error、TTL/max-stale）
 services/codex_acp.py              ← Pin 版 Codex ACP 協定轉接與真實唯讀 smoke 基礎
+services/codex_agent.py            ← 完整 Codex provider 契約、MCP 安全邊界與 circuit breaker
 services/claude_agent.py           ← Claude API 呼叫
 services/linebot_ai.py             ← AI 訊息處理流程
 services/ai_manager.py             ← AI 管理邏輯（859 行）

@@ -180,7 +180,7 @@ class Settings:
     session_cleanup_interval_minutes: int = 10
 
     # ===================
-    # AI Provider 路由（Codex provider 尚未接入，所有 mode 目前皆安全回到 Claude）
+    # AI Provider 路由（預設固定 Claude；Codex 只供 forced/canary 路徑選用）
     # ===================
     ai_provider_mode: str = _get_env_choice(
         "AI_PROVIDER_MODE",
@@ -227,6 +227,30 @@ class Settings:
     claude_usage_credentials_path: str = _get_env(
         "CLAUDE_USAGE_CREDENTIALS_PATH",
         str(Path.home() / ".claude/.credentials.json"),
+    )
+    codex_acp_bin_path: str = _get_env(
+        "CODEX_ACP_BIN_PATH",
+        str(_project_root / "node_modules/.bin/codex-acp"),
+    )
+    codex_bin_path: str = _get_env(
+        "CODEX_BIN_PATH",
+        str(_project_root / "node_modules/.bin/codex"),
+    )
+    codex_model: str = _get_env("CODEX_MODEL", "")
+    codex_max_concurrency: int = _get_env_int_bounded(
+        "CODEX_MAX_CONCURRENCY", 2, minimum=1, maximum=16
+    )
+    codex_queue_timeout_seconds: float = _get_env_float_bounded(
+        "CODEX_QUEUE_TIMEOUT_SECONDS", 5.0, minimum=0.1, maximum=60.0
+    )
+    codex_circuit_failure_threshold: int = _get_env_int_bounded(
+        "CODEX_CIRCUIT_FAILURE_THRESHOLD", 3, minimum=1, maximum=20
+    )
+    codex_circuit_cooldown_seconds: float = _get_env_float_bounded(
+        "CODEX_CIRCUIT_COOLDOWN_SECONDS", 60.0, minimum=1.0, maximum=3600.0
+    )
+    codex_stderr_max_bytes: int = _get_env_int_bounded(
+        "CODEX_STDERR_MAX_BYTES", 8192, minimum=1024, maximum=65536
     )
 
     # ===================
