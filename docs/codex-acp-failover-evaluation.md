@@ -1,7 +1,7 @@
 # Codex ACP 備援評估報告
 
 > 評估日期：2026-08-04
-> 狀態：Phase 0/1/2 完成；固定 Claude 的安全旁路與 sticky router 已受測，Codex 與自動路由尚未實作或啟用
+> 狀態：Phase 0–4 完成；安全旁路、usage monitor 與 Codex ACP 相容層已受測，Codex Provider 尚未註冊，正式流量仍固定 Claude
 > 後續計畫：`openspec/changes/add-codex-acp-failover/`
 
 ## 1. 結論
@@ -14,7 +14,7 @@
 
 ## 2. 評估範圍
 
-本次完成以下唯讀檢查與測試，未修改功能程式：
+初始評估完成以下唯讀檢查與測試；後續 Phase checkpoint 則依測試先行逐步加入預設不啟用的隔離元件：
 
 - 查閱 `docs/module-index.md` 定位 AI、Bot、MCP 與部署模組。
 - 還原 `ctos-lite` 的 Claude/Codex provider router、Claude 用量快取與 Codex ACP adapter。
@@ -25,7 +25,7 @@
 - 對照目前官方 Codex App Server、認證與 rate-limit 能力文件。
 - 執行主系統相關測試、完整後端測試與 `ctos-lite` provider 測試。
 
-本次沒有執行真實 Claude/Codex 推論，也沒有用正式 MCP 寫入工具做端到端驗證。這些驗證被列為後續啟用 gate，而不是在評估階段直接碰正式資料。
+初始評估沒有執行真實 Claude/Codex 推論，也沒有用正式 MCP 寫入工具做端到端驗證。Phase 4 已補上真實 Codex 唯讀 smoke 與隔離 MCP fixture；正式 MCP 寫入、正式資料及正式流量仍未觸碰，並保留為後續啟用 gate。
 
 ## 3. `ctos-lite` 參考實作
 
@@ -286,6 +286,23 @@ Codex ACP 每個請求啟動 Node/Codex subprocess。需要：
 - 完整 `npm run ci:check`：`1335 passed, 10 skipped, 1 warning in 180.15s`，整體 coverage 85.95%。
 
 此 checkpoint 完成 Phase 3。尚未註冊 Codex provider、啟動 Codex subprocess 或遷移任何 caller；下一步只進行 ACP protocol compatibility spike 與唯讀 smoke。
+
+### 6.9 Codex ACP compatibility spike checkpoint（2026-08-04）
+
+結論為 **Go**，正式 provider 可建立在 pin 版 ACP compatibility layer，不需改走直接 App Server。
+
+- npm lock 固定 `@agentclientprotocol/codex-acp` 1.1.9 與 `@openai/codex` 0.146.0；Python 使用既有 `claude-code-acp` 0.5.1 / ACP 0.8.0。
+- 上游 adapter 1.1.9 會啟動 Codex App Server，並原生映射 stdio/HTTP MCP、tool events、usage、permission 與 cancel。官方 App Server 的 initialize/thread/turn lifecycle 因此由 adapter 承擔。
+- Generic Python client 的已知缺口已集中修正在 `services/codex_acp.py`：合法重複 chunk 不再被 substring 去重、tool terminal update 只完成一次、PromptResponse token/model metadata 不遺失、stdio/HTTP schema 完整保留。
+- HTTP MCP 的 URL/headers 已以 fake connection 驗證，並以本機 Streamable HTTP fixture 完成真實 session handshake。
+- 真實 `on-request` permission event 已取得 canonical title `mcp.ctos-readonly-smoke.read_only_marker` 與 raw input 的 `server=ctos-readonly-smoke`、`tool=read_only_marker`；不需要 suffix 或 display-name 模糊比對。
+- 真實 read-only smoke：純文字、`repeat repeat repeat`、單一無副作用 stdio MCP tool、HTTP MCP handshake、timeout/cancel 與 subprocess cleanup 全部通過（`3 passed in 28.73s`；canonical permission 強化後單項重跑 `1 passed in 16.95s`）。
+- protocol 證據保存在 `backend/tests/fixtures/codex_acp_compatibility_1_1_9.json`；真實 smoke 預設 skip，只有 `RUN_CODEX_ACP_SMOKE=1` 才執行。
+- 預設 CI：compatibility `11 passed, 3 skipped`；完整 `npm run ci:check`：`1348 passed, 13 skipped, 1 warning in 181.26s`，coverage 85.88%。
+
+ACP 與直接 App Server 的差異：App Server 提供原生 initialize/thread/start/turn/start/turn/completed 事件與更完整控制；ACP 多一層翻譯，但已提供 ching-tech-os 需要的 client-facing session、MCP 與 permission 事件，且 ctos-lite 與本次真實 smoke 都已驗證。為降低自製 JSON-RPC client 的維護面積，Phase 5 繼續採 ACP；若未來 pin 升級破壞 canonical identity 或 HTTP MCP，則 fail closed 並回到 App Server spike，而不是模糊放行。
+
+此 checkpoint 尚未把 Codex 註冊到 Router；Phase 5 將在相同 compatibility layer 上實作完整 provider contract、權限與資源治理。
 
 ## 7. 補完測試後的信心邊界
 

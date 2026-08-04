@@ -1,0 +1,35 @@
+{
+  "recorded_at": "2026-08-04",
+  "platform": "linux-x64",
+  "versions": {
+    "codex_acp": "1.1.9",
+    "codex_cli": "0.146.0",
+    "claude_code_acp": "0.5.1",
+    "agent_client_protocol": "0.8.0",
+    "acp_protocol_version": 1
+  },
+  "validated": {
+    "pure_text": true,
+    "repeated_message_chunks": true,
+    "stdio_mcp_tool": true,
+    "http_mcp_handshake": true,
+    "timeout_cancel": true,
+    "subprocess_cleanup": true,
+    "token_and_model_metadata_fixture": true,
+    "canonical_permission_identity": true
+  },
+  "canonical_mcp_event": {
+    "title": "mcp.ctos-readonly-smoke.read_only_marker",
+    "raw_input": {
+      "server": "ctos-readonly-smoke",
+      "tool": "read_only_marker"
+    },
+    "permission_decision": "allow_once"
+  },
+  "security": {
+    "mode": "read-only",
+    "multi_agent": false,
+    "external_production_mcp": false,
+    "fixture_has_side_effects": false
+  }
+}

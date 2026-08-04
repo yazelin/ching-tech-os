@@ -71,6 +71,12 @@ ChingTech OS 的 AI 助手透過 `claude-code-acp`（ClaudeClient in-process）�
 
 自動路由採 hysteresis：fresh utilization `>=90%` 選 Codex、已在 Codex 時必須 `<85%` 才切回 Claude；85%–90% 或 max-stale 內的 stale 快照維持前一個穩定 provider。unknown、error 或超過 max-stale 一律回 Claude。Codex provider 尚未註冊時，所有 Codex 決策仍在 pre-start readiness 階段回到 Claude。
 
+### Codex ACP Compatibility Layer
+
+`services/codex_acp.py` 固定搭配 `@agentclientprotocol/codex-acp` 1.1.9、`@openai/codex` 0.146.0 與 Python ACP 0.8.0。此層只處理協定差異：ordered message delta、tool terminal event 去重、token/model metadata、stdio/HTTP MCP schema 與 tool-call-id permission identity correlation；provider 的工作目錄、權限、callback、timeout 與資源限制由 `codex_agent.py` 負責。
+
+真實 smoke 使用本機單一唯讀 MCP fixture，已驗證 stdio tool、Streamable HTTP handshake、canonical server/tool identity、timeout/cancel 與 subprocess cleanup。若 pin 組合升級後任一契約失敗，Codex readiness 必須 fail closed，不可退回模糊工具名稱判斷。
+
 ## Agent 系統
 
 ### Agent 定義與儲存

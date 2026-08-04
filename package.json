@@ -14,5 +14,9 @@
   },
   "devDependencies": {
     "esbuild": "^0.25.0"
+  },
+  "dependencies": {
+    "@agentclientprotocol/codex-acp": "1.1.9",
+    "@openai/codex": "0.146.0"
   }
 }
