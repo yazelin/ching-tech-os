@@ -44,11 +44,14 @@ npm run build
 # 後端全量測試
 npm run test:backend
 
-# 後端 coverage 測試（門檻 90%）
+# 後端 coverage 測試（現況防退步門檻 85%）
 npm run test:backend:cov
 
-# 下一階門檻預檢（91%，不作為目前 CI Gate）
+# 下一階門檻預檢（86%，不作為目前 CI Gate）
 npm run test:backend:cov:next
+
+# Codex ACP 自動切換等高風險功能的目標門檻（90%）
+npm run test:backend:cov:target
 ```
 
 ### 單一測試（快速迭代）
@@ -80,7 +83,7 @@ uv run pytest -k permissions -v
 2. `uv sync` 安裝後端依賴
 3. 執行 pytest + coverage：
    - `--cov=src/ching_tech_os`
-   - `--cov-fail-under=90`
+   - `--cov-fail-under=85`
    - 產生 `coverage.xml`、`htmlcov/`、`pytest-report.xml`
 4. 上傳測試報告 artifacts（供下載檢查）
 
@@ -89,9 +92,11 @@ uv run pytest -k permissions -v
 ## 4. 提高測試率的落地規則
 
 ### Coverage 門檻拉升節奏（Step-by-step）
-- **目前 CI Gate**：90%
-- **下一階預檢**：91%（使用 `npm run test:backend:cov:next`）
-- **建議拉升規則**：當 `cov:next` 在主分支連續穩定通過後，再把 CI Gate 提升到同等門檻（每次 +1%）。
+- **2026-08-04 實測基線**：85.50%（1269 passed、10 skipped）。
+- **目前 CI Gate**：85%，與 GitHub Actions 的 `COVERAGE_FAIL_UNDER` 一致，作為不可退步的最低門檻。
+- **下一階預檢**：86%（使用 `npm run test:backend:cov:next`）。
+- **高風險功能目標 Gate**：90%（使用 `npm run test:backend:cov:target`）；Codex ACP 自動模式與 canary 不得在此門檻通過前啟用。
+- **建議拉升規則**：新增測試讓下一個整數門檻穩定通過後，同步提高 GitHub Actions、`test:backend:cov` 與 `test:backend:cov:next`，逐步提升至 90%。
 
 ### 後端 API / Service 變更
 - 新增或修改 API 路由時，至少補對應 `backend/tests/` 測試（成功與錯誤情境）。

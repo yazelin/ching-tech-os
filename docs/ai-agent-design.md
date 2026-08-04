@@ -4,6 +4,8 @@
 
 ChingTech OS 的 AI 助手透過 `claude-code-acp`（ClaudeClient in-process）與 Claude API 溝通，支援 Line Bot、Telegram Bot 和 Web 前端三個平台。系統包含完整的 Agent 管理、動態工具分配、身份分流、頻率限制和對話壓縮機制。
 
+> Codex ACP provider 與用量路由尚未實作或啟用。目前已完成 provider-neutral `AIResponse`/`AIProvider` 契約、provider mode 驗證與 canary scope 判斷；尚無 caller 使用的 `call_ai()` 旁路仍會安全回到 Claude。評估、風險與後續 gate 見 [Codex ACP 備援評估報告](codex-acp-failover-evaluation.md) 與 `openspec/changes/add-codex-acp-failover/`。
+
 ## 架構
 
 ```
@@ -50,6 +52,18 @@ ChingTech OS 的 AI 助手透過 `claude-code-acp`（ClaudeClient in-process）�
 │  In-process Claude 呼叫，支援 MCP 工具、權限控制、token 統計   │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+### Provider Router 安全骨架
+
+`services/ai_router.py::call_ai()` 目前尚未被正式入口使用，也不會啟動 Codex。`ProviderRouter` 以 registry 與 `is_ready()` 建立可測試的 pre-start fallback 邊界：只有尚未進入 `provider.call()` 前可改選明確 fallback；進入 call 後，不論回應失敗或拋錯都保持 provider sticky，避免重複副作用。預設 registry 仍只有 Claude。已加入的設定只用來驗證未來路由政策：
+
+| 環境變數 | 預設值 | 目前行為 |
+|---------|--------|----------|
+| `AI_PROVIDER_MODE` | `claude` | 接受 `claude`、`codex`、`auto`；非法值明確告警並回到 Claude |
+| `AI_PROVIDER_CANARY_CONTEXTS` | `internal_admin,internal_test` | context exact-match allowlist |
+| `AI_PROVIDER_CANARY_AGENTS` | `test-agent` | Agent exact-match allowlist |
+
+在 Codex provider 與 usage monitor 尚未通過後續 gate 前，`codex` 會記錄 `codex_unready`，`auto` 會依 scope 記錄 `canary_not_allowed` 或 `usage_unknown`，實際 provider 仍為 Claude。`RoutingContext` 只供 router 判斷，不會傳入 prompt 或 provider。fake provider tests 已鎖住 readiness false/error/missing、fallback unavailable 與執行後禁止跨 provider retry。
 
 ## Agent 系統
 

@@ -44,6 +44,68 @@ class MockToolCall:
     output: str | None
 
 
+@dataclass(frozen=True)
+class ProviderContractSpec:
+    """Claude 與未來 Codex provider 共用的測試契約。"""
+
+    claude_request_fields: frozenset[str]
+    ai_request_fields: frozenset[str]
+    response_fields: frozenset[str]
+    routing_metadata_fields: frozenset[str]
+    tool_start_fields: frozenset[str]
+    tool_end_fields: frozenset[str]
+    partial_result_fields: frozenset[str]
+
+
+@pytest.fixture
+def provider_contract_spec() -> ProviderContractSpec:
+    """提供 provider contract 的唯一測試定義，供 Claude/Codex 套用同一組斷言。"""
+    claude_request_fields = frozenset({
+        "prompt",
+        "model",
+        "history",
+        "system_prompt",
+        "timeout",
+        "tools",
+        "tool_call_limits",
+        "on_tool_start",
+        "on_tool_end",
+        "required_mcp_servers",
+        "ctos_user_id",
+        "extra_mcp_env",
+    })
+    response_fields = frozenset({
+        "success",
+        "message",
+        "error",
+        "tool_calls",
+        "input_tokens",
+        "output_tokens",
+        "tool_timings",
+    })
+    return ProviderContractSpec(
+        claude_request_fields=claude_request_fields,
+        ai_request_fields=claude_request_fields | {"routing_context"},
+        response_fields=response_fields,
+        routing_metadata_fields=frozenset({
+            "provider",
+            "actual_model",
+            "route_reason",
+            "provider_started",
+            "usage_snapshot",
+        }),
+        tool_start_fields=frozenset({"tool_call_id", "name", "input"}),
+        tool_end_fields=frozenset({
+            "tool_call_id",
+            "name",
+            "status",
+            "output",
+            "duration_ms",
+        }),
+        partial_result_fields=response_fields,
+    )
+
+
 @pytest.fixture
 def mock_tool_call():
     """建立 MockToolCall 的工廠函式"""
