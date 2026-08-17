@@ -1,24 +1,37 @@
 #!/usr/bin/env python3
-"""測試圖片生成 Fallback 機制
+"""真實 HF FLUX 圖片生成 smoke；預設跳過，需明確設定環境變數。
 
 用法：
     cd backend
-    uv run pytest tests/test_image_fallback.py -v
+    RUN_HF_IMAGE_SMOKE=1 uv run pytest tests/test_image_fallback.py -v
 
-測試項目：
-    1. Hugging Face FLUX
-    2. 完整 fallback 流程
-
-注意：需要設定 HUGGINGFACE_API_TOKEN 環境變數才能執行
+注意：
+    - 會真的呼叫 Hugging Face API（消耗 quota），需要 HUGGINGFACE_API_TOKEN
+    - 輸出導到 tmp_path，不寫入正式 NAS 目錄
+    - 單元測試（含 mock）見 test_image_fallback_extended.py
 """
+
+import os
 
 import pytest
 
+from ching_tech_os.services import image_fallback
 from ching_tech_os.services.image_fallback import (
     generate_image_with_huggingface,
     generate_image_with_fallback,
     get_hf_token,
 )
+
+pytestmark = pytest.mark.skipif(
+    os.getenv("RUN_HF_IMAGE_SMOKE") != "1",
+    reason="需明確設定 RUN_HF_IMAGE_SMOKE=1 才執行真實 HF FLUX smoke（會消耗 API quota）",
+)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_output_dir(tmp_path, monkeypatch):
+    """輸出導到測試暫存目錄，不污染正式 NAS 的 ai-images。"""
+    monkeypatch.setattr(image_fallback, "_nas_ai_images_dir", tmp_path / "ai-images")
 
 
 @pytest.mark.asyncio
