@@ -220,6 +220,8 @@ tool-call limit 在 permission 核准前計數，provider 不能繞過 nanobanan
 
 **Phase 8.3 checkpoint（2026-08-17）**：Line（`linebot_ai.process_message_with_ai`）與 Telegram（`bot_telegram/handler._handle_text_with_ai`）改用 `call_ai()`。RoutingContext 分別為 `linebot-group`/`linebot-personal` 與 `telegram-group`/`telegram-personal` + Agent 名稱；per-群組/使用者的 canary 粒度由 Agent 綁定（群組專屬 Agent 名稱加入 `AI_PROVIDER_CANARY_AGENTS`）達成。`log_linebot_ai_call` 防禦性附加 routing metadata（舊型 response 物件無 `routing_metadata()` 則略過，四個共用 caller——Line、Telegram、identity_router、command_handlers——皆受惠）。progress callback 與 partial result 由 provider contract tests 覆蓋；真實文字/圖片/語音 canary 驗證屬 9.7 觀察 gate。intent_guard、identity_router、command_handlers 的直接 `call_claude` 維持不變（前置過濾與 restricted 路徑，屬 8.6）。CI：1411 passed/15 skipped、coverage 86.07%。
 
+**Phase 8.6 checkpoint（2026-08-17）**：restricted mode（`identity_router.handle_restricted_mode`）改用 `call_ai()`，`RoutingContext(context_type="bot-restricted", agent_name=<restricted agent>)` 讓 canary 可獨立於一般對話控制。遷移前先通過三類測試：身份（`ctos_user_id=None` 不可注入）、權限（工具僅限 Agent 白名單、空 app 權限不擴充）、成本（token 用量仍記入月度計數器）。仍維持 `call_claude` 的路徑：intent_guard（Haiku 前置過濾）、`/debug` 管理員診斷（依賴 run_skill_script 副作用工具，Codex 唯讀過濾下無意義）、8.7 特殊 pipeline（簡報、生圖、research、scheduler、summary）。CI：1413 passed/15 skipped、coverage 86.08%。
+
 ## Test Strategy
 
 ### Characterization tests

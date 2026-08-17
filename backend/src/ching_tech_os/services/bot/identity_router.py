@@ -155,7 +155,7 @@ async def handle_restricted_mode(
         AI 回應文字，或 None
     """
     from .. import ai_manager
-    from ..claude_agent import call_claude
+    from ..ai_router import RoutingContext, call_ai
     from ..linebot_ai import (
         build_system_prompt,
         get_conversation_context,
@@ -336,11 +336,12 @@ async def handle_restricted_mode(
     if agent and agent.get("id"):
         extra_mcp_env["CTOS_AGENT_ID"] = str(agent["id"])
 
-    # 9. 呼叫 Claude CLI
+    # 9. 呼叫 AI（8.6：restricted mode 走 provider-neutral call_ai；
+    # 專屬 context_type 讓 canary 可獨立於一般對話控制，預設仍為 Claude）
     start_time = time.time()
 
     try:
-        response = await call_claude(
+        response = await call_ai(
             prompt=user_message,
             model=model,
             history=history,
@@ -350,6 +351,10 @@ async def handle_restricted_mode(
             required_mcp_servers=required_mcp_servers,
             ctos_user_id=None,  # 未綁定用戶
             extra_mcp_env=extra_mcp_env or None,
+            routing_context=RoutingContext(
+                context_type="bot-restricted",
+                agent_name=agent.get("name"),
+            ),
         )
     except Exception:
         logger.exception("受限模式 AI 呼叫失敗")

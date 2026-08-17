@@ -237,10 +237,14 @@ def _make_agent(
 
 
 @contextlib.contextmanager
-def _restricted_mode_patches(agent=None, ai_reply="你好！有什麼可以幫你的？"):
-    """建立 handle_restricted_mode 的常用 mock patches"""
-    mock_response = MagicMock()
-    mock_response.tool_calls = []
+def _restricted_mode_patches(agent=None, ai_reply="你好！有什麼可以幫你的？", response=None):
+    """建立 handle_restricted_mode 的常用 mock patches；yield call_ai mock 供斷言"""
+    mock_response = response
+    if mock_response is None:
+        mock_response = MagicMock()
+        mock_response.tool_calls = []
+
+    call_ai_mock = AsyncMock(return_value=mock_response)
 
     with (
         patch(
@@ -249,9 +253,8 @@ def _restricted_mode_patches(agent=None, ai_reply="你好！有什麼可以幫�
             return_value=agent,
         ),
         patch(
-            "ching_tech_os.services.claude_agent.call_claude",
-            new_callable=AsyncMock,
-            return_value=mock_response,
+            "ching_tech_os.services.ai_router.call_ai",
+            call_ai_mock,
         ),
         patch(
             "ching_tech_os.services.linebot_ai.build_system_prompt",
@@ -278,7 +281,7 @@ def _restricted_mode_patches(agent=None, ai_reply="你好！有什麼可以幫�
             return_value=(ai_reply, [], []),
         ),
     ):
-        yield
+        yield call_ai_mock
 
 
 class TestHandleRestrictedMode:
@@ -418,7 +421,7 @@ class TestHandleRestrictedMode:
                 return_value=set(),
             ),
             patch(
-                "ching_tech_os.services.claude_agent.call_claude",
+                "ching_tech_os.services.ai_router.call_ai",
                 new_callable=AsyncMock,
                 side_effect=Exception("AI 失敗"),
             ),
@@ -462,7 +465,7 @@ class TestHandleRestrictedMode:
                 return_value=set(),
             ),
             patch(
-                "ching_tech_os.services.claude_agent.call_claude",
+                "ching_tech_os.services.ai_router.call_ai",
                 new_callable=AsyncMock,
                 side_effect=Exception("AI 失敗"),
             ),
@@ -474,3 +477,67 @@ class TestHandleRestrictedMode:
                 is_group=False,
             )
             assert result == "抱歉，處理您的訊息時發生錯誤，請稍後再試。"
+
+
+class TestRestrictedModeCallAiMigration:
+    """8.6：restricted mode 遷移 call_ai 的身份、權限、成本與路由測試"""
+
+    @pytest.mark.asyncio
+    async def test_identity_permissions_and_routing_context(self):
+        """身份不可注入、工具僅限 Agent 白名單、routing context 為 restricted 專屬"""
+        agent = _make_agent(
+            tools=["search_knowledge", "get_knowledge_item", "external_skill"]
+        )
+        agent["name"] = "bot-restricted"
+        with _restricted_mode_patches(agent=agent) as call_ai_mock:
+            result = await handle_restricted_mode(
+                content="你好",
+                platform_user_id="U123",
+                bot_user_id=None,
+                is_group=False,
+            )
+            assert result == "你好！有什麼可以幫你的？"
+
+        kwargs = call_ai_mock.await_args.kwargs
+        # 身份：未綁定用戶不得注入 ctos_user_id
+        assert kwargs["ctos_user_id"] is None
+        # 權限：工具僅來自 Agent 白名單（空 app 權限不會擴充工具）
+        assert set(kwargs["tools"]) == {
+            "search_knowledge",
+            "get_knowledge_item",
+            "external_skill",
+        }
+        # 路由：restricted 專屬 context，canary 可獨立於一般對話控制
+        routing_context = kwargs["routing_context"]
+        assert routing_context.context_type == "bot-restricted"
+        assert routing_context.agent_name == "bot-restricted"
+
+    @pytest.mark.asyncio
+    async def test_cost_tracking_records_tokens(self):
+        """成本：token 用量仍記錄到月度計數器"""
+        agent = _make_agent()
+        response = MagicMock()
+        response.tool_calls = []
+        response.input_tokens = 11
+        response.output_tokens = 22
+        with (
+            _restricted_mode_patches(agent=agent, response=response),
+            patch(
+                "ching_tech_os.services.bot.rate_limiter.check_and_increment",
+                new_callable=AsyncMock,
+                return_value=(True, None),
+            ),
+            patch(
+                "ching_tech_os.services.bot.rate_limiter.record_token_usage",
+                new_callable=AsyncMock,
+            ) as record_token_usage,
+        ):
+            await handle_restricted_mode(
+                content="hi",
+                platform_user_id="U1",
+                bot_user_id="bu-1",
+                is_group=False,
+            )
+        record_token_usage.assert_awaited_once_with(
+            "bu-1", input_tokens=11, output_tokens=22
+        )
