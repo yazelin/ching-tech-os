@@ -77,7 +77,7 @@
 
 - [x] 8.1 internal admin/test-agent 改用 `call_ai()`，限制唯讀/無副作用工具，完成第一階段 canary
 - [x] 8.2 Web Chat allowlist Agent 改用 `call_ai()`，驗證 history、system prompt、tool results 與 AI log
-- [ ] 8.3 Line/Telegram allowlist 使用者或群組 canary，驗證文字、圖片、語音、progress callback 與 partial result
+- [x] 8.3 Line/Telegram allowlist 使用者或群組 canary，驗證文字、圖片、語音、progress callback 與 partial result
 - [x] 8.4 驗證任何 provider failure 都不會重複執行 side-effect tool
 - [ ] 8.5 canary 穩定後才評估一般 Line/Telegram 對話啟用 auto mode
 - [ ] 8.6 restricted mode 通過身份、權限與成本測試後獨立遷移

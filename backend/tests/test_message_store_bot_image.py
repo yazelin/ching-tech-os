@@ -123,7 +123,7 @@ def _apply_common_patches(monkeypatch, *, file_message: dict, sent_ids: list[str
     monkeypatch.setattr(linebot_ai, "get_connection", _make_fake_db_ctx())
 
     # ---- Claude CLI ----
-    monkeypatch.setattr(linebot_ai, "call_claude", AsyncMock(return_value=_make_fake_response(file_message)))
+    monkeypatch.setattr(linebot_ai, "call_ai", AsyncMock(return_value=_make_fake_response(file_message)))
     monkeypatch.setattr(linebot_ai, "_extract_research_tool_feedback", lambda *a, **kw: None)
     monkeypatch.setattr(
         linebot_ai, "auto_prepare_generated_images",

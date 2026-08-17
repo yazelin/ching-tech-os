@@ -11,7 +11,7 @@ from telegram import Update
 
 from .adapter import TelegramBotAdapter
 from ..bot.ai import parse_ai_response
-from ..claude_agent import call_claude
+from ..ai_router import RoutingContext, call_ai
 from ...database import get_connection
 from ..linebot_agents import get_linebot_agent
 from ..linebot_ai import (
@@ -1014,9 +1014,10 @@ async def _handle_text_with_ai(
             logger.debug(f"進度通知（tool_end）失敗: {e}")
 
     # 呼叫 AI（含對話歷史和進度通知）
+    # 8.3：Telegram 走 provider-neutral call_ai；canary 由設定控制，預設仍為 Claude
     context_type = "telegram-group" if is_group else "telegram-personal"
     start_time = time.time()
-    response = await call_claude(
+    response = await call_ai(
         prompt=text,
         model=model,
         history=history,
@@ -1027,6 +1028,10 @@ async def _handle_text_with_ai(
         on_tool_end=_on_tool_end,
         required_mcp_servers=required_mcp_servers,
         ctos_user_id=ctos_user_id,
+        routing_context=RoutingContext(
+            context_type=context_type,
+            agent_name=agent.get("name"),
+        ),
     )
     duration_ms = int((time.time() - start_time) * 1000)
 

@@ -14,7 +14,8 @@ import re
 import time
 from uuid import UUID
 
-from .claude_agent import call_claude, compose_prompt_with_history
+from .ai_router import RoutingContext, call_ai
+from .claude_agent import compose_prompt_with_history
 from .image_fallback import (
     generate_image_with_fallback,
     get_fallback_notification,
@@ -979,7 +980,9 @@ async def process_message_with_ai(
         if agent and agent.get("id"):
             voice_mcp_env["CTOS_AGENT_ID"] = str(agent["id"])
 
-        response = await call_claude(
+        # 8.3：Line/Telegram 走 provider-neutral call_ai；routing context 用
+        # caller 端事實（對話類型 + Agent 名稱），canary 由設定控制，預設仍為 Claude
+        response = await call_ai(
             prompt=user_message,
             model=model,
             history=history,
@@ -989,6 +992,10 @@ async def process_message_with_ai(
             required_mcp_servers=required_mcp_servers,
             ctos_user_id=ctos_user_id,
             extra_mcp_env=voice_mcp_env or None,
+            routing_context=RoutingContext(
+                context_type="linebot-group" if is_group else "linebot-personal",
+                agent_name=agent_name,
+            ),
         )
 
         # 計算耗時
@@ -1338,6 +1345,11 @@ async def log_linebot_ai_call(
                 parsed_response["tool_timings"] = response.tool_timings
             if tool_routing:
                 parsed_response["tool_routing"] = tool_routing
+
+        # 附加 provider/route 資訊（防禦性：舊型 response 物件沒有 routing_metadata 則略過）
+        routing_metadata = getattr(response, "routing_metadata", None)
+        if callable(routing_metadata):
+            parsed_response = {**(parsed_response or {}), "routing": routing_metadata()}
 
         # 組合完整輸入（含歷史對話）
         if history:

@@ -218,6 +218,8 @@ tool-call limit 在 permission 核准前計數，provider 不能繞過 nanobanan
 
 **Phase 8.2/8.4 checkpoint（2026-08-17）**：Web Chat（`api/ai.py` 的 `ai_chat_event`）改用 `call_ai()`，`RoutingContext(context_type="web-chat", agent_name=<chat agent>)`；成功與失敗 log 都以 `attach_routing_metadata()` 寫入 routing（成功 log 保留原 tool_calls 結構）。對話壓縮（`call_claude_for_summary`）維持 Claude，屬 8.7 特殊 pipeline。8.4 新增端到端測試：provider 失敗回應攜帶已執行的副作用工具時，另一 provider 連 readiness 都不查詢、tool_calls 原樣保留供稽核。文件（10.1–10.3）同步更新：ai-agent-design 狀態與 router 段落、backend.md API 表、module-index、.env.example 與 ctos-deploy skill（Codex 認證/preflight/kill switch）。CI：1410 passed/15 skipped（新增 2 個 HF smoke 預設 skip）、coverage 86.07%。
 
+**Phase 8.3 checkpoint（2026-08-17）**：Line（`linebot_ai.process_message_with_ai`）與 Telegram（`bot_telegram/handler._handle_text_with_ai`）改用 `call_ai()`。RoutingContext 分別為 `linebot-group`/`linebot-personal` 與 `telegram-group`/`telegram-personal` + Agent 名稱；per-群組/使用者的 canary 粒度由 Agent 綁定（群組專屬 Agent 名稱加入 `AI_PROVIDER_CANARY_AGENTS`）達成。`log_linebot_ai_call` 防禦性附加 routing metadata（舊型 response 物件無 `routing_metadata()` 則略過，四個共用 caller——Line、Telegram、identity_router、command_handlers——皆受惠）。progress callback 與 partial result 由 provider contract tests 覆蓋；真實文字/圖片/語音 canary 驗證屬 9.7 觀察 gate。intent_guard、identity_router、command_handlers 的直接 `call_claude` 維持不變（前置過濾與 restricted 路徑，屬 8.6）。CI：1411 passed/15 skipped、coverage 86.07%。
+
 ## Test Strategy
 
 ### Characterization tests

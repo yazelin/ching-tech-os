@@ -447,6 +447,7 @@ def _patch_process_base(monkeypatch: pytest.MonkeyPatch) -> dict:
         "get_linebot_agent",
         AsyncMock(
             return_value={
+                "name": "linebot-group",
                 "model": "claude-sonnet",
                 "system_prompt": {"content": "BASE"},
                 "tools": ["WebSearch"],
@@ -517,7 +518,7 @@ async def test_process_message_with_ai_success_push_fallback_and_quote_text(monk
         "get_message_content_by_line_message_id",
         AsyncMock(return_value={"content": "X" * 2105, "display_name": "小明", "is_from_bot": False}),
     )
-    monkeypatch.setattr(linebot_ai, "call_claude", AsyncMock(return_value=_mock_claude_response()))
+    monkeypatch.setattr(linebot_ai, "call_ai", AsyncMock(return_value=_mock_claude_response()))
     monkeypatch.setattr(
         linebot_ai,
         "parse_ai_response",
@@ -556,10 +557,15 @@ async def test_process_message_with_ai_success_push_fallback_and_quote_text(monk
     push_messages.assert_awaited_once()
     assert linebot_ai.save_file_record.await_count == 1
 
-    prompt_arg = linebot_ai.call_claude.await_args.kwargs["prompt"]
+    # 8.3：Line/Telegram 走 call_ai，routing context 用 caller 端事實
+    routing_context = linebot_ai.call_ai.await_args.kwargs["routing_context"]
+    assert routing_context.context_type == "linebot-group"
+    assert routing_context.agent_name == "linebot-group"
+
+    prompt_arg = linebot_ai.call_ai.await_args.kwargs["prompt"]
     assert "[回覆 小明 的訊息" in prompt_arg
     assert "user[發問者]: 幫我處理" in prompt_arg
-    tools_arg = linebot_ai.call_claude.await_args.kwargs["tools"]
+    tools_arg = linebot_ai.call_ai.await_args.kwargs["tools"]
     assert "mcp__ching-tech-os__create_share_link" not in tools_arg
     assert "mcp__erpnext__list_documents" in tools_arg
 
@@ -589,7 +595,7 @@ async def test_process_message_with_ai_start_research_appends_job_id(monkeypatch
     )
     monkeypatch.setattr(
         linebot_ai,
-        "call_claude",
+        "call_ai",
         AsyncMock(
             return_value=_mock_claude_response(
                 success=True,
@@ -620,7 +626,7 @@ async def test_process_message_with_ai_research_check_disables_web_tools(monkeyp
     _patch_process_base(monkeypatch)
     monkeypatch.setattr(linebot_ai, "get_message_content_by_line_message_id", AsyncMock(return_value=None))
     call_claude = AsyncMock(return_value=_mock_claude_response(success=True, message="進度查詢完成"))
-    monkeypatch.setattr(linebot_ai, "call_claude", call_claude)
+    monkeypatch.setattr(linebot_ai, "call_ai", call_claude)
     monkeypatch.setattr(linebot_ai, "parse_ai_response", lambda text: (text, [], []))
     monkeypatch.setattr(linebot_ai, "send_ai_response", AsyncMock(return_value=["mid"]))
 
@@ -677,7 +683,7 @@ async def test_process_message_with_ai_check_research_feedback_overrides_model_t
     )
     monkeypatch.setattr(
         linebot_ai,
-        "call_claude",
+        "call_ai",
         AsyncMock(
             return_value=_mock_claude_response(
                 success=True,
@@ -707,7 +713,7 @@ async def test_process_message_with_ai_check_research_feedback_overrides_model_t
 async def test_process_message_with_ai_nanobanana_fallback_success(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_process_base(monkeypatch)
     monkeypatch.setattr(linebot_ai, "get_message_content_by_line_message_id", AsyncMock(return_value=None))
-    monkeypatch.setattr(linebot_ai, "call_claude", AsyncMock(return_value=_mock_claude_response(tool_calls=[SimpleNamespace()])))
+    monkeypatch.setattr(linebot_ai, "call_ai", AsyncMock(return_value=_mock_claude_response(tool_calls=[SimpleNamespace()])))
     monkeypatch.setattr(linebot_ai, "extract_nanobanana_error", lambda _calls: "overloaded")
     monkeypatch.setattr(linebot_ai, "check_nanobanana_timeout", lambda _calls: False)
     monkeypatch.setattr(linebot_ai, "extract_nanobanana_prompt", lambda _calls: "draw a cat")
@@ -758,7 +764,7 @@ async def test_process_message_with_ai_failed_response_with_generated_images(mon
     monkeypatch.setattr(linebot_ai, "get_message_content_by_line_message_id", AsyncMock(return_value=None))
     monkeypatch.setattr(
         linebot_ai,
-        "call_claude",
+        "call_ai",
         AsyncMock(return_value=_mock_claude_response(success=False, error="timeout", tool_calls=[SimpleNamespace(id="x")])),
     )
     monkeypatch.setattr(linebot_ai, "extract_nanobanana_error", lambda _calls: None)
@@ -785,7 +791,7 @@ async def test_process_message_with_ai_failed_response_without_tool_calls(monkey
     monkeypatch.setattr(linebot_ai, "get_message_content_by_line_message_id", AsyncMock(return_value=None))
     monkeypatch.setattr(
         linebot_ai,
-        "call_claude",
+        "call_ai",
         AsyncMock(return_value=_mock_claude_response(success=False, error="timeout", tool_calls=[])),
     )
     monkeypatch.setattr(linebot_ai, "extract_nanobanana_error", lambda _calls: None)
@@ -800,3 +806,68 @@ async def test_process_message_with_ai_failed_response_without_tool_calls(monkey
     )
     # 超時/失敗時現在會回覆錯誤提示，不再 return None
     assert result == "AI回覆"
+
+
+@pytest.mark.asyncio
+async def test_log_linebot_ai_call_attaches_routing_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """8.3：AIResponse 的 routing metadata 應寫入 parsed_response；舊型 response 不受影響。"""
+    from ching_tech_os.services.ai_provider import AIResponse
+
+    create_log = AsyncMock()
+    monkeypatch.setattr(linebot_ai.ai_manager, "create_log", create_log)
+    monkeypatch.setattr(
+        linebot_ai.ai_manager,
+        "get_agent_by_name",
+        AsyncMock(return_value={"id": uuid4(), "system_prompt": {"id": uuid4()}}),
+    )
+
+    response = AIResponse(
+        success=True,
+        message="ok",
+        provider="claude",
+        route_reason="forced_claude",
+        requested_role="sonnet",
+    )
+    await linebot_ai.log_linebot_ai_call(
+        message_uuid=uuid4(),
+        line_group_id=None,
+        is_group=False,
+        input_prompt="p",
+        history=None,
+        system_prompt="sys",
+        allowed_tools=None,
+        model="sonnet",
+        response=response,
+        duration_ms=10,
+    )
+    log_data = create_log.await_args.args[0]
+    assert log_data.parsed_response["routing"]["provider"] == "claude"
+    assert log_data.parsed_response["routing"]["route_reason"] == "forced_claude"
+
+    # 舊型 response（無 routing_metadata()）仍可正常記錄，不附 routing
+    create_log.reset_mock()
+    legacy = SimpleNamespace(
+        success=True,
+        message="ok",
+        error=None,
+        tool_calls=[],
+        tool_timings={},
+        input_tokens=1,
+        output_tokens=2,
+    )
+    await linebot_ai.log_linebot_ai_call(
+        message_uuid=uuid4(),
+        line_group_id=None,
+        is_group=False,
+        input_prompt="p",
+        history=None,
+        system_prompt="sys",
+        allowed_tools=None,
+        model="sonnet",
+        response=legacy,
+        duration_ms=10,
+    )
+    log_data = create_log.await_args.args[0]
+    assert log_data.parsed_response is None

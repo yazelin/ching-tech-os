@@ -504,12 +504,15 @@ async def test_handle_text_with_ai_success(monkeypatch: pytest.MonkeyPatch) -> N
     ticks = iter([0.0, 1.2, 2.5, 3.8, 5.0, 6.2, 7.4, 8.6])
     monkeypatch.setattr(handler.time, "time", lambda: next(ticks))
 
-    async def _fake_call_claude(**kwargs):
+    captured_call_ai_kwargs: dict = {}
+
+    async def _fake_call_ai(**kwargs):
+        captured_call_ai_kwargs.update(kwargs)
         await kwargs["on_tool_start"]("search_knowledge", {"query": "abc"})
         await kwargs["on_tool_end"]("search_knowledge", {"duration_ms": 1200})
         return SimpleNamespace(success=True, message="ok", tool_calls=[], error=None)
 
-    monkeypatch.setattr(handler, "call_claude", _fake_call_claude)
+    monkeypatch.setattr(handler, "call_ai", _fake_call_ai)
 
     adapter = SimpleNamespace(
         bot=SimpleNamespace(send_chat_action=AsyncMock()),
@@ -538,6 +541,10 @@ async def test_handle_text_with_ai_success(monkeypatch: pytest.MonkeyPatch) -> N
     adapter.send_text.assert_awaited()
     adapter.send_image.assert_awaited_once()
     assert save_message.await_count == 3
+
+    # 8.3：Telegram 走 call_ai，routing context 用 caller 端事實
+    routing_context = captured_call_ai_kwargs["routing_context"]
+    assert routing_context.context_type in {"telegram-group", "telegram-personal"}
 
 
 @pytest.mark.asyncio
@@ -603,7 +610,7 @@ async def test_handle_text_with_ai_failure_paths(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(handler, "get_mcp_servers_for_user", AsyncMock(return_value=[]))
     monkeypatch.setattr(
         handler,
-        "call_claude",
+        "call_ai",
         AsyncMock(return_value=SimpleNamespace(success=False, message="", tool_calls=[], error="timeout")),
     )
     monkeypatch.setattr(handler, "log_linebot_ai_call", AsyncMock())
