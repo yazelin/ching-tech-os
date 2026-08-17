@@ -11,7 +11,7 @@
 |------|------|
 | `main.py` | FastAPI 入口、路由註冊、lifespan（啟動 scheduler/MCP/Telegram） |
 | `modules.py` | 模組 registry、`ENABLED_MODULES` 條件啟停、Skill contributes 合併 |
-| `config.py` | 環境變數設定（Pydantic Settings） |
+| `config.py` | 環境變數設定（含 AI provider mode 與 canary allowlist） |
 | `database.py` | asyncpg 連線池 |
 | `__init__.py` | 版本號 `__version__` |
 | `middleware/cache_control.py` | 快取控制中介層 |
@@ -62,6 +62,11 @@ services/bot/intent_guard.py       ← Intent Guard 意圖守門員（Haiku 前�
 services/bot/rate_limiter.py       ← 受限模式頻率限制（bot_usage_tracking）
 services/bot/media.py              ← 媒體處理
 services/bot/message.py            ← 訊息處理
+services/ai_provider.py            ← Provider-neutral 回應型別與 AIProvider Protocol
+services/ai_router.py              ← call_ai()、Claude/Codex registry、readiness/sticky 邊界與 canary 判斷
+services/claude_usage.py           ← Claude OAuth usage snapshot、single-flight refresh 與 hysteresis 資料來源
+services/codex_acp.py              ← Codex ACP compatibility layer（ordered delta、HTTP MCP、permission identity）
+services/codex_agent.py            ← Codex Provider（canonical permission、資源限制、timeout/cleanup）
 services/claude_agent.py           ← call_claude() AI 推論
 ```
 
@@ -72,6 +77,11 @@ api/ai_management.py               ← AI prompt/agent CRUD API
 api/ai_router.py                   ← AI 對話 API（chats）
 services/linebot_agents.py         ← agent 定義、prompt 生成、工具分配、Agent 偏好持久化
 services/bot/agents.py             ← prompt 模板（按功能分類）
+services/ai_provider.py            ← AIResponse、ToolCall 與 provider Protocol
+services/ai_router.py              ← Provider-neutral call_ai()、ProviderDecision 與 pre-start fallback（目前無 caller）
+services/claude_usage.py           ← Usage Monitor（unknown/fresh/stale/error、TTL/max-stale）
+services/codex_acp.py              ← Pin 版 Codex ACP 協定轉接與真實唯讀 smoke 基礎
+services/codex_agent.py            ← 完整 Codex provider 契約、MCP 安全邊界與 circuit breaker
 services/claude_agent.py           ← Claude API 呼叫
 services/linebot_ai.py             ← AI 訊息處理流程
 services/ai_manager.py             ← AI 管理邏輯（859 行）

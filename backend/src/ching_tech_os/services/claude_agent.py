@@ -12,23 +12,16 @@ import re
 import shutil
 import tempfile
 import time
-from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import yaml
 from claude_code_acp import ClaudeClient
 
 from ..config import settings
+from .ai_provider import AIResponse, DEFAULT_TIMEOUT, ToolCall, ToolNotifyCallback
 
 logger = logging.getLogger(__name__)
-
-# Tool 進度通知 callback 型態（保持向後相容）
-ToolNotifyCallback = Callable[[str, dict], Awaitable[None]]
-
-# 超時設定（秒）
-DEFAULT_TIMEOUT = 180
 
 # 工作目錄基底（模組級只做 base，每次 call 會建立獨立子目錄）
 _WORKING_DIR_BASE = os.environ.get("CHING_TECH_WORKING_DIR", "")
@@ -179,28 +172,11 @@ MODEL_MAP = {
 
 
 # ============================================================
-# 資料類別（保持不變）
+# 資料類別相容 alias
 # ============================================================
 
-@dataclass
-class ToolCall:
-    """工具調用記錄"""
-    id: str
-    name: str
-    input: dict
-    output: Optional[str] = None
-
-
-@dataclass
-class ClaudeResponse:
-    """Claude CLI 回應"""
-    success: bool
-    message: str
-    error: Optional[str] = None
-    tool_calls: list[ToolCall] = field(default_factory=list)
-    input_tokens: Optional[int] = None
-    output_tokens: Optional[int] = None
-    tool_timings: list[dict] = field(default_factory=list)
+# 既有 caller 可繼續從 claude_agent 匯入 ClaudeResponse / ToolCall。
+ClaudeResponse = AIResponse
 
 
 # ============================================================
@@ -440,6 +416,7 @@ async def call_claude(
         mcp_servers=mcp_servers,
         system_prompt=system_prompt,
     )
+    provider_started = False
 
     @client.on_tool_start
     async def handle_tool_start(tool_id: str, title: str, raw_input: dict):
@@ -569,7 +546,9 @@ async def call_claude(
     # 避免 start_session() 掛住時沒有超時機制（例如 MCP 工具巢狀呼叫場景）
     async def _run_session() -> str:
         """啟動 session、設定模型/權限、送出 prompt"""
+        nonlocal provider_started
         await client.start_session()
+        provider_started = True
 
         if cli_model and cli_model != "sonnet":
             try:
@@ -603,6 +582,10 @@ async def call_claude(
             input_tokens=_usage_data.get("input_tokens"),
             output_tokens=_usage_data.get("output_tokens"),
             tool_timings=tool_timings,
+            provider="claude",
+            actual_model=cli_model,
+            route_reason="direct_claude",
+            provider_started=provider_started,
         )
 
     except asyncio.TimeoutError:
@@ -634,6 +617,10 @@ async def call_claude(
             input_tokens=_usage_data.get("input_tokens"),
             output_tokens=_usage_data.get("output_tokens"),
             tool_timings=tool_timings,
+            provider="claude",
+            actual_model=cli_model,
+            route_reason="direct_claude",
+            provider_started=provider_started,
         )
 
     except (ConnectionError, OSError, RuntimeError, asyncio.CancelledError) as e:
@@ -645,6 +632,10 @@ async def call_claude(
             error=f"呼叫 Claude 時發生錯誤: {str(e)}",
             tool_calls=tool_calls,
             tool_timings=tool_timings,
+            provider="claude",
+            actual_model=cli_model,
+            route_reason="direct_claude",
+            provider_started=provider_started,
         )
     finally:
         # 清理底層 ClaudeClient 的 session 和行程
@@ -667,6 +658,10 @@ async def call_claude_for_summary(
             success=False,
             message="",
             error="找不到 summarizer prompt",
+            provider="claude",
+            actual_model="haiku",
+            route_reason="direct_claude",
+            provider_started=False,
         )
 
     conversation_parts = []

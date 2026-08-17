@@ -4,6 +4,8 @@
 
 ChingTech OS 的 AI 助手透過 `claude-code-acp`（ClaudeClient in-process）與 Claude API 溝通，支援 Line Bot、Telegram Bot 和 Web 前端三個平台。系統包含完整的 Agent 管理、動態工具分配、身份分流、頻率限制和對話壓縮機制。
 
+> Codex ACP provider、用量監測與安全路由核心已實作，但預設仍為固定 Claude，且尚無正式入口改用 `call_ai()`。部署 readiness、可觀測性與 canary gate 尚未完成，因此目前不得開啟正式流量。評估、風險與後續 gate 見 [Codex ACP 備援評估報告](codex-acp-failover-evaluation.md) 與 `openspec/changes/add-codex-acp-failover/`。
+
 ## 架構
 
 ```
@@ -50,6 +52,36 @@ ChingTech OS 的 AI 助手透過 `claude-code-acp`（ClaudeClient in-process）�
 │  In-process Claude 呼叫，支援 MCP 工具、權限控制、token 統計   │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+### Provider Router 安全骨架
+
+`services/ai_router.py::call_ai()` 目前尚未被正式入口使用。`ProviderRouter` 以 Claude/Codex registry 與 `is_ready()` 建立可測試的 pre-start fallback 邊界：只有尚未進入 `provider.call()` 前可改選明確 fallback；進入 call 後，不論回應失敗或拋錯都保持 provider sticky，避免重複副作用。預設 mode 仍固定 Claude：
+
+| 環境變數 | 預設值 | 目前行為 |
+|---------|--------|----------|
+| `AI_PROVIDER_MODE` | `claude` | 接受 `claude`、`codex`、`auto`；非法值明確告警並回到 Claude |
+| `AI_PROVIDER_CANARY_CONTEXTS` | `internal_admin,internal_test` | context exact-match allowlist |
+| `AI_PROVIDER_CANARY_AGENTS` | `test-agent` | Agent exact-match allowlist |
+
+`codex` 或符合 canary 的 `auto` 決策可以選到已註冊的 Codex provider；binary/circuit readiness 失敗才會在 session 前回 Claude並記錄 `codex_unready`。`RoutingContext` 只供 router 判斷，不會傳入 prompt 或 provider。fake provider tests 已鎖住 readiness false/error/missing、fallback unavailable 與執行後禁止跨 provider retry。由於目前沒有正式 caller 使用 `call_ai()`，既有 Line、Telegram、Web 與特殊 pipeline 完全不受影響。
+
+### Claude Usage Monitor
+
+`services/claude_usage.py` 以背景 single-flight request 更新記憶體快照，Router 不會在使用者請求路徑等待外部 Usage API。快照分為 unknown、fresh、stale、error；預設 TTL 60 秒、max-stale 300 秒。只有 `AI_PROVIDER_MODE=auto` 會在 FastAPI lifespan 啟動，forced Claude 不讀取 credentials。
+
+自動路由採 hysteresis：fresh utilization `>=90%` 選 Codex、已在 Codex 時必須 `<85%` 才切回 Claude；85%–90% 或 max-stale 內的 stale 快照維持前一個穩定 provider。unknown、error 或超過 max-stale 一律回 Claude。
+
+### Codex ACP Compatibility Layer
+
+`services/codex_acp.py` 固定搭配 `@agentclientprotocol/codex-acp` 1.1.9、`@openai/codex` 0.146.0 與 Python ACP 0.8.0。此層只處理協定差異：ordered message delta、tool terminal event 去重、token/model metadata、stdio/HTTP MCP schema 與 tool-call-id permission identity correlation；provider 的工作目錄、權限、callback、timeout 與資源限制由 `codex_agent.py` 負責。
+
+真實 smoke 使用本機單一唯讀 MCP fixture，已驗證 stdio tool、Streamable HTTP handshake、canonical server/tool identity、timeout/cancel 與 subprocess cleanup。若 pin 組合升級後任一契約失敗，Codex readiness 必須 fail closed，不可退回模糊工具名稱判斷。
+
+### Codex Provider 安全邊界
+
+`services/codex_agent.py` 沿用 Claude 的 per-request session workdir、MCP merge 與 framework identity/env injection，但只載入 allowlist canonical name 實際引用且同時位於 required set 的 server。permission 必須同時具有完全一致的 `mcp.server.tool` title、結構化 server/tool 與 `mcp__server__tool` allowlist；Unknown、短名稱、同名 server 衝突或 event correlation 不一致全部拒絕。
+
+Provider 強制 read-only、`on-request` approval、停用 multi-agent，並拒絕 terminal、file-write 與 Codex 原生圖片工具。允許的圖片需求只能走既有 MCP 工具，且仍受 nanobanana/codex-image 全域上限。每次呼叫也受 semaphore、queue timeout 與 circuit breaker 控制；timeout 會 cancel、保留 partial result，再 disconnect 並清除 session 目錄。stderr 只保留有界尾端且遮罩 credential-like 內容。
 
 ## Agent 系統
 

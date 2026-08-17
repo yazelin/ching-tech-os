@@ -17,12 +17,16 @@ from .services.session import session_manager
 from .services.terminal import terminal_service
 from .services.scheduler import start_scheduler, stop_scheduler
 from .modules import get_module_registry, is_module_enabled
+from .utils.log_filters import install_log_filters
 
 try:  # 向下相容：保留可 monkeypatch 的符號
     from .services.linebot_agents import ensure_default_linebot_agents  # noqa: F401
 except Exception:  # pragma: no cover - 僅在依賴缺失時啟用
     async def ensure_default_linebot_agents():
         return None
+
+# 擋掉 Telegram 長輪詢雜訊並遮蔽 log 裡的 bot token(詳見 utils/log_filters.py)
+install_log_filters()
 
 # 建立 Socket.IO 伺服器
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
@@ -229,6 +233,18 @@ async def lifespan(app: FastAPI):
         app.state.skillhub_client = SkillHubClient()
     await init_db_pool()
 
+    # Claude usage monitor 只在 auto mode 啟動；預設 forced Claude 不讀 credentials。
+    usage_monitor_started = False
+    if settings.ai_provider_mode == "auto":
+        try:
+            from .services.claude_usage import claude_usage_monitor
+
+            await claude_usage_monitor.start()
+            usage_monitor_started = True
+        except Exception:
+            # 啟動失敗不得阻止既有服務；詳細內容可能含敏感資料，不寫入 log。
+            _logging.getLogger(__name__).warning("Claude usage monitor 啟動失敗")
+
     # 註冊 Bot 斜線指令
     from .services.bot.command_handlers import register_builtin_commands
     register_builtin_commands()
@@ -278,6 +294,13 @@ async def lifespan(app: FastAPI):
             await telegram_polling_task
         except asyncio.CancelledError:
             pass
+    if usage_monitor_started:
+        try:
+            from .services.claude_usage import claude_usage_monitor
+
+            await claude_usage_monitor.stop()
+        except Exception:
+            _logging.getLogger(__name__).warning("Claude usage monitor 關閉失敗")
     stop_scheduler()
     await terminal_service.stop_cleanup_task()
     terminal_service.close_all()

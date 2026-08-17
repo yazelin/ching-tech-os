@@ -5,6 +5,7 @@
 
 import logging
 import os
+from collections.abc import Collection
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -36,6 +37,60 @@ def _get_env_int(key: str, default: int) -> int:
         return default
 
 
+def _get_env_float_bounded(
+    key: str,
+    default: float,
+    *,
+    minimum: float,
+    maximum: float,
+) -> float:
+    """取得有上下限的浮點設定；非法值回到安全預設。"""
+    value = os.getenv(key)
+    if value is None:
+        return default
+    try:
+        parsed = float(value)
+    except ValueError:
+        parsed = float("nan")
+    if minimum <= parsed <= maximum:
+        return parsed
+    logger.error(
+        "環境變數 %s 必須介於 %s 與 %s；使用安全預設值 %s",
+        key,
+        minimum,
+        maximum,
+        default,
+    )
+    return default
+
+
+def _get_env_int_bounded(
+    key: str,
+    default: int,
+    *,
+    minimum: int,
+    maximum: int,
+) -> int:
+    """取得有上下限的整數設定；非法值回到安全預設。"""
+    value = os.getenv(key)
+    if value is None:
+        return default
+    try:
+        parsed = int(value)
+    except ValueError:
+        parsed = minimum - 1
+    if minimum <= parsed <= maximum:
+        return parsed
+    logger.error(
+        "環境變數 %s 必須介於 %d 與 %d；使用安全預設值 %d",
+        key,
+        minimum,
+        maximum,
+        default,
+    )
+    return default
+
+
 def _get_env_bool(key: str, default: bool = False) -> bool:
     """取得布林環境變數"""
     value = os.getenv(key, "").lower()
@@ -44,6 +99,43 @@ def _get_env_bool(key: str, default: bool = False) -> bool:
     if value in ("false", "0", "no", "off"):
         return False
     return default
+
+
+def _get_env_choice(
+    key: str,
+    default: str,
+    allowed: Collection[str],
+) -> str:
+    """取得小寫選項設定；非法值明確告警並回到安全預設。"""
+    allowed_values = frozenset(str(item).strip().lower() for item in allowed)
+    normalized_default = default.strip().lower()
+    if normalized_default not in allowed_values:
+        raise ValueError(f"{key} 的預設值不在合法選項中")
+
+    value = _get_env(key, normalized_default).strip().lower()
+    if value in allowed_values:
+        return value
+
+    logger.error(
+        "環境變數 %s 的值 %r 無效，合法值為 %s；使用安全預設值 %s",
+        key,
+        value,
+        ", ".join(sorted(allowed_values)),
+        normalized_default,
+    )
+    return normalized_default
+
+
+def _get_env_lower_set(key: str, default: str = "") -> frozenset[str]:
+    """取得逗號分隔、不含空字串的小寫集合。"""
+    return frozenset(
+        item.strip().lower()
+        for item in _get_env(key, default).split(",")
+        if item.strip()
+    )
+
+
+AI_PROVIDER_MODES = frozenset({"claude", "codex", "auto"})
 
 
 class Settings:
@@ -86,6 +178,80 @@ class Settings:
     # ===================
     session_ttl_hours: int = _get_env_int("SESSION_TTL_HOURS", 8)
     session_cleanup_interval_minutes: int = 10
+
+    # ===================
+    # AI Provider 路由（預設固定 Claude；Codex 只供 forced/canary 路徑選用）
+    # ===================
+    ai_provider_mode: str = _get_env_choice(
+        "AI_PROVIDER_MODE",
+        "claude",
+        AI_PROVIDER_MODES,
+    )
+    ai_provider_canary_contexts: frozenset[str] = _get_env_lower_set(
+        "AI_PROVIDER_CANARY_CONTEXTS",
+        "internal_admin,internal_test",
+    )
+    ai_provider_canary_agents: frozenset[str] = _get_env_lower_set(
+        "AI_PROVIDER_CANARY_AGENTS",
+        "test-agent",
+    )
+    claude_usage_switch_threshold: float = _get_env_float_bounded(
+        "CLAUDE_USAGE_SWITCH_THRESHOLD", 0.90, minimum=0.01, maximum=1.0
+    )
+    claude_usage_recovery_threshold: float = _get_env_float_bounded(
+        "CLAUDE_USAGE_RECOVERY_THRESHOLD", 0.85, minimum=0.0, maximum=0.99
+    )
+    if claude_usage_recovery_threshold >= claude_usage_switch_threshold:
+        logger.error("Claude usage recovery threshold 必須小於 switch threshold；使用 0.85/0.90")
+        claude_usage_recovery_threshold = 0.85
+        claude_usage_switch_threshold = 0.90
+    claude_usage_refresh_ttl_seconds: int = _get_env_int_bounded(
+        "CLAUDE_USAGE_REFRESH_TTL_SECONDS", 60, minimum=5, maximum=3600
+    )
+    claude_usage_max_stale_seconds: int = _get_env_int_bounded(
+        "CLAUDE_USAGE_MAX_STALE_SECONDS", 300, minimum=10, maximum=86400
+    )
+    if claude_usage_max_stale_seconds <= claude_usage_refresh_ttl_seconds:
+        logger.error("Claude usage max-stale 必須大於 refresh TTL；使用 300/60 秒")
+        claude_usage_refresh_ttl_seconds = 60
+        claude_usage_max_stale_seconds = 300
+    claude_usage_refresh_interval_seconds: int = _get_env_int_bounded(
+        "CLAUDE_USAGE_REFRESH_INTERVAL_SECONDS", 60, minimum=5, maximum=3600
+    )
+    claude_usage_http_timeout_seconds: float = _get_env_float_bounded(
+        "CLAUDE_USAGE_HTTP_TIMEOUT_SECONDS", 5.0, minimum=0.1, maximum=30.0
+    )
+    claude_usage_startup_timeout_seconds: float = _get_env_float_bounded(
+        "CLAUDE_USAGE_STARTUP_TIMEOUT_SECONDS", 2.0, minimum=0.1, maximum=10.0
+    )
+    claude_usage_credentials_path: str = _get_env(
+        "CLAUDE_USAGE_CREDENTIALS_PATH",
+        str(Path.home() / ".claude/.credentials.json"),
+    )
+    codex_acp_bin_path: str = _get_env(
+        "CODEX_ACP_BIN_PATH",
+        str(_project_root / "node_modules/.bin/codex-acp"),
+    )
+    codex_bin_path: str = _get_env(
+        "CODEX_BIN_PATH",
+        str(_project_root / "node_modules/.bin/codex"),
+    )
+    codex_model: str = _get_env("CODEX_MODEL", "")
+    codex_max_concurrency: int = _get_env_int_bounded(
+        "CODEX_MAX_CONCURRENCY", 2, minimum=1, maximum=16
+    )
+    codex_queue_timeout_seconds: float = _get_env_float_bounded(
+        "CODEX_QUEUE_TIMEOUT_SECONDS", 5.0, minimum=0.1, maximum=60.0
+    )
+    codex_circuit_failure_threshold: int = _get_env_int_bounded(
+        "CODEX_CIRCUIT_FAILURE_THRESHOLD", 3, minimum=1, maximum=20
+    )
+    codex_circuit_cooldown_seconds: float = _get_env_float_bounded(
+        "CODEX_CIRCUIT_COOLDOWN_SECONDS", 60.0, minimum=1.0, maximum=3600.0
+    )
+    codex_stderr_max_bytes: int = _get_env_int_bounded(
+        "CODEX_STDERR_MAX_BYTES", 8192, minimum=1024, maximum=65536
+    )
 
     # ===================
     # 路徑設定
