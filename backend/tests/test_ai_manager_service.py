@@ -472,3 +472,265 @@ async def test_ensure_log_partitions(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(ai_manager, "get_connection", lambda: _CM(conn))
     await ai_manager.ensure_log_partitions()
     conn.execute.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_prompt_not_found_and_update_branches(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Prompt 查無資料與 update_prompt 各欄位分支。"""
+    pid = uuid4()
+    conn = AsyncMock()
+    monkeypatch.setattr(ai_manager, "get_connection", lambda: _CM(conn))
+
+    # get_prompt / get_prompt_by_name：查無資料
+    conn.fetchrow = AsyncMock(return_value=None)
+    assert await ai_manager.get_prompt(pid) is None
+    assert await ai_manager.get_prompt_by_name("missing") is None
+
+    # update_prompt：所有欄位都更新（覆蓋 name/display_name/category/description/variables 分支）
+    conn.fetchrow = AsyncMock(return_value={
+        "id": pid,
+        "name": "full",
+        "display_name": "Full",
+        "category": "task",
+        "content": "c",
+        "description": "d",
+        "variables": '{"all":1}',
+        "created_at": _now(),
+        "updated_at": _now(),
+    })
+    updated = await ai_manager.update_prompt(
+        pid,
+        AiPromptUpdate(
+            name="full",
+            display_name="Full",
+            category="task",
+            content="c",
+            description="d",
+            variables={"all": 1},
+        ),
+    )
+    assert updated is not None and updated["variables"]["all"] == 1
+
+    # update_prompt：無任何欄位 -> fallback get_prompt
+    monkeypatch.setattr(ai_manager, "get_prompt", AsyncMock(return_value={"id": pid, "name": "fb"}))
+    assert (await ai_manager.update_prompt(pid, AiPromptUpdate()))["name"] == "fb"
+
+    # update_prompt：目標不存在 -> 回傳 None
+    conn.fetchrow = AsyncMock(return_value=None)
+    assert await ai_manager.update_prompt(pid, AiPromptUpdate(content="x")) is None
+
+
+@pytest.mark.asyncio
+async def test_agent_not_found_and_update_branches(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Agent 查無資料、關聯 Prompt 組裝與 update_agent 各欄位分支。"""
+    aid = uuid4()
+    pid = uuid4()
+    conn = AsyncMock()
+    monkeypatch.setattr(ai_manager, "get_connection", lambda: _CM(conn))
+
+    # get_agent / get_agent_by_name：查無資料
+    conn.fetchrow = AsyncMock(return_value=None)
+    assert await ai_manager.get_agent(aid) is None
+    assert await ai_manager.get_agent_by_name("missing") is None
+
+    # get_agent：無關聯 Prompt（prompt_id 為 None -> system_prompt 為 None）
+    conn.fetchrow = AsyncMock(return_value={
+        "id": aid,
+        "name": "agent",
+        "display_name": "A",
+        "description": None,
+        "model": "claude-sonnet",
+        "system_prompt_id": None,
+        "is_active": True,
+        "tools": None,
+        "settings": None,
+        "created_at": _now(),
+        "updated_at": _now(),
+        "prompt_id": None,
+        "prompt_name": None,
+        "prompt_display_name": None,
+        "prompt_category": None,
+        "prompt_content": None,
+        "prompt_description": None,
+        "prompt_variables": None,
+        "prompt_created_at": None,
+        "prompt_updated_at": None,
+    })
+    no_prompt = await ai_manager.get_agent(aid)
+    assert no_prompt is not None and no_prompt["system_prompt"] is None
+
+    # get_agent_by_name：有關聯 Prompt（組裝 system_prompt dict）
+    conn.fetchrow = AsyncMock(return_value={
+        "id": aid,
+        "name": "agent",
+        "display_name": "A",
+        "description": None,
+        "model": "claude-sonnet",
+        "system_prompt_id": pid,
+        "is_active": True,
+        "tools": None,
+        "settings": None,
+        "created_at": _now(),
+        "updated_at": _now(),
+        "prompt_id": pid,
+        "prompt_name": "p",
+        "prompt_display_name": "P",
+        "prompt_category": "system",
+        "prompt_content": "sys",
+        "prompt_description": None,
+        "prompt_variables": '{"v":9}',
+        "prompt_created_at": _now(),
+        "prompt_updated_at": _now(),
+    })
+    with_prompt = await ai_manager.get_agent_by_name("agent")
+    assert with_prompt["system_prompt"]["variables"]["v"] == 9
+
+    # update_agent：所有欄位都更新（覆蓋 display_name/description/system_prompt_id/tools/settings 分支）
+    conn.fetchrow = AsyncMock(return_value={
+        "id": aid,
+        "name": "n2",
+        "display_name": "D2",
+        "description": "d2",
+        "model": "claude-haiku",
+        "system_prompt_id": pid,
+        "is_active": True,
+        "tools": '["t"]',
+        "settings": '{"s":1}',
+        "created_at": _now(),
+        "updated_at": _now(),
+    })
+    updated = await ai_manager.update_agent(
+        aid,
+        AiAgentUpdate(
+            name="n2",
+            display_name="D2",
+            description="d2",
+            model="claude-haiku",
+            system_prompt_id=pid,
+            is_active=True,
+            tools=["t"],
+            settings={"s": 1},
+        ),
+    )
+    assert updated is not None and updated["tools"] == ["t"] and updated["settings"]["s"] == 1
+
+    # update_agent：目標不存在 -> 回傳 None
+    conn.fetchrow = AsyncMock(return_value=None)
+    assert await ai_manager.update_agent(aid, AiAgentUpdate(name="x")) is None
+
+
+@pytest.mark.asyncio
+async def test_get_selectable_agents(monkeypatch: pytest.MonkeyPatch) -> None:
+    """取得可供 /agent 切換的 Agent 清單。"""
+    conn = AsyncMock()
+    conn.fetch = AsyncMock(return_value=[
+        {"id": uuid4(), "name": "sel", "display_name": "S", "description": None, "model": "m", "tools": None},
+    ])
+    monkeypatch.setattr(ai_manager, "get_connection", lambda: _CM(conn))
+    agents = await ai_manager.get_selectable_agents()
+    assert agents[0]["name"] == "sel"
+
+
+@pytest.mark.asyncio
+async def test_get_logs_all_filters_and_used_tools_parsing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """get_logs：agent_id/日期過濾條件與 used_tools、script_label 解析分支。"""
+    conn = AsyncMock()
+    conn.fetchrow = AsyncMock(return_value={"total": 3})
+    conn.fetch = AsyncMock(return_value=[
+        {  # run_skill_script（含 skill/script）、無 name 的 tool_call、一般工具
+            "id": uuid4(),
+            "agent_id": None,
+            "agent_name": None,
+            "context_type": "web",
+            "model": "m",
+            "input_prompt": "p1",
+            "allowed_tools": None,
+            "parsed_response": (
+                '{"tool_calls":['
+                '{"name":"run_skill_script","input":{"skill":"mail","script":"send"}},'
+                '{"name":"run_skill_script","input":{"skill":"mail"}},'
+                '{"name":"run_skill_script","input":{"other":1}},'
+                '{"input":{"no_name":1}},'
+                '{"name":"search_knowledge"}'
+                "]}"
+            ),
+            "success": True,
+            "duration_ms": 1,
+            "input_tokens": 1,
+            "output_tokens": 1,
+            "created_at": _now(),
+        },
+        {  # 無 parsed_response -> used_tools 空；script context -> 解析 script_label
+            "id": uuid4(),
+            "agent_id": None,
+            "agent_name": None,
+            "context_type": "script",
+            "model": "m",
+            "input_prompt": 'mail/send: {"x":1}',
+            "allowed_tools": None,
+            "parsed_response": None,
+            "success": True,
+            "duration_ms": 1,
+            "input_tokens": 1,
+            "output_tokens": 1,
+            "created_at": _now(),
+        },
+        {  # script context 但 input_prompt 沒有冒號 -> script_label 維持 None
+            "id": uuid4(),
+            "agent_id": None,
+            "agent_name": None,
+            "context_type": "script",
+            "model": "m",
+            "input_prompt": "no-colon-format",
+            "allowed_tools": None,
+            "parsed_response": None,
+            "success": False,
+            "duration_ms": 1,
+            "input_tokens": 1,
+            "output_tokens": 1,
+            "created_at": _now(),
+        },
+    ])
+    monkeypatch.setattr(ai_manager, "get_connection", lambda: _CM(conn))
+
+    items, total = await ai_manager.get_logs(
+        AiLogFilter(agent_id=uuid4(), start_date=_now(), end_date=_now()),
+        page=1,
+        page_size=10,
+    )
+    assert total == 3
+    # run_skill_script 依 skill/script 展開，沒有 skill 的保留原名，無 name 的忽略
+    assert sorted(items[0]["used_tools"]) == [
+        "run_skill_script",
+        "run_skill_script(mail)",
+        "run_skill_script(mail/send)",
+        "search_knowledge",
+    ]
+    assert items[1]["used_tools"] == [] and items[1]["script_label"] == "mail/send"
+    assert items[2]["script_label"] is None
+
+
+@pytest.mark.asyncio
+async def test_get_log_stats_filters_and_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    """get_log_stats：agent_id/日期過濾與零筆資料時的統計。"""
+    conn = AsyncMock()
+    conn.fetchrow = AsyncMock(return_value={
+        "total_calls": 0,
+        "success_count": 0,
+        "failure_count": 0,
+        "avg_duration_ms": None,
+        "total_input_tokens": 0,
+        "total_output_tokens": 0,
+    })
+    monkeypatch.setattr(ai_manager, "get_connection", lambda: _CM(conn))
+
+    stats = await ai_manager.get_log_stats(
+        agent_id=uuid4(),
+        start_date=_now(),
+        end_date=_now(),
+    )
+    # 零筆資料時 success_rate 為 0、avg_duration_ms 為 None
+    assert stats["success_rate"] == 0.0 and stats["avg_duration_ms"] is None
+    # WHERE 條件應包含三個過濾參數
+    args = conn.fetchrow.await_args.args
+    assert "agent_id = $1" in args[0] and "created_at >= $2" in args[0] and "created_at <= $3" in args[0]

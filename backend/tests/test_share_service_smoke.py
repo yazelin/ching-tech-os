@@ -309,3 +309,160 @@ async def test_public_resource_size_format_branches(monkeypatch: pytest.MonkeyPa
     res_kb = await share.get_public_resource("tok-kb")
     assert res_kb.data["file_size_str"].endswith("KB")
 
+
+def _setup_nas_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    """把 ctos / nas 掛載路徑指向 tmp_path，避免碰到真實 NAS"""
+    monkeypatch.setattr(share.settings, "ctos_mount_path", str(tmp_path / "ctos"))
+    monkeypatch.setattr(share.settings, "nas_mount_path", str(tmp_path))
+    return tmp_path
+
+
+def test_validate_nas_file_path_ai_images_branch(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """validate_nas_file_path：ai-images/ 相對路徑分支"""
+    _setup_nas_paths(monkeypatch, tmp_path)
+    target = tmp_path / "ctos" / "linebot" / "files" / "ai-images" / "pic.jpg"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(b"img")
+
+    result = share.validate_nas_file_path("ai-images/pic.jpg")
+    assert result.name == "pic.jpg"
+
+
+def test_validate_nas_file_path_path_manager_branches(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """validate_nas_file_path：走 PathManager 解析的各種錯誤分支"""
+    from ching_tech_os.services import path_manager as pm_module
+    from ching_tech_os.services.path_manager import StorageZone
+    from ching_tech_os.services.shared_source_permissions import SharedSourceAccessDeniedError
+
+    _setup_nas_paths(monkeypatch, tmp_path)
+    pm = pm_module.path_manager
+
+    # parse 失敗 -> NasFileAccessDenied
+    monkeypatch.setattr(pm, "parse", lambda _p: (_ for _ in ()).throw(ValueError("bad")))
+    with pytest.raises(share.NasFileAccessDenied):
+        share.validate_nas_file_path("weird://path")
+
+    # 不允許的區域（temp）-> NasFileAccessDenied
+    monkeypatch.setattr(pm, "parse", lambda _p: SimpleNamespace(zone=StorageZone.TEMP))
+    with pytest.raises(share.NasFileAccessDenied):
+        share.validate_nas_file_path("temp://x.txt")
+
+    # to_filesystem 丟 SharedSourceAccessDeniedError -> NasFileAccessDenied
+    monkeypatch.setattr(pm, "parse", lambda _p: SimpleNamespace(zone=StorageZone.CTOS))
+    monkeypatch.setattr(
+        pm,
+        "to_filesystem",
+        lambda _p, source_permissions=None: (_ for _ in ()).throw(SharedSourceAccessDeniedError("denied")),
+    )
+    with pytest.raises(share.NasFileAccessDenied):
+        share.validate_nas_file_path("ctos://x.txt")
+
+    # to_filesystem 丟 ValueError -> NasFileAccessDenied
+    monkeypatch.setattr(
+        pm,
+        "to_filesystem",
+        lambda _p, source_permissions=None: (_ for _ in ()).throw(ValueError("bad path")),
+    )
+    with pytest.raises(share.NasFileAccessDenied):
+        share.validate_nas_file_path("ctos://y.txt")
+
+    # 解析出的路徑在 NAS 掛載點之外 -> NasFileAccessDenied
+    monkeypatch.setattr(pm, "to_filesystem", lambda _p, source_permissions=None: "/etc/passwd")
+    with pytest.raises(share.NasFileAccessDenied):
+        share.validate_nas_file_path("ctos://escape.txt")
+
+    # 檔案不存在 -> NasFileNotFoundError
+    monkeypatch.setattr(
+        pm, "to_filesystem", lambda _p, source_permissions=None: str(tmp_path / "missing.bin")
+    )
+    with pytest.raises(share.NasFileNotFoundError):
+        share.validate_nas_file_path("ctos://missing.bin")
+
+    # 路徑是目錄不是檔案 -> NasFileNotFoundError
+    folder = tmp_path / "a-folder"
+    folder.mkdir()
+    monkeypatch.setattr(pm, "to_filesystem", lambda _p, source_permissions=None: str(folder))
+    with pytest.raises(share.NasFileNotFoundError):
+        share.validate_nas_file_path("ctos://a-folder")
+
+    # 掛載點路徑含 null byte，resolve 丟例外 -> NasFileAccessDenied（generic except 分支）
+    ok_file = tmp_path / "ok.bin"
+    ok_file.write_bytes(b"x")
+    monkeypatch.setattr(pm, "to_filesystem", lambda _p, source_permissions=None: str(ok_file))
+    monkeypatch.setattr(share.settings, "nas_mount_path", "bad\0path")
+    with pytest.raises(share.NasFileAccessDenied):
+        share.validate_nas_file_path("ctos://ok.bin")
+
+
+@pytest.mark.asyncio
+async def test_get_resource_title_nas_and_error_branches(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """get_resource_title：nas_file 成功與各種錯誤映射為 ResourceNotFoundError"""
+    # nas_file 成功分支
+    nas_file = tmp_path / "圖面.pdf"
+    nas_file.write_bytes(b"pdf")
+    monkeypatch.setattr(share, "validate_nas_file_path", lambda _p: nas_file)
+    assert await share.get_resource_title("nas_file", "圖面.pdf") == "圖面.pdf"
+
+    # 知識庫不存在 -> ResourceNotFoundError
+    monkeypatch.setattr(
+        share, "get_knowledge", lambda _rid: (_ for _ in ()).throw(share.KnowledgeNotFoundError("x"))
+    )
+    with pytest.raises(share.ResourceNotFoundError):
+        await share.get_resource_title("knowledge", "kb-x")
+
+    # NAS 檔案不存在 -> ResourceNotFoundError
+    monkeypatch.setattr(
+        share, "validate_nas_file_path", lambda _p: (_ for _ in ()).throw(share.NasFileNotFoundError("gone"))
+    )
+    with pytest.raises(share.ResourceNotFoundError):
+        await share.get_resource_title("nas_file", "gone.txt")
+
+    # NAS 存取被拒 -> ResourceNotFoundError
+    monkeypatch.setattr(
+        share, "validate_nas_file_path", lambda _p: (_ for _ in ()).throw(share.NasFileAccessDenied("no"))
+    )
+    with pytest.raises(share.ResourceNotFoundError):
+        await share.get_resource_title("nas_file", "secret.txt")
+
+
+@pytest.mark.asyncio
+async def test_create_share_link_edge_branches(monkeypatch: pytest.MonkeyPatch) -> None:
+    """create_share_link：content 缺內容、token 產生失敗、自訂密碼、非 content 類型"""
+    # content 類型缺 content -> ShareError
+    with pytest.raises(share.ShareError):
+        await share.create_share_link(
+            ShareLinkCreate(resource_type="content"), created_by="admin"
+        )
+
+    conn = AsyncMock()
+    monkeypatch.setattr(share, "get_connection", lambda: _CM(conn))
+    monkeypatch.setattr(share.settings, "public_url", "https://example.com")
+
+    # token 連續 10 次撞號 -> ShareError
+    conn.fetchval = AsyncMock(return_value=1)
+    with pytest.raises(share.ShareError):
+        await share.create_share_link(
+            ShareLinkCreate(resource_type="content", content="hi"), created_by="admin"
+        )
+
+    # 非 content 類型 + 自訂密碼：呼叫 get_resource_title 並回傳 has_password
+    conn.fetchval = AsyncMock(return_value=None)
+    conn.fetchrow = AsyncMock(return_value=_row(resource_type="nas_file", resource_id="/f.txt"))
+    monkeypatch.setattr(share, "get_resource_title", AsyncMock(return_value="f.txt"))
+
+    link = await share.create_share_link(
+        ShareLinkCreate(resource_type="nas_file", resource_id="/f.txt", password="5678"),
+        created_by="admin",
+    )
+    assert link.resource_title == "f.txt"
+    assert link.has_password is True
+    assert link.password == "5678"
+
+    # content 類型未給密碼：自動產生 4 位數字密碼
+    conn.fetchrow = AsyncMock(return_value=_row())
+    auto = await share.create_share_link(
+        ShareLinkCreate(resource_type="content", content="hi"), created_by="admin"
+    )
+    assert auto.has_password is True
+    assert auto.password is not None and auto.password.isdigit()
+
