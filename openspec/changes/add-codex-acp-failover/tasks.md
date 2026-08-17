@@ -85,9 +85,9 @@
 
 ## 9. 驗收與 Rollout Gate
 
-- [ ] 9.1 `uv run pytest` 全數通過，無既有測試回歸
-- [ ] 9.2 `npm run ci:check` 與 `npm run test:backend:cov:target` 通過，整體 coverage 不低於 90%
-- [ ] 9.3 `openspec validate add-codex-acp-failover --strict --no-interactive` 通過
+- [x] 9.1 `uv run pytest` 全數通過，無既有測試回歸
+- [x] 9.2 `npm run ci:check` 與 `npm run test:backend:cov:target` 通過，整體 coverage 不低於 90%
+- [x] 9.3 `openspec validate add-codex-acp-failover --strict --no-interactive` 通過
 - [ ] 9.4 真實 ACP 唯讀 smoke matrix 全數通過，stdio/HTTP MCP 無缺漏
 - [ ] 9.5 bounded concurrency/load test 通過，無 zombie process、無無限制記憶體成長
 - [ ] 9.6 演練 forced Claude kill switch、清空 canary、Codex auth 過期與 circuit open
