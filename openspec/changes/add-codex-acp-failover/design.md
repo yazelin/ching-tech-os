@@ -222,6 +222,8 @@ tool-call limit 在 permission 核准前計數，provider 不能繞過 nanobanan
 
 **Phase 8.6 checkpoint（2026-08-17）**：restricted mode（`identity_router.handle_restricted_mode`）改用 `call_ai()`，`RoutingContext(context_type="bot-restricted", agent_name=<restricted agent>)` 讓 canary 可獨立於一般對話控制。遷移前先通過三類測試：身份（`ctos_user_id=None` 不可注入）、權限（工具僅限 Agent 白名單、空 app 權限不擴充）、成本（token 用量仍記入月度計數器）。仍維持 `call_claude` 的路徑：intent_guard（Haiku 前置過濾）、`/debug` 管理員診斷（依賴 run_skill_script 副作用工具，Codex 唯讀過濾下無意義）、8.7 特殊 pipeline（簡報、生圖、research、scheduler、summary）。CI：1413 passed/15 skipped、coverage 86.08%。
 
+**Phase 6.5 checkpoint（2026-08-17）**：以開發機（同時為 staging，服務直跑工作目錄）完成演練：(1) 服務重啟——11:56 重啟後 health check 通過、新路由（providers/status）生效、extends/MCP 正常載入，舊 process 停止碼造成的一次性 systemd "Failed" 為停止行為非啟動失敗；(2) 重啟後完整 preflight（含真實 handshake）8/8 通過；(3) adapter 缺失（`CODEX_ACP_BIN_PATH=/nonexistent`）→ preflight fail-closed、version 檢查略過；(4) 登入過期／auth 不存在（`CODEX_HOME` 指向空目錄）→ `auth_storage` fail、handshake 不啟動 subprocess；(5) forced Claude rollback 目標狀態即目前狀態（`AI_PROVIDER_MODE` 未設定 → 預設 claude），mode 切換演練（codex/auto → claude）留待啟用 canary 時與 9.6 一併執行。
+
 **Coverage 90% gate checkpoint（2026-08-17）**：兩輪平行測試補強將整體 coverage 從 86.08% 提升到 **91.00%**（1599 passed/15 skipped），通過 9.2 的 canary 前必達 gate。八個模組拉到 100%：api/share、services/share、services/scheduler、api/user、services/ai_manager、services/smb、services/mcp/nas_tools、services/presentation、services/linebot_agents；services/knowledge 99%（剩一行不可達死碼）。9.1（pytest 全綠）、9.2（build + cov:target 90%）、9.3（openspec validate --strict）此時點皆通過；Go/No-Go（9.8）前需重新驗證。已知兩個偶發 flaky（`test_api_share_more`、`test_bot_multi_mode_integration::test_restricted_mode_full_flow`，全套件跑各出現一次、隔離與重跑皆過），未阻擋 gate，後續觀察。
 
 ## Test Strategy

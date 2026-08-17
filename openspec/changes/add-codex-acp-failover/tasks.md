@@ -63,7 +63,7 @@
 - [x] 6.2 更新部署 preflight：binary path、version、service user、auth storage、`NO_BROWSER=1`、最小 handshake
 - [x] 6.3 確認 systemd 使用 `ct` credentials，不依賴 root 或互動 login
 - [x] 6.4 實作 provider readiness 與 circuit 狀態輸出，錯誤不得包含 token
-- [ ] 6.5 在 staging 驗證服務重啟、登入過期、adapter 缺失與 forced Claude rollback
+- [x] 6.5 在 staging 驗證服務重啟、登入過期、adapter 缺失與 forced Claude rollback
 
 ## 7. 可觀測性
 
