@@ -548,3 +548,42 @@ async def test_codex_tool_events_logged_without_arguments(
     assert completed and "duration_ms=" in completed[0]
     # 工具輸入參數（可能含使用者資料）不得寫入 log
     assert "query" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_unexpected_exception_types_fail_closed_and_trip_circuit() -> None:
+    """9.6 演練發現:非白名單例外(如 acp RequestError)必須轉安全失敗並記入 circuit。"""
+
+    class CustomAcpError(Exception):
+        """模擬 acp.exceptions.RequestError 這類不在舊白名單的例外。"""
+
+    class ExplodingClient(FakeCodexClient):
+        async def connect(self) -> None:
+            raise CustomAcpError(
+                'Codex process has exited with code 1: CODEX_HOME points to "/bad" secret-value'
+            )
+
+    factory_clients: list[ExplodingClient] = []
+
+    def factory(**kwargs):
+        client = ExplodingClient(**kwargs)
+        factory_clients.append(client)
+        return client
+
+    breaker = codex_agent.CodexCircuitBreaker(3, 60.0)
+    provider = codex_agent.CodexProvider(
+        client_factory=factory,
+        adapter_path="/bin/true",
+        codex_path="/bin/true",
+        circuit_breaker=breaker,
+    )
+    result = await provider.call(prompt="hi")
+
+    # fail closed:回傳安全 failure response,不 raise、不洩漏原始訊息
+    assert result.success is False
+    assert result.provider == "codex"
+    assert "secret-value" not in (result.error or "")
+    # circuit 必須記到失敗
+    assert breaker.status()["consecutive_failures"] == 1
+    # client 必須清理
+    assert factory_clients[0].disconnected is True

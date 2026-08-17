@@ -481,7 +481,9 @@ class CodexProvider:
             return self._failure_response(
                 client, "timeout", provider_started, tool_calls, tool_timings
             )
-        except (ConnectionError, OSError, RuntimeError, ValueError) as exc:
+        except Exception as exc:
+            # fail closed:任何未預期例外（含 acp RequestError）都轉安全失敗，
+            # 不得向 caller 拋出原始訊息，且必須記入 circuit breaker
             category = _safe_error_category(exc)
             self.circuit_breaker.record_failure()
             logger.warning("Codex provider 失敗，category=%s", category)
