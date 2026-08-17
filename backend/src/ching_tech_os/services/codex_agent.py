@@ -73,6 +73,17 @@ class CodexCircuitBreaker:
         if self._failures >= self.failure_threshold:
             self._opened_at = self._clock()
 
+    def status(self) -> dict[str, Any]:
+        """不改變內部狀態的安全狀態輸出。"""
+        is_open = (
+            self._opened_at is not None
+            and self._clock() - self._opened_at < self.cooldown_seconds
+        )
+        return {
+            "state": "open" if is_open else "closed",
+            "consecutive_failures": self._failures,
+        }
+
 
 def _resolve_executable(value: str) -> str | None:
     """接受明確路徑或 PATH command，且只回傳可執行檔。"""
@@ -169,11 +180,25 @@ class CodexProvider:
             and _resolve_executable(self.codex_path)
         )
 
+    async def status(self) -> dict[str, Any]:
+        """readiness 與 circuit 的安全狀態輸出；不含路徑外的環境或 credentials。"""
+        adapter_ok = _resolve_executable(self.adapter_path) is not None
+        codex_ok = _resolve_executable(self.codex_path) is not None
+        circuit = self.circuit_breaker.status()
+        return {
+            "ready": bool(adapter_ok and codex_ok and circuit["state"] == "closed"),
+            "adapter_binary": adapter_ok,
+            "codex_binary": codex_ok,
+            "circuit": circuit,
+        }
+
     def _client_env(self, codex_binary: str) -> dict[str, str]:
         env = dict(os.environ)
         env.update(
             {
                 "CODEX_PATH": codex_binary,
+                # 明確固定 auth storage，避免 systemd 環境下 HOME 不確定時讀錯 credentials
+                "CODEX_HOME": settings.codex_home,
                 "INITIAL_AGENT_MODE": "read-only",
                 "NO_BROWSER": "1",
                 "CODEX_CONFIG": json.dumps(

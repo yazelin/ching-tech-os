@@ -27,8 +27,21 @@ from ..models.ai import (
     AiTestResponse,
 )
 from ..services import ai_manager
+from ..services import ai_router as ai_router_service
+from .auth import require_admin
 
 router = APIRouter(prefix="/api/ai", tags=["AI Management"])
+
+
+# ============================================================
+# Provider 狀態（readiness / circuit / usage，admin 專用）
+# ============================================================
+
+
+@router.get("/providers/status")
+async def get_provider_status(session: SessionData = Depends(require_admin)):
+    """取得 AI provider readiness、circuit 與 Claude usage 快照（不含 credentials）。"""
+    return await ai_router_service.provider_status()
 
 
 # ============================================================

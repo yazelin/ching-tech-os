@@ -189,7 +189,7 @@ tool-call limit 在 permission 核准前計數，provider 不能繞過 nanobanan
 - systemd 使用 `ct` 使用者的明確 Codex auth storage，不讀 root credentials。
 - `NO_BROWSER=1`，服務中不得啟動互動 login。
 
-### 11. 第一階段不新增 `ai_logs` provider 欄位
+**Phase 6 checkpoint（2026-08-17）**：adapter/runtime 已以 exact version pin 在根目錄 `package.json` + `package-lock.json`，部署腳本（install/update-service.sh）根目錄改用 `npm ci` 保證照 lock 安裝。新增 `services/codex_preflight.py`（CLI：`uv run python -m ching_tech_os.services.codex_preflight`）檢查 binary path、pin 版本、service user 非 root、`CODEX_HOME/auth.json` 存在且屬於 service user、`NO_BROWSER=1`/`CODEX_HOME` env 與最小 ACP handshake；所有輸出只留安全 category，不含 credentials。`update-service.sh` 在 `.env` 的 `AI_PROVIDER_MODE` 為 codex/auto 時強制執行 preflight，失敗即中止部署。systemd unit 明確設定 `CODEX_HOME`（RUN_USER 的 `~/.codex`）與 `NO_BROWSER=1`，provider `_client_env` 也固定帶 `CODEX_HOME`。新增 `GET /api/ai/providers/status`（require_admin）輸出 provider readiness、circuit 狀態與 usage 快照。開發機實跑完整 preflight（含真實 handshake）通過；CI 為 1398 passed/13 skipped、coverage 86.03%。6.5 staging 演練（服務重啟、登入過期、adapter 缺失、forced Claude rollback）尚待部署機執行。
 
 為降低分區表 migration 風險，先將 routing metadata 寫入：
 

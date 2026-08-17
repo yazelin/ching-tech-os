@@ -236,6 +236,9 @@ class Settings:
         "CODEX_BIN_PATH",
         str(_project_root / "node_modules/.bin/codex"),
     )
+    # Codex CLI auth storage；systemd 服務必須用 service user（ct）自己的 ~/.codex，
+    # 不得依賴 root credentials 或互動 login
+    codex_home: str = _get_env("CODEX_HOME", str(Path.home() / ".codex"))
     codex_model: str = _get_env("CODEX_MODEL", "")
     codex_max_concurrency: int = _get_env_int_bounded(
         "CODEX_MAX_CONCURRENCY", 2, minimum=1, maximum=16

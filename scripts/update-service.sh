@@ -162,14 +162,17 @@ if [ "${DRY_RUN}" = true ]; then
     echo "     依 git submodule status 過濾非 - 開頭者；單一 submodule 失敗只警告不中斷）"
     echo "  5. cd backend && uv sync --extra voice（與 install-service.sh 一致，"
     echo "     避免 uv sync 移除已安裝的 voice 依賴）"
-    echo "  6. npm install（根目錄與 frontend/）+ npm run build（建置前端，照 install-service.sh）"
+    echo "  6. npm ci（根目錄，依 lock 安裝 pin 版 Codex adapter）+ npm install（frontend/）"
+    echo "     + npm run build（建置前端，照 install-service.sh）"
     echo "  7. cd backend && uv run alembic upgrade head（重啟前先跑，提早暴露 migration 錯誤；"
     echo "     systemd unit 的 ExecStartPre 啟動時還會再跑一次）"
-    echo "  8. sudo systemctl restart ${SERVICE_NAME}"
-    echo "  9. systemctl is-active ${SERVICE_NAME} 確認服務啟動"
-    echo " 10. Health check: curl ${HEALTH_URL}（最多 ${HEALTH_RETRIES} 次、間隔 ${HEALTH_INTERVAL} 秒；"
+    echo "  8. 若 .env 的 AI_PROVIDER_MODE 為 codex/auto：執行 Codex preflight"
+    echo "     （python -m ching_tech_os.services.codex_preflight；失敗即中止部署）"
+    echo "  9. sudo systemctl restart ${SERVICE_NAME}"
+    echo " 10. systemctl is-active ${SERVICE_NAME} 確認服務啟動"
+    echo " 11. Health check: curl ${HEALTH_URL}（最多 ${HEALTH_RETRIES} 次、間隔 ${HEALTH_INTERVAL} 秒；"
     echo "     失敗時印 journalctl -u ${SERVICE_NAME} -n 30 並 exit 1）"
-    echo " 11. 印出新版本號與更新摘要（git log --oneline 舊版..新版）"
+    echo " 12. 印出新版本號與更新摘要（git log --oneline 舊版..新版）"
     exit 0
 fi
 
@@ -255,7 +258,9 @@ log_info "更新後端 Python 依賴（uv sync --extra voice）..."
 # 前端建置（照 install-service.sh：npm install + npm run build）
 # ===================
 log_info "更新前端依賴..."
-npm install
+# 根目錄含 pin 版 Codex adapter/runtime（@agentclientprotocol/codex-acp、@openai/codex），
+# 用 npm ci 保證完全依 package-lock.json 安裝；lock 不同步時直接失敗，不靜默改版
+npm ci
 (cd "${PROJECT_ROOT}/frontend" && npm install)
 
 log_info "建置前端..."
@@ -268,6 +273,21 @@ npm run build
 # 但這裡先跑一次，讓 migration 錯誤在重啟服務前就暴露出來
 log_info "執行資料庫 migration（alembic upgrade head）..."
 (cd "${BACKEND_DIR}" && "${UV_BIN}" run alembic upgrade head)
+
+# ===================
+# Codex preflight（只在 .env 啟用 Codex provider 時檢查；失敗即中止部署）
+# ===================
+AI_PROVIDER_MODE_VALUE="$(grep -E '^AI_PROVIDER_MODE=' "${PROJECT_ROOT}/.env" 2>/dev/null | tail -n1 | cut -d= -f2- | tr -d '[:space:]')"
+if [ "${AI_PROVIDER_MODE_VALUE}" = "codex" ] || [ "${AI_PROVIDER_MODE_VALUE}" = "auto" ]; then
+    log_info "AI_PROVIDER_MODE=${AI_PROVIDER_MODE_VALUE}，執行 Codex preflight（binary/版本/auth/handshake）..."
+    if ! (cd "${BACKEND_DIR}" && "${UV_BIN}" run python -m ching_tech_os.services.codex_preflight); then
+        log_error "Codex preflight 失敗；請修正後再部署，或將 AI_PROVIDER_MODE 改回 claude"
+        exit 1
+    fi
+    log_info "Codex preflight 通過"
+else
+    log_info "AI_PROVIDER_MODE=${AI_PROVIDER_MODE_VALUE:-claude}（未啟用 Codex），略過 Codex preflight"
+fi
 
 # ===================
 # 重啟服務

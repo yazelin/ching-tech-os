@@ -311,7 +311,8 @@ echo "安裝 Playwright Chromium（browse_webpage 工具需要）..."
 sudo -u ${RUN_USER} bash -c "cd ${BACKEND_DIR} && ${UV_BIN} run playwright install chromium" || echo "警告：Playwright Chromium 安裝失敗，browse_webpage 工具將無法使用"
 
 echo "安裝前端依賴..."
-sudo -u ${RUN_USER} bash -c "export PATH=${NODE_BIN_DIR}:\$PATH && cd ${PROJECT_DIR} && npm install"
+# 根目錄含 pin 版 Codex adapter/runtime，npm ci 保證完全依 package-lock.json 安裝
+sudo -u ${RUN_USER} bash -c "export PATH=${NODE_BIN_DIR}:\$PATH && cd ${PROJECT_DIR} && npm ci"
 sudo -u ${RUN_USER} bash -c "export PATH=${NODE_BIN_DIR}:\$PATH && cd ${PROJECT_DIR}/frontend && npm install"
 
 echo "建置前端..."
@@ -356,6 +357,11 @@ EnvironmentFile=${ENV_FILE}
 
 # 確保 PATH 包含 uv、nvm node 和其他工具
 Environment="PATH=${SERVICE_PATH}"
+
+# Codex provider 使用 service user 自己的 auth storage（codex login 產生的 ~/.codex），
+# 明確固定避免讀到 root 或其他使用者的 credentials；服務內一律 headless，不啟動互動 login
+Environment="CODEX_HOME=$(getent passwd ${RUN_USER} | cut -d: -f6)/.codex"
+Environment="NO_BROWSER=1"
 
 # 啟動前確保資料庫容器運行
 ExecStartPre=/usr/bin/docker compose -f ${DOCKER_DIR}/docker-compose.yml up -d postgres

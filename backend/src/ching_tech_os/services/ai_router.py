@@ -253,6 +253,21 @@ def select_provider_decision(
     return ProviderDecision("claude", reason)
 
 
+async def provider_status() -> dict[str, Any]:
+    """Provider readiness、circuit 與 usage 快照的安全彙總，供 admin 觀測。
+
+    輸出不得包含 credentials、token 或原始錯誤內容。
+    """
+    return {
+        "mode": str(settings.ai_provider_mode).strip().lower(),
+        "providers": {
+            "claude": {"ready": True},
+            "codex": await codex_provider.status(),
+        },
+        "usage": claude_usage_monitor.snapshot().as_metadata(),
+    }
+
+
 _usage_policy = UsageRoutingPolicy(
     switch_threshold=settings.claude_usage_switch_threshold,
     recovery_threshold=settings.claude_usage_recovery_threshold,
