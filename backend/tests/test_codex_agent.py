@@ -13,6 +13,41 @@ import pytest
 from acp.schema import HttpMcpServer
 
 from ching_tech_os.services import ai_provider, codex_agent
+from ching_tech_os.config import settings
+
+
+# 專案根目錄的 .mcp.json 被 .gitignore 擋著（見 .gitignore:56），CI 上不存在。
+# provider 會把它合併後寫進 session 工作目錄再讀回來，所以少了它整條 MCP
+# 清單就是空的——本檔測 MCP 過濾的案例會在開發機通過、在 CI 全滅。
+# 這裡改讓測試自備一份設定，不依賴跑測試的機器上有什麼。
+_MCP_FIXTURE = {
+    "mcpServers": {
+        "ching-tech-os": {
+            "command": "bash",
+            "args": ["-c", "true"],
+        },
+        "github": {
+            "type": "http",
+            "url": "https://api.githubcopilot.com/mcp/",
+            "headers": {"Authorization": "Bearer test-token"},
+        },
+        # 留著讓「未被要求的 server 會被過濾掉」那條斷言真的有東西可過濾
+        "nanobanana": {
+            "type": "stdio",
+            "command": "bash",
+            "args": ["-c", "true"],
+        },
+    }
+}
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_mcp_config(tmp_path, monkeypatch):
+    """讓 provider 讀到固定的 .mcp.json，與開發機上的實際設定脫鉤。"""
+    (tmp_path / ".mcp.json").write_text(
+        json.dumps(_MCP_FIXTURE, ensure_ascii=False), encoding="utf-8"
+    )
+    monkeypatch.setattr(settings, "project_root", str(tmp_path))
 
 
 class FakeCodexClient:
