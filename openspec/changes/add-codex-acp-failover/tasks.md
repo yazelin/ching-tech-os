@@ -67,11 +67,11 @@
 
 ## 7. 可觀測性
 
-- [ ] 7.1 將 requested role、selected provider、actual model、route reason 與 usage snapshot 加入 response metadata
-- [ ] 7.2 將 routing metadata 寫入 structured log 與 `ai_logs.parsed_response`，保留既有 `model` 統計相容性
-- [ ] 7.3 記錄 provider latency、queue latency、error category、tool started/completed 與 circuit 狀態
-- [ ] 7.4 新增 log tests，確認敏感 credentials、MCP headers/env 與 stderr token 不會被記錄
-- [ ] 7.5 建立 canary 查詢與人工檢查清單；確認無法辨識 provider 的請求視為驗收失敗
+- [x] 7.1 將 requested role、selected provider、actual model、route reason 與 usage snapshot 加入 response metadata
+- [x] 7.2 將 routing metadata 寫入 structured log 與 `ai_logs.parsed_response`，保留既有 `model` 統計相容性
+- [x] 7.3 記錄 provider latency、queue latency、error category、tool started/completed 與 circuit 狀態
+- [x] 7.4 新增 log tests，確認敏感 credentials、MCP headers/env 與 stderr token 不會被記錄
+- [x] 7.5 建立 canary 查詢與人工檢查清單；確認無法辨識 provider 的請求視為驗收失敗
 
 ## 8. 分階段 Caller 整合
 

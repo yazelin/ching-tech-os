@@ -199,6 +199,8 @@ tool-call limit 在 permission 核准前計數，provider 不能繞過 nanobanan
 
 `model` 欄位是否改記 actual model，需先確認既有 AI 管理統計與前端篩選不會退化。若 canary 需要 provider index/query，再提出獨立 migration。
 
+**Phase 7 checkpoint（2026-08-17）**：`AIResponse` 新增 `requested_role` 與 `routing_metadata()`；`attach_routing_metadata()` 供 caller 將路由資訊併入 `ai_logs.parsed_response`（`routing` key，`model` 欄位維持記 requested role 保留統計相容）。`call_ai()` 輸出 `ai_route` structured log（provider、route reason、requested role、actual model、latency、tool 數；unavailable 時只記決策不記 kwargs）。Codex provider 記錄 `codex_call`（queue_wait_ms、circuit 狀態）、`codex_queue_timeout` 與 `codex_tool_started/completed`（只有工具名稱與耗時，輸入參數不進 log）。log tests 驗證 extra_mcp_env secrets、prompt 內容與工具參數不落 log。canary 查詢與人工檢查清單見 `docs/codex-canary-checklist.md`，明定無法辨識 provider 的請求為驗收失敗。實際將 routing 寫入 ai_logs 的接線隨 8.x caller 遷移進行。CI：1407 passed/13 skipped、coverage 86.05%。
+
 ### 12. 按入口逐步遷移
 
 建議順序：

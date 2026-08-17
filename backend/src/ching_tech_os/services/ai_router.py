@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -303,21 +304,44 @@ async def call_ai(
         allowed_contexts=settings.ai_provider_canary_contexts,
         allowed_agents=settings.ai_provider_canary_agents,
     )
-    response = await _provider_router.execute(
-        decision,
-        prompt=prompt,
-        model=model,
-        history=history,
-        system_prompt=system_prompt,
-        timeout=timeout,
-        tools=tools,
-        tool_call_limits=tool_call_limits,
-        on_tool_start=on_tool_start,
-        on_tool_end=on_tool_end,
-        required_mcp_servers=required_mcp_servers,
-        ctos_user_id=ctos_user_id,
-        extra_mcp_env=extra_mcp_env,
-    )
+    started = time.monotonic()
+    try:
+        response = await _provider_router.execute(
+            decision,
+            prompt=prompt,
+            model=model,
+            history=history,
+            system_prompt=system_prompt,
+            timeout=timeout,
+            tools=tools,
+            tool_call_limits=tool_call_limits,
+            on_tool_start=on_tool_start,
+            on_tool_end=on_tool_end,
+            required_mcp_servers=required_mcp_servers,
+            ctos_user_id=ctos_user_id,
+            extra_mcp_env=extra_mcp_env,
+        )
+    except ProviderUnavailableError:
+        # 只記路由決策，不記 prompt 或任何 provider kwargs
+        logger.warning(
+            "ai_route unavailable mode=%s provider=%s route_reason=%s",
+            mode,
+            decision.provider_name,
+            decision.route_reason,
+        )
+        raise
+    response.requested_role = str(model)
     if usage_snapshot is not None:
         response.usage_snapshot = usage_snapshot.as_metadata()
+    logger.info(
+        "ai_route provider=%s route_reason=%s requested_role=%s actual_model=%s "
+        "success=%s provider_latency_ms=%d tool_calls=%d",
+        response.provider,
+        response.route_reason,
+        response.requested_role,
+        response.actual_model,
+        response.success,
+        int((time.monotonic() - started) * 1000),
+        len(response.tool_calls),
+    )
     return response

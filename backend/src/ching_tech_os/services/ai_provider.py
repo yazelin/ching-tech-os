@@ -38,8 +38,29 @@ class AIResponse:
     provider: str = "unknown"
     actual_model: str | None = None
     route_reason: str | None = None
+    requested_role: str | None = None
     provider_started: bool = False
     usage_snapshot: dict[str, Any] | None = None
+
+    def routing_metadata(self) -> dict[str, Any]:
+        """可直接寫入 structured log 與 ai_logs.parsed_response 的安全路由資訊。"""
+        return {
+            "provider": self.provider,
+            "requested_role": self.requested_role,
+            "actual_model": self.actual_model,
+            "route_reason": self.route_reason,
+            "provider_started": self.provider_started,
+            "usage_snapshot": self.usage_snapshot,
+        }
+
+
+def attach_routing_metadata(
+    parsed_response: dict[str, Any] | None, response: AIResponse
+) -> dict[str, Any]:
+    """將路由資訊併入 ai_logs 的 parsed_response；不改動呼叫端原本的 dict。"""
+    merged = dict(parsed_response or {})
+    merged["routing"] = response.routing_metadata()
+    return merged
 
 
 @runtime_checkable

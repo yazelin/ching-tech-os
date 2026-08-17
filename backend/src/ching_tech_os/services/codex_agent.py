@@ -228,11 +228,17 @@ class CodexProvider:
         extra_mcp_env: dict[str, str] | None = None,
     ) -> AIResponse:
         del model  # Claude 的 workload role 不可直接當成 Codex model slug。
+        queue_started = time.monotonic()
         try:
             await asyncio.wait_for(
                 self._semaphore.acquire(), timeout=self.queue_timeout
             )
         except TimeoutError:
+            logger.warning(
+                "codex_queue_timeout queue_wait_ms=%d circuit=%s",
+                int((time.monotonic() - queue_started) * 1000),
+                self.circuit_breaker.status()["state"],
+            )
             return AIResponse(
                 success=False,
                 message="",
@@ -240,9 +246,10 @@ class CodexProvider:
                 provider="codex",
                 provider_started=False,
             )
+        queue_wait_ms = int((time.monotonic() - queue_started) * 1000)
 
         try:
-            return await self._call_acp(
+            response = await self._call_acp(
                 prompt=prompt,
                 history=history,
                 system_prompt=system_prompt,
@@ -255,6 +262,13 @@ class CodexProvider:
                 ctos_user_id=ctos_user_id,
                 extra_mcp_env=extra_mcp_env,
             )
+            logger.info(
+                "codex_call success=%s queue_wait_ms=%d circuit=%s",
+                response.success,
+                queue_wait_ms,
+                self.circuit_breaker.status()["state"],
+            )
+            return response
         finally:
             self._semaphore.release()
 
@@ -380,6 +394,8 @@ class CodexProvider:
                 counts[tool_name] = current + 1
                 approved.add(tool_id)
                 active[tool_id] = (tool_name, time.monotonic(), pending_entry[1])
+            # 只記工具名稱，輸入參數可能含使用者資料，不進 log
+            logger.info("codex_tool_started name=%s", tool_name)
             await safe_notify(on_tool_start, tool_name, pending_entry[1])
             return _permission_option(options, allow=True)
 
@@ -399,6 +415,12 @@ class CodexProvider:
             tool_calls.append(ToolCall(tool_id, tool_name, tool_input, output))
             timing = {"name": tool_name, "duration_ms": duration_ms}
             tool_timings.append(timing)
+            logger.info(
+                "codex_tool_completed name=%s status=%s duration_ms=%d",
+                tool_name,
+                status,
+                duration_ms,
+            )
             await safe_notify(
                 on_tool_end,
                 tool_name,

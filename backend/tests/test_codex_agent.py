@@ -472,3 +472,79 @@ def test_canonical_parser_rejects_unknown_and_conflicting_names() -> None:
         "mcp.a.tool", {"server": "b", "tool": "tool"}
     ) is None
     assert codex_agent._allowed_identities(["tool", "mcp__a__tool"]) == {("a", "tool")}
+
+
+# ── 7.3 可觀測性：queue latency、circuit 狀態與工具事件 log ──
+
+
+@pytest.mark.asyncio
+async def test_codex_call_logs_queue_wait_and_circuit(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    provider = make_provider(FakeFactory())
+    with caplog.at_level("INFO", logger="ching_tech_os.services.codex_agent"):
+        result = await provider.call(prompt="hi")
+    assert result.success is True
+    call_logs = [
+        record.getMessage()
+        for record in caplog.records
+        if "codex_call" in record.getMessage()
+    ]
+    assert call_logs, "codex call 必須輸出 codex_call structured log"
+    assert "queue_wait_ms=" in call_logs[0]
+    assert "circuit=closed" in call_logs[0]
+
+
+@pytest.mark.asyncio
+async def test_codex_queue_timeout_logs_circuit_state(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    class BlockingClient(FakeCodexClient):
+        async def prompt(self, text: str) -> str:
+            entered.set()
+            await release.wait()
+            return await super().prompt(text)
+
+    provider = codex_agent.CodexProvider(
+        client_factory=lambda **kwargs: BlockingClient(**kwargs),
+        adapter_path="/bin/true",
+        codex_path="/bin/true",
+        max_concurrency=1,
+        queue_timeout=0.01,
+    )
+    first = asyncio.create_task(provider.call(prompt="first"))
+    await entered.wait()
+    with caplog.at_level("WARNING", logger="ching_tech_os.services.codex_agent"):
+        second = await provider.call(prompt="second")
+    release.set()
+    await first
+    assert second.success is False
+    timeout_logs = [
+        record.getMessage()
+        for record in caplog.records
+        if "codex_queue_timeout" in record.getMessage()
+    ]
+    assert timeout_logs
+    assert "circuit=" in timeout_logs[0]
+
+
+@pytest.mark.asyncio
+async def test_codex_tool_events_logged_without_arguments(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    provider = make_provider(FakeFactory("tool"))
+    with caplog.at_level("INFO", logger="ching_tech_os.services.codex_agent"):
+        result = await provider.call(
+            prompt="hi", tools=["mcp__ching-tech-os__search_knowledge"]
+        )
+    assert result.success is True
+    messages = [record.getMessage() for record in caplog.records]
+    started = [m for m in messages if "codex_tool_started" in m]
+    completed = [m for m in messages if "codex_tool_completed" in m]
+    assert started and "mcp__ching-tech-os__search_knowledge" in started[0]
+    assert completed and "duration_ms=" in completed[0]
+    # 工具輸入參數（可能含使用者資料）不得寫入 log
+    assert "query" not in caplog.text
