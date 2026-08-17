@@ -216,6 +216,8 @@ tool-call limit 在 permission 核准前計數，provider 不能繞過 nanobanan
 
 **Phase 8.1 checkpoint（2026-08-17）**：`ai_manager.call_agent()`（admin Test API / test-agent 入口）改用 `call_ai()`，以 caller 端事實建立 `RoutingContext(context_type, agent_name)`，並將 `attach_routing_metadata()` 寫入 `ai_logs.parsed_response`（`model` 欄位維持 requested role）。`ProviderRouter.execute()` 在選定 Codex 後以 `filter_codex_readonly_tools()` fail-closed 過濾工具（只放行 `search_/get_/read_/list_/find_` 前綴的 canonical MCP 名稱），pre-start fallback 回 Claude 時保有完整工具。admin test 入口記錄的 `context_type` 仍為 `test`，預設不在 canary contexts 內；啟用第一階段 canary 需明確把 `test` 加入 `AI_PROVIDER_CANARY_CONTEXTS` 或使用名為 `test-agent` 的 Agent。實際 canary 觀察（含 24–72 小時）屬 9.7 gate。CI：1411 passed/13 skipped、coverage 86.06%。
 
+**Phase 8.2/8.4 checkpoint（2026-08-17）**：Web Chat（`api/ai.py` 的 `ai_chat_event`）改用 `call_ai()`，`RoutingContext(context_type="web-chat", agent_name=<chat agent>)`；成功與失敗 log 都以 `attach_routing_metadata()` 寫入 routing（成功 log 保留原 tool_calls 結構）。對話壓縮（`call_claude_for_summary`）維持 Claude，屬 8.7 特殊 pipeline。8.4 新增端到端測試：provider 失敗回應攜帶已執行的副作用工具時，另一 provider 連 readiness 都不查詢、tool_calls 原樣保留供稽核。文件（10.1–10.3）同步更新：ai-agent-design 狀態與 router 段落、backend.md API 表、module-index、.env.example 與 ctos-deploy skill（Codex 認證/preflight/kill switch）。CI：1410 passed/15 skipped（新增 2 個 HF smoke 預設 skip）、coverage 86.07%。
+
 ## Test Strategy
 
 ### Characterization tests

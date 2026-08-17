@@ -7,7 +7,9 @@ from socketio import AsyncServer
 
 from ..models.ai import AiLogCreate
 from ..services import ai_chat, ai_manager
-from ..services.claude_agent import call_claude, call_claude_for_summary
+from ..services.ai_provider import attach_routing_metadata
+from ..services.ai_router import RoutingContext, call_ai
+from ..services.claude_agent import call_claude_for_summary
 from ..services.message import log_message
 
 
@@ -97,13 +99,17 @@ def register_events(sio: AsyncServer):
         # 記錄開始時間
         start_time = time.time()
 
-        # 呼叫 Claude CLI（自己管理歷史）
-        response = await call_claude(
+        # 呼叫 AI（8.2：web-chat 走 provider-neutral call_ai；
+        # routing context 用 caller 端事實，canary 由設定控制，預設仍為 Claude）
+        response = await call_ai(
             prompt=message,
             model=model,
             history=history,
             system_prompt=system_prompt,
             tools=agent_tools,
+            routing_context=RoutingContext(
+                context_type="web-chat", agent_name=agent_name
+            ),
         )
 
         # 計算耗時
@@ -175,6 +181,8 @@ def register_events(sio: AsyncServer):
                                 for tc in response.tool_calls
                             ]
                         }
+                    # 附加 provider/route 資訊（model 欄位維持記 requested role）
+                    parsed_response = attach_routing_metadata(parsed_response, response)
 
                     log_data = AiLogCreate(
                         agent_id=agent_id,
@@ -219,6 +227,7 @@ def register_events(sio: AsyncServer):
                         context_id=chat_id_str,
                         input_prompt=message,
                         system_prompt=system_prompt,
+                        parsed_response=attach_routing_metadata(None, response),
                         model=model,
                         success=False,
                         error_message=response.error,

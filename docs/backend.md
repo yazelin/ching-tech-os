@@ -164,6 +164,7 @@ uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8088 --reload
 | PUT | `/api/ai/agents/{id}` | 更新 Agent |
 | DELETE | `/api/ai/agents/{id}` | 刪除 Agent |
 | POST | `/api/ai/test` | 測試 Agent |
+| GET | `/api/ai/providers/status` | AI provider readiness、circuit 與 usage 快照（admin）|
 
 #### AI Logs
 

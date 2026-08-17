@@ -9,6 +9,7 @@ from uuid import uuid4
 import pytest
 
 from ching_tech_os.api import ai as ai_api
+from ching_tech_os.services.ai_provider import AIResponse, ToolCall
 
 
 class _FakeSio:
@@ -30,13 +31,16 @@ def _response(
     input_tokens: int = 1,
     output_tokens: int = 2,
 ):
-    return SimpleNamespace(
+    # 用真實 AIResponse，讓 attach_routing_metadata() 可運作
+    return AIResponse(
         success=success,
         message=message,
         error=error,
         tool_calls=tool_calls or [],
         input_tokens=input_tokens,
         output_tokens=output_tokens,
+        provider="claude",
+        route_reason="forced_claude",
     )
 
 
@@ -87,12 +91,11 @@ async def test_ai_chat_event_success(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(ai_api.ai_chat, "update_chat_messages", update_messages)
     monkeypatch.setattr(ai_api.ai_chat, "update_chat_title", update_title)
 
-    tool_call = SimpleNamespace(id="tc1", name="search_knowledge", input={"query": "x"}, output="ok")
-    monkeypatch.setattr(
-        ai_api,
-        "call_claude",
-        AsyncMock(return_value=_response(success=True, message="AI 回覆", tool_calls=[tool_call])),
+    tool_call = ToolCall(id="tc1", name="search_knowledge", input={"query": "x"}, output="ok")
+    call_ai_mock = AsyncMock(
+        return_value=_response(success=True, message="AI 回覆", tool_calls=[tool_call])
     )
+    monkeypatch.setattr(ai_api, "call_ai", call_ai_mock)
 
     create_log = AsyncMock()
     monkeypatch.setattr(ai_api.ai_manager, "create_log", create_log)
@@ -112,6 +115,15 @@ async def test_ai_chat_event_success(monkeypatch: pytest.MonkeyPatch) -> None:
     update_title.assert_awaited_once()
     create_log.assert_awaited_once()
     log_message.assert_awaited_once()
+
+    # 8.2：web-chat 走 call_ai，routing context 用 caller 端事實
+    routing_context = call_ai_mock.await_args.kwargs["routing_context"]
+    assert routing_context.context_type == "web-chat"
+    assert routing_context.agent_name == "agent-a"
+    # AI log 的 parsed_response 保留 tool_calls 並附加 routing metadata
+    log_data = create_log.await_args.args[0]
+    assert log_data.parsed_response["routing"]["provider"] == "claude"
+    assert log_data.parsed_response["tool_calls"][0]["name"] == "search_knowledge"
 
 
 @pytest.mark.asyncio
@@ -147,7 +159,7 @@ async def test_ai_chat_event_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(ai_api.ai_chat, "update_chat_title", update_title)
     monkeypatch.setattr(
         ai_api,
-        "call_claude",
+        "call_ai",
         AsyncMock(return_value=_response(success=False, error="模型忙碌")),
     )
     create_log = AsyncMock()

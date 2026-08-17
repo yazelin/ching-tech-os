@@ -43,7 +43,7 @@ cd /home/ct/SDD/ching-tech-os
 ./scripts/update-service.sh
 ```
 
-腳本會依序：顯示目前版本與 git 狀態 → `git pull --ff-only`（預設 main）→ 更新已初始化的 submodule → `uv sync --extra voice` → 前端 `npm install` + `npm run build` → `alembic upgrade head` → `sudo systemctl restart ching-tech-os` → health check（`/api/health`）→ 印出版本變化與 `git log --oneline` 更新摘要。
+腳本會依序：顯示目前版本與 git 狀態 → `git pull --ff-only`（預設 main）→ 更新已初始化的 submodule → `uv sync --extra voice` → 根目錄 `npm ci`（依 lock 安裝 pin 版 Codex adapter）+ frontend `npm install` + `npm run build` → `alembic upgrade head` → 若 `.env` 的 `AI_PROVIDER_MODE` 為 `codex`/`auto` 則跑 Codex preflight（失敗即中止）→ `sudo systemctl restart ching-tech-os` → health check（`/api/health`）→ 印出版本變化與 `git log --oneline` 更新摘要。
 
 常用選項：
 
@@ -58,6 +58,32 @@ cd /home/ct/SDD/ching-tech-os
 - 腳本內含 `sudo systemctl restart`，執行帳號需有 sudo 權限。
 - 部署機工作樹 dirty 通常代表有人在正式機上直接改過檔案——先查清楚（`git status`、`git diff`）再決定要 stash、還原還是 `--force`。
 - private submodule（如 `extends/his`、`extends/law`）在部署機沒權限時會被略過，不會中斷更新；這是預期行為。
+
+## Codex Provider（僅在啟用 Codex 備援時需要）
+
+Codex adapter/runtime 以 exact version pin 在根目錄 `package.json`（`@agentclientprotocol/codex-acp` + `@openai/codex`），由 `npm ci` 安裝，不依賴全域 npm。
+
+**首次啟用前，以 service user（ct）完成認證並跑 preflight：**
+
+```bash
+# 1. service user 登入 Codex（一次性，auth 存在 ~/.codex/auth.json）
+node_modules/.bin/codex login
+
+# 2. 跑完整 preflight（binary/pin 版本/service user/auth/headless/最小 handshake）
+cd backend && uv run python -m ching_tech_os.services.codex_preflight
+```
+
+- systemd unit 已固定 `CODEX_HOME`（service user 的 `~/.codex`）與 `NO_BROWSER=1`，不得依賴 root credentials 或互動 login。
+- preflight 的 `auth_error` 通常代表登入過期：以 service user 重新 `codex login`。
+- 執行狀態可由 admin API 查看：`GET /api/ai/providers/status`（readiness、circuit、usage 快照）。
+- canary 查詢與人工檢查清單見 `docs/codex-canary-checklist.md`。
+
+**Codex kill switch（不需回滾程式碼）：**
+
+```bash
+# .env 設 AI_PROVIDER_MODE=claude 並清空 canary allowlist，然後
+sudo systemctl restart ching-tech-os
+```
 
 ## 部署後驗證
 

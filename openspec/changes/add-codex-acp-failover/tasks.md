@@ -76,9 +76,9 @@
 ## 8. 分階段 Caller 整合
 
 - [x] 8.1 internal admin/test-agent 改用 `call_ai()`，限制唯讀/無副作用工具，完成第一階段 canary
-- [ ] 8.2 Web Chat allowlist Agent 改用 `call_ai()`，驗證 history、system prompt、tool results 與 AI log
+- [x] 8.2 Web Chat allowlist Agent 改用 `call_ai()`，驗證 history、system prompt、tool results 與 AI log
 - [ ] 8.3 Line/Telegram allowlist 使用者或群組 canary，驗證文字、圖片、語音、progress callback 與 partial result
-- [ ] 8.4 驗證任何 provider failure 都不會重複執行 side-effect tool
+- [x] 8.4 驗證任何 provider failure 都不會重複執行 side-effect tool
 - [ ] 8.5 canary 穩定後才評估一般 Line/Telegram 對話啟用 auto mode
 - [ ] 8.6 restricted mode 通過身份、權限與成本測試後獨立遷移
 - [ ] 8.7 簡報 JSON、生圖、research、scheduler、summary 各自新增 parity tests 後才逐一遷移；未完成者維持 Claude
@@ -96,7 +96,7 @@
 
 ## 10. 文件與版本
 
-- [ ] 10.1 更新 `docs/ai-agent-design.md`、`docs/backend.md` 與 `.env.example`
-- [ ] 10.2 更新 `docs/module-index.md` 加入 provider router、usage monitor 與 Codex adapter
-- [ ] 10.3 更新部署文件，記錄 Codex 認證、pin 版本、preflight、監控與 rollback
+- [x] 10.1 更新 `docs/ai-agent-design.md`、`docs/backend.md` 與 `.env.example`
+- [x] 10.2 更新 `docs/module-index.md` 加入 provider router、usage monitor 與 Codex adapter
+- [x] 10.3 更新部署文件，記錄 Codex 認證、pin 版本、preflight、監控與 rollback
 - [ ] 10.4 功能完成後依專案規則確認是否進行 MINOR version bump，並同步三個版本位置

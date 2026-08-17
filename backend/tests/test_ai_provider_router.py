@@ -549,3 +549,43 @@ def test_auto_route_decision_requires_canary_and_attaches_safe_fallback() -> Non
     assert selected.route_reason == "usage_threshold"
     assert selected.fallback_provider == "claude"
     assert selected.fallback_reason == "codex_unready"
+
+
+@pytest.mark.asyncio
+async def test_call_ai_provider_failure_never_replays_side_effect_tools(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """8.4：provider 失敗時已執行的副作用工具不得被任何 provider 重跑。"""
+    executed_tool = ai_provider.ToolCall(
+        id="tc-1",
+        name="mcp__ching-tech-os__add_note",
+        input={"title": "已寫入的筆記"},
+        output="note created",
+    )
+    codex_response = ai_provider.AIResponse(
+        success=False,
+        message="部分內容",
+        error="provider failed after tool execution",
+        provider="codex",
+        provider_started=True,
+        tool_calls=[executed_tool],
+    )
+    codex = _FakeProvider("codex", response=codex_response)
+    claude = _FakeProvider("claude")
+    monkeypatch.setattr(
+        ai_router,
+        "_provider_router",
+        ai_router.ProviderRouter({"codex": codex, "claude": claude}),
+    )
+    monkeypatch.setattr(config.settings, "ai_provider_mode", "codex")
+
+    result = await ai_router.call_ai(prompt="會產生副作用的請求")
+
+    # 失敗回應原樣回傳，副作用證據（tool_calls）保留供稽核
+    assert result.success is False
+    assert result.tool_calls == [executed_tool]
+    assert result.provider == "codex"
+    # Claude 從未被呼叫——連 readiness 都不查，杜絕重複執行副作用
+    assert codex.call_count == 1
+    assert claude.call_count == 0
+    assert claude.readiness_count == 0

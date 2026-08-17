@@ -4,7 +4,7 @@
 
 ChingTech OS 的 AI 助手透過 `claude-code-acp`（ClaudeClient in-process）與 Claude API 溝通，支援 Line Bot、Telegram Bot 和 Web 前端三個平台。系統包含完整的 Agent 管理、動態工具分配、身份分流、頻率限制和對話壓縮機制。
 
-> Codex ACP provider、用量監測與安全路由核心已實作，但預設仍為固定 Claude，且尚無正式入口改用 `call_ai()`。部署 readiness、可觀測性與 canary gate 尚未完成，因此目前不得開啟正式流量。評估、風險與後續 gate 見 [Codex ACP 備援評估報告](codex-acp-failover-evaluation.md) 與 `openspec/changes/add-codex-acp-failover/`。
+> Codex ACP provider、用量監測、安全路由、部署 readiness（preflight/pin/systemd auth）與可觀測性（routing metadata、structured log）已完成。首批入口（admin test-agent 與 Web Chat）已改用 `call_ai()`，但預設 mode 仍為固定 Claude；只有明確設定 canary allowlist 並開啟 `auto`/`codex` mode 才會路由到 Codex，且 Codex 只會拿到唯讀工具。staging 演練與 canary 觀察（9.x gate）尚未完成，因此不得開啟正式流量。canary 查詢與 kill switch 見 [Codex Canary 檢查清單](codex-canary-checklist.md)；評估與 gate 見 [Codex ACP 備援評估報告](codex-acp-failover-evaluation.md) 與 `openspec/changes/add-codex-acp-failover/`。
 
 ## 架構
 
@@ -55,7 +55,7 @@ ChingTech OS 的 AI 助手透過 `claude-code-acp`（ClaudeClient in-process）�
 
 ### Provider Router 安全骨架
 
-`services/ai_router.py::call_ai()` 目前尚未被正式入口使用。`ProviderRouter` 以 Claude/Codex registry 與 `is_ready()` 建立可測試的 pre-start fallback 邊界：只有尚未進入 `provider.call()` 前可改選明確 fallback；進入 call 後，不論回應失敗或拋錯都保持 provider sticky，避免重複副作用。預設 mode 仍固定 Claude：
+`services/ai_router.py::call_ai()` 目前的正式入口：`ai_manager.call_agent()`（admin Test API / test-agent）與 Web Chat（`api/ai.py` 的 `ai_chat_event`）。兩者都以 caller 端事實建立 `RoutingContext`，並將 `attach_routing_metadata()` 寫入 `ai_logs.parsed_response`（`model` 欄位維持記 requested role）。`ProviderRouter` 以 Claude/Codex registry 與 `is_ready()` 建立可測試的 pre-start fallback 邊界：只有尚未進入 `provider.call()` 前可改選明確 fallback；進入 call 後，不論回應失敗或拋錯都保持 provider sticky，避免重複副作用。選定 Codex 後會以 `filter_codex_readonly_tools()` fail-closed 過濾工具（只放行 `search_/get_/read_/list_/find_` 前綴的 canonical MCP 名稱）；pre-start fallback 回 Claude 時保有完整工具。預設 mode 仍固定 Claude：
 
 | 環境變數 | 預設值 | 目前行為 |
 |---------|--------|----------|
@@ -63,7 +63,9 @@ ChingTech OS 的 AI 助手透過 `claude-code-acp`（ClaudeClient in-process）�
 | `AI_PROVIDER_CANARY_CONTEXTS` | `internal_admin,internal_test` | context exact-match allowlist |
 | `AI_PROVIDER_CANARY_AGENTS` | `test-agent` | Agent exact-match allowlist |
 
-`codex` 或符合 canary 的 `auto` 決策可以選到已註冊的 Codex provider；binary/circuit readiness 失敗才會在 session 前回 Claude並記錄 `codex_unready`。`RoutingContext` 只供 router 判斷，不會傳入 prompt 或 provider。fake provider tests 已鎖住 readiness false/error/missing、fallback unavailable 與執行後禁止跨 provider retry。由於目前沒有正式 caller 使用 `call_ai()`，既有 Line、Telegram、Web 與特殊 pipeline 完全不受影響。
+`codex` 或符合 canary 的 `auto` 決策可以選到已註冊的 Codex provider；binary/circuit readiness 失敗才會在 session 前回 Claude並記錄 `codex_unready`。`RoutingContext` 只供 router 判斷，不會傳入 prompt 或 provider。fake provider tests 已鎖住 readiness false/error/missing、fallback unavailable 與執行後禁止跨 provider retry。Line、Telegram、restricted mode 與特殊 pipeline（簡報、research、scheduler、summary）仍呼叫 `call_claude()`，完全不受影響。
+
+可觀測性：每次 `call_ai()` 輸出 `ai_route` structured log（provider、route reason、requested role、actual model、latency、tool 數）；Codex 端記錄 `codex_call`（queue_wait_ms、circuit 狀態）與 `codex_tool_started/completed`（只有名稱與耗時）。admin 可用 `GET /api/ai/providers/status` 查 readiness、circuit 與 usage 快照。部署前置檢查：`uv run python -m ching_tech_os.services.codex_preflight`（binary/pin 版本/service user/auth storage/headless/最小 handshake），`update-service.sh` 在 mode 為 codex/auto 時強制執行。
 
 ### Claude Usage Monitor
 

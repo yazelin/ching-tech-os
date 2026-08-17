@@ -63,10 +63,11 @@ services/bot/rate_limiter.py       ← 受限模式頻率限制（bot_usage_trac
 services/bot/media.py              ← 媒體處理
 services/bot/message.py            ← 訊息處理
 services/ai_provider.py            ← Provider-neutral 回應型別與 AIProvider Protocol
-services/ai_router.py              ← call_ai()、Claude/Codex registry、readiness/sticky 邊界與 canary 判斷
+services/ai_router.py              ← call_ai()、Claude/Codex registry、readiness/sticky 邊界、canary 判斷與 Codex 唯讀工具過濾
 services/claude_usage.py           ← Claude OAuth usage snapshot、single-flight refresh 與 hysteresis 資料來源
 services/codex_acp.py              ← Codex ACP compatibility layer（ordered delta、HTTP MCP、permission identity）
-services/codex_agent.py            ← Codex Provider（canonical permission、資源限制、timeout/cleanup）
+services/codex_agent.py            ← Codex Provider（canonical permission、資源限制、timeout/cleanup、status 輸出）
+services/codex_preflight.py        ← Codex 部署 preflight（binary/版本/auth/headless/handshake，CLI 可執行）
 services/claude_agent.py           ← call_claude() AI 推論
 ```
 
@@ -78,7 +79,7 @@ api/ai_router.py                   ← AI 對話 API（chats）
 services/linebot_agents.py         ← agent 定義、prompt 生成、工具分配、Agent 偏好持久化
 services/bot/agents.py             ← prompt 模板（按功能分類）
 services/ai_provider.py            ← AIResponse、ToolCall 與 provider Protocol
-services/ai_router.py              ← Provider-neutral call_ai()、ProviderDecision 與 pre-start fallback（目前無 caller）
+services/ai_router.py              ← Provider-neutral call_ai()、ProviderDecision 與 pre-start fallback（caller：call_agent、web-chat）
 services/claude_usage.py           ← Usage Monitor（unknown/fresh/stale/error、TTL/max-stale）
 services/codex_acp.py              ← Pin 版 Codex ACP 協定轉接與真實唯讀 smoke 基礎
 services/codex_agent.py            ← 完整 Codex provider 契約、MCP 安全邊界與 circuit breaker
