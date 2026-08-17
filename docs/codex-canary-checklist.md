@@ -12,36 +12,59 @@ Codex ACP failover 的 canary 觀察工具與驗收規則。搭配 `openspec/cha
 
 ### ai_logs（parsed_response.routing 由 `attach_routing_metadata()` 寫入）
 
+> 注意（2026-08-17 實測修正）：`create_log` 存入時會先 `json.dumps`，jsonb 欄位裡是「JSON 字串」，
+> 要先 `#>> '{}'` 取出再 cast 回 jsonb；且舊資料含 NUL 跳脫序列（反斜線 u0000） 會讓 cast 直接報錯，
+> 必須用 `WITH ... MATERIALIZED` 先以 text 條件過濾，再做 jsonb 萃取。
+
 ```bash
 # 最近 20 筆含 routing 資訊的請求：provider、route reason、實際模型
 docker exec ching-tech-os-db psql -U ching_tech -d ching_tech_os -c "
+WITH logs AS MATERIALIZED (
+  SELECT id, context_type, model, success, duration_ms, created_at,
+         (parsed_response #>> '{}')::jsonb AS pr
+  FROM ai_logs
+  WHERE parsed_response IS NOT NULL
+    AND parsed_response::text NOT LIKE '%\\\\u0000%'
+)
 SELECT id, context_type, model,
-       parsed_response::jsonb #>> '{routing,provider}'      AS provider,
-       parsed_response::jsonb #>> '{routing,route_reason}'  AS route_reason,
-       parsed_response::jsonb #>> '{routing,actual_model}'  AS actual_model,
+       pr #>> '{routing,provider}'     AS provider,
+       pr #>> '{routing,route_reason}' AS route_reason,
+       pr #>> '{routing,actual_model}' AS actual_model,
        success, duration_ms, created_at
-FROM ai_logs
-WHERE parsed_response::jsonb ? 'routing'
+FROM logs WHERE pr ? 'routing'
 ORDER BY created_at DESC LIMIT 20"
 
 # 驗收失敗偵測：canary context 中「無法辨識 provider」的請求（應為 0 筆）
 docker exec ching-tech-os-db psql -U ching_tech -d ching_tech_os -c "
+WITH logs AS MATERIALIZED (
+  SELECT id, context_type, created_at,
+         CASE WHEN parsed_response IS NULL
+                OR parsed_response::text LIKE '%\\\\u0000%'
+              THEN NULL
+              ELSE (parsed_response #>> '{}')::jsonb END AS pr
+  FROM ai_logs
+  WHERE context_type IN ('internal_admin', 'internal_test', 'test')  -- 依 canary allowlist 調整
+    AND created_at > now() - interval '72 hours'
+)
 SELECT id, context_type, created_at
-FROM ai_logs
-WHERE context_type IN ('internal_admin', 'internal_test')  -- 依 canary allowlist 調整
-  AND created_at > now() - interval '72 hours'
-  AND (parsed_response IS NULL OR NOT parsed_response::jsonb ? 'routing')
+FROM logs WHERE pr IS NULL OR NOT pr ? 'routing'
 ORDER BY created_at DESC"
 
 # provider 分佈與成功率（觀察期彙總）
 docker exec ching-tech-os-db psql -U ching_tech -d ching_tech_os -c "
-SELECT parsed_response::jsonb #>> '{routing,provider}' AS provider,
+WITH logs AS MATERIALIZED (
+  SELECT success, duration_ms, created_at,
+         (parsed_response #>> '{}')::jsonb AS pr
+  FROM ai_logs
+  WHERE parsed_response IS NOT NULL
+    AND parsed_response::text NOT LIKE '%\\\\u0000%'
+    AND created_at > now() - interval '72 hours'
+)
+SELECT pr #>> '{routing,provider}' AS provider,
        count(*) AS total,
        count(*) FILTER (WHERE success) AS ok,
        round(avg(duration_ms)) AS avg_ms
-FROM ai_logs
-WHERE parsed_response::jsonb ? 'routing'
-  AND created_at > now() - interval '72 hours'
+FROM logs WHERE pr ? 'routing'
 GROUP BY 1 ORDER BY 2 DESC"
 ```
 
