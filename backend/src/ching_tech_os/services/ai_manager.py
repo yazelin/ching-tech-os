@@ -22,7 +22,9 @@ from ..models.ai import (
     AiPromptResponse,
     AiPromptUpdate,
 )
-from .claude_agent import call_claude, compose_prompt_with_history
+from .ai_provider import attach_routing_metadata
+from .ai_router import RoutingContext, call_ai
+from .claude_agent import compose_prompt_with_history
 
 
 # ============================================================
@@ -788,14 +790,21 @@ async def call_agent(
     # 取得工具列表
     tools = agent.get("tools") if agent.get("tools") else None
 
-    # 調用 AI
+    # 調用 AI（8.1：internal admin/test-agent 為第一批 call_ai canary 入口）
+    # routing context 只用 caller 端事實，不受訊息內容影響
+    routing_context = (
+        RoutingContext(context_type=context_type, agent_name=agent_name)
+        if context_type
+        else None
+    )
     start_time = time.time()
-    result = await call_claude(
+    result = await call_ai(
         prompt=message,
         model=agent["model"],
         history=history,
         system_prompt=system_prompt,
         tools=tools,
+        routing_context=routing_context,
     )
     duration_ms = int((time.time() - start_time) * 1000)
 
@@ -815,6 +824,8 @@ async def call_agent(
         system_prompt=system_prompt,
         allowed_tools=tools,
         raw_response=result.message if result.success else None,
+        # model 欄位維持記 requested role 保留統計相容；實際 provider/模型在 routing
+        parsed_response=attach_routing_metadata(None, result),
         model=agent["model"],
         success=result.success,
         error_message=result.error if not result.success else None,

@@ -214,6 +214,8 @@ tool-call limit 在 permission 核准前計數，provider 不能繞過 nanobanan
 
 任何階段都能把 router mode 改回 forced Claude。未列入 allowlist 的 caller 保持呼叫 `call_claude()`。
 
+**Phase 8.1 checkpoint（2026-08-17）**：`ai_manager.call_agent()`（admin Test API / test-agent 入口）改用 `call_ai()`，以 caller 端事實建立 `RoutingContext(context_type, agent_name)`，並將 `attach_routing_metadata()` 寫入 `ai_logs.parsed_response`（`model` 欄位維持 requested role）。`ProviderRouter.execute()` 在選定 Codex 後以 `filter_codex_readonly_tools()` fail-closed 過濾工具（只放行 `search_/get_/read_/list_/find_` 前綴的 canonical MCP 名稱），pre-start fallback 回 Claude 時保有完整工具。admin test 入口記錄的 `context_type` 仍為 `test`，預設不在 canary contexts 內；啟用第一階段 canary 需明確把 `test` 加入 `AI_PROVIDER_CANARY_CONTEXTS` 或使用名為 `test-agent` 的 Agent。實際 canary 觀察（含 24–72 小時）屬 9.7 gate。CI：1411 passed/13 skipped、coverage 86.06%。
+
 ## Test Strategy
 
 ### Characterization tests

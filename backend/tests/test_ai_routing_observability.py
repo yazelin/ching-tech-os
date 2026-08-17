@@ -148,3 +148,73 @@ async def test_call_ai_metadata_json_serializable(
     payload = attach_routing_metadata({"tool_calls": []}, response)
     # parsed_response 必須可直接 JSON 序列化寫入 ai_logs
     json.dumps(payload)
+
+
+# ── 8.1 canary：Codex 只允許唯讀工具（fail closed） ──────────
+
+
+def test_filter_codex_readonly_tools_fail_closed() -> None:
+    tools = [
+        "mcp__ching-tech-os__search_knowledge",
+        "mcp__ching-tech-os__get_knowledge_item",
+        "mcp__ching-tech-os__read_knowledge_attachment",
+        "mcp__ching-tech-os__list_library_folders",
+        "mcp__erpnext__find_items",
+        "mcp__ching-tech-os__add_note",           # 知識庫寫入
+        "mcp__ching-tech-os__send_nas_file",      # 外部訊息/檔案發送
+        "mcp__ching-tech-os__update_knowledge_item",
+        "mcp__erpnext__create_document",          # ERP 寫入
+        "mcp__nanobanana__generate_image",        # 圖片生成
+        "WebSearch",                              # 非 MCP canonical 名稱
+        "mcp__broken",                            # 缺 tool 段
+    ]
+    filtered = ai_router_service.filter_codex_readonly_tools(tools)
+    assert filtered == [
+        "mcp__ching-tech-os__search_knowledge",
+        "mcp__ching-tech-os__get_knowledge_item",
+        "mcp__ching-tech-os__read_knowledge_attachment",
+        "mcp__ching-tech-os__list_library_folders",
+        "mcp__erpnext__find_items",
+    ]
+    assert ai_router_service.filter_codex_readonly_tools(None) is None
+
+
+class RecordingProvider:
+    def __init__(self, name: str, *, ready: bool = True) -> None:
+        self.provider_name = name
+        self.ready = ready
+        self.kwargs: dict | None = None
+
+    async def is_ready(self) -> bool:
+        return self.ready
+
+    async def call(self, **kwargs) -> AIResponse:
+        self.kwargs = kwargs
+        return AIResponse(success=True, message="ok", provider=self.provider_name)
+
+
+@pytest.mark.asyncio
+async def test_router_execute_filters_side_effect_tools_for_codex_only() -> None:
+    claude = RecordingProvider("claude")
+    codex = RecordingProvider("codex")
+    router = ai_router_service.ProviderRouter({"claude": claude, "codex": codex})
+    tools = [
+        "mcp__ching-tech-os__search_knowledge",
+        "mcp__ching-tech-os__add_note",
+    ]
+
+    decision = ai_router_service.ProviderDecision(
+        "codex", "forced_codex", fallback_provider="claude", fallback_reason="codex_unready"
+    )
+    await router.execute(decision, prompt="hi", tools=list(tools))
+    assert codex.kwargs is not None
+    assert codex.kwargs["tools"] == ["mcp__ching-tech-os__search_knowledge"]
+
+    # pre-start fallback 回到 Claude 時必須拿到完整工具，不受 Codex 過濾影響
+    codex_down = RecordingProvider("codex", ready=False)
+    router2 = ai_router_service.ProviderRouter(
+        {"claude": claude, "codex": codex_down}
+    )
+    await router2.execute(decision, prompt="hi", tools=list(tools))
+    assert claude.kwargs is not None
+    assert claude.kwargs["tools"] == tools

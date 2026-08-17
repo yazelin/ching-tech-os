@@ -18,6 +18,7 @@ from ching_tech_os.models.ai import (
     AiPromptUpdate,
 )
 from ching_tech_os.services import ai_manager
+from ching_tech_os.services.ai_provider import AIResponse
 
 
 class _CM:
@@ -348,8 +349,8 @@ async def test_call_agent_and_test_agent_paths(monkeypatch: pytest.MonkeyPatch) 
     )
     monkeypatch.setattr(
         ai_manager,
-        "call_claude",
-        AsyncMock(return_value=SimpleNamespace(success=True, message="ok", error=None)),
+        "call_ai",
+        AsyncMock(return_value=AIResponse(success=True, message="ok")),
     )
     monkeypatch.setattr(ai_manager, "compose_prompt_with_history", lambda _h, m: f"H::{m}")
     monkeypatch.setattr(ai_manager, "create_log", AsyncMock(return_value={"id": uuid4()}))
@@ -359,8 +360,8 @@ async def test_call_agent_and_test_agent_paths(monkeypatch: pytest.MonkeyPatch) 
     # 失敗路徑
     monkeypatch.setattr(
         ai_manager,
-        "call_claude",
-        AsyncMock(return_value=SimpleNamespace(success=False, message=None, error="boom")),
+        "call_ai",
+        AsyncMock(return_value=AIResponse(success=False, message="", error="boom")),
     )
     fail = await ai_manager.call_agent("agent-a", "hi")
     assert fail["success"] is False and fail["error"] == "boom"
@@ -375,6 +376,94 @@ async def test_call_agent_and_test_agent_paths(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(ai_manager, "call_agent", AsyncMock(return_value={"success": True, "response": "ok"}))
     tested = await ai_manager.test_agent(agent_id, "x")
     assert tested["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_call_agent_routes_via_call_ai_with_routing_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """8.1：internal test-agent 走 call_ai，帶 routing context 並記錄 routing metadata。"""
+    agent_id = uuid4()
+    monkeypatch.setattr(
+        ai_manager,
+        "get_agent_by_name",
+        AsyncMock(
+            return_value={
+                "id": agent_id,
+                "name": "test-agent",
+                "is_active": True,
+                "model": "sonnet",
+                "tools": ["mcp__ching-tech-os__search_knowledge"],
+                "system_prompt": None,
+            }
+        ),
+    )
+    captured: dict = {}
+
+    async def fake_call_ai(**kwargs):
+        captured.update(kwargs)
+        return AIResponse(
+            success=True,
+            message="ok",
+            provider="claude",
+            route_reason="forced_claude",
+            requested_role="sonnet",
+        )
+
+    monkeypatch.setattr(ai_manager, "call_ai", fake_call_ai)
+    logged: dict = {}
+
+    async def fake_create_log(data):
+        logged["data"] = data
+        return {"id": uuid4()}
+
+    monkeypatch.setattr(ai_manager, "create_log", fake_create_log)
+
+    result = await ai_manager.call_agent(
+        "test-agent", "hi", context_type="test", context_id="cid-1"
+    )
+    assert result["success"] is True
+    # routing context 以 caller 事實為準，不受 LLM 影響
+    routing_context = captured["routing_context"]
+    assert routing_context.context_type == "test"
+    assert routing_context.agent_name == "test-agent"
+    assert captured["tools"] == ["mcp__ching-tech-os__search_knowledge"]
+    # ai_logs.parsed_response 記錄 routing metadata；model 欄位保留 requested role
+    assert logged["data"].parsed_response["routing"]["provider"] == "claude"
+    assert logged["data"].parsed_response["routing"]["route_reason"] == "forced_claude"
+    assert logged["data"].model == "sonnet"
+
+
+@pytest.mark.asyncio
+async def test_call_agent_without_context_type_has_no_routing_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        ai_manager,
+        "get_agent_by_name",
+        AsyncMock(
+            return_value={
+                "id": uuid4(),
+                "name": "agent-a",
+                "is_active": True,
+                "model": "sonnet",
+                "tools": None,
+                "system_prompt": None,
+            }
+        ),
+    )
+    captured: dict = {}
+
+    async def fake_call_ai(**kwargs):
+        captured.update(kwargs)
+        return AIResponse(success=True, message="ok")
+
+    monkeypatch.setattr(ai_manager, "call_ai", fake_call_ai)
+    monkeypatch.setattr(ai_manager, "create_log", AsyncMock(return_value={"id": uuid4()}))
+
+    await ai_manager.call_agent("agent-a", "hi")
+    # 沒有可信 context 就不進 canary scope（is_canary_allowed(None) 為 False）
+    assert captured["routing_context"] is None
 
 
 @pytest.mark.asyncio

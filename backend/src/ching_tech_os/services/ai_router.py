@@ -22,6 +22,26 @@ class ProviderUnavailableError(RuntimeError):
     """選定的 provider 與允許的 pre-start fallback 都不可用。"""
 
 
+# 首批 canary 只允許唯讀工具進 Codex（spec：副作用工具 MUST NOT 暴露給 Codex）。
+# 以動詞前綴 fail closed：不在名單內的一律移除，寧可少工具也不放行副作用。
+_CODEX_READONLY_TOOL_PREFIXES = ("search_", "get_", "read_", "list_", "find_")
+
+
+def filter_codex_readonly_tools(tools: list[str] | None) -> list[str] | None:
+    """回傳只含唯讀 MCP 工具的清單；非 canonical 名稱或非唯讀動詞一律移除。"""
+    if tools is None:
+        return None
+    filtered: list[str] = []
+    for tool in tools:
+        normalized = str(tool).strip().lower()
+        if not normalized.startswith("mcp__"):
+            continue
+        _server, separator, tool_name = normalized[5:].partition("__")
+        if separator and tool_name.startswith(_CODEX_READONLY_TOOL_PREFIXES):
+            filtered.append(tool)
+    return filtered
+
+
 @dataclass(frozen=True)
 class ProviderDecision:
     """單次請求在任何 provider 執行前固定的路由決策。"""
@@ -100,6 +120,20 @@ class ProviderRouter:
             raise ProviderUnavailableError(
                 f"AI provider unavailable: {selected_name}"
             )
+
+        # 首批 canary：副作用工具不得暴露給 Codex；過濾必須在 provider
+        # 選定之後做，pre-start fallback 回 Claude 時才能保有完整工具。
+        if selected_name == "codex":
+            original_tools = provider_kwargs.get("tools")
+            filtered_tools = filter_codex_readonly_tools(original_tools)
+            removed = len(original_tools or []) - len(filtered_tools or [])
+            if removed:
+                logger.info(
+                    "ai_route codex_readonly_filter removed=%d kept=%d",
+                    removed,
+                    len(filtered_tools or []),
+                )
+            provider_kwargs["tools"] = filtered_tools
 
         # 進入 provider.call 後視為已跨越 router 的執行邊界；任何結果或例外
         # 都直接回傳/拋出，不再查詢或呼叫 fallback provider。

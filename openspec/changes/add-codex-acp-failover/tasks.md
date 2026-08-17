@@ -75,7 +75,7 @@
 
 ## 8. 分階段 Caller 整合
 
-- [ ] 8.1 internal admin/test-agent 改用 `call_ai()`，限制唯讀/無副作用工具，完成第一階段 canary
+- [x] 8.1 internal admin/test-agent 改用 `call_ai()`，限制唯讀/無副作用工具，完成第一階段 canary
 - [ ] 8.2 Web Chat allowlist Agent 改用 `call_ai()`，驗證 history、system prompt、tool results 與 AI log
 - [ ] 8.3 Line/Telegram allowlist 使用者或群組 canary，驗證文字、圖片、語音、progress callback 與 partial result
 - [ ] 8.4 驗證任何 provider failure 都不會重複執行 side-effect tool
