@@ -226,6 +226,8 @@ tool-call limit 在 permission 核准前計數，provider 不能繞過 nanobanan
 
 **Phase 9.6 checkpoint（2026-08-17）**：五項演練全數通過：(1) forced Codex 端到端——真實 Codex 回應成功，`actual_model=gpt-5.6-luna`（Codex 忽略 requested role，統一用 CLI 預設模型）；(2) auth 過期——安全失敗（error 只含 category，不含原始訊息），不跨 provider 重送；**此演練抓到真 bug**：ACP `RequestError` 不在 `_call_acp` except 白名單，會原樣拋出且 circuit 記不到失敗，已改為 `except Exception` fail-closed 並補測試；(3) 三連敗 circuit open 後，auth 已恢復但 circuit 仍 open 時 pre-start 正確回 Claude（`codex_unready`）取得正常回應；(4) 清空 canary allowlist → `canary_not_allowed`；(5) 服務層 kill switch——`.env` 改 forced claude + restart 後 usage monitor 不啟動、canary scope 請求也 `forced_claude`，再恢復 auto + restart 後 monitor 正常回來。CI：1600 passed/15 skipped、coverage 91.00%。
 
+**Phase 9.5 checkpoint（2026-08-17）**：真實 Codex bounded concurrency load test 通過：6 併發（semaphore=2、queue_timeout=5s）→ 恰好 2 筆執行成功（7–8s），4 筆在 5.0s 準時收到 queue_timeout 安全失敗，無失控 spawn；後續兩波 2 併發共 4 筆全部成功（6–14s）。收斂檢查：測試自身零殘留 process、暫存目錄零未清理、script RSS 全程持平 58MB。峰值觀測 9 個 codex 相關 process 為 2 個 session 的正常子程序樹。另發現 3 個 8/4 spike 日留下的全域 `/usr/bin/codex` 孤兒 process（與本系統 pin 的 node_modules 路徑無關），已通知使用者自行處理。
+
 **Coverage 90% gate checkpoint（2026-08-17）**：兩輪平行測試補強將整體 coverage 從 86.08% 提升到 **91.00%**（1599 passed/15 skipped），通過 9.2 的 canary 前必達 gate。八個模組拉到 100%：api/share、services/share、services/scheduler、api/user、services/ai_manager、services/smb、services/mcp/nas_tools、services/presentation、services/linebot_agents；services/knowledge 99%（剩一行不可達死碼）。9.1（pytest 全綠）、9.2（build + cov:target 90%）、9.3（openspec validate --strict）此時點皆通過；Go/No-Go（9.8）前需重新驗證。已知兩個偶發 flaky（`test_api_share_more`、`test_bot_multi_mode_integration::test_restricted_mode_full_flow`，全套件跑各出現一次、隔離與重跑皆過），未阻擋 gate，後續觀察。
 
 ## Test Strategy
