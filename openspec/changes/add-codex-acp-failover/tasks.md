@@ -91,12 +91,12 @@
 - [x] 9.4 真實 ACP 唯讀 smoke matrix 全數通過，stdio/HTTP MCP 無缺漏
 - [x] 9.5 bounded concurrency/load test 通過，無 zombie process、無無限制記憶體成長
 - [x] 9.6 演練 forced Claude kill switch、清空 canary、Codex auth 過期與 circuit open
-- [ ] 9.7 canary 連續觀察至少 24–72 小時，無重複副作用、安全退化或不可追查請求
-- [ ] 9.8 記錄 Go/No-Go 結論；只有 Go 才能擴大 auto mode scope
+- [x] 9.7 canary 連續觀察至少 24–72 小時，無重複副作用、安全退化或不可追查請求
+- [x] 9.8 記錄 Go/No-Go 結論；只有 Go 才能擴大 auto mode scope
 
 ## 10. 文件與版本
 
 - [x] 10.1 更新 `docs/ai-agent-design.md`、`docs/backend.md` 與 `.env.example`
 - [x] 10.2 更新 `docs/module-index.md` 加入 provider router、usage monitor 與 Codex adapter
 - [x] 10.3 更新部署文件，記錄 Codex 認證、pin 版本、preflight、監控與 rollback
-- [ ] 10.4 功能完成後依專案規則確認是否進行 MINOR version bump，並同步三個版本位置
+- [x] 10.4 功能完成後依專案規則確認是否進行 MINOR version bump，並同步三個版本位置

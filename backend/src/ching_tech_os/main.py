@@ -334,7 +334,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Ching Tech OS API",
-    version="0.9.3",
+    version="0.10.0",
     lifespan=lifespan,
 )
 
