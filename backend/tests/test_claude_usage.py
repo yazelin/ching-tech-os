@@ -435,3 +435,55 @@ async def test_monitor_start_timeout_does_not_block_and_stop_cleans_task() -> No
     await monitor.stop()
     assert not monitor.is_running
     await monitor.stop()
+
+
+# ── backoff 與成功後快速恢復(canary 觀察期發現的 429 hammering 改進) ──
+
+
+def test_next_refresh_delay_backs_off_exponentially() -> None:
+    monitor = claude_usage.ClaudeUsageMonitor(refresh_interval_seconds=60)
+    # 無失敗 → 正常間隔
+    assert monitor._next_refresh_delay() == 60
+    # 連續失敗 → 指數退避,上限 1800 秒
+    monitor._snapshot = claude_usage.UsageSnapshot(consecutive_failures=1)
+    assert monitor._next_refresh_delay() == 120
+    monitor._snapshot = claude_usage.UsageSnapshot(consecutive_failures=3)
+    assert monitor._next_refresh_delay() == 480
+    monitor._snapshot = claude_usage.UsageSnapshot(consecutive_failures=10)
+    assert monitor._next_refresh_delay() == 1800
+    monitor._snapshot = claude_usage.UsageSnapshot(consecutive_failures=500)
+    assert monitor._next_refresh_delay() == 1800
+
+
+@pytest.mark.asyncio
+async def test_nudge_after_success_refreshes_degraded_snapshot() -> None:
+    calls = {"count": 0}
+
+    async def fetcher() -> dict:
+        calls["count"] += 1
+        return {"five_hour": {"utilization": 10}, "seven_day": {"utilization": 20}}
+
+    monitor = claude_usage.ClaudeUsageMonitor(fetcher=fetcher)
+    # monitor 未啟動 → no-op
+    monitor.nudge_after_success()
+    await asyncio.sleep(0)
+    assert calls["count"] == 0
+
+    await monitor.start()
+    try:
+        baseline = calls["count"]
+        # 快照 fresh → 不觸發
+        monitor.nudge_after_success()
+        await asyncio.sleep(0.05)
+        assert calls["count"] == baseline
+
+        # 模擬退化(連續失敗)→ nudge 觸發一次 refresh
+        monitor._snapshot = claude_usage.UsageSnapshot(consecutive_failures=3)
+        monitor.nudge_after_success()
+        # 連續 nudge 不會疊加多個 task
+        monitor.nudge_after_success()
+        await asyncio.sleep(0.05)
+        assert calls["count"] == baseline + 1
+        assert monitor.snapshot().state == "fresh"
+    finally:
+        await monitor.stop()

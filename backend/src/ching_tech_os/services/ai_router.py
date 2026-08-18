@@ -367,6 +367,10 @@ async def call_ai(
     response.requested_role = str(model)
     if usage_snapshot is not None:
         response.usage_snapshot = usage_snapshot.as_metadata()
+    # Claude 請求成功代表 OAuth token 剛被刷新；usage 快照若已退化，
+    # 立刻非同步補一次 refresh（零成本、不阻塞、single-flight）
+    if mode == "auto" and response.success and response.provider == "claude":
+        claude_usage_monitor.nudge_after_success()
     logger.info(
         "ai_route provider=%s route_reason=%s requested_role=%s actual_model=%s "
         "success=%s provider_latency_ms=%d tool_calls=%d",

@@ -22,6 +22,8 @@ from ..config import settings
 logger = logging.getLogger(__name__)
 
 USAGE_API_URL = "https://api.anthropic.com/api/oauth/usage"
+# 連續失敗退避上限（秒）；避免 token 過期時整夜以固定頻率撞 401/429
+_MAX_BACKOFF_SECONDS = 1800.0
 _ANTHROPIC_BETA = "claude-code-20250219"
 _USER_AGENT = "claude-code/0.2.29"
 
@@ -150,6 +152,7 @@ class ClaudeUsageMonitor:
         self._snapshot = UsageSnapshot()
         self._refresh_lock = asyncio.Lock()
         self._background_task: asyncio.Task | None = None
+        self._nudge_task: asyncio.Task | None = None
 
     @property
     def is_running(self) -> bool:
@@ -278,10 +281,41 @@ class ClaudeUsageMonitor:
             raise UsageRefreshError("invalid_response")
         return payload
 
+    def _next_refresh_delay(self) -> float:
+        """連續失敗時指數退避，避免以固定頻率去撞 401/429（上限 30 分鐘）。"""
+        failures = self._snapshot.consecutive_failures
+        if failures <= 0:
+            return self.refresh_interval_seconds
+        return min(
+            self.refresh_interval_seconds * (2 ** min(failures, 10)),
+            _MAX_BACKOFF_SECONDS,
+        )
+
+    def nudge_after_success(self) -> None:
+        """真實 AI 請求成功後呼叫：快照已退化時非同步觸發一次 refresh。
+
+        AI 請求成功代表 CLI 剛刷新過 OAuth token，此時 refresh 幾乎必然成功，
+        不必等退避後的下一個週期。不阻塞 caller、single-flight、fresh 時 no-op。
+        """
+        if not self.is_running:
+            return
+        degraded = (
+            self.snapshot().state != "fresh"
+            or self._snapshot.consecutive_failures > 0
+        )
+        if not degraded:
+            return
+        if self._nudge_task and not self._nudge_task.done():
+            return
+        self._nudge_task = asyncio.create_task(
+            self.refresh(force=True),
+            name="claude-usage-nudge",
+        )
+
     async def _refresh_loop(self) -> None:
         try:
             while True:
-                await asyncio.sleep(self.refresh_interval_seconds)
+                await asyncio.sleep(self._next_refresh_delay())
                 await self.refresh(force=True)
         except asyncio.CancelledError:
             raise

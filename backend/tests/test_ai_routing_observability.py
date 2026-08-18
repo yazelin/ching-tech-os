@@ -218,3 +218,36 @@ async def test_router_execute_filters_side_effect_tools_for_codex_only() -> None
     await router2.execute(decision, prompt="hi", tools=list(tools))
     assert claude.kwargs is not None
     assert claude.kwargs["tools"] == tools
+
+
+# ── usage monitor 成功後快速恢復 hook ─────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_call_ai_nudges_usage_monitor_after_claude_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """auto mode 下 Claude 成功回應後,應通知 usage monitor 嘗試恢復退化快照。"""
+    from ching_tech_os.services.claude_usage import claude_usage_monitor
+
+    provider = FakeClaudeProvider(AIResponse(success=True, message="ok"))
+    router = ai_router_service.ProviderRouter({"claude": provider})
+    monkeypatch.setattr(ai_router_service, "_provider_router", router)
+    monkeypatch.setattr(settings, "ai_provider_mode", "auto")
+
+    nudges: list[bool] = []
+    monkeypatch.setattr(
+        claude_usage_monitor, "nudge_after_success", lambda: nudges.append(True)
+    )
+
+    await ai_router_service.call_ai(
+        prompt="hi",
+        routing_context=ai_router_service.RoutingContext(context_type="internal_test"),
+    )
+    assert nudges == [True]
+
+    # forced claude mode 不觸發(monitor 本來就沒啟動)
+    nudges.clear()
+    monkeypatch.setattr(settings, "ai_provider_mode", "claude")
+    await ai_router_service.call_ai(prompt="hi")
+    assert nudges == []
