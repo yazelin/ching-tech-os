@@ -81,7 +81,7 @@
 - [x] 8.4 驗證任何 provider failure 都不會重複執行 side-effect tool
 - [x] 8.5 canary 穩定後才評估一般 Line/Telegram 對話啟用 auto mode
 - [x] 8.6 restricted mode 通過身份、權限與成本測試後獨立遷移
-- [ ] 8.7 簡報 JSON、生圖、research、scheduler、summary 各自新增 parity tests 後才逐一遷移；未完成者維持 Claude
+- [ ] 8.7 簡報 JSON、生圖、research、scheduler、summary 各自新增 parity tests 後才逐一遷移；未完成者維持 Claude（→ 遞延至第二階段 change：add-codex-pipeline-parity）
 
 ## 9. 驗收與 Rollout Gate
 
