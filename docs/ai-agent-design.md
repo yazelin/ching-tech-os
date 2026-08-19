@@ -55,7 +55,7 @@ ChingTech OS 的 AI 助手透過 `claude-code-acp`（ClaudeClient in-process）�
 
 ### Provider Router 安全骨架
 
-`services/ai_router.py::call_ai()` 目前的正式入口：`ai_manager.call_agent()`（admin Test API / test-agent）與 Web Chat（`api/ai.py` 的 `ai_chat_event`）。兩者都以 caller 端事實建立 `RoutingContext`，並將 `attach_routing_metadata()` 寫入 `ai_logs.parsed_response`（`model` 欄位維持記 requested role）。`ProviderRouter` 以 Claude/Codex registry 與 `is_ready()` 建立可測試的 pre-start fallback 邊界：只有尚未進入 `provider.call()` 前可改選明確 fallback；進入 call 後，不論回應失敗或拋錯都保持 provider sticky，避免重複副作用。選定 Codex 後會以 `filter_codex_readonly_tools()` fail-closed 過濾工具（只放行 `search_/get_/read_/list_/find_` 前綴的 canonical MCP 名稱）；pre-start fallback 回 Claude 時保有完整工具。預設 mode 仍固定 Claude：
+`services/ai_router.py::call_ai()` 目前的正式入口：`ai_manager.call_agent()`（admin Test API / test-agent）與 Web Chat（`api/ai.py` 的 `ai_chat_event`）。兩者都以 caller 端事實建立 `RoutingContext`，並將 `attach_routing_metadata()` 寫入 `ai_logs.parsed_response`（`model` 欄位維持記 requested role）。`ProviderRouter` 以 Claude/Codex registry 與 `is_ready()` 建立可測試的 pre-start fallback 邊界：只有尚未進入 `provider.call()` 前可改選明確 fallback；進入 call 後，不論回應失敗或拋錯都保持 provider sticky，避免重複副作用。選定 Codex 後會以 `filter_codex_readonly_tools()` fail-closed 過濾工具（只放行 `search_/get_/read_/list_/find_` 前綴的 canonical MCP 名稱；可另以 `CODEX_CONTEXT_TOOL_ALLOWLIST` 依 routing context 明確放行個別工具，格式錯誤整份作廢回唯讀預設）；pre-start fallback 回 Claude 時保有完整工具。預設 mode 仍固定 Claude：
 
 | 環境變數 | 預設值 | 目前行為 |
 |---------|--------|----------|

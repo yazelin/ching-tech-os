@@ -138,6 +138,38 @@ def _get_env_lower_set(key: str, default: str = "") -> frozenset[str]:
 AI_PROVIDER_MODES = frozenset({"claude", "codex", "auto"})
 
 
+def _parse_context_tool_allowlist(value: str) -> dict[str, frozenset[str]]:
+    """解析 per-context Codex 額外工具 allowlist。
+
+    格式：``context:mcp__server__tool|mcp__server__tool2,context2:...``。
+    任一條目格式錯誤即整份作廢回空（fail-closed，不部分套用）。
+    """
+    text = value.strip()
+    if not text:
+        return {}
+    parsed: dict[str, frozenset[str]] = {}
+    for entry in text.split(","):
+        entry = entry.strip()
+        if not entry:
+            continue
+        context, separator, tools_part = entry.partition(":")
+        context = context.strip().lower()
+        tools = frozenset(
+            tool.strip().lower() for tool in tools_part.split("|") if tool.strip()
+        )
+        valid_tools = all(
+            tool.startswith("mcp__") and tool[5:].partition("__")[1] for tool in tools
+        )
+        if not separator or not context or not tools or not valid_tools:
+            logger.error(
+                "CODEX_CONTEXT_TOOL_ALLOWLIST 條目格式無效（%r）；整份作廢回到唯讀預設",
+                entry,
+            )
+            return {}
+        parsed[context] = parsed.get(context, frozenset()) | tools
+    return parsed
+
+
 class Settings:
     """應用程式設定"""
 
@@ -194,6 +226,10 @@ class Settings:
     ai_provider_canary_agents: frozenset[str] = _get_env_lower_set(
         "AI_PROVIDER_CANARY_AGENTS",
         "test-agent",
+    )
+    # Per-context Codex 額外工具 allowlist（預設空 = 純唯讀 fail-closed）
+    codex_context_tool_allowlist: dict[str, frozenset[str]] = (
+        _parse_context_tool_allowlist(_get_env("CODEX_CONTEXT_TOOL_ALLOWLIST", ""))
     )
     claude_usage_switch_threshold: float = _get_env_float_bounded(
         "CLAUDE_USAGE_SWITCH_THRESHOLD", 0.90, minimum=0.01, maximum=1.0

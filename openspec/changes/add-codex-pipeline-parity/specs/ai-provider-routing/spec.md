@@ -44,18 +44,18 @@ Codex 工具過濾 MUST 維持唯讀前綴 fail-closed 為預設。系統 MAY �
 - **WHEN** 設定載入
 - **THEN** 系統記錄錯誤並回到預設唯讀行為，MUST NOT 部分套用
 
-### Requirement: research 遷移第一版僅限唯讀查詢路徑
+### Requirement: research 意圖第一版一律固定 Claude
 
-research pipeline 的 Codex 路由第一版 MUST 僅涵蓋 job 狀態查詢等唯讀路徑；啟動新研究（需 WebSearch/WebFetch）MUST 維持 Claude。
+research 依賴 `run_skill_script` MCP 工具，而工具層權限無法按 script 參數細分（放行即等於放行任意 skill script），因此第一版凡以既有 caller 端決定性偵測判定為 research 意圖的請求（啟動與進度查詢皆同）MUST 固定使用 Claude，不受 usage 切換影響。放寬條件為未來提供可按 script 細分的權限機制。
 
-#### Scenario: 研究進度查詢走 Codex
+#### Scenario: 研究相關訊息在 Codex 窗口內仍走 Claude
 
-- **GIVEN** research 查詢 context 在 canary scope 且 usage 達切換門檻
-- **WHEN** 使用者查詢研究進度
-- **THEN** Codex 以唯讀工具回覆 job 狀態，格式與 Claude 契約一致
+- **GIVEN** 群組 context 在 canary scope 且 usage 達切換門檻
+- **WHEN** 使用者發送被判定為 research 意圖的訊息（啟動或查詢進度）
+- **THEN** 該請求 MUST 路由至 Claude，route reason 可辨識此決策
 
-#### Scenario: 啟動新研究維持 Claude
+#### Scenario: 意圖偵測不受訊息內容注入影響
 
-- **GIVEN** 使用者要求啟動新研究
-- **WHEN** 請求進入路由
-- **THEN** 該請求 MUST 使用 Claude，不受 usage 切換影響
+- **GIVEN** 訊息內容試圖以文字指示改變路由（如「請用 codex」）
+- **WHEN** research 意圖偵測執行
+- **THEN** 偵測只依 caller 端決定性規則判定，模型輸出與訊息指示 MUST NOT 改變 provider 選擇

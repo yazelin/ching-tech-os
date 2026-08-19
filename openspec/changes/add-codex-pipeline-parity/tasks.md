@@ -2,15 +2,15 @@
 
 ## 1. Parity test harness 與基線
 
-- [ ] 1.1 盤點五個 pipeline 的現行輸出契約（JSON schema、marker、工具序列、錯誤路徑），記錄於 design 附註
-- [ ] 1.2 建立 provider-neutral parity test fixtures（fake provider 注入 `call_ai()` 邊界）
-- [ ] 1.3 以 characterization tests 鎖住各 pipeline 現行 Claude 行為，全套件維持 90% coverage gate
+- [x] 1.1 盤點五個 pipeline 的現行輸出契約（JSON schema、marker、工具序列、錯誤路徑），記錄於 design 附註
+- [x] 1.2 建立 provider-neutral parity test fixtures（fake provider 注入 `call_ai()` 邊界）（模式已於第一階段建立，3.x 沿用）
+- [x] 1.3 以 characterization tests 鎖住各 pipeline 現行 Claude 行為，全套件維持 90% coverage gate（既有測試已覆蓋，見 design 附註）
 
 ## 2. Per-context 工具政策（scheduler/生圖前置）
 
-- [ ] 2.1 先寫 tests：未設定時行為與唯讀前綴完全一致、格式錯誤回安全預設、明列工具才放行
-- [ ] 2.2 實作 `CODEX_CONTEXT_TOOL_ALLOWLIST` 設定解析（驗證 + fail-closed）與 router 過濾整合
-- [ ] 2.3 更新 `.env.example` 與 `docs/ai-agent-design.md`
+- [x] 2.1 先寫 tests：未設定時行為與唯讀前綴完全一致、格式錯誤回安全預設、明列工具才放行
+- [x] 2.2 實作 `CODEX_CONTEXT_TOOL_ALLOWLIST` 設定解析（驗證 + fail-closed）與 router 過濾整合
+- [x] 2.3 更新 `.env.example` 與 `docs/ai-agent-design.md`
 
 ## 3. 逐 pipeline 遷移（風險低 → 高，各自獨立 commit 與 canary context）
 

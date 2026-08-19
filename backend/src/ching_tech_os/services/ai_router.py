@@ -27,8 +27,15 @@ class ProviderUnavailableError(RuntimeError):
 _CODEX_READONLY_TOOL_PREFIXES = ("search_", "get_", "read_", "list_", "find_")
 
 
-def filter_codex_readonly_tools(tools: list[str] | None) -> list[str] | None:
-    """回傳只含唯讀 MCP 工具的清單；非 canonical 名稱或非唯讀動詞一律移除。"""
+def filter_codex_readonly_tools(
+    tools: list[str] | None,
+    extra_allowlist: frozenset[str] = frozenset(),
+) -> list[str] | None:
+    """回傳只含唯讀 MCP 工具的清單；非 canonical 名稱或非唯讀動詞一律移除。
+
+    ``extra_allowlist`` 為 per-context 明確放行的 canonical 工具名（fail-closed：
+    只有完全相符才放行，預設空集合時行為與純唯讀規則完全相同）。
+    """
     if tools is None:
         return None
     filtered: list[str] = []
@@ -37,7 +44,9 @@ def filter_codex_readonly_tools(tools: list[str] | None) -> list[str] | None:
         if not normalized.startswith("mcp__"):
             continue
         _server, separator, tool_name = normalized[5:].partition("__")
-        if separator and tool_name.startswith(_CODEX_READONLY_TOOL_PREFIXES):
+        if not separator:
+            continue
+        if tool_name.startswith(_CODEX_READONLY_TOOL_PREFIXES) or normalized in extra_allowlist:
             filtered.append(tool)
     return filtered
 
@@ -104,6 +113,8 @@ class ProviderRouter:
     async def execute(
         self,
         decision: ProviderDecision,
+        *,
+        codex_extra_tools: frozenset[str] = frozenset(),
         **provider_kwargs: Any,
     ) -> AIResponse:
         """依既定決策執行；只允許在 provider call 前 fallback。"""
@@ -125,7 +136,9 @@ class ProviderRouter:
         # 選定之後做，pre-start fallback 回 Claude 時才能保有完整工具。
         if selected_name == "codex":
             original_tools = provider_kwargs.get("tools")
-            filtered_tools = filter_codex_readonly_tools(original_tools)
+            filtered_tools = filter_codex_readonly_tools(
+                original_tools, extra_allowlist=codex_extra_tools
+            )
             removed = len(original_tools or []) - len(filtered_tools or [])
             if removed:
                 logger.info(
@@ -338,10 +351,18 @@ async def call_ai(
         allowed_contexts=settings.ai_provider_canary_contexts,
         allowed_agents=settings.ai_provider_canary_agents,
     )
+    # per-context 額外工具 allowlist（預設空 = 純唯讀 fail-closed）
+    codex_extra_tools: frozenset[str] = frozenset()
+    if routing_context is not None:
+        codex_extra_tools = settings.codex_context_tool_allowlist.get(
+            routing_context.context_type, frozenset()
+        )
+
     started = time.monotonic()
     try:
         response = await _provider_router.execute(
             decision,
+            codex_extra_tools=codex_extra_tools,
             prompt=prompt,
             model=model,
             history=history,

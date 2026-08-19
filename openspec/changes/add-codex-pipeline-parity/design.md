@@ -52,3 +52,19 @@ summary → 簡報 JSON → research → 生圖 → scheduler。每階段獨立 
 - **[結構化 JSON 差異]** Codex 輸出 JSON 格式偏差 → 沿用既有 JSON 修復/重試 parser，parity test 覆蓋修復路徑；仍失敗則該 pipeline 維持 Claude。
 - **[scheduler 副作用]** 排程任務跨 provider 重放風險 → 沿用「provider 失敗不重送」規則；額外 allowlist 逐工具開放並測試。
 - **[生圖上限]** nanobanana/codex-image 全域上限已在 provider 層強制，遷移不得繞過（沿用第一階段測試）。
+
+## 附註:1.1 盤點結果(2026-08-19)
+
+### 各 pipeline 實際契約與遷移含意
+
+| Pipeline | 呼叫點 | 契約 | 關鍵發現 |
+|----------|--------|------|----------|
+| summary | `claude_agent.call_claude_for_summary`(api/ai.py compress)| 純文字摘要 → caller 包成 `[對話摘要]\n{...}` system message;model=haiku、summarizer prompt 來自 DB、無工具 | 最單純,直接遷 |
+| 簡報 JSON | `presentation.generate_outline` | prompt 要求純 JSON;解析=剝 ``` fence → `json.loads`;失敗 raise ValueError(不重試)| 無工具、單次呼叫;「修復」僅 fence 剝除 |
+| research | **無獨立 AI 呼叫** — 經 8.3 已遷移的 `process_message_with_ai`,靠 `mcp__ching-tech-os__run_skill_script`(start/check-research)| job 狀態 JSON 由 MCP 工具回傳,`_extract_research_tool_feedback` 解析 | `run_skill_script` 非唯讀前綴 → Codex 過濾掉;**工具層無法按 script 參數細分權限**,放行=放行任意 script,不可接受 → 第一版 research 意圖(啟動+查詢)一律固定 Claude,以 caller 端既有的決定性偵測(`_should_force_research_check_mode` 同型)實作 |
+| 生圖 | 同上經 Line 流程;工具 `mcp__nanobanana__generate_image` 等 + FILE_MESSAGE marker + FLUX fallback | marker 解析與 fallback 在 caller 端,對 provider 中立 | `generate_` 前綴被過濾 → Codex 窗口內無法生圖;3.4 的評估=是否將 nanobanana 生圖工具列入群組 context 的額外 allowlist(受既有全域生圖上限保護);`presentation.fetch_image` 是直接服務呼叫,不經 AI 路由,不受影響 |
+| scheduler | `task_scheduler._execute_agent_task`(context_type=scheduler)| agent 設定的 prompt/tools;副作用由 MCP 工具執行;失敗 raise 讓排程記錄 | 遷移需 per-context allowlist;排程屬背景批次,Claude 限流時延後執行即可 → 遷移價值最低,允許結論為「維持 Claude」 |
+
+### 1.2/1.3 現況
+
+Characterization 已由第一階段與 coverage 衝刺覆蓋:`test_claude_agent.py`(summary 契約)、`test_api_ai_events.py`(compress 流程)、`test_presentation_service.py`(outline 成功/壞 JSON/fence)、`test_task_scheduler_service.py`(agent task 成功/找不到)、`test_linebot_ai_service.py`(marker/research feedback 解析)。parity fixture 模式(fake provider 注入 call_ai 邊界)已於 `test_ai_routing_observability.py` 建立,3.x 各遷移沿用並於當步補 provider-neutral 斷言。
