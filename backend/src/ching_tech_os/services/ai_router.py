@@ -48,6 +48,12 @@ def filter_codex_readonly_tools(
             continue
         if tool_name.startswith(_CODEX_READONLY_TOOL_PREFIXES) or normalized in extra_allowlist:
             filtered.append(tool)
+    # allowlist 語意為「保證此 context 下 Codex 可用」：即使被上游（如 script-first
+    # 路由）從清單隱藏，也補回來——MCP server 本就提供這些工具，只是權限未開
+    normalized_filtered = {str(t).strip().lower() for t in filtered}
+    for tool in sorted(extra_allowlist):
+        if tool not in normalized_filtered:
+            filtered.append(tool)
     return filtered
 
 

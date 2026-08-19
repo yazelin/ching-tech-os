@@ -168,3 +168,21 @@ async def test_pre_start_fallback_to_claude_keeps_full_tools_with_allowlist(
     )
     assert claude.kwargs is not None
     assert claude.kwargs["tools"] == tools
+
+
+def test_extra_allowlist_appends_tools_hidden_by_caller() -> None:
+    """真實流量:script-first 路由會把部分工具從清單隱藏(Claude 下改走 run_skill_script),
+    Codex 下 run_skill_script 被擋 → allowlist 必須能把明確放行的工具補回來。"""
+    tools = ["mcp__ching-tech-os__search_knowledge"]  # create_share_link 被上游隱藏
+    filtered = ai_router.filter_codex_readonly_tools(
+        tools,
+        extra_allowlist=frozenset({"mcp__ching-tech-os__create_share_link"}),
+    )
+    assert filtered == [
+        "mcp__ching-tech-os__search_knowledge",
+        "mcp__ching-tech-os__create_share_link",
+    ]
+    # tools=None(無工具請求)不受 extra 影響
+    assert ai_router.filter_codex_readonly_tools(
+        None, extra_allowlist=frozenset({"mcp__ching-tech-os__create_share_link"})
+    ) is None
