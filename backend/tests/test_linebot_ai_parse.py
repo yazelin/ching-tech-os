@@ -340,3 +340,23 @@ def test_extract_generated_images_recognizes_codex_image_tool() -> None:
         "ai-images/codex_abc123.png",
         "ai-images/codex_def456.png",
     ]
+
+
+def test_extract_generated_images_dedupes_repeated_output() -> None:
+    """Codex ACP 輸出結構會重複包含同段文字,同一張圖只能抓一次。"""
+    from types import SimpleNamespace
+    from ching_tech_os.services.bot.ai import extract_generated_images_from_tool_calls
+
+    calls = [
+        SimpleNamespace(
+            name="mcp__ching-tech-os__codex_image_tool",
+            input={},
+            output=(
+                "圖片已生成：ai-images/codex_dup.png\n"
+                "圖片已生成：ai-images/codex_dup.png"
+            ),
+        ),
+    ]
+    assert extract_generated_images_from_tool_calls(calls) == [
+        "ai-images/codex_dup.png"
+    ]

@@ -195,7 +195,10 @@ def extract_generated_images_from_tool_calls(tool_calls: list) -> list[str]:
     for tc in tool_calls:
         if tc.name == "mcp__ching-tech-os__codex_image_tool":
             for match in codex_image_pattern.finditer(str(tc.output or "")):
-                generated_files.append(match.group(1))
+                path = match.group(1)
+                # ACP 輸出結構會重複包含同段文字，同一張圖只抓一次
+                if path not in generated_files:
+                    generated_files.append(path)
             continue
         if tc.name not in nanobanana_tools:
             continue
