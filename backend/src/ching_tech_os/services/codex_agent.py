@@ -369,6 +369,11 @@ class CodexProvider:
             nonlocal security_violation
             identity = _canonical_identity(title, raw_input)
             if identity is None:
+                # title 為工具名稱類資訊，截斷後記錄供追查（如 Codex 內建功能）
+                logger.warning(
+                    "codex_security_violation subtype=non_canonical_tool title=%s",
+                    str(title)[:80],
+                )
                 security_violation = "non_canonical_tool"
                 return
             pending[tool_id] = (_canonical_tool_name(identity), dict(raw_input))
