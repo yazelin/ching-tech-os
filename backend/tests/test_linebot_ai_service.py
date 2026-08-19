@@ -871,3 +871,40 @@ async def test_log_linebot_ai_call_attaches_routing_metadata(
     )
     log_data = create_log.await_args.args[0]
     assert log_data.parsed_response is None
+
+
+def test_is_research_intent_deterministic() -> None:
+    """3.3:research 意圖偵測——決定性規則,寧可多判(固定 Claude 是安全方向)。"""
+    # 進度查詢(既有 job-id 偵測)
+    assert linebot_ai._is_research_intent("查詢研究進度 c904b40d") is True
+    # 啟動研究(關鍵字)
+    assert linebot_ai._is_research_intent("幫我研究 AMR 市場趨勢") is True
+    # 一般訊息不受影響
+    assert linebot_ai._is_research_intent("今天庫存還有多少?") is False
+    assert linebot_ai._is_research_intent("") is False
+
+
+@pytest.mark.asyncio
+async def test_research_intent_routes_with_research_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """3.3:research 意圖的訊息使用 research context(不在 canary → 固定 Claude)。"""
+    _patch_process_base(monkeypatch)
+    call_ai_mock = AsyncMock(return_value=_mock_claude_response())
+    monkeypatch.setattr(linebot_ai, "call_ai", call_ai_mock)
+    monkeypatch.setattr(
+        linebot_ai, "parse_ai_response", lambda _text: ("文字回覆", [], [])
+    )
+    monkeypatch.setattr(linebot_ai, "send_ai_response", AsyncMock(return_value=["m1"]))
+    monkeypatch.setattr(linebot_ai, "log_linebot_ai_call", AsyncMock())
+
+    await linebot_ai.process_message_with_ai(
+        message_uuid=uuid4(),
+        content="幫我研究一下競品的雷射切割方案",
+        line_group_id=uuid4(),
+        line_user_id=None,
+        reply_token="token",
+        force_trigger=True,
+    )
+    routing_context = call_ai_mock.await_args.kwargs["routing_context"]
+    assert routing_context.context_type == "research"

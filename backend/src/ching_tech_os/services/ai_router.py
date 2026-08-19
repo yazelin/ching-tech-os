@@ -393,10 +393,11 @@ async def call_ai(
     if mode == "auto" and response.success and response.provider == "claude":
         claude_usage_monitor.nudge_after_success()
     logger.info(
-        "ai_route provider=%s route_reason=%s requested_role=%s actual_model=%s "
-        "success=%s provider_latency_ms=%d tool_calls=%d",
+        "ai_route provider=%s route_reason=%s context=%s requested_role=%s "
+        "actual_model=%s success=%s provider_latency_ms=%d tool_calls=%d",
         response.provider,
         response.route_reason,
+        routing_context.context_type if routing_context else "none",
         response.requested_role,
         response.actual_model,
         response.success,

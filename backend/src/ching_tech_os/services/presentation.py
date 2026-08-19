@@ -15,6 +15,7 @@ import httpx
 from ..config import settings
 from .smb import SMBService
 from .workers import run_in_smb_pool
+from .ai_router import RoutingContext, call_ai
 from .claude_agent import call_claude
 from .huggingface_image import generate_image_with_flux, is_fallback_available
 
@@ -116,14 +117,16 @@ layout 類型說明：
 6. 只回傳 JSON，不要其他文字或 markdown 標記"""
 
     try:
-        response = await call_claude(
+        # 3.2：簡報 outline 走 provider-neutral call_ai；canary 由設定控制
+        response = await call_ai(
             prompt=prompt,
             model="sonnet",
             timeout=120,
+            routing_context=RoutingContext(context_type="presentation"),
         )
 
         if not response.success:
-            raise ValueError(f"Claude 回應失敗: {response.error}")
+            raise ValueError(f"AI 回應失敗: {response.error}")
 
         text = response.message.strip()
 

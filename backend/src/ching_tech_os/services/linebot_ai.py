@@ -415,6 +415,18 @@ def _extract_research_job_id_from_text(text: str) -> str:
     return match.group(1).lower()
 
 
+def _is_research_intent(text: str) -> bool:
+    """決定性 research 意圖偵測（啟動或查詢）。
+
+    research 依賴 run_skill_script（無法按 script 細分權限，不可暴露給 Codex），
+    命中者以 research context 路由 → 不在 canary scope → 固定 Claude。
+    寧可多判：誤判只是把請求留在 Claude，為安全方向。
+    """
+    if _should_force_research_check_mode(text):
+        return True
+    return "研究" in (text or "")
+
+
 def _should_force_research_check_mode(text: str) -> bool:
     """判斷是否為研究進度查詢語意（需禁用同步 WebSearch/WebFetch）。"""
     job_id = _extract_research_job_id_from_text(text)
@@ -993,7 +1005,13 @@ async def process_message_with_ai(
             ctos_user_id=ctos_user_id,
             extra_mcp_env=voice_mcp_env or None,
             routing_context=RoutingContext(
-                context_type="linebot-group" if is_group else "linebot-personal",
+                # research 意圖固定以 research context 路由（不在 canary → Claude），
+                # 因 run_skill_script 無法安全暴露給 Codex
+                context_type=(
+                    "research"
+                    if _is_research_intent(content)
+                    else ("linebot-group" if is_group else "linebot-personal")
+                ),
                 agent_name=agent_name,
             ),
         )

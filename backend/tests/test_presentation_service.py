@@ -14,20 +14,35 @@ from ching_tech_os.services import presentation
 
 @pytest.mark.asyncio
 async def test_generate_outline_success_and_invalid_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    """3.2 parity：outline 走 call_ai，JSON 契約（fence 剝除/壞 JSON/失敗）不變。"""
     ok_response = SimpleNamespace(success=True, message='{"title":"T","slides":[]}', error=None)
-    monkeypatch.setattr(presentation, "call_claude", AsyncMock(return_value=ok_response))
+    call_ai_mock = AsyncMock(return_value=ok_response)
+    monkeypatch.setattr(presentation, "call_ai", call_ai_mock)
     outline = await presentation.generate_outline("topic", 3, "uncover")
     assert outline["title"] == "T"
+    # routing context 用 caller 事實；model role 維持 sonnet
+    kwargs = call_ai_mock.await_args.kwargs
+    assert kwargs["routing_context"].context_type == "presentation"
+    assert kwargs["model"] == "sonnet"
 
+    # markdown fence 剝除後仍是壞 JSON → ValueError（不得產生格式錯誤的簡報）
     bad_response = SimpleNamespace(success=True, message='```json\n{bad json}\n```', error=None)
-    monkeypatch.setattr(presentation, "call_claude", AsyncMock(return_value=bad_response))
+    monkeypatch.setattr(presentation, "call_ai", AsyncMock(return_value=bad_response))
     with pytest.raises(ValueError):
         await presentation.generate_outline("topic")
 
     fail_response = SimpleNamespace(success=False, message="", error="failed")
-    monkeypatch.setattr(presentation, "call_claude", AsyncMock(return_value=fail_response))
+    monkeypatch.setattr(presentation, "call_ai", AsyncMock(return_value=fail_response))
     with pytest.raises(ValueError):
         await presentation.generate_outline("topic")
+
+    # fence 有效剝除的正常路徑（Codex 常見回覆形式）
+    fenced_ok = SimpleNamespace(
+        success=True, message='```json\n{"title":"F","slides":[]}\n```', error=None
+    )
+    monkeypatch.setattr(presentation, "call_ai", AsyncMock(return_value=fenced_ok))
+    outline = await presentation.generate_outline("topic")
+    assert outline["title"] == "F"
 
 
 @pytest.mark.asyncio

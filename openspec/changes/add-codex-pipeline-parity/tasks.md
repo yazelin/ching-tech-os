@@ -15,8 +15,8 @@
 ## 3. 逐 pipeline 遷移（風險低 → 高，各自獨立 commit 與 canary context）
 
 - [x] 3.1 summary：parity tests → `call_ai()` + RoutingContext，驗證壓縮摘要契約
-- [ ] 3.2 簡報 JSON：parity tests（含 JSON 修復路徑）→ 遷移 `generate_outline`
-- [ ] 3.3 research 唯讀查詢：parity tests → 遷移進度查詢路徑；啟動新研究維持 Claude
+- [x] 3.2 簡報 JSON：parity tests（含 JSON 修復路徑）→ 遷移 `generate_outline`
+- [x] 3.3 research：決定性意圖偵測 → research context 固定 Claude（啟動與查詢皆同，見 design 附註）
 - [ ] 3.4 生圖：parity tests（marker、fallback 階梯、全域上限）→ 評估遷移或記錄阻擋原因
 - [ ] 3.5 scheduler：parity tests + per-context allowlist → 評估遷移或記錄阻擋原因
 
