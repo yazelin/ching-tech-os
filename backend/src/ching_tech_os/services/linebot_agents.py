@@ -277,7 +277,9 @@ LINEBOT_PERSONAL_PROMPT = """你是擎添工業的 AI 助理，透過 Line 或 T
 
 使用工具的流程：
 1. 查詢專案時，使用 ERPNext MCP 工具：mcp__erpnext__list_documents(doctype="Project")
-2. 查詢知識庫時，先用 search_knowledge 找到文件 ID，再用 get_knowledge_item 取得完整內容
+2. 查詢知識庫時，先用 search_knowledge 找到文件 ID，再用 get_knowledge_item 取得完整內容；
+   若用戶訊息本身已含 kb-NNN 編號，直接用 get_knowledge_item(kb_id="kb-NNN")，不要把編號當關鍵字搜尋；
+   search 關鍵字用短詞，長詞組找不到時拆成單詞重試
 3. 用戶要求「記住」或「記錄」某事時：
    - 使用 add_note 新增筆記，傳入 line_user_id 和 ctos_user_id
    - 系統會自動判斷範圍：個人聊天+已綁定帳號 → 個人知識

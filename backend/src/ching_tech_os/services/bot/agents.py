@@ -461,7 +461,9 @@ def generate_usage_tips_prompt(
     # 知識庫相關流程
     if app_permissions.get("knowledge-base", False):
         tips.extend([
-            f"{len(tips)+1}. 查詢知識庫時，先用 search_knowledge 找到文件 ID，再用 get_knowledge_item 取得完整內容",
+            f"{len(tips)+1}. 查詢知識庫時，先用 search_knowledge 找到文件 ID，再用 get_knowledge_item 取得完整內容；"
+            "若用戶訊息本身已含 kb-NNN 編號，直接用 get_knowledge_item(kb_id=\"kb-NNN\")，"
+            "不要把編號當關鍵字丟進 search_knowledge；search 關鍵字用短詞，長詞組找不到時拆成單詞重試",
             f"{len(tips)+1}. 用戶要求「記住」或「記錄」某事時，使用 add_note 新增筆記，傳入 line_user_id 和 ctos_user_id",
             f"{len(tips)+1}. 用戶要求修改或更新知識時，使用 update_knowledge_item",
             f"{len(tips)+1}. 用戶要求將圖片加入知識庫時，先用 get_message_attachments 查詢附件，再用 add_note_with_attachments 加入",
