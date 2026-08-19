@@ -174,7 +174,7 @@ def get_user_friendly_nanobanana_error(error: str) -> str:
 
 
 def extract_generated_images_from_tool_calls(tool_calls: list) -> list[str]:
-    """從 tool_calls 中提取 nanobanana 生成的圖片路徑
+    """從 tool_calls 中提取 nanobanana / codex_image_tool 生成的圖片路徑
 
     Returns:
         生成的圖片檔案路徑列表
@@ -188,8 +188,15 @@ def extract_generated_images_from_tool_calls(tool_calls: list) -> list[str]:
         "mcp__nanobanana__generate_image",
         "mcp__nanobanana__edit_image",
     }
+    # codex_image_tool 回傳「圖片已生成：ai-images/<檔名>」純文字
+    # （Codex 唯讀模式下模型無法呼叫 prepare_file_message，必須由程式端接手發圖）
+    codex_image_pattern = re.compile(r"圖片已生成[:：]\s*(ai-images/[^\s\"'\\]+)")
 
     for tc in tool_calls:
+        if tc.name == "mcp__ching-tech-os__codex_image_tool":
+            for match in codex_image_pattern.finditer(str(tc.output or "")):
+                generated_files.append(match.group(1))
+            continue
         if tc.name not in nanobanana_tools:
             continue
 

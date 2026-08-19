@@ -306,3 +306,37 @@ class TestExtractGeneratedImages:
         tc = MockToolCall(name="mcp__nanobanana__edit_image", input={}, output=output)
         result = extract_generated_images_from_tool_calls([tc])
         assert result == ["/tmp/edited.jpg"]
+
+
+def test_extract_generated_images_recognizes_codex_image_tool() -> None:
+    """2026-08-19 真實流量:codex_image_tool 生圖成功但程式端撈圖不認得 → 圖成孤兒。
+
+    codex_image_tool 回傳「圖片已生成：ai-images/<檔名>」純文字;
+    Codex 唯讀模式下模型無法呼叫 prepare_file_message,必須由程式端接手。
+    """
+    from types import SimpleNamespace
+    from ching_tech_os.services.bot.ai import extract_generated_images_from_tool_calls
+
+    calls = [
+        SimpleNamespace(
+            name="mcp__ching-tech-os__codex_image_tool",
+            input={"prompt": "a chicken"},
+            output="圖片已生成：ai-images/codex_abc123.png",
+        ),
+        # Claude 流程的 MCP JSON 包裝格式也要認得
+        SimpleNamespace(
+            name="mcp__ching-tech-os__codex_image_tool",
+            input={"prompt": "a dog"},
+            output='[{"type": "text", "text": "圖片已生成：ai-images/codex_def456.png"}]',
+        ),
+        # 失敗輸出不得誤抓
+        SimpleNamespace(
+            name="mcp__ching-tech-os__codex_image_tool",
+            input={"prompt": "x"},
+            output="Codex 生圖失敗：quota exceeded",
+        ),
+    ]
+    assert extract_generated_images_from_tool_calls(calls) == [
+        "ai-images/codex_abc123.png",
+        "ai-images/codex_def456.png",
+    ]
