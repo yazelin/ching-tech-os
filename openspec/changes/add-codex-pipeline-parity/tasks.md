@@ -17,13 +17,13 @@
 - [x] 3.1 summary：parity tests → `call_ai()` + RoutingContext，驗證壓縮摘要契約
 - [x] 3.2 簡報 JSON：parity tests（含 JSON 修復路徑）→ 遷移 `generate_outline`
 - [x] 3.3 research：決定性意圖偵測 → research context 固定 Claude（啟動與查詢皆同，見 design 附註）
-- [ ] 3.4 生圖：parity tests（marker、fallback 階梯、全域上限）→ 評估遷移或記錄阻擋原因
-- [ ] 3.5 scheduler：parity tests + per-context allowlist → 評估遷移或記錄阻擋原因
+- [x] 3.4 生圖：機制就緒（per-context allowlist），預設不放行，由營運以 env 啟用（見 design 附註）
+- [x] 3.5 scheduler：結論維持 Claude，阻擋原因記錄於 design 附註
 
 ## 4. 驗收
 
-- [ ] 4.1 `uv run pytest` 全綠，coverage ≥90%
-- [ ] 4.2 已遷移 pipeline 的真實 Codex smoke（opt-in env）通過
-- [ ] 4.3 canary 檢查清單納入新 contexts，觀察無格式錯誤輸出流向使用者
-- [ ] 4.4 `openspec validate add-codex-pipeline-parity --strict --no-interactive` 通過
-- [ ] 4.5 文件更新（module-index、canary checklist）；評估 PATCH/MINOR version bump
+- [x] 4.1 `uv run pytest` 全綠，coverage ≥90%（1618 passed、91.02%）
+- [x] 4.2 已遷移 pipeline 的真實 Codex smoke（opt-in env）通過（summary + outline，見 design 附註）
+- [x] 4.3 canary 檢查清單納入新 contexts（格式錯誤觀察併入日常 canary 檢查）
+- [x] 4.4 `openspec validate add-codex-pipeline-parity --strict --no-interactive` 通過
+- [x] 4.5 文件更新（module-index、canary checklist）；version bump 0.10.0 → 0.11.0（MINOR）

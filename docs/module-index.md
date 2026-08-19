@@ -68,6 +68,7 @@ services/claude_usage.py           ← Claude OAuth usage snapshot、single-flig
 services/codex_acp.py              ← Codex ACP compatibility layer（ordered delta、HTTP MCP、permission identity）
 services/codex_agent.py            ← Codex Provider（canonical permission、資源限制、timeout/cleanup、status 輸出）
 services/codex_preflight.py        ← Codex 部署 preflight（binary/版本/auth/headless/handshake，CLI 可執行）
+services/ai_pipelines.py           ← Provider-neutral 特殊 pipeline（summary/簡報 outline）
 services/claude_agent.py           ← call_claude() AI 推論
 ```
 

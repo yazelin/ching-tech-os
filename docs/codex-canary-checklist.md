@@ -105,6 +105,17 @@ curl -s -H "Cookie: session=<admin-session>" \
 - [ ] log 中無 credentials / token / MCP headers（抽查 `grep -iE 'bearer|sk-|token=' `，命中即立刻處理）
 - [ ] usage snapshot 的 state 大部分時間為 fresh；長期 stale/error 需查 usage monitor
 
+## Pipeline contexts（add-codex-pipeline-parity 之後）
+
+| context | pipeline | 狀態 |
+|---------|----------|------|
+| `compress` | 對話摘要 | 已遷移 `call_ai()`；加入 canary contexts 即可備援 |
+| `presentation` | 簡報 outline JSON | 已遷移；同上 |
+| `research` | 研究（啟動+查詢） | **固定 Claude**（run_skill_script 不可暴露給 Codex），不得加入 canary |
+| `scheduler` | 排程任務 | 維持 `call_claude()`（限流時延後執行即可） |
+
+生圖工具放行（營運決策）：`CODEX_CONTEXT_TOOL_ALLOWLIST=linebot-group:mcp__nanobanana__generate_image`
+
 ## 異常處置（kill switch）
 
 1. `.env` 設 `AI_PROVIDER_MODE=claude`（forced Claude）。

@@ -68,3 +68,11 @@ summary → 簡報 JSON → research → 生圖 → scheduler。每階段獨立 
 ### 1.2/1.3 現況
 
 Characterization 已由第一階段與 coverage 衝刺覆蓋:`test_claude_agent.py`(summary 契約)、`test_api_ai_events.py`(compress 流程)、`test_presentation_service.py`(outline 成功/壞 JSON/fence)、`test_task_scheduler_service.py`(agent task 成功/找不到)、`test_linebot_ai_service.py`(marker/research feedback 解析)。parity fixture 模式(fake provider 注入 call_ai 邊界)已於 `test_ai_routing_observability.py` 建立,3.x 各遷移沿用並於當步補 provider-neutral 斷言。
+
+## 附註:3.4/3.5 評估結論(2026-08-19)
+
+**3.4 生圖:機制就緒,預設不放行,由營運以 env 啟用。** 放行方式為 `CODEX_CONTEXT_TOOL_ALLOWLIST=linebot-group:mcp__nanobanana__generate_image`(全域生圖上限已在 provider 層強制,phase 5 測試覆蓋)。建議等第一次真實 usage 切換、觀察群組在 Codex 下的表現後再開啟。FLUX fallback 與 marker 解析在 caller 端,對 provider 中立,無需修改。
+
+**3.5 scheduler:維持 Claude(阻擋原因記錄)。** 理由:(1) 背景批次任務在 Claude 限流時延後執行即可,無即時性壓力;(2) 排程 agent 的工具多為副作用型(訊息發送、資料寫入),無法整批安全放行;(3) 遷移價值最低。若未來特定唯讀型排程任務有需求,可用 per-context allowlist 個案處理。
+
+**4.2 真實 smoke(2026-08-19)**:forced codex 下 summarize_messages(結構化摘要格式正確)與 generate_outline(合法 JSON、layout 規則符合)皆通過,actual_model=gpt-5.6-luna,ai_route 的 context 欄位正確。
