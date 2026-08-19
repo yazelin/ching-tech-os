@@ -647,42 +647,5 @@ async def call_claude(
         _cleanup_session_workdir(session_dir)
 
 
-async def call_claude_for_summary(
-    messages_to_compress: list[dict],
-    timeout: int = DEFAULT_TIMEOUT,
-) -> ClaudeResponse:
-    """呼叫 Claude 壓縮對話歷史（保持不變）"""
-    summarizer_prompt = await get_prompt_content("summarizer")
-    if not summarizer_prompt:
-        return ClaudeResponse(
-            success=False,
-            message="",
-            error="找不到 summarizer prompt",
-            provider="claude",
-            actual_model="haiku",
-            route_reason="direct_claude",
-            provider_started=False,
-        )
-
-    conversation_parts = []
-    for msg in messages_to_compress:
-        role = msg.get("role", "user")
-        content = msg.get("content", "")
-        conversation_parts.append(f"{role}: {content}")
-
-    conversation_text = "\n".join(conversation_parts)
-
-    full_prompt = f"""請將以下對話歷史壓縮成摘要：
-
----
-{conversation_text}
----
-
-請依照指定格式輸出摘要。"""
-
-    return await call_claude(
-        prompt=full_prompt,
-        model="haiku",
-        system_prompt=summarizer_prompt,
-        timeout=timeout,
-    )
+# call_claude_for_summary 已遷移為 services/ai_pipelines.py::summarize_messages
+# （provider-neutral，3.1 summary pipeline）

@@ -293,24 +293,8 @@ async def test_get_prompt_content_and_summary(monkeypatch: pytest.MonkeyPatch) -
     )
     assert await claude_agent.get_prompt_content("x") == "prompt-body"
 
-    monkeypatch.setattr(claude_agent, "get_prompt_content", AsyncMock(return_value=None))
-    no_prompt = await claude_agent.call_claude_for_summary([{"role": "user", "content": "a"}])
-    assert no_prompt.success is False
-    assert "找不到 summarizer prompt" in (no_prompt.error or "")
-    assert no_prompt.provider == "claude"
-    assert no_prompt.actual_model == "haiku"
-    assert no_prompt.route_reason == "direct_claude"
-    assert no_prompt.provider_started is False
-
-    monkeypatch.setattr(claude_agent, "get_prompt_content", AsyncMock(return_value="summary prompt"))
-    call_mock = AsyncMock(
-        return_value=claude_agent.ClaudeResponse(success=True, message="摘要完成")
-    )
-    monkeypatch.setattr(claude_agent, "call_claude", call_mock)
-    ok = await claude_agent.call_claude_for_summary([{"role": "user", "content": "a"}], timeout=12)
-    assert ok.success is True
-    assert call_mock.await_args.kwargs["model"] == "haiku"
-    assert call_mock.await_args.kwargs["timeout"] == 12
+    # call_claude_for_summary 已遷移至 ai_pipelines.summarize_messages
+    # （契約測試見 test_ai_pipelines.py）
 
 
 class _BaseFakeClient:

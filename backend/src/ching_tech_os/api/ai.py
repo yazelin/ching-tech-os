@@ -7,9 +7,9 @@ from socketio import AsyncServer
 
 from ..models.ai import AiLogCreate
 from ..services import ai_chat, ai_manager
+from ..services.ai_pipelines import summarize_messages
 from ..services.ai_provider import attach_routing_metadata
 from ..services.ai_router import RoutingContext, call_ai
-from ..services.claude_agent import call_claude_for_summary
 from ..services.message import log_message
 
 
@@ -338,8 +338,8 @@ def register_events(sio: AsyncServer):
         # 記錄開始時間
         start_time = time.time()
 
-        # 呼叫 Claude 產生摘要
-        response = await call_claude_for_summary(messages_to_compress)
+        # 呼叫 AI 產生摘要（3.1：summary pipeline 走 provider-neutral call_ai）
+        response = await summarize_messages(messages_to_compress)
 
         # 計算耗時
         duration_ms = int((time.time() - start_time) * 1000)
@@ -352,6 +352,7 @@ def register_events(sio: AsyncServer):
                 context_id=chat_id_str,
                 input_prompt=input_text[:2000],  # 限制長度
                 raw_response=response.message if response.success else None,
+                parsed_response=attach_routing_metadata(None, response),
                 model="claude-haiku",
                 success=response.success,
                 error_message=response.error if not response.success else None,

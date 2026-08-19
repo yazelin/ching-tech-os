@@ -205,7 +205,7 @@ async def test_compress_chat_success_and_failure(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(ai_api.ai_manager, "get_prompt_by_name", AsyncMock(return_value={"id": uuid4()}))
     monkeypatch.setattr(
         ai_api,
-        "call_claude_for_summary",
+        "summarize_messages",
         AsyncMock(return_value=_response(success=True, message="摘要內容")),
     )
     update_messages = AsyncMock()
@@ -223,7 +223,7 @@ async def test_compress_chat_success_and_failure(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(ai_api.ai_manager, "get_prompt_by_name", AsyncMock(return_value={"id": uuid4()}))
     monkeypatch.setattr(
         ai_api,
-        "call_claude_for_summary",
+        "summarize_messages",
         AsyncMock(return_value=_response(success=False, error="摘要失敗")),
     )
     monkeypatch.setattr(ai_api.ai_manager, "create_log", AsyncMock())
