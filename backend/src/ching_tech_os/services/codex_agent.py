@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import shutil
 import time
 from collections.abc import Callable
@@ -30,6 +31,10 @@ from .claude_agent import (
 from .codex_acp import CodexAcpClient
 
 logger = logging.getLogger(__name__)
+
+# adapter 會以 tool 事件回報 MCP server 啟動（title=mcp__<server>__startup），
+# 屬基礎設施通知而非模型工具呼叫；真實 MCP 工具的 title 為 mcp.<server>.<tool> 點分格式
+_INFRA_EVENT_TITLE = re.compile(r"mcp__[\w-]+__startup\Z")
 
 _SECURITY_PROMPT = """
 安全限制（由 ching-tech-os framework 強制執行）：
@@ -347,6 +352,7 @@ class CodexProvider:
 
         limits = self._build_tool_limits(allowed, tool_call_limits)
         counts: dict[str, int] = {}
+        infra_tool_ids: set[str] = set()
         pending: dict[str, tuple[str, dict[str, Any]]] = {}
         active: dict[str, tuple[str, float, dict[str, Any]]] = {}
         approved: set[str] = set()
@@ -367,6 +373,11 @@ class CodexProvider:
         @client.on_tool_start
         async def handle_tool_start(tool_id: str, title: str, raw_input: dict) -> None:
             nonlocal security_violation
+            if _INFRA_EVENT_TITLE.fullmatch(str(title or "")):
+                # MCP server 啟動通知：忽略（含後續的 completed end 事件）
+                infra_tool_ids.add(tool_id)
+                logger.debug("codex_infra_event title=%s", title)
+                return
             identity = _canonical_identity(title, raw_input)
             if identity is None:
                 # title 為工具名稱類資訊，截斷後記錄供追查（如 Codex 內建功能）
@@ -416,6 +427,9 @@ class CodexProvider:
         @client.on_tool_end
         async def handle_tool_end(tool_id: str, status: str, raw_output: Any) -> None:
             nonlocal security_violation
+            if tool_id in infra_tool_ids:
+                infra_tool_ids.discard(tool_id)
+                return
             pending.pop(tool_id, None)
             item = active.pop(tool_id, None)
             if tool_id not in approved or item is None:

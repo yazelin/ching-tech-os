@@ -633,3 +633,44 @@ async def test_unexpected_exception_types_fail_closed_and_trip_circuit() -> None
     assert breaker.status()["consecutive_failures"] == 1
     # client 必須清理
     assert factory_clients[0].disconnected is True
+
+
+@pytest.mark.asyncio
+async def test_mcp_server_startup_events_are_ignored_not_violations() -> None:
+    """2026-08-19 真實流量發現:adapter 會以 tool 事件回報 MCP server 啟動
+    （title=mcp__<server>__startup），不得誤判為非 canonical 工具而作廢回應。"""
+
+    class StartupEventClient(FakeCodexClient):
+        async def prompt(self, text: str) -> str:
+            self.prompt_text = text
+            # 模擬 adapter 的 MCP server 啟動通知(start + completed end)
+            for i, server in enumerate(("nanobanana", "erpnext")):
+                tool_id = f"infra-{i}"
+                await self.events["tool_start"](tool_id, f"mcp__{server}__startup", {})
+                await self.events["tool_end"](tool_id, "completed", None)
+            # 之後正常執行一個合法工具
+            await self._emit_tools()
+            self._text_buffer = "完成"
+            return "完成"
+
+    clients: list[StartupEventClient] = []
+
+    def factory(**kwargs):
+        client = StartupEventClient(scenario="tool", **kwargs)
+        clients.append(client)
+        return client
+
+    provider = codex_agent.CodexProvider(
+        client_factory=factory,
+        adapter_path="/bin/true",
+        codex_path="/bin/true",
+    )
+    result = await provider.call(
+        prompt="hi", tools=["mcp__ching-tech-os__search_knowledge"]
+    )
+    # startup 事件被忽略,回應與合法工具都正常
+    assert result.success is True
+    assert result.message == "完成"
+    assert [t.name for t in result.tool_calls] == [
+        "mcp__ching-tech-os__search_knowledge"
+    ]
