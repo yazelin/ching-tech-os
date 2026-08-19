@@ -379,8 +379,17 @@ class CodexProvider:
             identity = _canonical_identity(title, raw_input)
             tool_id = str(raw_input.get("_acp_tool_call_id", ""))
             async with permission_lock:
-                if identity is None or identity not in allowed or not tool_id:
-                    security_violation = "permission_denied"
+                if not tool_id:
+                    # 少了 correlation id 代表 adapter 契約破壞，識別鏈斷 → 整體作廢
+                    security_violation = "permission_correlation_missing"
+                    return _permission_option(options, allow=False)
+                if identity is None or identity not in allowed:
+                    # 模型要求了白名單外或無法辨識的工具：拒絕即已 fail-closed，
+                    # 不作廢整個回應（prompt 可能宣傳了被過濾的工具，屬預期情境）
+                    logger.warning(
+                        "codex_tool_rejected reason=not_allowed title=%s",
+                        str(title)[:80],
+                    )
                     return _permission_option(options, allow=False)
                 tool_name = _canonical_tool_name(identity)
                 pending_entry = pending.get(tool_id)
@@ -457,6 +466,10 @@ class CodexProvider:
 
             text = await asyncio.wait_for(run(), timeout=max(0.1, timeout))
             if security_violation:
+                # 子類型只含固定枚舉值（non_canonical_tool 等），可安全記錄
+                logger.warning(
+                    "codex_security_violation subtype=%s", security_violation
+                )
                 return self._failure_response(
                     client, "security_violation", provider_started, tool_calls, tool_timings
                 )

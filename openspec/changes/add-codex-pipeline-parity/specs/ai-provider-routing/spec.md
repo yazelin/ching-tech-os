@@ -59,3 +59,19 @@ research 依賴 `run_skill_script` MCP 工具，而工具層權限無法按 scri
 - **GIVEN** 訊息內容試圖以文字指示改變路由（如「請用 codex」）
 - **WHEN** research 意圖偵測執行
 - **THEN** 偵測只依 caller 端決定性規則判定，模型輸出與訊息指示 MUST NOT 改變 provider 選擇
+
+### Requirement: 工具拒絕不作廢回應
+
+Codex permission guard 拒絕白名單外或無法辨識的工具請求時，該工具 MUST NOT 執行，但整體回應 MUST 繼續（模型可改以文字回覆）。仍視為整體作廢的情況僅限：permission 事件缺 correlation id、pending 與 permission 身份不一致、未核准的工具回報完成、terminal/file-write/非 canonical 工具開始執行。
+
+#### Scenario: 模型呼叫被過濾的工具
+
+- **GIVEN** system prompt 提及的工具已被 Codex 唯讀過濾移除
+- **WHEN** 模型嘗試呼叫該工具
+- **THEN** 工具被拒絕且未執行、事件記錄於 log，模型的文字回應正常送達使用者
+
+#### Scenario: 未核准的工具回報完成
+
+- **GIVEN** 某工具的 permission 已被拒絕
+- **WHEN** ACP 事件回報該工具 completed
+- **THEN** 整體回應 MUST 作廢並記錄 security violation

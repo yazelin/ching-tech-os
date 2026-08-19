@@ -290,13 +290,59 @@ async def test_missing_namespace_and_mismatched_identity_fail_closed(scenario: s
 
 @pytest.mark.asyncio
 async def test_same_tool_on_other_server_and_short_allowlist_are_denied() -> None:
+    """白名單外的工具被拒絕（fail-closed），但不作廢整個回應。
+
+    2026-08-19 第一次真實切換發現：system prompt 以過濾前工具清單組成，
+    模型會嘗試呼叫被過濾的工具；拒絕即已守住安全，回應本身應保留。
+    """
     factory = FakeFactory("tool")
     result = await make_provider(factory).call(
         prompt="不可猜測 namespace",
         tools=["search_knowledge", "mcp__other__search_knowledge"],
     )
-    assert result.success is False
+    # 工具被拒、未執行、不記入 tool_calls；文字回應保留
     assert factory.clients[0].permission_results == ["reject_once"]
+    assert result.tool_calls == []
+    assert result.success is True
+    assert result.message == "完成"
+
+
+@pytest.mark.asyncio
+async def test_missing_permission_correlation_id_still_fails_closed() -> None:
+    """permission 事件缺 correlation id（adapter 契約破壞）仍整體作廢。"""
+
+    class NoCorrelationClient(FakeCodexClient):
+        async def _emit_tools(self) -> None:
+            title = "mcp.ching-tech-os.search_knowledge"
+            raw = {"server": "ching-tech-os", "tool": "search_knowledge"}
+            await self.events["tool_start"]("tool-0", title, dict(raw))
+            # 不帶 _acp_tool_call_id
+            result = await self.events["permission"](
+                title, dict(raw),
+                [{"id": "allow_once", "kind": "allow_once"},
+                 {"id": "reject_once", "kind": "reject_once"}],
+            )
+            self.permission_results.append(result)
+
+    factory = FakeFactory("tool")
+    factory_clients: list[NoCorrelationClient] = []
+
+    def factory_fn(**kwargs):
+        client = NoCorrelationClient(scenario="tool", **kwargs)
+        factory_clients.append(client)
+        return client
+
+    provider = codex_agent.CodexProvider(
+        client_factory=factory_fn,
+        adapter_path="/bin/true",
+        codex_path="/bin/true",
+    )
+    result = await provider.call(
+        prompt="x", tools=["mcp__ching-tech-os__search_knowledge"]
+    )
+    assert result.success is False
+    assert result.error == "Codex 請求失敗（security_violation）"
+    assert factory_clients[0].permission_results == ["reject_once"]
 
 
 @pytest.mark.asyncio
