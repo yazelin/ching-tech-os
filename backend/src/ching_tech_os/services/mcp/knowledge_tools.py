@@ -187,10 +187,12 @@ async def search_knowledge(
         )
 
         if not result.items:
+            hint = "（未綁定 CTOS 帳號，只看得到公開條目）" if public_only else ""
             if search_query:
-                return f"找不到包含「{query}」的知識"
-            else:
-                return "知識庫目前是空的"
+                return f"找不到包含「{query}」的知識{hint}"
+            if public_only:
+                return f"目前沒有公開的知識條目{hint}"
+            return "知識庫目前是空的"
 
         # 格式化結果
         items = result.items[:limit]

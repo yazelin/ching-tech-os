@@ -3,6 +3,8 @@
 FastMCP 實例和共用輔助函數。
 """
 
+import functools
+import inspect
 import logging
 import os
 from datetime import datetime, timedelta, timezone
@@ -36,6 +38,36 @@ mcp = FastMCP(
 )
 
 
+def _tool_with_identity(*deco_args, **deco_kwargs):
+    """mcp.tool 的包裝：工具簽章有 ctos_user_id 就自動用 resolve_ctos_user_id 填。
+
+    身分由伺服器端保證，不再依賴模型記得帶參數
+    （bypassPermissions 模式下 on_tool_input_transform 不會被呼叫）。
+    """
+    register = _original_tool(*deco_args, **deco_kwargs)
+
+    def decorator(fn):
+        sig = inspect.signature(fn)
+        if "ctos_user_id" not in sig.parameters:
+            return register(fn)
+
+        @functools.wraps(fn)
+        async def with_identity(*args, **kwargs):
+            bound = sig.bind_partial(*args, **kwargs)
+            bound.arguments["ctos_user_id"] = resolve_ctos_user_id(
+                bound.arguments.get("ctos_user_id")
+            )
+            return await fn(*bound.args, **bound.kwargs)
+
+        return register(with_identity)
+
+    return decorator
+
+
+_original_tool = mcp.tool
+mcp.tool = _tool_with_identity
+
+
 # ============================================================
 # 資料庫連線輔助函數
 # ============================================================
@@ -55,21 +87,21 @@ async def ensure_db_connection():
 
 
 def resolve_ctos_user_id(ctos_user_id: int | None) -> int | None:
-    """解析 ctos_user_id，參數為 None 時 fallback 讀取環境變數。
+    """解析 ctos_user_id：環境變數優先，只認伺服器驗過的身分。
 
-    bypassPermissions 模式下 on_tool_input_transform 不會被呼叫，
-    AI 可能不會在工具參數中傳入 ctos_user_id。此時由 framework
-    注入的 CTOS_USER_ID 環境變數提供 fallback。
+    claude_agent 為每個 session 啟動 MCP 子行程時，會把該 LINE/Telegram
+    使用者綁定的 ctos_user_id 放進 CTOS_USER_ID 環境變數。這是伺服器驗過的
+    身分，模型在工具參數裡打什麼都不能覆蓋（防冒充）。
+
+    環境變數不存在時（例如網頁端 execute_tool 直接呼叫），才採用參數。
     """
-    if ctos_user_id is not None:
-        return ctos_user_id
     env_val = os.environ.get("CTOS_USER_ID")
     if env_val:
         try:
             return int(env_val)
         except ValueError:
             pass
-    return None
+    return ctos_user_id
 
 
 def resolve_agent_allowed_shared_sources() -> list[str] | None:
