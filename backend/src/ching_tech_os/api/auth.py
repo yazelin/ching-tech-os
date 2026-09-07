@@ -242,6 +242,32 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
     # 先嘗試從資料庫查找使用者
     user_data = await get_user_for_auth(request.username)
 
+    # 檢查帳號是否停用（需在認證分支之前，密碼認證與 SMB 認證皆適用）
+    if user_data and not user_data.get("is_active", True):
+        # 停用帳號的登入嘗試也要留紀錄：有人在試離職員工的帳號時管理員才看得到
+        try:
+            await record_login(
+                username=request.username,
+                success=False,
+                ip_address=ip_address,
+                user_id=user_data["id"],
+                failure_reason="帳號已停用",
+                user_agent=user_agent,
+                geo=geo,
+                device=device_info,
+            )
+            await log_message(
+                severity=MessageSeverity.WARNING,
+                source=MessageSource.SECURITY,
+                title=f"停用帳號登入嘗試：{request.username}",
+                content=f"來自 {ip_address} 嘗試登入已停用的帳號",
+                category="auth",
+                metadata={"ip": ip_address, "username": request.username},
+            )
+        except Exception:
+            pass  # 記錄失敗不影響回應
+        return LoginResponse(success=False, error="此帳號已被停用")
+
     auth_success = False
     use_password_auth = False
     must_change_password = False
@@ -250,10 +276,6 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
     if user_data and user_data.get("password_hash"):
         # 使用密碼認證
         use_password_auth = True
-
-        # 檢查帳號是否停用
-        if not user_data.get("is_active", True):
-            return LoginResponse(success=False, error="此帳號已被停用")
 
         # 驗證密碼
         if verify_password(request.password, user_data["password_hash"]):
