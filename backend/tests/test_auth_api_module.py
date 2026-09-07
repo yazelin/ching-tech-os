@@ -238,3 +238,30 @@ async def test_logout_and_change_password(monkeypatch: pytest.MonkeyPatch) -> No
         session=_session("user", user_id=1),
     )
     assert resp.success is True
+
+
+@pytest.mark.asyncio
+async def test_login_inactive_smb_user_blocked_and_recorded(monkeypatch: pytest.MonkeyPatch) -> None:
+    """停用帳號沒有密碼（走 SMB）也要擋，且不能碰 NAS、要留紀錄。"""
+    req = _request({"user-agent": "pytest-agent"})
+    login_req = LoginRequest(username="gone", password="p1")
+    monkeypatch.setattr(auth, "resolve_ip_location", lambda _ip: None)
+    monkeypatch.setattr(auth, "parse_device_info", lambda _ua: None)
+    record = AsyncMock(return_value=1)
+    monkeypatch.setattr(auth, "record_login", record)
+    monkeypatch.setattr(auth, "log_message", AsyncMock(return_value=1))
+    monkeypatch.setattr(auth.settings, "enable_nas_auth", True)
+    monkeypatch.setattr(auth, "get_user_for_auth", AsyncMock(return_value={
+        "id": 5,
+        "password_hash": None,
+        "is_active": False,
+    }))
+    smb = AsyncMock(return_value=None)  # NAS 帳密仍有效
+    monkeypatch.setattr(auth, "run_in_smb_pool", smb)
+
+    resp = await auth.login(login_req, req)
+
+    assert resp.success is False and "停用" in (resp.error or "")
+    smb.assert_not_awaited()
+    assert record.await_args.kwargs["failure_reason"] == "帳號已停用"
+    assert record.await_args.kwargs["user_id"] == 5
