@@ -68,7 +68,7 @@ def test_get_nas_connection_paths(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(nas_api.nas_connection_manager, "get_connection", lambda t: conn if t == "ok" else None)
     monkeypatch.setattr(nas_api, "create_smb_service", lambda username, password, host: ("svc", host, username, password))
 
-    session = SimpleNamespace(username="u", password="p", nas_host="h")
+    session = SimpleNamespace(username="u", password="p", nas_host="h", nas_username=None)
     assert nas_api.get_nas_connection("ok", session=session) == (smb, "h")
     with pytest.raises(HTTPException) as e1:
         nas_api.get_nas_connection("bad", session=session)
@@ -76,7 +76,7 @@ def test_get_nas_connection_paths(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert nas_api.get_nas_connection(None, session=session)[1] == "h"
     with pytest.raises(HTTPException):
-        nas_api.get_nas_connection(None, session=SimpleNamespace(username="u", password=None, nas_host="h"))
+        nas_api.get_nas_connection(None, session=SimpleNamespace(username="u", password=None, nas_host="h", nas_username=None))
 
     # with query parameter
     assert nas_api.get_nas_connection_with_query(None, "ok", session=session) == (smb, "h")
@@ -237,3 +237,24 @@ async def test_delete_rename_mkdir_search_routes(monkeypatch: pytest.MonkeyPatch
     with pytest.raises(HTTPException) as e4:
         await nas_api.search_files(path="/docs", query="a", nas_conn=nas_conn)
     assert e4.value.status_code == 404
+
+
+def test_get_nas_connection_uses_bound_nas_username(monkeypatch: pytest.MonkeyPatch) -> None:
+    from datetime import datetime
+    from ching_tech_os.models.auth import SessionData
+    import ching_tech_os.api.nas as nas_api
+
+    captured = {}
+
+    def fake_create(username, password, host=None, **_kw):
+        captured["username"] = username
+        return object()
+
+    monkeypatch.setattr(nas_api, "create_smb_service", fake_create)
+    now = datetime.now()
+    session = SessionData(
+        username="alice", password="pw", nas_host="h", user_id=1,
+        created_at=now, expires_at=now, nas_username="nas-a",
+    )
+    nas_api.get_nas_connection(x_nas_token=None, session=session)
+    assert captured["username"] == "nas-a"

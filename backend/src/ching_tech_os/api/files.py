@@ -114,7 +114,7 @@ def _get_nas_smb_service(
     # Fallback: 使用 Session 密碼
     if session.password:
         return create_smb_service(
-            username=session.username,
+            username=session.nas_username or session.username,
             password=session.password,
             host=session.nas_host,
         ), session.nas_host

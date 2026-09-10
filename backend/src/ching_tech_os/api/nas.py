@@ -182,7 +182,7 @@ def get_nas_connection(
     # Fallback: 使用 Session 密碼（向後相容）
     if session.password:
         return create_smb_service(
-            username=session.username,
+            username=session.nas_username or session.username,
             password=session.password,
             host=session.nas_host,
         ), session.nas_host
@@ -348,7 +348,7 @@ def get_nas_connection_with_query(
     # Fallback: 使用 Session 密碼（向後相容）
     if session.password:
         return create_smb_service(
-            username=session.username,
+            username=session.nas_username or session.username,
             password=session.password,
             host=session.nas_host,
         ), session.nas_host
