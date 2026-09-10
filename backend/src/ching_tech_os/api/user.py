@@ -190,6 +190,11 @@ async def bind_nas_account(
     session: SessionData = Depends(get_current_session),
 ) -> NasBindingResponse:
     """以 NAS 帳密驗證後，把 NAS 帳號綁到目前登入的平台帳號"""
+    if session.read_only:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="此 API token 為唯讀，無法執行寫入操作",
+        )
     smb = create_smb_service(request.nas_username, request.password)
     try:
         await run_in_smb_pool(smb.test_auth)
@@ -210,6 +215,11 @@ async def unbind_nas_account(
     session: SessionData = Depends(get_current_session),
 ) -> NasBindingResponse:
     """解除 NAS 帳號綁定"""
+    if session.read_only:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="此 API token 為唯讀，無法執行寫入操作",
+        )
     await set_nas_username(session.user_id, None)
     return NasBindingResponse(success=True, nas_username=None)
 

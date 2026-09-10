@@ -697,3 +697,37 @@ async def test_bind_nas_paths(user_app, monkeypatch: pytest.MonkeyPatch) -> None
         r = await c.delete("/api/user/me/nas-binding")
         assert r.status_code == 200 and r.json() == {"success": True, "nas_username": None}
         unbind.assert_awaited_with(5, None)
+
+
+@pytest.mark.asyncio
+async def test_bind_nas_rejects_read_only_pat(
+    user_app, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """唯讀 PAT 不可綁定或解綁 NAS 帳號"""
+    from ching_tech_os.api.auth import get_current_session
+
+    def _read_only_session() -> SessionData:
+        now = datetime.now(timezone.utc)
+        return SessionData(
+            username="alice", password="", nas_host="localhost", user_id=5,
+            created_at=now, expires_at=now, role="user",
+            auth_type="pat", read_only=True,
+        )
+
+    user_app.dependency_overrides[get_current_session] = _read_only_session
+
+    run_in_smb_pool = AsyncMock()
+    set_nas = AsyncMock()
+    monkeypatch.setattr(user_api, "create_smb_service", lambda u, p: MagicMock())
+    monkeypatch.setattr(user_api, "run_in_smb_pool", run_in_smb_pool)
+    monkeypatch.setattr(user_api, "set_nas_username", set_nas)
+
+    async with AsyncClient(transport=ASGITransport(app=user_app), base_url="http://t") as c:
+        r = await c.post("/api/user/me/nas-binding", json={"nas_username": "nas-a", "password": "x"})
+        assert r.status_code == 403
+
+        r = await c.delete("/api/user/me/nas-binding")
+        assert r.status_code == 403
+
+    run_in_smb_pool.assert_not_called()
+    set_nas.assert_not_called()
