@@ -88,6 +88,7 @@ async def test_auth_dependency_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
 async def test_login_paths(monkeypatch: pytest.MonkeyPatch) -> None:
     req = _request({"user-agent": "pytest-agent"})
     login_req = LoginRequest(username="u1", password="p1", device=DeviceInfo(device_type="desktop", browser="Chrome"))
+    login_req_local = LoginRequest(username="u1", password="p1", method="local", device=DeviceInfo(device_type="desktop", browser="Chrome"))
     geo = SimpleNamespace(country="TW", city="Taipei")
     ua_device = SimpleNamespace(device_type=SimpleNamespace(value="desktop"), browser="Firefox", os="Linux")
 
@@ -111,7 +112,7 @@ async def test_login_paths(monkeypatch: pytest.MonkeyPatch) -> None:
     }))
     monkeypatch.setattr(auth, "verify_password", lambda _pw, _h: True)
     monkeypatch.setattr(auth, "update_last_login", AsyncMock())
-    ok = await auth.login(login_req, req)
+    ok = await auth.login(login_req_local, req)
     assert ok.success is True and ok.token == "token-1" and ok.must_change_password is True
 
     # 帳號停用
@@ -120,7 +121,7 @@ async def test_login_paths(monkeypatch: pytest.MonkeyPatch) -> None:
         "password_hash": "h",
         "is_active": False,
     }))
-    disabled = await auth.login(login_req, req)
+    disabled = await auth.login(login_req_local, req)
     assert disabled.success is False and "停用" in (disabled.error or "")
 
     # 密碼錯誤（失敗訊息路徑）
@@ -130,12 +131,12 @@ async def test_login_paths(monkeypatch: pytest.MonkeyPatch) -> None:
         "is_active": True,
     }))
     monkeypatch.setattr(auth, "verify_password", lambda _pw, _h: False)
-    bad_pw = await auth.login(login_req, req)
+    bad_pw = await auth.login(login_req_local, req)
     assert bad_pw.success is False
 
     # SMB 認證成功 + upsert_user
     monkeypatch.setattr(auth.settings, "enable_nas_auth", True)
-    monkeypatch.setattr(auth, "get_user_for_auth", AsyncMock(return_value=None))
+    monkeypatch.setattr(auth, "get_user_by_nas_username", AsyncMock(return_value=None))
     monkeypatch.setattr(auth, "create_smb_service", lambda _u, _p: SimpleNamespace(test_auth=lambda: None))
     monkeypatch.setattr(auth, "run_in_smb_pool", AsyncMock(return_value=None))
     monkeypatch.setattr(auth, "upsert_user", AsyncMock(return_value=77))
@@ -154,20 +155,20 @@ async def test_login_paths(monkeypatch: pytest.MonkeyPatch) -> None:
         await auth.login(login_req, req)
     assert e1.value.status_code == 503
 
-    # NAS auth disabled + user 不存在
+    # NAS 驗證關閉 → nas 方式直接失敗（不查使用者）
     monkeypatch.setattr(auth.settings, "enable_nas_auth", False)
-    monkeypatch.setattr(auth, "get_user_for_auth", AsyncMock(return_value=None))
+    monkeypatch.setattr(auth, "get_user_by_nas_username", AsyncMock(return_value=None))
     no_user = await auth.login(login_req, req)
-    assert no_user.success is False and "不存在" in (no_user.error or "")
+    assert no_user.success is False and "NAS 登入未啟用" in (no_user.error or "")
 
-    # NAS auth disabled + user 存在但無密碼
-    monkeypatch.setattr(auth, "get_user_for_auth", AsyncMock(return_value={"id": 3, "password_hash": None}))
+    # NAS 驗證關閉 + 使用者存在但無密碼綁定 → 仍直接失敗
+    monkeypatch.setattr(auth, "get_user_by_nas_username", AsyncMock(return_value={"id": 3, "password_hash": None}))
     no_pwd = await auth.login(login_req, req)
-    assert no_pwd.success is False and "帳號或密碼錯誤" in (no_pwd.error or "")
+    assert no_pwd.success is False and "NAS 登入未啟用" in (no_pwd.error or "")
 
     # upsert_user 失敗
     monkeypatch.setattr(auth.settings, "enable_nas_auth", True)
-    monkeypatch.setattr(auth, "get_user_for_auth", AsyncMock(return_value=None))
+    monkeypatch.setattr(auth, "get_user_by_nas_username", AsyncMock(return_value=None))
     monkeypatch.setattr(auth, "run_in_smb_pool", AsyncMock(return_value=None))
     monkeypatch.setattr(auth, "upsert_user", AsyncMock(side_effect=RuntimeError("db down")))
     with pytest.raises(HTTPException) as e2:
@@ -251,7 +252,7 @@ async def test_login_inactive_smb_user_blocked_and_recorded(monkeypatch: pytest.
     monkeypatch.setattr(auth, "record_login", record)
     monkeypatch.setattr(auth, "log_message", AsyncMock(return_value=1))
     monkeypatch.setattr(auth.settings, "enable_nas_auth", True)
-    monkeypatch.setattr(auth, "get_user_for_auth", AsyncMock(return_value={
+    monkeypatch.setattr(auth, "get_user_by_nas_username", AsyncMock(return_value={
         "id": 5,
         "password_hash": None,
         "is_active": False,
@@ -265,3 +266,84 @@ async def test_login_inactive_smb_user_blocked_and_recorded(monkeypatch: pytest.
     smb.assert_not_awaited()
     assert record.await_args.kwargs["failure_reason"] == "帳號已停用"
     assert record.await_args.kwargs["user_id"] == 5
+
+
+@pytest.mark.asyncio
+async def test_login_local_method_never_touches_smb(monkeypatch: pytest.MonkeyPatch) -> None:
+    """local：只驗密碼；沒密碼的帳號不會 fallback 去問 NAS。"""
+    req = _request({"user-agent": "pytest-agent"})
+    monkeypatch.setattr(auth, "resolve_ip_location", lambda _ip: None)
+    monkeypatch.setattr(auth, "parse_device_info", lambda _ua: None)
+    monkeypatch.setattr(auth, "record_login", AsyncMock(return_value=1))
+    monkeypatch.setattr(auth, "log_message", AsyncMock(return_value=1))
+    monkeypatch.setattr(auth, "emit_new_message", AsyncMock())
+    monkeypatch.setattr(auth, "emit_unread_count", AsyncMock())
+    monkeypatch.setattr(auth.settings, "enable_nas_auth", True)
+    smb = AsyncMock(return_value=None)
+    monkeypatch.setattr(auth, "run_in_smb_pool", smb)
+    create = AsyncMock(return_value="tok")
+    monkeypatch.setattr(auth.session_manager, "create_session", create)
+    monkeypatch.setattr(auth, "get_user_role", AsyncMock(return_value="user"))
+    monkeypatch.setattr(permissions_service, "get_user_app_permissions_sync", lambda _r, _u: {})
+    monkeypatch.setattr(auth, "update_last_login", AsyncMock())
+
+    # 沒有密碼的帳號用 local 登入 → 失敗，且 SMB 沒被呼叫
+    monkeypatch.setattr(auth, "get_user_for_auth", AsyncMock(return_value={
+        "id": 1, "password_hash": None, "is_active": True, "nas_username": "u1",
+    }))
+    res = await auth.login(LoginRequest(username="u1", password="p", method="local"), req)
+    assert res.success is False and res.error == "帳號或密碼錯誤"
+    smb.assert_not_called()
+
+    # 有密碼且正確 → 成功，session 不存密碼
+    monkeypatch.setattr(auth, "get_user_for_auth", AsyncMock(return_value={
+        "id": 1, "password_hash": "h", "is_active": True, "must_change_password": False,
+        "preferences": {}, "nas_username": None,
+    }))
+    monkeypatch.setattr(auth, "verify_password", lambda _pw, _h: True)
+    res = await auth.login(LoginRequest(username="u1", password="p", method="local"), req)
+    assert res.success is True and res.token == "tok"
+    assert create.call_args[0][1] == ""  # session_password
+
+
+@pytest.mark.asyncio
+async def test_login_nas_method_binds_by_nas_username(monkeypatch: pytest.MonkeyPatch) -> None:
+    """nas：SMB 驗過後依 nas_username 找人；找不到就自動建帳號。"""
+    req = _request({"user-agent": "pytest-agent"})
+    monkeypatch.setattr(auth, "resolve_ip_location", lambda _ip: None)
+    monkeypatch.setattr(auth, "parse_device_info", lambda _ua: None)
+    monkeypatch.setattr(auth, "record_login", AsyncMock(return_value=1))
+    monkeypatch.setattr(auth, "log_message", AsyncMock(return_value=1))
+    monkeypatch.setattr(auth, "emit_new_message", AsyncMock())
+    monkeypatch.setattr(auth, "emit_unread_count", AsyncMock())
+    monkeypatch.setattr(auth.settings, "enable_nas_auth", True)
+    monkeypatch.setattr(auth, "run_in_smb_pool", AsyncMock(return_value=None))
+    create = AsyncMock(return_value="tok")
+    monkeypatch.setattr(auth.session_manager, "create_session", create)
+    monkeypatch.setattr(auth, "get_user_role", AsyncMock(return_value="user"))
+    monkeypatch.setattr(permissions_service, "get_user_app_permissions_sync", lambda _r, _u: {})
+    monkeypatch.setattr(auth, "update_last_login", AsyncMock())
+    monkeypatch.setattr(auth, "get_user_for_auth", AsyncMock(side_effect=AssertionError("nas 不該查 username")))
+
+    # 平台帳號 alice 綁了 NAS 帳號 nas-a：用 nas-a 登入，session 的 username 是 alice
+    monkeypatch.setattr(auth, "get_user_by_nas_username", AsyncMock(return_value={
+        "id": 3, "username": "alice", "nas_username": "nas-a", "password_hash": "h",
+        "is_active": True, "preferences": {},
+    }))
+    res = await auth.login(LoginRequest(username="nas-a", password="p", method="nas"), req)
+    assert res.success is True and res.username == "alice"
+    assert create.call_args[0][0] == "alice"
+    assert create.call_args[0][1] == "p"  # SMB 密碼要留在 session
+
+    # 沒綁過的 NAS 帳號 → upsert_user 自動建
+    monkeypatch.setattr(auth, "get_user_by_nas_username", AsyncMock(return_value=None))
+    upsert = AsyncMock(return_value=10)
+    monkeypatch.setattr(auth, "upsert_user", upsert)
+    res = await auth.login(LoginRequest(username="new-nas", password="p", method="nas"), req)
+    assert res.success is True
+    upsert.assert_awaited_once_with("new-nas")
+
+    # NAS 驗證關閉 → nas 方式直接失敗
+    monkeypatch.setattr(auth.settings, "enable_nas_auth", False)
+    res = await auth.login(LoginRequest(username="new-nas", password="p", method="nas"), req)
+    assert res.success is False
