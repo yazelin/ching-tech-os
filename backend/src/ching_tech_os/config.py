@@ -170,6 +170,11 @@ def _parse_context_tool_allowlist(value: str) -> dict[str, frozenset[str]]:
     return parsed
 
 
+def _parse_extra_origins(value: str) -> list[str]:
+    """CORS_EXTRA_ORIGINS：逗號分隔，去空白，丟掉空項"""
+    return [o.strip() for o in value.split(",") if o.strip()]
+
+
 class Settings:
     """應用程式設定"""
 
@@ -456,7 +461,7 @@ class Settings:
         # MD2PPT/MD2DOC 外部應用程式
         "https://md-2-ppt-evolution.vercel.app",
         "https://md-2-doc-evolution.vercel.app",
-    ] + [o.strip() for o in _get_env("CORS_EXTRA_ORIGINS", "").split(",") if o.strip()]
+    ] + _parse_extra_origins(_get_env("CORS_EXTRA_ORIGINS", ""))
 
     # ===================
     # 相容性屬性（向後相容，使用統一的 NAS 設定）
