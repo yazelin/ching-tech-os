@@ -5,6 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import asyncpg
 import pytest
 
 from ching_tech_os.services import user as user_service
@@ -144,7 +145,7 @@ async def test_nas_username_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
             None,                                        # get_user_by_nas_username miss
             {"id": 9, "nas_username": "n", "password_hash": None},  # get_user_for_auth
         ]),
-        execute=AsyncMock(side_effect=["UPDATE 1", Exception("duplicate key value violates unique constraint")]),
+        execute=AsyncMock(side_effect=["UPDATE 1", asyncpg.UniqueViolationError("duplicate key")]),
     )
     _patch_conn(monkeypatch, conn)
 

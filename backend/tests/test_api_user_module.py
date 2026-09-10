@@ -106,6 +106,7 @@ async def test_update_current_user_paths(monkeypatch: pytest.MonkeyPatch):
     )
 
     monkeypatch.setattr(user_api, "update_user_display_name", AsyncMock(return_value=_user_row(display_name="新名稱")))
+    monkeypatch.setattr(user_api, "get_user_by_username", AsyncMock(return_value=_user_row(display_name="新名稱")))
     updated = await user_api.update_current_user(UpdateUserRequest(display_name="新名稱"), _session())
     assert updated.display_name == "新名稱"
 

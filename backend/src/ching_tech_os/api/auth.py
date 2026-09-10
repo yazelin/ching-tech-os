@@ -250,9 +250,11 @@ async def _reject_inactive(request, user_data, ip_address, user_agent, geo, devi
 async def login(request: LoginRequest, req: Request) -> LoginResponse:
     """登入並建立 session
 
-    支援兩種認證方式：
-    1. 密碼認證：使用者已設定密碼（password_hash 不為 NULL）
-    2. SMB 認證：使用者尚未設定密碼，fallback 到 NAS SMB 驗證（過渡期）
+    依 `request.method` 決定認證方式：
+    - `auto`（預設，舊前端不帶 method）：依 username 查到使用者且有設定密碼
+      （password_hash 不為 NULL）就走 `local`，否則走 `nas`
+    - `nas`：以 NAS 帳密 SMB 驗證，成功後依 `nas_username` 綁定找出（或建立）平台帳號
+    - `local`：平台帳號密碼認證，只驗密碼雜湊，不 fallback SMB
     """
     # 取得客戶端資訊
     ip_address = get_client_ip(req)

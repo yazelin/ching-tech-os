@@ -666,6 +666,25 @@ async def test_me_includes_nas_username(user_app, monkeypatch: pytest.MonkeyPatc
 
 
 @pytest.mark.asyncio
+async def test_patch_me_includes_nas_username(user_app, monkeypatch: pytest.MonkeyPatch) -> None:
+    """PATCH /api/user/me 回應要跟 GET /me 一樣帶 nas_username 與 has_password"""
+    update_mock = AsyncMock(return_value=_user_row(
+        id=5, username="alice", nas_username="nas-a", display_name="新名稱",
+    ))
+    monkeypatch.setattr(user_api, "update_user_display_name", update_mock)
+    monkeypatch.setattr(user_api, "get_user_by_username", AsyncMock(return_value=_user_row(
+        id=5, username="alice", nas_username="nas-a", display_name="新名稱",
+    )))
+    async with AsyncClient(transport=ASGITransport(app=user_app), base_url="http://t") as c:
+        r = await c.patch("/api/user/me", json={"display_name": "新名稱"})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["nas_username"] == "nas-a"
+    assert data["has_password"] is True
+    update_mock.assert_awaited_with("alice", "新名稱")
+
+
+@pytest.mark.asyncio
 async def test_bind_nas_paths(user_app, monkeypatch: pytest.MonkeyPatch) -> None:
     from ching_tech_os.services.smb import SMBAuthError
 

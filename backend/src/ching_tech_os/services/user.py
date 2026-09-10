@@ -2,6 +2,8 @@
 
 from datetime import datetime
 
+import asyncpg
+
 from ..database import get_connection
 
 
@@ -722,7 +724,5 @@ async def set_nas_username(user_id: int, nas_username: str | None) -> None:
                 user_id,
                 nas_username,
             )
-        except Exception as e:
-            if "unique constraint" in str(e).lower() or "duplicate key" in str(e).lower():
-                raise ValueError("此 NAS 帳號已綁定其他使用者")
-            raise
+        except asyncpg.UniqueViolationError:
+            raise ValueError("此 NAS 帳號已綁定其他使用者")

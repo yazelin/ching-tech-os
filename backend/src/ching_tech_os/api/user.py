@@ -153,9 +153,11 @@ async def update_current_user(
 ) -> UserInfo:
     """更新目前登入使用者的資訊"""
     if request.display_name is not None:
-        user = await update_user_display_name(session.username, request.display_name)
-    else:
-        user = await get_user_by_username(session.username)
+        await update_user_display_name(session.username, request.display_name)
+
+    # update_user_display_name 的 RETURNING 欄位不含 nas_username / password_hash，
+    # 一律重新用 get_user_by_username 取得完整資料，與 GET /me 回應對齊
+    user = await get_user_by_username(session.username)
 
     if user is None:
         raise HTTPException(
@@ -166,6 +168,9 @@ async def update_current_user(
     # 取得權限資訊
     preferences = _parse_preferences(user.get("preferences"))
     permissions = get_user_permissions_for_role(session.role, preferences)
+
+    # 判斷是否已設定密碼
+    has_password = bool(user.get("password_hash"))
 
     # is_admin 改為基於 role 判斷
     user_is_admin = session.role == "admin"
@@ -181,6 +186,8 @@ async def update_current_user(
         role=session.role,
         account_role=user.get("role") or "user",
         auth_type=session.auth_type,
+        has_password=has_password,
+        nas_username=user.get("nas_username"),
     )
 
 
@@ -195,6 +202,11 @@ async def bind_nas_account(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="此 API token 為唯讀，無法執行寫入操作",
         )
+    if session.user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="使用者資料不完整",
+        )
     smb = create_smb_service(request.nas_username, request.password)
     try:
         await run_in_smb_pool(smb.test_auth)
@@ -206,7 +218,7 @@ async def bind_nas_account(
         await set_nas_username(session.user_id, request.nas_username)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
-    # ponytail: 綁定後 session 快取裡的 nas_username 要等重新登入才更新；要即時就在這裡清該 token 的 cache
+    # ponytail: 綁定後 session 快取裡的 nas_username 會在快取 TTL（30 秒）內自動更新；要更即時就在這裡清該 token 的 cache
     return NasBindingResponse(success=True, nas_username=request.nas_username)
 
 
@@ -219,6 +231,11 @@ async def unbind_nas_account(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="此 API token 為唯讀，無法執行寫入操作",
+        )
+    if session.user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="使用者資料不完整",
         )
     await set_nas_username(session.user_id, None)
     return NasBindingResponse(success=True, nas_username=None)
