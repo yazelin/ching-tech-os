@@ -28,6 +28,8 @@ class UserInfo(BaseModel):
     auth_type: str = "session"
     # 密碼狀態
     has_password: bool = False  # 是否已設定密碼（用於顯示變更/設定密碼按鈕）
+    # 綁定的 NAS 帳號（None 表示未綁定）
+    nas_username: str | None = None
 
 
 class UpdateUserRequest(BaseModel):
@@ -125,3 +127,17 @@ class DefaultPermissionsResponse(BaseModel):
     apps: dict[str, bool]
     knowledge: dict[str, bool]
     app_names: dict[str, str]
+
+
+class NasBindingRequest(BaseModel):
+    """綁定 NAS 帳號請求：以 NAS 帳密驗證後寫入 nas_username"""
+
+    nas_username: str
+    password: str
+
+
+class NasBindingResponse(BaseModel):
+    """綁定／解綁 NAS 帳號回應"""
+
+    success: bool
+    nas_username: str | None = None
