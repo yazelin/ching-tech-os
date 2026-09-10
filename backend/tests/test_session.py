@@ -197,6 +197,7 @@ class TestSessionManagerGet:
             "expires_at": now,
             "role": "admin",
             "app_permissions": {"file-manager": True},
+            "nas_username": None,
         }
         conn, cm = _make_mock_connection()
         conn.fetchrow = AsyncMock(return_value=row)
@@ -229,6 +230,7 @@ class TestSessionManagerGet:
             "expires_at": now,
             "role": "user",
             "app_permissions": {},
+            "nas_username": None,
         }
         conn, cm = _make_mock_connection()
         conn.fetchrow = AsyncMock(return_value=row)
@@ -251,6 +253,30 @@ class TestSessionManagerGet:
             result = await session_manager.get_session("expired-token")
 
         assert result is None
+
+    @pytest.mark.asyncio
+    async def test_db_row_carries_nas_username(self, session_manager):
+        """session 載入時要順帶查出綁定的 NAS 帳號"""
+        now = datetime.now()
+        row = {
+            "username": "alice",
+            "password_enc": "",
+            "nas_host": "10.0.0.3",
+            "user_id": 3,
+            "created_at": now,
+            "expires_at": now,
+            "role": "user",
+            "app_permissions": {},
+            "nas_username": "nas-a",
+        }
+        conn, cm = _make_mock_connection()
+        conn.fetchrow = AsyncMock(return_value=row)
+
+        with patch("ching_tech_os.services.session.get_connection", return_value=cm):
+            result = await session_manager.get_session("t")
+
+        assert result.nas_username == "nas-a"
+        assert "nas_username" in conn.fetchrow.call_args[0][0]
 
 
 class TestSessionManagerDelete:

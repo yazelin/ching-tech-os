@@ -131,7 +131,8 @@ class SessionManager:
                 UPDATE sessions SET last_accessed_at = NOW()
                 WHERE token = $1 AND expires_at > NOW()
                 RETURNING username, password_enc, nas_host, user_id,
-                          created_at, expires_at, role, app_permissions
+                          created_at, expires_at, role, app_permissions,
+                          (SELECT u.nas_username FROM users u WHERE u.id = sessions.user_id) AS nas_username
                 """,
                 token,
             )
@@ -151,6 +152,7 @@ class SessionManager:
             expires_at=row["expires_at"],
             role=row["role"],
             app_permissions=row["app_permissions"] or {},
+            nas_username=row["nas_username"],
         )
 
         # 寫入 cache
