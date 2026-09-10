@@ -42,6 +42,13 @@ ChingTech OS 是擎添工業內部使用的整合式工作平台，以 Web 技�
 
 ## 近期架構更新（2026-03）
 
+### 2026-09
+
+- **三種登入方式**：登入分 auto（預設，行為同舊版）、NAS 帳號（SMB 驗證，自動建帳號）、平台帳號（管理員建立、只驗密碼）三種方式。平台帳號可綁定 NAS 帳號與 LINE。`users.nas_username` 為綁定欄位。
+- **CORS_EXTRA_ORIGINS**：給獨立部署的新前端（os.ching-tech.com）用。
+
+### 2026-03
+
 - **Intent Guard（意圖守門員）**：輕量前置過濾機制，使用 Haiku 在主 Agent 之前快速判斷用戶意圖。支援 allow/reject/direct 三種判定，各產業模組可透過 Agent settings 自訂過濾規則。全域開關 `INTENT_GUARD_ENABLED` + Agent 級雙重控制。
 - **月度 Token 用量上限**：按用戶限制受限模式的月度 token 消耗（`monthly_token_limit`），防止單一用戶消耗整月預算。已綁定用戶記錄但不限制。
 - **黑名單機制**：管理員可在 Bot 管理介面手動封鎖/解封用戶。封鎖用戶的訊息靜默忽略，不進入 AI 處理。前端新增「黑名單」tab。

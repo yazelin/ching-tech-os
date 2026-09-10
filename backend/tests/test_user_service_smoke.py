@@ -5,6 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import asyncpg
 import pytest
 
 from ching_tech_os.services import user as user_service
@@ -133,3 +134,29 @@ async def test_user_update_info_and_role(monkeypatch: pytest.MonkeyPatch) -> Non
     assert await user_service.get_user_role(1) == "admin"
     assert await user_service.get_user_role(2) == "user"
     assert await user_service.get_user_role(3) == "user"
+
+
+@pytest.mark.asyncio
+async def test_nas_username_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
+    conn = SimpleNamespace(
+        fetchrow=AsyncMock(side_effect=[
+            {"id": 7},                                  # upsert_user
+            {"id": 8, "username": "p", "nas_username": "n"},  # get_user_by_nas_username
+            None,                                        # get_user_by_nas_username miss
+            {"id": 9, "nas_username": "n", "password_hash": None},  # get_user_for_auth
+        ]),
+        execute=AsyncMock(side_effect=["UPDATE 1", asyncpg.UniqueViolationError("duplicate key")]),
+    )
+    _patch_conn(monkeypatch, conn)
+
+    assert await user_service.upsert_user("n") == 7
+    insert_sql, *insert_args = conn.fetchrow.call_args_list[0][0]
+    assert "nas_username" in insert_sql and insert_args[0] == "n"
+
+    assert (await user_service.get_user_by_nas_username("n"))["id"] == 8
+    assert await user_service.get_user_by_nas_username("x") is None
+    assert (await user_service.get_user_for_auth("p"))["nas_username"] == "n"
+
+    await user_service.set_nas_username(9, "n2")
+    with pytest.raises(ValueError):
+        await user_service.set_nas_username(9, "taken")

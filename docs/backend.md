@@ -85,6 +85,16 @@ uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8088 --reload
 （單篇 / 版本歷史 / 附件下載 / MCP 工具）一律回 404，與搜尋的過濾語意一致；
 寫入與刪除走 `check_knowledge_permission_async`（owner 或 global_write / global_delete）。
 
+#### 登入方式（2026-09）
+
+`POST /api/auth/login` 的 `method` 欄位：
+
+- `auto`（預設，舊前端不帶此欄位時就是這個）：沿用舊邏輯。依 `username` 查使用者，有 `password_hash` 就走 `local`，否則走 `nas`。
+- `nas`：以 NAS 帳密做 SMB 驗證，依 `users.nas_username` 找平台帳號，找不到就自動建立並綁定。session 保留 SMB 密碼供檔案操作。停用帳號不論從哪條路找到都會被擋。
+- `local`：平台帳號密碼，只驗 `password_hash`，不 fallback 到 NAS。session 不存密碼，檔案功能要另外連線 NAS。
+
+平台帳號可在 `POST /api/user/me/nas-binding` 以 NAS 帳密驗證後綁定 NAS 帳號，`DELETE` 解綁。`GET /api/user/me` 回 `nas_username`。唯讀 PAT 對綁定與解綁端點回 403。
+
 ### 使用者
 
 | 方法 | 端點 | 說明 |
@@ -327,6 +337,7 @@ uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8088 --reload
 | LIBRARY_PUBLIC_FOLDERS | 產品資料,教育訓練 | 公開資料夾列表（逗號分隔） |
 | SMB_CONNECT_TIMEOUT | 10 | SMB 連線逾時（秒） |
 | ENABLE_NAS_AUTH | true | 是否啟用 NAS SMB 認證 |
+| CORS_EXTRA_ORIGINS | （空） | 額外允許的 CORS origin，逗號分隔（新前端 os.ching-tech.com） |
 
 ### 路徑
 

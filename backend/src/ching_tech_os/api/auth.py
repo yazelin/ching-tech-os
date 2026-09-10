@@ -20,7 +20,14 @@ from ..models.message import MessageSeverity, MessageSource
 from ..services.session import session_manager, SessionData
 from ..services.smb import create_smb_service, SMBAuthError, SMBConnectionError
 from ..services.workers import run_in_smb_pool
-from ..services.user import upsert_user, get_user_by_username, get_user_for_auth, update_last_login, get_user_role
+from ..services.user import (
+    upsert_user,
+    get_user_by_username,
+    get_user_for_auth,
+    get_user_by_nas_username,
+    update_last_login,
+    get_user_role,
+)
 from ..services.password import verify_password
 from ..services.login_record import record_login
 from ..services.message import log_message
@@ -206,6 +213,32 @@ def get_client_ip(req: Request) -> str:
     return req.client.host if req.client else "127.0.0.1"
 
 
+async def _reject_inactive(request, user_data, ip_address, user_agent, geo, device_info) -> LoginResponse:
+    """停用帳號的登入嘗試也要留紀錄：有人在試離職員工的帳號時管理員才看得到"""
+    try:
+        await record_login(
+            username=request.username,
+            success=False,
+            ip_address=ip_address,
+            user_id=user_data["id"],
+            failure_reason="帳號已停用",
+            user_agent=user_agent,
+            geo=geo,
+            device=device_info,
+        )
+        await log_message(
+            severity=MessageSeverity.WARNING,
+            source=MessageSource.SECURITY,
+            title=f"停用帳號登入嘗試：{request.username}",
+            content=f"來自 {ip_address} 嘗試登入已停用的帳號",
+            category="auth",
+            metadata={"ip": ip_address, "username": request.username},
+        )
+    except Exception:
+        pass  # 記錄失敗不影響回應
+    return LoginResponse(success=False, error="此帳號已被停用")
+
+
 @router.post(
     "/login",
     response_model=LoginResponse,
@@ -217,9 +250,11 @@ def get_client_ip(req: Request) -> str:
 async def login(request: LoginRequest, req: Request) -> LoginResponse:
     """登入並建立 session
 
-    支援兩種認證方式：
-    1. 密碼認證：使用者已設定密碼（password_hash 不為 NULL）
-    2. SMB 認證：使用者尚未設定密碼，fallback 到 NAS SMB 驗證（過渡期）
+    依 `request.method` 決定認證方式：
+    - `auto`（預設，舊前端不帶 method）：依 username 查到使用者且有設定密碼
+      （password_hash 不為 NULL）就走 `local`，否則走 `nas`
+    - `nas`：以 NAS 帳密 SMB 驗證，成功後依 `nas_username` 綁定找出（或建立）平台帳號
+    - `local`：平台帳號密碼認證，只驗密碼雜湊，不 fallback SMB
     """
     # 取得客戶端資訊
     ip_address = get_client_ip(req)
@@ -239,74 +274,48 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
         os=request.device.os if request.device and request.device.os else (ua_device.os if ua_device else None),
     )
 
-    # 先嘗試從資料庫查找使用者
-    user_data = await get_user_for_auth(request.username)
-
-    # 檢查帳號是否停用（需在認證分支之前，密碼認證與 SMB 認證皆適用）
-    if user_data and not user_data.get("is_active", True):
-        # 停用帳號的登入嘗試也要留紀錄：有人在試離職員工的帳號時管理員才看得到
-        try:
-            await record_login(
-                username=request.username,
-                success=False,
-                ip_address=ip_address,
-                user_id=user_data["id"],
-                failure_reason="帳號已停用",
-                user_agent=user_agent,
-                geo=geo,
-                device=device_info,
-            )
-            await log_message(
-                severity=MessageSeverity.WARNING,
-                source=MessageSource.SECURITY,
-                title=f"停用帳號登入嘗試：{request.username}",
-                content=f"來自 {ip_address} 嘗試登入已停用的帳號",
-                category="auth",
-                metadata={"ip": ip_address, "username": request.username},
-            )
-        except Exception:
-            pass  # 記錄失敗不影響回應
-        return LoginResponse(success=False, error="此帳號已被停用")
-
     auth_success = False
-    use_password_auth = False
     must_change_password = False
+    user_data = None
+    auto_user_data = None
 
-    # 認證邏輯
-    if user_data and user_data.get("password_hash"):
-        # 使用密碼認證
-        use_password_auth = True
+    effective_method = request.method
+    if effective_method == "auto":
+        # 舊前端不帶 method：沿用舊邏輯，依 username 查到有 password_hash 就走 local，否則走 nas
+        auto_user_data = await get_user_for_auth(request.username)
+        effective_method = "local" if auto_user_data and auto_user_data.get("password_hash") else "nas"
 
-        # 驗證密碼
-        if verify_password(request.password, user_data["password_hash"]):
+    use_password_auth = effective_method == "local"
+
+    if effective_method == "local":
+        # 平台帳號：只驗密碼雜湊，不 fallback SMB
+        # auto 判斷時已查過一次，直接重用，避免重複查詢
+        user_data = auto_user_data if auto_user_data is not None else await get_user_for_auth(request.username)
+        if user_data and not user_data.get("is_active", True):
+            return await _reject_inactive(request, user_data, ip_address, user_agent, geo, device_info)
+        if user_data and user_data.get("password_hash") and verify_password(
+            request.password, user_data["password_hash"]
+        ):
             auth_success = True
             must_change_password = user_data.get("must_change_password", False)
-        else:
-            auth_success = False
     else:
-        # 使用者沒有密碼，嘗試 SMB 認證（如果啟用）
-        if settings.enable_nas_auth:
-            smb = create_smb_service(
-                request.username,
-                request.password,
+        # NAS 帳號：SMB 驗證，再依綁定找平台帳號
+        if not settings.enable_nas_auth:
+            return LoginResponse(success=False, error="NAS 登入未啟用")
+        user_data = await get_user_by_nas_username(request.username)
+        if user_data and not user_data.get("is_active", True):
+            return await _reject_inactive(request, user_data, ip_address, user_agent, geo, device_info)
+        smb = create_smb_service(request.username, request.password)
+        try:
+            await run_in_smb_pool(smb.test_auth)
+            auth_success = True
+        except SMBAuthError:
+            auth_success = False
+        except SMBConnectionError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="無法連線至檔案伺服器",
             )
-            try:
-                await run_in_smb_pool(smb.test_auth)
-                auth_success = True
-            except SMBAuthError:
-                auth_success = False
-            except SMBConnectionError:
-                raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail="無法連線至檔案伺服器",
-                )
-        else:
-            # 未啟用 NAS 驗證，且使用者不存在或無密碼
-            if user_data is None:
-                return LoginResponse(success=False, error="帳號不存在")
-            else:
-                # 使用者存在但沒有密碼，無法登入
-                return LoginResponse(success=False, error="帳號或密碼錯誤")
 
     if not auth_success:
         # 登入失敗：記錄失敗的登入嘗試
@@ -359,7 +368,7 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
         # 更新最後登入時間
         await update_last_login(user_id)
     else:
-        # 使用者不存在（SMB 認證但尚未建立用戶記錄）
+        # 使用者不存在，或 NAS 帳號尚未綁定平台帳號（SMB 認證通過）
         try:
             user_id = await upsert_user(request.username)
         except Exception as e:
@@ -368,6 +377,13 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="無法建立使用者記錄，請稍後再試。",
             )
+        # upsert_user 用 ON CONFLICT (username) DO UPDATE，可能撞到既有帳號（例如
+        # nas_username 與輸入的 username 不同、但 username 欄位本身相同），
+        # 必須重新讀一次確認帳號沒有被停用，否則 SMB 過了就能繞過停用檢查
+        user_data = await get_user_for_auth(request.username)
+        if user_data and not user_data.get("is_active", True):
+            # SMB 已驗證成功，但帳號已停用：不可建立 session
+            return await _reject_inactive(request, user_data, ip_address, user_agent, geo, device_info)
 
     # 從 users.role 欄位取得角色
     user_role = await get_user_role(user_id)
@@ -381,8 +397,9 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
     # SMB 認證時仍需保留密碼（過渡期，供檔案操作使用）
     session_password = "" if use_password_auth else request.password
 
+    platform_username = (user_data.get("username") if user_data else None) or request.username
     token = await session_manager.create_session(
-        request.username,
+        platform_username,
         session_password,
         user_id=user_id,
         role=user_role,
@@ -392,7 +409,7 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
     # 記錄成功登入
     try:
         await record_login(
-            username=request.username,
+            username=platform_username,
             success=True,
             ip_address=ip_address,
             user_id=user_id,
@@ -412,8 +429,8 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
         msg_id = await log_message(
             severity=MessageSeverity.INFO,
             source=MessageSource.SECURITY,
-            title=f"登入成功：{request.username}",
-            content=f"使用者 {request.username} 從 {ip_address} {location_str}登入（{auth_method}認證）",
+            title=f"登入成功：{platform_username}",
+            content=f"使用者 {platform_username} 從 {ip_address} {location_str}登入（{auth_method}認證）",
             category="auth",
             user_id=user_id,
             session_id=token,
@@ -434,7 +451,7 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
     return LoginResponse(
         success=True,
         token=token,
-        username=request.username,
+        username=platform_username,
         role=user_role,
         must_change_password=must_change_password,
     )

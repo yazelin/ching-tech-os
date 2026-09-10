@@ -170,6 +170,11 @@ def _parse_context_tool_allowlist(value: str) -> dict[str, frozenset[str]]:
     return parsed
 
 
+def _parse_extra_origins(value: str) -> list[str]:
+    """CORS_EXTRA_ORIGINS：逗號分隔，去空白，丟掉空項"""
+    return [o.strip() for o in value.split(",") if o.strip()]
+
+
 class Settings:
     """應用程式設定"""
 
@@ -445,6 +450,7 @@ class Settings:
     # CORS 設定
     # ===================
     # credentials=True 時不能用 "*"
+    # 額外 origin 由 CORS_EXTRA_ORIGINS 逗號分隔追加（新前端 os.ching-tech.com 走這裡）
     cors_origins: list[str] = [
         "http://localhost:8080",
         "http://localhost:8088",
@@ -455,7 +461,7 @@ class Settings:
         # MD2PPT/MD2DOC 外部應用程式
         "https://md-2-ppt-evolution.vercel.app",
         "https://md-2-doc-evolution.vercel.app",
-    ]
+    ] + _parse_extra_origins(_get_env("CORS_EXTRA_ORIGINS", ""))
 
     # ===================
     # 相容性屬性（向後相容，使用統一的 NAS 設定）

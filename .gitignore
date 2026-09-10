@@ -60,3 +60,6 @@ nanobanana-output/
 frontend/dist/
 frontend/node_modules/
 .worktrees/
+
+# SDD 工作區（superpowers subagent-driven-development 暫存）
+.superpowers/

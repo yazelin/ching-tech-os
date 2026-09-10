@@ -1,6 +1,7 @@
 """認證相關資料模型"""
 
 from datetime import datetime
+from typing import Literal
 from pydantic import BaseModel
 
 
@@ -22,6 +23,9 @@ class LoginRequest(BaseModel):
     username: str
     password: str
     device: DeviceInfo | None = None
+    # auto：舊前端不帶此欄位時沿用舊邏輯（依 username 查到有 password_hash 就走 local，否則走 nas）；
+    # nas / local 由新前端明確指定
+    method: Literal["auto", "nas", "local"] = "auto"
 
 
 class LoginResponse(BaseModel):
@@ -58,6 +62,8 @@ class SessionData(BaseModel):
     auth_type: str = "session"
     # 唯讀 token：非 GET/HEAD/OPTIONS 的 app API 一律拒絕
     read_only: bool = False
+    # 綁定的 NAS 帳號；SMB 操作用它，None 表示未綁定
+    nas_username: str | None = None
 
 
 class ErrorResponse(BaseModel):
