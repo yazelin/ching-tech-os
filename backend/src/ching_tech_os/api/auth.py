@@ -275,6 +275,7 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
     auth_success = False
     must_change_password = False
     user_data = None
+    auto_user_data = None
 
     effective_method = request.method
     if effective_method == "auto":
@@ -286,7 +287,8 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
 
     if effective_method == "local":
         # 平台帳號：只驗密碼雜湊，不 fallback SMB
-        user_data = await get_user_for_auth(request.username)
+        # auto 判斷時已查過一次，直接重用，避免重複查詢
+        user_data = auto_user_data if auto_user_data is not None else await get_user_for_auth(request.username)
         if user_data and not user_data.get("is_active", True):
             return await _reject_inactive(request, user_data, ip_address, user_agent, geo, device_info)
         if user_data and user_data.get("password_hash") and verify_password(
@@ -364,7 +366,7 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
         # 更新最後登入時間
         await update_last_login(user_id)
     else:
-        # 使用者不存在（SMB 認證但尚未建立用戶記錄）
+        # 使用者不存在，或 NAS 帳號尚未綁定平台帳號（SMB 認證通過）
         try:
             user_id = await upsert_user(request.username)
         except Exception as e:
@@ -373,6 +375,13 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="無法建立使用者記錄，請稍後再試。",
             )
+        # upsert_user 用 ON CONFLICT (username) DO UPDATE，可能撞到既有帳號（例如
+        # nas_username 與輸入的 username 不同、但 username 欄位本身相同），
+        # 必須重新讀一次確認帳號沒有被停用，否則 SMB 過了就能繞過停用檢查
+        user_data = await get_user_for_auth(request.username)
+        if user_data and not user_data.get("is_active", True):
+            # SMB 已驗證成功，但帳號已停用：不可建立 session
+            return await _reject_inactive(request, user_data, ip_address, user_agent, geo, device_info)
 
     # 從 users.role 欄位取得角色
     user_role = await get_user_role(user_id)

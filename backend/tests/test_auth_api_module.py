@@ -335,10 +335,13 @@ async def test_login_nas_method_binds_by_nas_username(monkeypatch: pytest.Monkey
     assert create.call_args[0][0] == "alice"
     assert create.call_args[0][1] == "p"  # SMB 密碼要留在 session
 
-    # 沒綁過的 NAS 帳號 → upsert_user 自動建
+    # 沒綁過的 NAS 帳號 → upsert_user 自動建，之後重新讀一次確認未停用
     monkeypatch.setattr(auth, "get_user_by_nas_username", AsyncMock(return_value=None))
     upsert = AsyncMock(return_value=10)
     monkeypatch.setattr(auth, "upsert_user", upsert)
+    monkeypatch.setattr(auth, "get_user_for_auth", AsyncMock(return_value={
+        "id": 10, "username": "new-nas", "is_active": True, "password_hash": None,
+    }))
     res = await auth.login(LoginRequest(username="new-nas", password="p", method="nas"), req)
     assert res.success is True
     upsert.assert_awaited_once_with("new-nas")
@@ -405,3 +408,97 @@ async def test_login_auto_method_matches_legacy(monkeypatch: pytest.MonkeyPatch)
     res = await auth.login(LoginRequest(username="new-user", password="p"), req)
     assert res.success is True
     smb3.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_login_nas_upsert_collision_rechecks_inactive(monkeypatch: pytest.MonkeyPatch) -> None:
+    """nas：get_user_by_nas_username 找不到綁定，但 upsert_user 撞到既有帳號（ON CONFLICT）時，
+    SMB 已過關不代表能略過停用檢查——要重新讀一次確認未停用，且要把讀到的資料交給權限查詢。"""
+    req = _request({"user-agent": "pytest-agent"})
+    monkeypatch.setattr(auth, "resolve_ip_location", lambda _ip: None)
+    monkeypatch.setattr(auth, "parse_device_info", lambda _ua: None)
+    monkeypatch.setattr(auth, "log_message", AsyncMock(return_value=1))
+    monkeypatch.setattr(auth, "emit_new_message", AsyncMock())
+    monkeypatch.setattr(auth, "emit_unread_count", AsyncMock())
+    monkeypatch.setattr(auth.settings, "enable_nas_auth", True)
+    monkeypatch.setattr(auth, "run_in_smb_pool", AsyncMock(return_value=None))
+    monkeypatch.setattr(auth, "get_user_by_nas_username", AsyncMock(return_value=None))
+    monkeypatch.setattr(auth, "upsert_user", AsyncMock(return_value=10))
+    monkeypatch.setattr(auth, "get_user_role", AsyncMock(return_value="user"))
+    create = AsyncMock(return_value="tok")
+    monkeypatch.setattr(auth.session_manager, "create_session", create)
+
+    # 撞到既有「已停用」帳號 → 不可建立 session，回「此帳號已被停用」
+    record = AsyncMock(return_value=1)
+    monkeypatch.setattr(auth, "record_login", record)
+    monkeypatch.setattr(auth, "get_user_for_auth", AsyncMock(return_value={
+        "id": 10, "username": "old-emp", "is_active": False,
+    }))
+    res = await auth.login(LoginRequest(username="old-emp", password="p", method="nas"), req)
+    assert res.success is False and res.error == "此帳號已被停用"
+    create.assert_not_called()
+    assert record.await_args.kwargs["failure_reason"] == "帳號已停用"
+
+    # 撞到既有「正常」帳號 → 成功登入，session 用重讀到的平台帳號名，權限查詢拿到真正的 user_data
+    captured: dict = {}
+
+    def _capture_perms(role, ud):
+        captured["role"] = role
+        captured["user_data"] = ud
+        return {}
+
+    monkeypatch.setattr(permissions_service, "get_user_app_permissions_sync", _capture_perms)
+    monkeypatch.setattr(auth, "get_user_for_auth", AsyncMock(return_value={
+        "id": 10, "username": "old-emp", "is_active": True, "preferences": {"x": 1},
+    }))
+    res2 = await auth.login(LoginRequest(username="old-emp", password="p", method="nas"), req)
+    assert res2.success is True
+    assert create.call_args[0][0] == "old-emp"
+    assert captured["user_data"] is not None and captured["user_data"]["id"] == 10
+
+
+@pytest.mark.asyncio
+async def test_login_auto_upsert_collision_rechecks_inactive(monkeypatch: pytest.MonkeyPatch) -> None:
+    """auto（舊前端不帶 method）：同樣的撞號情境，也要擋停用帳號、也要把讀到的資料交給權限查詢。"""
+    req = _request({"user-agent": "pytest-agent"})
+    monkeypatch.setattr(auth, "resolve_ip_location", lambda _ip: None)
+    monkeypatch.setattr(auth, "parse_device_info", lambda _ua: None)
+    monkeypatch.setattr(auth, "log_message", AsyncMock(return_value=1))
+    monkeypatch.setattr(auth, "emit_new_message", AsyncMock())
+    monkeypatch.setattr(auth, "emit_unread_count", AsyncMock())
+    monkeypatch.setattr(auth.settings, "enable_nas_auth", True)
+    monkeypatch.setattr(auth, "run_in_smb_pool", AsyncMock(return_value=None))
+    monkeypatch.setattr(auth, "get_user_by_nas_username", AsyncMock(return_value=None))
+    monkeypatch.setattr(auth, "upsert_user", AsyncMock(return_value=20))
+    monkeypatch.setattr(auth, "get_user_role", AsyncMock(return_value="user"))
+    create = AsyncMock(return_value="tok")
+    monkeypatch.setattr(auth.session_manager, "create_session", create)
+
+    # 沒帶 method → auto 判斷查到「沒有密碼」→ 走 nas；查無綁定、SMB 過關、
+    # upsert 撞到既有「已停用」帳號 → 要擋
+    record = AsyncMock(return_value=1)
+    monkeypatch.setattr(auth, "record_login", record)
+    monkeypatch.setattr(auth, "get_user_for_auth", AsyncMock(return_value={
+        "id": 20, "username": "old-emp2", "password_hash": None, "is_active": False,
+    }))
+    res = await auth.login(LoginRequest(username="old-emp2", password="p"), req)
+    assert res.success is False and res.error == "此帳號已被停用"
+    create.assert_not_called()
+    assert record.await_args.kwargs["failure_reason"] == "帳號已停用"
+
+    # 撞到既有「正常」帳號 → 成功登入，權限查詢拿到重新讀到的 user_data
+    captured: dict = {}
+
+    def _capture_perms(role, ud):
+        captured["role"] = role
+        captured["user_data"] = ud
+        return {}
+
+    monkeypatch.setattr(permissions_service, "get_user_app_permissions_sync", _capture_perms)
+    monkeypatch.setattr(auth, "get_user_for_auth", AsyncMock(return_value={
+        "id": 20, "username": "old-emp2", "password_hash": None, "is_active": True, "preferences": {"y": 2},
+    }))
+    res2 = await auth.login(LoginRequest(username="old-emp2", password="p"), req)
+    assert res2.success is True
+    assert create.call_args[0][0] == "old-emp2"
+    assert captured["user_data"] is not None and captured["user_data"]["id"] == 20
