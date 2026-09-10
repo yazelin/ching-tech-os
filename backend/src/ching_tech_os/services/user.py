@@ -46,7 +46,7 @@ async def get_user_by_username(username: str) -> dict | None:
         row = await conn.fetchrow(
             """
             SELECT id, username, display_name, created_at, last_login_at,
-                   preferences, role, password_hash, email,
+                   preferences, role, nas_username, password_hash, email,
                    password_changed_at, must_change_password, is_active
             FROM users
             WHERE username = $1

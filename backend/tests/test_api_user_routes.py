@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import FastAPI
@@ -636,3 +636,64 @@ async def test_delete_user_success(
     resp = await _request(app_admin, "DELETE", f"/api/admin/users/{TARGET_USER_ID}")
     assert resp.status_code == 200
     assert resp.json()["success"] is True
+
+
+def _user_session(user_id: int = 5) -> SessionData:
+    now = datetime.now(timezone.utc)
+    return SessionData(
+        username="alice", password="", nas_host="localhost", user_id=user_id,
+        created_at=now, expires_at=now, role="user",
+    )
+
+
+@pytest.fixture
+def user_app():
+    from ching_tech_os.api.auth import get_current_session
+    app = FastAPI()
+    app.include_router(user_api.router)
+    app.dependency_overrides[get_current_session] = lambda: _user_session()
+    return app
+
+
+@pytest.mark.asyncio
+async def test_me_includes_nas_username(user_app, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(user_api, "get_user_by_username", AsyncMock(return_value=_user_row(
+        id=5, username="alice", nas_username="nas-a",
+    )))
+    async with AsyncClient(transport=ASGITransport(app=user_app), base_url="http://t") as c:
+        r = await c.get("/api/user/me")
+    assert r.status_code == 200 and r.json()["nas_username"] == "nas-a"
+
+
+@pytest.mark.asyncio
+async def test_bind_nas_paths(user_app, monkeypatch: pytest.MonkeyPatch) -> None:
+    from ching_tech_os.services.smb import SMBAuthError
+
+    set_nas = AsyncMock()
+    monkeypatch.setattr(user_api, "set_nas_username", set_nas)
+    monkeypatch.setattr(user_api, "create_smb_service", lambda u, p: MagicMock())
+
+    async with AsyncClient(transport=ASGITransport(app=user_app), base_url="http://t") as c:
+        # NAS 帳密錯 → 401，不寫入
+        monkeypatch.setattr(user_api, "run_in_smb_pool", AsyncMock(side_effect=SMBAuthError("bad")))
+        r = await c.post("/api/user/me/nas-binding", json={"nas_username": "nas-a", "password": "x"})
+        assert r.status_code == 401
+        set_nas.assert_not_called()
+
+        # 驗過 → 寫入
+        monkeypatch.setattr(user_api, "run_in_smb_pool", AsyncMock(return_value=None))
+        r = await c.post("/api/user/me/nas-binding", json={"nas_username": "nas-a", "password": "x"})
+        assert r.status_code == 200 and r.json() == {"success": True, "nas_username": "nas-a"}
+        set_nas.assert_awaited_with(5, "nas-a")
+
+        # 被別人綁走 → 409
+        monkeypatch.setattr(user_api, "set_nas_username", AsyncMock(side_effect=ValueError("taken")))
+        r = await c.post("/api/user/me/nas-binding", json={"nas_username": "nas-a", "password": "x"})
+        assert r.status_code == 409
+
+        # 解綁
+        unbind = AsyncMock()
+        monkeypatch.setattr(user_api, "set_nas_username", unbind)
+        r = await c.delete("/api/user/me/nas-binding")
+        assert r.status_code == 200 and r.json() == {"success": True, "nas_username": None}
+        unbind.assert_awaited_with(5, None)

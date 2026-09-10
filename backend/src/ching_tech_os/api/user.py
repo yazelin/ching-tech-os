@@ -19,6 +19,8 @@ from ..models.user import (
     UpdateUserStatusRequest,
     ResetPasswordRequest,
     UserOperationResponse,
+    NasBindingRequest,
+    NasBindingResponse,
 )
 from ..services.user import (
     get_user_by_username,
@@ -35,7 +37,10 @@ from ..services.user import (
     activate_user,
     clear_user_password,
     delete_user,
+    set_nas_username,
 )
+from ..services.smb import create_smb_service, SMBAuthError, SMBConnectionError
+from ..services.workers import run_in_smb_pool
 from ..services.password import hash_password, validate_password_strength
 from ..services.permissions import (
     get_user_permissions_for_role,
@@ -137,6 +142,7 @@ async def get_current_user(
         account_role=user.get("role") or "user",
         auth_type=session.auth_type,
         has_password=has_password,
+        nas_username=user.get("nas_username"),
     )
 
 
@@ -176,6 +182,36 @@ async def update_current_user(
         account_role=user.get("role") or "user",
         auth_type=session.auth_type,
     )
+
+
+@router.post("/me/nas-binding", response_model=NasBindingResponse)
+async def bind_nas_account(
+    request: NasBindingRequest,
+    session: SessionData = Depends(get_current_session),
+) -> NasBindingResponse:
+    """以 NAS 帳密驗證後，把 NAS 帳號綁到目前登入的平台帳號"""
+    smb = create_smb_service(request.nas_username, request.password)
+    try:
+        await run_in_smb_pool(smb.test_auth)
+    except SMBAuthError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="NAS 帳號或密碼錯誤")
+    except SMBConnectionError:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="無法連線至檔案伺服器")
+    try:
+        await set_nas_username(session.user_id, request.nas_username)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+    # ponytail: 綁定後 session 快取裡的 nas_username 要等重新登入才更新；要即時就在這裡清該 token 的 cache
+    return NasBindingResponse(success=True, nas_username=request.nas_username)
+
+
+@router.delete("/me/nas-binding", response_model=NasBindingResponse)
+async def unbind_nas_account(
+    session: SessionData = Depends(get_current_session),
+) -> NasBindingResponse:
+    """解除 NAS 帳號綁定"""
+    await set_nas_username(session.user_id, None)
+    return NasBindingResponse(success=True, nas_username=None)
 
 
 # === 偏好設定 API ===
