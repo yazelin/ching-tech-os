@@ -273,11 +273,18 @@ async def login(request: LoginRequest, req: Request) -> LoginResponse:
     )
 
     auth_success = False
-    use_password_auth = request.method == "local"
     must_change_password = False
     user_data = None
 
-    if request.method == "local":
+    effective_method = request.method
+    if effective_method == "auto":
+        # 舊前端不帶 method：沿用舊邏輯，依 username 查到有 password_hash 就走 local，否則走 nas
+        auto_user_data = await get_user_for_auth(request.username)
+        effective_method = "local" if auto_user_data and auto_user_data.get("password_hash") else "nas"
+
+    use_password_auth = effective_method == "local"
+
+    if effective_method == "local":
         # 平台帳號：只驗密碼雜湊，不 fallback SMB
         user_data = await get_user_for_auth(request.username)
         if user_data and not user_data.get("is_active", True):

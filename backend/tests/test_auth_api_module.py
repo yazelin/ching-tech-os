@@ -87,7 +87,7 @@ async def test_auth_dependency_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.mark.asyncio
 async def test_login_paths(monkeypatch: pytest.MonkeyPatch) -> None:
     req = _request({"user-agent": "pytest-agent"})
-    login_req = LoginRequest(username="u1", password="p1", device=DeviceInfo(device_type="desktop", browser="Chrome"))
+    login_req = LoginRequest(username="u1", password="p1", method="nas", device=DeviceInfo(device_type="desktop", browser="Chrome"))
     login_req_local = LoginRequest(username="u1", password="p1", method="local", device=DeviceInfo(device_type="desktop", browser="Chrome"))
     geo = SimpleNamespace(country="TW", city="Taipei")
     ua_device = SimpleNamespace(device_type=SimpleNamespace(value="desktop"), browser="Firefox", os="Linux")
@@ -245,7 +245,7 @@ async def test_logout_and_change_password(monkeypatch: pytest.MonkeyPatch) -> No
 async def test_login_inactive_smb_user_blocked_and_recorded(monkeypatch: pytest.MonkeyPatch) -> None:
     """停用帳號沒有密碼（走 SMB）也要擋，且不能碰 NAS、要留紀錄。"""
     req = _request({"user-agent": "pytest-agent"})
-    login_req = LoginRequest(username="gone", password="p1")
+    login_req = LoginRequest(username="gone", password="p1", method="nas")
     monkeypatch.setattr(auth, "resolve_ip_location", lambda _ip: None)
     monkeypatch.setattr(auth, "parse_device_info", lambda _ua: None)
     record = AsyncMock(return_value=1)
@@ -347,3 +347,61 @@ async def test_login_nas_method_binds_by_nas_username(monkeypatch: pytest.Monkey
     monkeypatch.setattr(auth.settings, "enable_nas_auth", False)
     res = await auth.login(LoginRequest(username="new-nas", password="p", method="nas"), req)
     assert res.success is False
+
+
+@pytest.mark.asyncio
+async def test_login_auto_method_matches_legacy(monkeypatch: pytest.MonkeyPatch) -> None:
+    """auto（舊前端不帶 method）：沿用舊邏輯，依 username 是否有 password_hash 決定走 local 或 nas。"""
+    req = _request({"user-agent": "pytest-agent"})
+    monkeypatch.setattr(auth, "resolve_ip_location", lambda _ip: None)
+    monkeypatch.setattr(auth, "parse_device_info", lambda _ua: None)
+    monkeypatch.setattr(auth, "record_login", AsyncMock(return_value=1))
+    monkeypatch.setattr(auth, "log_message", AsyncMock(return_value=1))
+    monkeypatch.setattr(auth, "emit_new_message", AsyncMock())
+    monkeypatch.setattr(auth, "emit_unread_count", AsyncMock())
+    monkeypatch.setattr(auth.settings, "enable_nas_auth", True)
+    create = AsyncMock(return_value="tok")
+    monkeypatch.setattr(auth.session_manager, "create_session", create)
+    monkeypatch.setattr(auth, "get_user_role", AsyncMock(return_value="user"))
+    monkeypatch.setattr(permissions_service, "get_user_app_permissions_sync", lambda _r, _u: {})
+    monkeypatch.setattr(auth, "update_last_login", AsyncMock())
+
+    # (a) 有 password_hash + 沒帶 method → 走密碼認證，不碰 SMB，session 不存密碼
+    monkeypatch.setattr(auth, "get_user_for_auth", AsyncMock(return_value={
+        "id": 1, "username": "u1", "password_hash": "h", "is_active": True,
+        "must_change_password": False, "preferences": {},
+    }))
+    monkeypatch.setattr(auth, "verify_password", lambda _pw, _h: True)
+    smb = AsyncMock(return_value=None)
+    monkeypatch.setattr(auth, "run_in_smb_pool", smb)
+    res = await auth.login(LoginRequest(username="u1", password="p"), req)
+    assert res.success is True
+    smb.assert_not_called()
+    assert create.call_args[0][1] == ""  # session_password
+
+    # (b) 沒有 password_hash + 沒帶 method → 走 SMB，再依 nas_username 綁定找人，session 保留密碼
+    monkeypatch.setattr(auth, "get_user_for_auth", AsyncMock(return_value={
+        "id": 1, "username": "u1", "password_hash": None, "is_active": True,
+    }))
+    smb2 = AsyncMock(return_value=None)
+    monkeypatch.setattr(auth, "run_in_smb_pool", smb2)
+    nas_lookup = AsyncMock(return_value={
+        "id": 1, "username": "u1", "nas_username": "u1", "password_hash": None,
+        "is_active": True, "preferences": {},
+    })
+    monkeypatch.setattr(auth, "get_user_by_nas_username", nas_lookup)
+    res = await auth.login(LoginRequest(username="u1", password="p"), req)
+    assert res.success is True
+    smb2.assert_called_once()
+    nas_lookup.assert_awaited_once_with("u1")
+    assert create.call_args[0][1] == "p"  # session_password 保留 SMB 密碼
+
+    # (c) 未知使用者 + 沒帶 method → 走 SMB 路徑（找不到平台帳號，SMB 過就建帳號）
+    monkeypatch.setattr(auth, "get_user_for_auth", AsyncMock(return_value=None))
+    smb3 = AsyncMock(return_value=None)
+    monkeypatch.setattr(auth, "run_in_smb_pool", smb3)
+    monkeypatch.setattr(auth, "get_user_by_nas_username", AsyncMock(return_value=None))
+    monkeypatch.setattr(auth, "upsert_user", AsyncMock(return_value=99))
+    res = await auth.login(LoginRequest(username="new-user", password="p"), req)
+    assert res.success is True
+    smb3.assert_called_once()

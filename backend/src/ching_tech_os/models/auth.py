@@ -23,8 +23,9 @@ class LoginRequest(BaseModel):
     username: str
     password: str
     device: DeviceInfo | None = None
-    # nas：SMB 驗證（預設，舊前端不帶此欄位）；local：平台帳號密碼
-    method: Literal["nas", "local"] = "nas"
+    # auto：舊前端不帶此欄位時沿用舊邏輯（依 username 查到有 password_hash 就走 local，否則走 nas）；
+    # nas / local 由新前端明確指定
+    method: Literal["auto", "nas", "local"] = "auto"
 
 
 class LoginResponse(BaseModel):
