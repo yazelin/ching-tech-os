@@ -20,10 +20,11 @@ async def upsert_user(username: str) -> int:
         # 嘗試插入或更新（使用 username 唯一鍵）
         result = await conn.fetchrow(
             """
-            INSERT INTO users (username, last_login_at)
-            VALUES ($1, $2)
+            INSERT INTO users (username, nas_username, last_login_at)
+            VALUES ($1, $1, $2)
             ON CONFLICT (username) DO UPDATE
-            SET last_login_at = $2
+            SET last_login_at = $2,
+                nas_username = COALESCE(users.nas_username, EXCLUDED.nas_username)
             RETURNING id
             """,
             username,
@@ -69,7 +70,7 @@ async def get_user_for_auth(username: str) -> dict | None:
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
-            SELECT id, username, display_name, role,
+            SELECT id, username, display_name, role, nas_username,
                    password_hash, must_change_password, is_active, preferences
             FROM users
             WHERE username = $1
@@ -691,3 +692,37 @@ async def get_user_role(user_id: int | None) -> str:
             return row["role"] or "user"
 
     return "user"
+
+
+async def get_user_by_nas_username(nas_username: str) -> dict | None:
+    """依綁定的 NAS 帳號取得使用者（欄位同 get_user_for_auth）"""
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT id, username, display_name, role, nas_username,
+                   password_hash, must_change_password, is_active, preferences
+            FROM users
+            WHERE nas_username = $1
+            """,
+            nas_username,
+        )
+        return dict(row) if row else None
+
+
+async def set_nas_username(user_id: int, nas_username: str | None) -> None:
+    """綁定或解綁（None）NAS 帳號
+
+    Raises:
+        ValueError: nas_username 已綁定其他使用者
+    """
+    async with get_connection() as conn:
+        try:
+            await conn.execute(
+                "UPDATE users SET nas_username = $2 WHERE id = $1",
+                user_id,
+                nas_username,
+            )
+        except Exception as e:
+            if "unique constraint" in str(e).lower() or "duplicate key" in str(e).lower():
+                raise ValueError("此 NAS 帳號已綁定其他使用者")
+            raise
