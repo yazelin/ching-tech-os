@@ -394,7 +394,7 @@ LINE／Telegram Bot 是對外開放的入口：任何人加好友或把 bot 拉�
 | 條目層級 | 知識庫 `_check_item_access()`、記憶的擁有者條件 | 這一筆是不是你的；未綁定只讀得到 `scope=global` 且 `is_public` |
 | 工具內部自檢 | `require_bound_user()`＋`TOOLS_REQUIRE_BOUND_USER` | 憑空建立新資料的寫入（`add_note`、`add_note_with_attachments`，#207） |
 
-身分一律由伺服器注入，模型在工具參數裡宣稱的一律不算數：
+bot 走的路徑上，身分一律由伺服器注入，模型在工具參數裡宣稱的一律不算數：
 
 | 環境變數 | 內容 | 注入處 | 讀取處 |
 |----------|------|--------|--------|
@@ -402,8 +402,14 @@ LINE／Telegram Bot 是對外開放的入口：任何人加好友或把 bot 拉�
 | `CTOS_BOT_GROUP_ID`（＋沿用的 `CTOS_GROUP_ID`） | `bot_groups.id` | `build_bot_mcp_env()`，由 `linebot_ai.py`／`bot_telegram/handler.py`／`bot/identity_router.py` 呼叫 | `resolve_bot_identity()` |
 | `CTOS_BOT_USER_ID` | `bot_users.platform_user_id` | 同上 | `resolve_bot_identity()` |
 
-網頁端 `execute_tool()` 沒有 MCP 子行程、沒有這些環境變數，工具參數才會被採用；
-那條路已經過 session 認證。
+環境變數不存在時工具才會採用參數——**網頁聊天就是這種情況**：
+`api/ai.py` 的 Socket.IO `ai_message` 呼叫 `call_ai()` 時沒有帶 `ctos_user_id`，
+也沒有帶 `extra_mcp_env`（雖然 session 裡就有 `user_id`），所以那條路會起一個
+沒有任何身分環境變數的 MCP 子行程：工具的 `ctos_user_id` 由模型參數決定、
+記憶工具吃模型帶的 `line_group_id`／`line_user_id`、`update_memory`／`delete_memory`
+沒有擁有者範圍。進 socket 之前有 session 認證，所以不是匿名者能打的路，
+但同一個登入者可以指定別人的 id。這條缺口記在
+[存取矩陣的「已知缺口」](mcp-tool-access-matrix.md#已知缺口本次未修)，尚未修。
 
 ---
 

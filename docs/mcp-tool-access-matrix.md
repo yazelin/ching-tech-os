@@ -38,17 +38,6 @@
   `line_group_id`／`line_user_id` 但還沒接上注入，模型帶進來的值會被採用（殘留風險，
   見下方「已知缺口」）；`無` ＝ 工具不帶身分。
 
-## 已知缺口（本次未修）
-
-- `bot 身分（模型參數）` 的工具（`add_note`／`add_note_with_attachments`／
-  `search_knowledge`／`send_nas_file`／`get_message_attachments`／`summarize_chat`）
-  仍以模型帶的 `line_group_id`／`line_user_id` 決定範圍。已綁定的使用者可以宣稱
-  別的群組，藉此把筆記寫進別的專案範圍或讀到別的群組的訊息。修法與 #204 相同
-  （接 `resolve_bot_identity()`），但不在這支 PR 的範圍。
-- `是（未檢查）` 的工具（分享、排程、語音、生圖、`download_web_image`、
-  `generate_*`）連 app 權限都沒檢查，未綁定者只要模型肯呼叫就跑得動。#205 處理
-  分享那兩支，其餘尚未有 issue。
-
 共 74 支工具：未綁定可呼叫 27 支、寫入類 45 支。
 
 | 工具 | 模組 | App 權限 | 未綁定可呼叫 | 寫入 | 身分來源 |
@@ -127,3 +116,15 @@
 | `run_skill_script` | `skill_script_tools` | —（未登錄） | 是（未檢查） | 否 | `ctos_user_id` |
 | `text_to_speech` | `voice_tools` | —（未登錄） | 是（未檢查） | 是 | `ctos_user_id` |
 | `browse_webpage` | `web_tools` | —（未登錄） | 是（未檢查） | 否 | `ctos_user_id` |
+
+## 已知缺口（本次未修）
+
+**沒有工具層權限檢查的 18 支**：`codex_image_tool`、`download_web_image`、`add_memory`、`delete_memory`、`get_memories`、`update_memory`、`get_message_attachments`、`summarize_chat`、`generate_md2doc`、`generate_md2ppt`、`generate_presentation`、`list_scheduled_tasks`、`manage_scheduled_task`、`create_share_link`、`share_knowledge_attachment`、`run_skill_script`、`text_to_speech`、`browse_webpage`。這些工具連 `check_mcp_tool_permission()` 都沒呼叫，`TOOL_APP_MAPPING` 的對應只是裝飾，未綁定者只要模型肯呼叫就跑得動。#205 處理分享那兩支，其餘尚未有 issue。
+
+**完全不在 `TOOL_APP_MAPPING` 的模組（5 個）**：`codex_image_tools`、`scheduler_tools`、`skill_script_tools`、`voice_tools`、`web_tools`。新增工具沒登錄 registry 就等於不檢查，預設是開的。
+
+**未綁定可呼叫又會寫入／送出的 17 支**：`codex_image_tool`、`download_web_image`、`add_memory`、`delete_memory`、`update_memory`、`generate_md2doc`、`generate_md2ppt`、`generate_presentation`、`prepare_print_file`、`manage_scheduled_task`、`create_share_link`、`share_knowledge_attachment`、`text_to_speech` 沒有第二道關卡（例如 `prepare_print_file` 會把檔案送進印表機佇列）；`add_attachments_to_knowledge`、`delete_knowledge_item`、`update_knowledge_attachment`、`update_knowledge_item` 還有條目層級 `_check_item_access()` 擋著，未綁定實際上寫不進去。
+
+**bot 身分還是模型說了算的 6 支**：`add_note`、`add_note_with_attachments`、`search_knowledge`、`get_message_attachments`、`summarize_chat`、`send_nas_file`。這些工具收 `line_group_id`／`line_user_id` 但沒接 `resolve_bot_identity()`，已綁定的使用者可以宣稱別的群組，把筆記寫進別的專案範圍或讀到別的群組的訊息附件。修法與 #204 相同，不在這支 PR 的範圍。
+
+**網頁聊天不注入身分**：`api/ai.py` 的 Socket.IO `ai_message` 走 `call_ai()` 時沒有帶 `ctos_user_id` 也沒有帶 `extra_mcp_env`（雖然 session 裡就有 `user_id`），那條路會起一個沒有任何身分環境變數的 MCP 子行程：工具的 `ctos_user_id` 由模型參數決定、記憶工具吃模型帶的 id、`update_memory`／`delete_memory` 沒有擁有者範圍。進 socket 之前有 session 認證，所以不是匿名者能打的路，但同一個登入者可以指定別人的 id。

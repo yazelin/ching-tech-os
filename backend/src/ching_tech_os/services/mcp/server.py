@@ -93,7 +93,9 @@ def resolve_ctos_user_id(ctos_user_id: int | None) -> int | None:
     使用者綁定的 ctos_user_id 放進 CTOS_USER_ID 環境變數。這是伺服器驗過的
     身分，模型在工具參數裡打什麼都不能覆蓋（防冒充）。
 
-    環境變數不存在時（例如網頁端 execute_tool 直接呼叫），才採用參數。
+    環境變數不存在時才採用參數。實際上就是網頁聊天：`api/ai.py` 呼叫 `call_ai()`
+    沒有帶 ctos_user_id 也沒有帶 extra_mcp_env（見 docs/mcp-tool-access-matrix.md
+    的已知缺口）。`execute_tool()` 目前只有 MCP server 內部的 skill fallback 在用。
     """
     env_val = os.environ.get("CTOS_USER_ID")
     if env_val:
@@ -143,7 +145,9 @@ def resolve_bot_identity(
     - 模型只帶 user → 用注入的個人 id
     - 兩個都帶或都沒帶 → 兩個都用注入值（工具本身是群組優先）
 
-    環境變數都不存在時（網頁端 `execute_tool` 直接呼叫），才採用參數。
+    環境變數都不存在時才採用參數——目前實際上就是網頁聊天（`api/ai.py` 呼叫
+    `call_ai()` 沒有帶 `extra_mcp_env`），那條路的身分仍由模型參數決定，
+    缺口記在 `docs/mcp-tool-access-matrix.md`。
 
     Args:
         line_group_id: 模型帶進來的群組 UUID（bot_groups.id）

@@ -30,8 +30,8 @@ async def _connected_memory_scope():
 
     `update_memory`／`delete_memory` 只吃 memory_id，沒有身分參數——換句話說
     任何拿得到（或猜得到）UUID 的人都能改別的群組／別人的記憶。有伺服器注入的
-    連線身分時，SQL 一律加上對應的擁有者條件；沒有注入（網頁端 `execute_tool`）
-    才維持原本的不限範圍行為。
+    連線身分時，SQL 一律加上對應的擁有者條件；沒有注入（目前是網頁聊天，
+    見 `docs/mcp-tool-access-matrix.md` 的已知缺口）才維持原本的不限範圍行為。
 
     Returns:
         (bot_group_id, bot_user_uuid)：都是 None 表示沒有連線身分可用

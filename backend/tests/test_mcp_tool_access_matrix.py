@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -27,14 +28,28 @@ GENERATOR = BACKEND_DIR / "scripts" / "gen_tool_access_matrix.py"
 MATRIX_DOC = REPO_ROOT / "docs" / "mcp-tool-access-matrix.md"
 
 
-def _generate() -> str:
-    """以乾淨的直譯器重跑產生器（避免其他測試註冊的假工具混進來）。"""
+def _generate(enabled_modules: str = "knowledge") -> str:
+    """以乾淨的直譯器重跑產生器。
+
+    - 用 subprocess：其他測試會往真的 MCP registry 註冊假工具，in-process 產生會被汙染。
+    - 明確給一份最小 env：不繼承這個 pytest 行程的環境，矩陣才不會隨開發機飄。
+    - `ENABLED_MODULES` 預設故意傳一個「只開一個模組」的值：產生器要自己硬設成 `*`，
+      否則 `get_effective_app_permissions()` 會少掉被停用模組的 app，整欄「未綁定可呼叫」就變了。
+    """
+    env = {
+        "PATH": os.environ.get("PATH", ""),
+        "HOME": os.environ.get("HOME", ""),
+        "PYTHONIOENCODING": "utf-8",
+        "ENABLED_MODULES": enabled_modules,
+    }
     result = subprocess.run(
         [sys.executable, str(GENERATOR), "--stdout"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=180,
         cwd=str(BACKEND_DIR),
+        env=env,
     )
     assert result.returncode == 0, result.stderr
     return result.stdout
@@ -46,12 +61,37 @@ def test_matrix_doc_matches_generator() -> None:
     assert MATRIX_DOC.read_text(encoding="utf-8") == _generate()
 
 
+@pytest.mark.parametrize("enabled_modules", ["*", "knowledge", ""])
+def test_matrix_is_independent_of_enabled_modules(enabled_modules: str) -> None:
+    """產生器硬設 `ENABLED_MODULES=*`：呼叫端的設定不該改變矩陣內容。"""
+    assert _generate(enabled_modules) == MATRIX_DOC.read_text(encoding="utf-8")
+
+
 def test_matrix_doc_explains_root_cause() -> None:
     """矩陣頂端要寫共同根因與四個 issue 的關聯。"""
     content = MATRIX_DOC.read_text(encoding="utf-8")
     assert "這套權限設計假設呼叫者是已綁定的自己人" in content
     for issue in ("#201", "#204", "#205", "#207"):
         assert issue in content
+
+
+def test_matrix_doc_lists_generated_gaps() -> None:
+    """已知缺口要由表格資料產生，不是手寫的一句話。"""
+    content = MATRIX_DOC.read_text(encoding="utf-8")
+    gaps = content.split("## 已知缺口")[-1]
+
+    unchecked = [
+        line.split("`")[1]
+        for line in content.splitlines()
+        if line.startswith("| `") and "是（未檢查）" in line
+    ]
+    assert unchecked, "矩陣裡應該有沒做權限檢查的工具"
+    for name in unchecked:
+        assert f"`{name}`" in gaps, f"{name} 沒有出現在已知缺口"
+
+    # 未綁定可呼叫又會送印的代表案例，以及網頁聊天沒注入身分那條
+    assert "`prepare_print_file`" in gaps
+    assert "api/ai.py" in gaps
 
 
 def test_write_tools_registry_covers_write_verbs() -> None:

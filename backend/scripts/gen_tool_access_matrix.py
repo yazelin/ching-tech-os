@@ -78,24 +78,15 @@ _DOC_HEADER = """# MCP 工具存取矩陣
   `line_group_id`／`line_user_id` 但還沒接上注入，模型帶進來的值會被採用（殘留風險，
   見下方「已知缺口」）；`無` ＝ 工具不帶身分。
 
-## 已知缺口（本次未修）
-
-- `bot 身分（模型參數）` 的工具（`add_note`／`add_note_with_attachments`／
-  `search_knowledge`／`send_nas_file`／`get_message_attachments`／`summarize_chat`）
-  仍以模型帶的 `line_group_id`／`line_user_id` 決定範圍。已綁定的使用者可以宣稱
-  別的群組，藉此把筆記寫進別的專案範圍或讀到別的群組的訊息。修法與 #204 相同
-  （接 `resolve_bot_identity()`），但不在這支 PR 的範圍。
-- `是（未檢查）` 的工具（分享、排程、語音、生圖、`download_web_image`、
-  `generate_*`）連 app 權限都沒檢查，未綁定者只要模型肯呼叫就跑得動。#205 處理
-  分享那兩支，其餘尚未有 issue。
-
 """
 
 
 def _load_tools():
     """載入 repo 內的 MCP 工具並回傳 {tool_name: Tool}。"""
-    # 讓結果不受本機 .env 影響：所有內建模組都啟用
-    os.environ.setdefault("ENABLED_MODULES", "*")
+    # 讓結果不受本機 .env／呼叫端環境影響：硬設成全部啟用。
+    # 用 setdefault 不夠——`ENABLED_MODULES=knowledge` 之類的值會讓
+    # `get_effective_app_permissions()` 少掉被停用模組的 app，矩陣就跟著漂。
+    os.environ["ENABLED_MODULES"] = "*"
     sys.path.insert(0, str(BACKEND_DIR / "src"))
 
     import importlib
@@ -184,6 +175,70 @@ def _classify(name: str, tool) -> dict:
     }
 
 
+def _render_gaps(rows: list[dict]) -> list[str]:
+    """已知缺口一節：由表格資料算出來，不手寫（手寫的清單三個月後就是假的）。"""
+
+    def names(selected: list[dict]) -> str:
+        return "、".join(f"`{r['name']}`" for r in selected)
+
+    unchecked = [r for r in rows if r["unbound"] == "是（未檢查）"]
+    model_param = [r for r in rows if "模型參數" in r["identity"]]
+    unbound_writes = [
+        r for r in rows if r["unbound"].startswith("是") and r["write"] == "是"
+    ]
+    unbound_writes_guarded = [
+        r for r in unbound_writes if r["module"] == "knowledge_tools"
+    ]
+    unbound_writes_open = [
+        r for r in unbound_writes if r["module"] != "knowledge_tools"
+    ]
+    unmapped_modules = sorted({r["module"] for r in rows if "未登錄" in r["app"]})
+
+    lines = ["## 已知缺口（本次未修）", ""]
+
+    lines.append(
+        f"**沒有工具層權限檢查的 {len(unchecked)} 支**："
+        f"{names(unchecked)}。"
+        "這些工具連 `check_mcp_tool_permission()` 都沒呼叫，"
+        "`TOOL_APP_MAPPING` 的對應只是裝飾，未綁定者只要模型肯呼叫就跑得動。"
+        "#205 處理分享那兩支，其餘尚未有 issue。"
+    )
+    lines.append("")
+    lines.append(
+        f"**完全不在 `TOOL_APP_MAPPING` 的模組（{len(unmapped_modules)} 個）**："
+        + "、".join(f"`{m}`" for m in unmapped_modules)
+        + "。新增工具沒登錄 registry 就等於不檢查，預設是開的。"
+    )
+    lines.append("")
+    lines.append(
+        f"**未綁定可呼叫又會寫入／送出的 {len(unbound_writes)} 支**："
+        f"{names(unbound_writes_open)} 沒有第二道關卡"
+        "（例如 `prepare_print_file` 會把檔案送進印表機佇列）；"
+        f"{names(unbound_writes_guarded)} 還有條目層級 `_check_item_access()` 擋著，"
+        "未綁定實際上寫不進去。"
+    )
+    lines.append("")
+    lines.append(
+        f"**bot 身分還是模型說了算的 {len(model_param)} 支**："
+        f"{names(model_param)}。"
+        "這些工具收 `line_group_id`／`line_user_id` 但沒接 `resolve_bot_identity()`，"
+        "已綁定的使用者可以宣稱別的群組，把筆記寫進別的專案範圍或讀到別的群組的訊息附件。"
+        "修法與 #204 相同，不在這支 PR 的範圍。"
+    )
+    lines.append("")
+    lines.append(
+        "**網頁聊天不注入身分**：`api/ai.py` 的 Socket.IO `ai_message` 走 "
+        "`call_ai()` 時沒有帶 `ctos_user_id` 也沒有帶 `extra_mcp_env`（雖然 "
+        "session 裡就有 `user_id`），那條路會起一個沒有任何身分環境變數的 MCP 子行程："
+        "工具的 `ctos_user_id` 由模型參數決定、記憶工具吃模型帶的 id、"
+        "`update_memory`／`delete_memory` 沒有擁有者範圍。"
+        "進 socket 之前有 session 認證，所以不是匿名者能打的路，"
+        "但同一個登入者可以指定別人的 id。"
+    )
+    lines.append("")
+    return lines
+
+
 def render() -> str:
     tools = _load_tools()
     rows = [_classify(name, tool) for name, tool in tools.items()]
@@ -206,6 +261,7 @@ def render() -> str:
             f"| {row['unbound']} | {row['write']} | {row['identity']} |"
         )
     lines.append("")
+    lines.extend(_render_gaps(rows))
     return "\n".join(lines)
 
 
