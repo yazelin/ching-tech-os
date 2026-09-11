@@ -23,6 +23,7 @@ from httpx import ASGITransport, AsyncClient
 import ching_tech_os.api.ai_management as ai_management_api
 import ching_tech_os.api.auth as auth_api
 from ching_tech_os.models.auth import SessionData
+from ching_tech_os.services.permissions import DEFAULT_APP_PERMISSIONS, has_app_permission
 
 
 def _session(role: str = "user", app_permissions: dict[str, bool] | None = None) -> SessionData:
@@ -90,8 +91,8 @@ def _prompt(prompt_id) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_update_agent_user_default_denied(monkeypatch: pytest.MonkeyPatch) -> None:
-    """一般使用者（app_permissions 無覆寫）→ 403，且不會呼叫 service"""
+async def test_update_agent_user_explicit_false_denied(monkeypatch: pytest.MonkeyPatch) -> None:
+    """一般使用者、明確關閉 → 403，且不會呼叫 service"""
     agent_id = uuid4()
     update = AsyncMock(return_value=_agent(agent_id))
     monkeypatch.setattr(ai_management_api.ai_manager, "update_agent", update)
@@ -104,6 +105,65 @@ async def test_update_agent_user_default_denied(monkeypatch: pytest.MonkeyPatch)
     )
     assert resp.status_code == 403
     update.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_update_agent_user_empty_permissions_denied(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """app_permissions 是空 dict → 回退到預設值（agent-settings 預設關閉）→ 403"""
+    agent_id = uuid4()
+    update = AsyncMock(return_value=_agent(agent_id))
+    monkeypatch.setattr(ai_management_api.ai_manager, "update_agent", update)
+
+    resp = await _request(
+        _app(_session(role="user", app_permissions={})),
+        "PUT",
+        f"/api/ai/agents/{agent_id}",
+        json={"display_name": "改過的名字"},
+    )
+    assert resp.status_code == 403
+    update.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_update_agent_user_other_app_permission_denied(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """app_permissions 有值但沒帶 agent-settings → 一樣回退到預設值 → 403
+
+    （checker 以前遇到非空 dict 缺 key 會直接 403，現在與 has_app_permission 一致）
+    """
+    agent_id = uuid4()
+    update = AsyncMock(return_value=_agent(agent_id))
+    monkeypatch.setattr(ai_management_api.ai_manager, "update_agent", update)
+
+    resp = await _request(
+        _app(_session(role="user", app_permissions={"other-app": True})),
+        "PUT",
+        f"/api/ai/agents/{agent_id}",
+        json={"display_name": "改過的名字"},
+    )
+    assert resp.status_code == 403
+    update.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_checker_falls_back_to_default_for_missing_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """非空 dict 缺 key 時要回退到預設值，預設開放的 app 就該放行"""
+    monkeypatch.setattr(ai_management_api.ai_manager, "get_agents", AsyncMock(return_value=[]))
+    # knowledge-base 預設開放；session 的權限快取只帶了別的 app
+    from ching_tech_os.services.permissions import require_app_permission
+
+    checker = require_app_permission("knowledge-base")
+    session = _session(role="user", app_permissions={"other-app": True})
+
+    class _Req:
+        method = "GET"
+
+    assert await checker(request=_Req(), session=session) is session
 
 
 @pytest.mark.asyncio
@@ -269,3 +329,20 @@ async def test_list_prompts_user_allowed(monkeypatch: pytest.MonkeyPatch) -> Non
         "/api/ai/prompts",
     )
     assert resp.status_code == 200
+
+
+# ============================================================
+# 預設權限（F8：兩個 app 改為預設關閉）
+# ============================================================
+
+
+def test_prompt_editor_and_agent_settings_default_closed() -> None:
+    """ai_prompts / ai_agents 是全域表，預設關閉、由管理員逐人開放"""
+    assert DEFAULT_APP_PERMISSIONS["prompt-editor"] is False
+    assert DEFAULT_APP_PERMISSIONS["agent-settings"] is False
+
+
+def test_has_app_permission_defaults_for_two_apps() -> None:
+    for app_id in ("prompt-editor", "agent-settings"):
+        assert has_app_permission("user", None, app_id) is False
+        assert has_app_permission("admin", None, app_id) is True

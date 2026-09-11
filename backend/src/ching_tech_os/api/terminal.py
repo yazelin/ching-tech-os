@@ -3,7 +3,11 @@
 import socketio
 
 from ..services.permissions import has_app_permission
-from ..services.socket_auth import get_socket_identity
+from ..services.socket_auth import (
+    disconnect_socket,
+    get_socket_identity,
+    revalidate_socket_session,
+)
 from ..services.terminal import terminal_service
 
 
@@ -32,20 +36,27 @@ def register_events(sio: socketio.AsyncServer) -> None:
     @sio.on('terminal:create')
     async def handle_create(sid: str, data: dict) -> dict:
         """建立新的終端機 session（身分以連線時的 token 為準）"""
-        identity = await get_socket_identity(sio, sid)
-        if identity is None:
-            return {'success': False, 'error': '未授權'}
+        # 進入時重新解析一次 token：連線後才登出或撤銷的 token 不能再開終端機
+        session = await revalidate_socket_session(sio, sid)
+        if session is None:
+            await disconnect_socket(sio, sid)
+            return {'success': False, 'error': '連線未授權，請重新登入'}
 
-        role = identity.get('role', 'user')
-        app_permissions = identity.get('app_permissions') or {}
-        if not has_app_permission(role, {"apps": app_permissions}, 'terminal'):
+        if session.read_only:
+            return {'success': False, 'error': '此 API token 為唯讀，無法開啟終端機'}
+
+        permissions = {"apps": session.app_permissions} if session.app_permissions else None
+        if not has_app_permission(session.role, permissions, 'terminal'):
             return {'success': False, 'error': '無「終端機」功能權限'}
+
+        if session.user_id is None:
+            return {'success': False, 'error': '連線未授權，請重新登入'}
 
         try:
             cols = data.get('cols', 80)
             rows = data.get('rows', 24)
             # 忽略 client 送來的 user_id，一律用連線身分
-            user_id = identity.get('user_id')
+            user_id = session.user_id
 
             session = await terminal_service.create_session(
                 websocket_sid=sid,
@@ -125,10 +136,11 @@ def register_events(sio: socketio.AsyncServer) -> None:
     async def handle_list(sid: str, data: dict) -> dict:
         """列出可重連的 sessions（只列連線身分自己的）"""
         identity = await get_socket_identity(sio, sid)
-        if identity is None:
+        user_id = identity.get('user_id') if identity else None
+        if user_id is None:
             return {'sessions': []}
 
-        sessions = terminal_service.get_detached_sessions(identity.get('user_id'))
+        sessions = terminal_service.get_detached_sessions(user_id)
 
         return {
             'sessions': [
@@ -151,12 +163,13 @@ def register_events(sio: socketio.AsyncServer) -> None:
             return {'success': False, 'error': 'Missing session_id'}
 
         identity = await get_socket_identity(sio, sid)
-        if identity is None:
-            return {'success': False, 'error': '未授權'}
+        user_id = identity.get('user_id') if identity else None
+        if user_id is None:
+            return {'success': False, 'error': '連線未授權，請重新登入'}
 
         # 只能重連自己的 session
         existing = terminal_service.get_session(session_id)
-        if existing is None or existing.user_id != identity.get('user_id'):
+        if existing is None or existing.user_id != user_id:
             return {'success': False, 'error': 'Session not found or already connected'}
 
         success = terminal_service.reattach_websocket(session_id, sid)

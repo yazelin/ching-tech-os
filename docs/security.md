@@ -311,22 +311,36 @@ Socket.IO 與 REST 走同一套身分：連線（`connect`）時就驗 token，�
 
 ### 連線流程
 
-1. Client 連線時帶 token。舊桌面前端在 `frontend/js/socket-client.js` 以
-   `auth: (cb) => cb({ token: LoginModule.getToken() })` 傳入（function 形式，重連時會重新取最新 token）；
-   無法設定 `auth` 的客戶端可改用 query string `?token=...`。
-2. 後端 `main.py` 的 `connect(sid, environ, auth)` 取 token（`auth.token` 優先，其次 query string），
-   交給 `api/auth.py` 的 `_resolve_session()` 解析，與 REST 同一條路徑，支援 session token 與 PAT。
-3. 取不到 token 或解析失敗 → `raise socketio.exceptions.ConnectionRefusedError("unauthorized")`。
-4. 成功 → `sio.save_session(sid, {...})` 存下 `user_id`、`username`、`role`、`app_permissions`、`auth_type`。
+1. Client 連線時以 `auth.token` 帶 token。舊桌面前端在 `frontend/js/socket-client.js` 寫
+   `auth: (cb) => cb({ token: LoginModule.getToken() })`（function 形式，重連時會重新取最新 token）。
+   **不接受 query string 帶 token**，那會留在 nginx access log 與瀏覽器歷史紀錄裡。
+2. 後端 `main.py` 的 `connect(sid, environ, auth)` 取 `auth["token"]`，交給 `api/auth.py` 的
+   `_resolve_session()` 解析，與 REST 同一條路徑，支援 session token 與 PAT。
+3. 取不到 token、解析回 `None`、解析過程出錯（記 warning）→
+   `raise socketio.exceptions.ConnectionRefusedError("unauthorized")`。
+4. 成功 → `sio.save_session(sid, {...})` 存下 `user_id`、`username`、`role`、`app_permissions`、
+   `read_only`、`token`。
+5. 前端收到 `connect_error` 且 `error.message === 'unauthorized'` 時，走 `LoginModule.logout()`
+   清 token 並導回登入頁。
 
 ### 事件如何用連線身分
 
 | 事件 | 行為 |
 |------|------|
-| `ai_chat_event`、`compress_chat` | 以連線身分的 `user_id` 呼叫 `ai_chat.get_chat(chat_id, user_id)`；不是自己的對話就回 `ai_error` / `compress_error`（「對話不存在或無權限」），不呼叫 AI provider |
-| `terminal:create` | 忽略 payload 的 `user_id`，用連線身分；另外要求 `terminal` app 權限 |
-| `terminal:list`、`terminal:reconnect` | 只看得到、只能重連自己的 session |
-| `join_user_room`、`leave_user_room`、`get_unread_count_event` | 房間固定是 `user:<連線身分的 user_id>`，忽略 payload 的 `userId` |
+| `ai_chat_event`、`compress_chat` | 進入時用存下的 token 重新解析一次身分；以該身分的 `user_id` 呼叫 `ai_chat.get_chat(chat_id, user_id)`，不是自己的對話就回 `ai_error` / `compress_error`（「對話不存在或無權限」），不呼叫 AI provider |
+| `terminal:create` | 進入時重新解析身分；忽略 payload 的 `user_id`，並要求 `terminal` app 權限 |
+| `terminal:list`、`terminal:reconnect` | 只看得到、只能重連自己的 session；連線身分沒有 `user_id` 一律拒絕 |
+| `join_user_room`、`leave_user_room`、`get_unread_count_event` | 房間固定是 `user:<連線身分的 user_id>`，忽略 payload 的 `userId`；取不到身分就不回未讀數 |
+
+### 為什麼高風險事件要重新解析 token
+
+Socket.IO 連線可以掛很久。跑 AI（燒 token）與開終端機（能執行指令）這兩類事件，
+在進入時用連線時存下的 token 再跑一次 `_resolve_session()`：連線之後才登出、
+session 過期或 PAT 被撤銷的連線，會收到錯誤事件並被 `disconnect()`。
+其餘事件（加入房間、查未讀數）沿用連線時存下的身分，不再查一次。
+
+唯讀 PAT（`read_only`）不能跑 AI 對話、壓縮對話與開終端機，與 REST 的
+`require_app_permission` 對非 GET 方法的處理一致。
 
 取不到連線身分時（例如連線已消失），事件回錯誤或直接略過，不會往下執行。
 
@@ -339,15 +353,20 @@ Socket.IO 與 REST 走同一套身分：連線（`connect`）時就驗 token，�
 App 權限定義在 `services/permissions.py` 的 `DEFAULT_APP_PERMISSIONS`，
 以 `require_app_permission(app_id)` 這個 FastAPI dependency 套在端點上；admin 一律放行。
 
-| App 權限 | 套用範圍 |
-|----------|----------|
-| `ai-log` | `GET /api/ai/logs`、`/api/ai/logs/stats`、`/api/ai/logs/{id}` |
-| `prompt-editor` | `POST` / `PUT` / `DELETE /api/ai/prompts*` |
-| `agent-settings` | `POST` / `PUT` / `DELETE /api/ai/agents*`、`POST /api/ai/test` |
-| `terminal` | Socket.IO `terminal:create` |
+| App 權限 | 預設 | 套用範圍 |
+|----------|------|----------|
+| `ai-log` | 關閉 | `GET /api/ai/logs`、`/api/ai/logs/stats`、`/api/ai/logs/{id}` |
+| `prompt-editor` | 關閉 | `POST` / `PUT` / `DELETE /api/ai/prompts*` |
+| `agent-settings` | 關閉 | `POST` / `PUT` / `DELETE /api/ai/agents*`、`POST /api/ai/test` |
+| `terminal` | 關閉 | Socket.IO `terminal:create` |
 
-AI 管理的 GET 端點（prompts、agents、agents/by-name、agents/{id}）維持登入即可，
+`prompt-editor` 與 `agent-settings` 預設關閉、由管理員逐人開放：`ai_prompts` 與 `ai_agents`
+是全域表，一個人改 system prompt 或工具白名單就影響所有人。**GET 不受影響**，
+AI 管理的讀取端點（prompts、agents、agents/by-name、agents/{id}）維持登入即可，
 AI 助手選 agent、AI Log 篩選、排程 UI 都要讀。
+
+session 的權限快取沒帶到某個 `app_id` 時，`require_app_permission` 會回退到
+`get_effective_app_permissions()` 的預設值，與 `has_app_permission()` 一致。
 
 `prompt-editor` 與 `agent-settings` 原本只在舊桌面前端擋 `openApp` 點擊，後端沒有對應檢查；
 新前端沒有那道客戶端防護，缺口因此浮上檯面，修法是把防護移到後端。這是既有的客戶端防護缺口，不是新功能。

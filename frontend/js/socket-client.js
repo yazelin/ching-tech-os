@@ -50,6 +50,14 @@ const SocketClient = (function () {
 
     socket.on('connect_error', (error) => {
       console.error('[SocketClient] Connection error:', error.message);
+
+      // 後端 connect 驗不過 token 時回 'unauthorized'，走既有登出流程回登入頁
+      if (error && error.message === 'unauthorized') {
+        socket.disconnect();
+        if (typeof LoginModule !== 'undefined') {
+          LoginModule.logout();
+        }
+      }
     });
 
     // AI 相關事件

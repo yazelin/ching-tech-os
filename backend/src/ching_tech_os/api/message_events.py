@@ -71,6 +71,10 @@ def register_events(sio: AsyncServer):
             data: 保留相容，內容不使用
         """
         user_id = await get_socket_user_id(sio, sid)
+        if not user_id:
+            # 取不到連線身分就不回全域未讀數，避免洩漏別人的訊息量
+            return
+
         count = await get_unread_count(user_id)
         await sio.emit(
             "message:unread_count",

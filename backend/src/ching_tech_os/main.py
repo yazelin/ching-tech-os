@@ -504,17 +504,24 @@ app.mount("/data/projects/attachments", StaticFiles(directory=PROJECT_ATTACHMENT
 async def connect(sid, environ, auth=None):
     """客戶端連線（必須帶有效 token）
 
-    token 來源：client 的 `auth.token`（優先），或連線 query string 的 `token=`。
-    驗不過一律拒絕連線；通過則把身分存進 sio session，供各事件使用。
+    token 只從 client 的 `auth.token` 取（query string 會留在 nginx log 與
+    瀏覽器歷史紀錄，不接受）。驗不過一律拒絕連線；通過則把身分存進 sio
+    session，供各事件使用。
     """
     from .api.auth import _resolve_session
     from .services.socket_auth import extract_token
 
-    token = extract_token(auth, environ)
+    token = extract_token(auth)
     if not token:
         raise socketio.exceptions.ConnectionRefusedError("unauthorized")
 
-    session = await _resolve_session(token)
+    try:
+        session = await _resolve_session(token)
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.warning("Socket.IO 連線解析 token 失敗（sid=%s）: %s", sid, e)
+        raise socketio.exceptions.ConnectionRefusedError("unauthorized")
+
     if session is None:
         raise socketio.exceptions.ConnectionRefusedError("unauthorized")
 
@@ -525,7 +532,9 @@ async def connect(sid, environ, auth=None):
             "username": session.username,
             "role": session.role,
             "app_permissions": session.app_permissions or {},
-            "auth_type": session.auth_type,
+            "read_only": session.read_only,
+            # 高風險事件會拿它重新解析一次，確認 token 還有效
+            "token": token,
         },
     )
     print(f"Client connected: {sid} (user={session.username})")

@@ -2,23 +2,31 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
+import ching_tech_os.api.auth as auth_api
 from ching_tech_os.api import terminal as terminal_api
+from ching_tech_os.models.auth import SessionData
 
 
 class _FakeSio:
     def __init__(self, identity: dict | None = None) -> None:
         self.handlers = {}
         self.emit = AsyncMock()
+        self.disconnect = AsyncMock()
         self.identity = (
             identity
             if identity is not None
-            else {"user_id": 1, "role": "user", "app_permissions": {"terminal": True}}
+            else {
+                "user_id": 1,
+                "role": "user",
+                "app_permissions": {"terminal": True},
+                "token": "tok",
+            }
         )
 
     def on(self, event: str):
@@ -29,6 +37,32 @@ class _FakeSio:
 
     async def get_session(self, sid):
         return self.identity
+
+
+def _stub_resolve_session(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    user_id: int = 1,
+    role: str = "user",
+    app_permissions: dict | None = None,
+    read_only: bool = False,
+) -> AsyncMock:
+    """terminal:create 進入時會重新解析一次 token"""
+    now = datetime.now(timezone.utc)
+    session = SessionData(
+        username="tester",
+        password="xxx",
+        nas_host="localhost",
+        user_id=user_id,
+        created_at=now,
+        expires_at=now,
+        role=role,
+        app_permissions=app_permissions if app_permissions is not None else {"terminal": True},
+        read_only=read_only,
+    )
+    resolve = AsyncMock(return_value=session)
+    monkeypatch.setattr(auth_api, "_resolve_session", resolve)
+    return resolve
 
 
 class _FakeSession:
@@ -95,6 +129,7 @@ async def test_terminal_event_handlers(monkeypatch: pytest.MonkeyPatch) -> None:
     sio = _FakeSio()
     service = _FakeTerminalService()
     monkeypatch.setattr(terminal_api, "terminal_service", service)
+    _stub_resolve_session(monkeypatch)
 
     terminal_api.register_events(sio)
     assert service.output_cb is not None
@@ -164,6 +199,7 @@ async def test_terminal_create_error_branch(monkeypatch: pytest.MonkeyPatch) -> 
 
     service.create_session = _raise_create  # type: ignore[method-assign]
     monkeypatch.setattr(terminal_api, "terminal_service", service)
+    _stub_resolve_session(monkeypatch)
     terminal_api.register_events(sio)
 
     result = await sio.handlers["terminal:create"]("sid1", {})

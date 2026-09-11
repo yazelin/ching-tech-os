@@ -338,7 +338,7 @@ async def test_message_events_module(monkeypatch: pytest.MonkeyPatch) -> None:
 
         async def get_session(self, sid):
             # 連線時存下的身分（房間以此為準，不看 payload）
-            return {"user_id": 10, "role": "user", "app_permissions": {}}
+            return {"user_id": 10, "role": "user", "app_permissions": {}, "token": "tok"}
 
     sio = _FakeSio()
     monkeypatch.setattr(message_events, "get_unread_count", AsyncMock(return_value=7))
