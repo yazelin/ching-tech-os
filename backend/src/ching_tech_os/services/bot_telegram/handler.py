@@ -32,7 +32,7 @@ from ..linebot_agents import (
     get_tools_for_user,
     get_tool_routing_for_user,
 )
-from ..mcp import get_mcp_tool_names
+from ..mcp import build_bot_mcp_env, get_mcp_tool_names
 from ..permissions import get_mcp_tools_for_user, get_user_app_permissions_sync
 from ..user import get_user_role_and_permissions
 from .media import download_telegram_document, download_telegram_photo
@@ -1017,6 +1017,12 @@ async def _handle_text_with_ai(
     # 8.3：Telegram 走 provider-neutral call_ai；canary 由設定控制，預設仍為 Claude
     context_type = "telegram-group" if is_group else "telegram-personal"
     start_time = time.time()
+    # 連線身分注入 MCP 子行程（記憶工具靠這個判斷是誰在講話，見 issue #204）
+    extra_mcp_env = build_bot_mcp_env(
+        line_group_id=bot_group_id,
+        line_user_id=platform_user_id,
+        agent_id=agent.get("id"),
+    )
     response = await call_ai(
         prompt=text,
         model=model,
@@ -1028,6 +1034,7 @@ async def _handle_text_with_ai(
         on_tool_end=_on_tool_end,
         required_mcp_servers=required_mcp_servers,
         ctos_user_id=ctos_user_id,
+        extra_mcp_env=extra_mcp_env or None,
         routing_context=RoutingContext(
             context_type=context_type,
             agent_name=agent.get("name"),

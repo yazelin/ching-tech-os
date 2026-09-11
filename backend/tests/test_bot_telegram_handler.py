@@ -549,6 +549,11 @@ async def test_handle_text_with_ai_success(monkeypatch: pytest.MonkeyPatch) -> N
     # AI Log 記綁定的 CTOS 帳號（bot_users.user_id）
     assert handler.log_linebot_ai_call.await_args.kwargs["user_id"] == 1
 
+    # #204：連線身分注入 MCP 子行程（Telegram 之前完全沒注入）
+    env = captured_call_ai_kwargs["extra_mcp_env"]
+    assert env["CTOS_BOT_USER_ID"] == "9"
+    assert "CTOS_BOT_GROUP_ID" not in env
+
 
 @pytest.mark.asyncio
 async def test_handle_text_with_ai_failure_paths(monkeypatch: pytest.MonkeyPatch) -> None:

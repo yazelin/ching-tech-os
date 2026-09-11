@@ -177,6 +177,36 @@ def resolve_bot_identity(
     return resolved_group, resolved_user
 
 
+def build_bot_mcp_env(
+    line_group_id=None,
+    line_user_id=None,
+    agent_id=None,
+) -> dict[str, str]:
+    """組 bot 對話要注入 MCP 子行程的身分環境變數（issue #204）。
+
+    寫入端（`linebot_ai.py`／`bot_telegram/handler.py`／`bot/identity_router.py`）
+    與讀取端（`resolve_bot_identity`）共用這一個函式，變數名稱只有這裡定義一次。
+
+    Args:
+        line_group_id: 群組的內部 UUID（bot_groups.id；個人對話為 None）
+        line_user_id: 平台使用者 ID（bot_users.platform_user_id）
+        agent_id: 這次對話使用的 Agent ID（語音設定用）
+
+    Returns:
+        要附加到 ching-tech-os MCP server 的環境變數
+    """
+    env: dict[str, str] = {}
+    if line_group_id:
+        env["CTOS_BOT_GROUP_ID"] = str(line_group_id)
+        # 語音設定（voice_tools）已經在用的名字，沿用同一個值避免兩套名字打架
+        env["CTOS_GROUP_ID"] = str(line_group_id)
+    if line_user_id:
+        env["CTOS_BOT_USER_ID"] = str(line_user_id)
+    if agent_id:
+        env["CTOS_AGENT_ID"] = str(agent_id)
+    return env
+
+
 def resolve_agent_allowed_shared_sources() -> list[str] | None:
     """從環境變數讀取 Agent 允許的 shared 來源列表。
 

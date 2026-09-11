@@ -330,11 +330,17 @@ async def handle_restricted_mode(
         if allowed_library_paths:
             extra_mcp_env["AGENT_ALLOWED_LIBRARY_PATHS"] = _json.dumps(allowed_library_paths)
 
-    # 語音設定 context：注入 group_id 和 agent_id
-    if line_group_id:
-        extra_mcp_env["CTOS_GROUP_ID"] = str(line_group_id)
-    if agent and agent.get("id"):
-        extra_mcp_env["CTOS_AGENT_ID"] = str(agent["id"])
+    # 連線身分與語音設定 context：注入 group_id、platform_user_id 和 agent_id
+    # （未綁定者一樣要注入，記憶工具才不會吃模型帶的 id，見 issue #204）
+    from ..mcp import build_bot_mcp_env
+
+    extra_mcp_env.update(
+        build_bot_mcp_env(
+            line_group_id=line_group_id,
+            line_user_id=platform_user_id,
+            agent_id=(agent or {}).get("id"),
+        )
+    )
 
     # 9. 呼叫 AI（8.6：restricted mode 走 provider-neutral call_ai；
     # 專屬 context_type 讓 canary 可獨立於一般對話控制，預設仍為 Claude）
