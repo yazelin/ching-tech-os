@@ -71,6 +71,8 @@
 
 明確不在第一版：檔案管理、終端機、程式編輯器、物料庫存、記憶管理、排程、語音、簡報、發包期程、廠商主檔。這些留在舊桌面。
 
+> **部分推翻（2026-09-12）**：「物料庫存」與「廠商主檔」兩項改由 `2026-09-12-ai-native-erp-design.md`（往來與物料模組，取代 ERPNext）在新前端實作，後端 PR #192 已合併。依據：管理層 2026-09-12 決定自建 AI native 類 ERP，原話見該規格第一節。其餘項目仍留在舊桌面。
+
 ## 四、後端改動
 
 ### 帳號模型
@@ -107,6 +109,8 @@
 ## 獨立一條線：ERPNext 資料搬出
 
 不等前端，隨時可做。寫一支腳本把 ERPNext 全部 doctype 匯成 JSON 與 CSV 到 NAS 備份區，與 `scripts/backup-knowledge-to-nas.sh` 一起排程。之後專用簡化 ERP 依真實需求另開 spec；第一版專案模組可選擇把 ERPNext 的 Project 匯入當種子資料。
+
+> **進度（2026-09-12）**：備份已上線（PR #190，`backup-erpnext.timer` 每天 03:30，見 `docs/erpnext-backup.md`）。「專用簡化 ERP 另開 spec」已成為 `2026-09-12-ai-native-erp-design.md`，範圍從「之後再說」提前為現行工作，依據同上。
 
 ## 風險
 
