@@ -11,6 +11,7 @@ from ..services.ai_pipelines import summarize_messages
 from ..services.ai_provider import attach_routing_metadata
 from ..services.ai_router import RoutingContext, call_ai
 from ..services.message import log_message
+from ..services.socket_auth import get_socket_user_id
 
 
 def register_events(sio: AsyncServer):
@@ -61,14 +62,15 @@ def register_events(sio: AsyncServer):
             )
             return
 
-        # 從 DB 載入對話
-        chat = await ai_chat.get_chat(chat_id)
+        # 以連線身分取對話（不是自己的對話就不往下走，也不呼叫 AI）
+        user_id = await get_socket_user_id(sio, sid)
+        chat = await ai_chat.get_chat(chat_id, user_id) if user_id else None
         if chat is None:
             await sio.emit(
                 "ai_error",
                 {
                     "chatId": chat_id_str,
-                    "error": "對話不存在",
+                    "error": "對話不存在或無權限",
                 },
                 to=sid,
             )
@@ -202,8 +204,7 @@ def register_events(sio: AsyncServer):
                 except Exception as e:
                     print(f"[ai] create_log error: {e}")
 
-            # 記錄 AI 對話訊息到訊息中心
-            user_id = chat.get("user_id")
+            # 記錄 AI 對話訊息到訊息中心（用連線身分）
             if user_id:
                 try:
                     await log_message(
@@ -285,14 +286,15 @@ def register_events(sio: AsyncServer):
             )
             return
 
-        # 從 DB 載入對話
-        chat = await ai_chat.get_chat(chat_id)
+        # 以連線身分取對話（不是自己的對話就不往下走，也不呼叫 AI）
+        user_id = await get_socket_user_id(sio, sid)
+        chat = await ai_chat.get_chat(chat_id, user_id) if user_id else None
         if chat is None:
             await sio.emit(
                 "compress_error",
                 {
                     "chatId": chat_id_str,
-                    "error": "對話不存在",
+                    "error": "對話不存在或無權限",
                 },
                 to=sid,
             )

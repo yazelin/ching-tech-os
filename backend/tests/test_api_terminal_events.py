@@ -12,9 +12,14 @@ from ching_tech_os.api import terminal as terminal_api
 
 
 class _FakeSio:
-    def __init__(self) -> None:
+    def __init__(self, identity: dict | None = None) -> None:
         self.handlers = {}
         self.emit = AsyncMock()
+        self.identity = (
+            identity
+            if identity is not None
+            else {"user_id": 1, "role": "user", "app_permissions": {"terminal": True}}
+        )
 
     def on(self, event: str):
         def _decorator(fn):
@@ -22,11 +27,15 @@ class _FakeSio:
             return fn
         return _decorator
 
+    async def get_session(self, sid):
+        return self.identity
+
 
 class _FakeSession:
-    def __init__(self, session_id: str, websocket_sid: str | None = None) -> None:
+    def __init__(self, session_id: str, websocket_sid: str | None = None, user_id: int | None = 1) -> None:
         self.session_id = session_id
         self.websocket_sid = websocket_sid
+        self.user_id = user_id
         self.created_at = datetime.now()
         self.last_activity = datetime.now()
         self.written: list[str] = []
@@ -45,6 +54,7 @@ class _FakeSession:
 class _FakeTerminalService:
     def __init__(self) -> None:
         self.output_cb = None
+        self.created_user_ids: list = []
         self.sessions: dict[str, _FakeSession] = {}
         self.detached_by_sid: dict[str, list[str]] = {"sid-disconnect": ["s1"]}
 
@@ -52,7 +62,8 @@ class _FakeTerminalService:
         self.output_cb = cb
 
     async def create_session(self, websocket_sid: str, user_id=None, cols=80, rows=24):
-        s = _FakeSession("s1", websocket_sid=websocket_sid)
+        self.created_user_ids.append(user_id)
+        s = _FakeSession("s1", websocket_sid=websocket_sid, user_id=user_id)
         self.sessions[s.session_id] = s
         return s
 

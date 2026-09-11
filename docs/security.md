@@ -304,6 +304,56 @@ Bot 憑證（Line Channel Secret / Access Token、Telegram Bot Token 等）使�
 
 ---
 
+## Socket.IO 連線驗證
+
+Socket.IO 與 REST 走同一套身分：連線（`connect`）時就驗 token，驗不過直接拒絕，
+之後所有事件一律以連線時存下的身分為準，不看 client payload 送來的 `user_id` / `userId`。
+
+### 連線流程
+
+1. Client 連線時帶 token。舊桌面前端在 `frontend/js/socket-client.js` 以
+   `auth: (cb) => cb({ token: LoginModule.getToken() })` 傳入（function 形式，重連時會重新取最新 token）；
+   無法設定 `auth` 的客戶端可改用 query string `?token=...`。
+2. 後端 `main.py` 的 `connect(sid, environ, auth)` 取 token（`auth.token` 優先，其次 query string），
+   交給 `api/auth.py` 的 `_resolve_session()` 解析，與 REST 同一條路徑，支援 session token 與 PAT。
+3. 取不到 token 或解析失敗 → `raise socketio.exceptions.ConnectionRefusedError("unauthorized")`。
+4. 成功 → `sio.save_session(sid, {...})` 存下 `user_id`、`username`、`role`、`app_permissions`、`auth_type`。
+
+### 事件如何用連線身分
+
+| 事件 | 行為 |
+|------|------|
+| `ai_chat_event`、`compress_chat` | 以連線身分的 `user_id` 呼叫 `ai_chat.get_chat(chat_id, user_id)`；不是自己的對話就回 `ai_error` / `compress_error`（「對話不存在或無權限」），不呼叫 AI provider |
+| `terminal:create` | 忽略 payload 的 `user_id`，用連線身分；另外要求 `terminal` app 權限 |
+| `terminal:list`、`terminal:reconnect` | 只看得到、只能重連自己的 session |
+| `join_user_room`、`leave_user_room`、`get_unread_count_event` | 房間固定是 `user:<連線身分的 user_id>`，忽略 payload 的 `userId` |
+
+取不到連線身分時（例如連線已消失），事件回錯誤或直接略過，不會往下執行。
+
+> 部署後舊桌面前端要重新整理頁面，才會載到會帶 token 的新版 `socket-client.js`。
+
+---
+
+## App 功能權限（後端強制）
+
+App 權限定義在 `services/permissions.py` 的 `DEFAULT_APP_PERMISSIONS`，
+以 `require_app_permission(app_id)` 這個 FastAPI dependency 套在端點上；admin 一律放行。
+
+| App 權限 | 套用範圍 |
+|----------|----------|
+| `ai-log` | `GET /api/ai/logs`、`/api/ai/logs/stats`、`/api/ai/logs/{id}` |
+| `prompt-editor` | `POST` / `PUT` / `DELETE /api/ai/prompts*` |
+| `agent-settings` | `POST` / `PUT` / `DELETE /api/ai/agents*`、`POST /api/ai/test` |
+| `terminal` | Socket.IO `terminal:create` |
+
+AI 管理的 GET 端點（prompts、agents、agents/by-name、agents/{id}）維持登入即可，
+AI 助手選 agent、AI Log 篩選、排程 UI 都要讀。
+
+`prompt-editor` 與 `agent-settings` 原本只在舊桌面前端擋 `openApp` 點擊，後端沒有對應檢查；
+新前端沒有那道客戶端防護，缺口因此浮上檯面，修法是把防護移到後端。這是既有的客戶端防護缺口，不是新功能。
+
+---
+
 ## 安全注意事項
 
 ### Session 密碼處理
@@ -365,4 +415,7 @@ app.add_middleware(
 | `backend/src/ching_tech_os/models/login_record.py` | 登入記錄模型 |
 | `backend/migrations/versions/007_seed_admin_user.py` | 預設管理員帳號 migration |
 | `frontend/js/device-fingerprint.js` | 裝置指紋 |
+| `backend/src/ching_tech_os/services/permissions.py` | App 功能權限與 `require_app_permission` |
+| `backend/src/ching_tech_os/services/socket_auth.py` | Socket.IO 連線身分工具（token 擷取、讀連線 session） |
 | `frontend/js/login.js` | 登入模組 |
+| `frontend/js/socket-client.js` | Socket.IO 客戶端（連線帶 token） |

@@ -26,12 +26,15 @@ const SocketClient = (function () {
     const basePath = window.API_BASE || '';
     const socketPath = basePath ? `${basePath}/socket.io/` : '/socket.io/';
 
+    // 連線驗證：後端 connect 會驗 token，驗不過直接拒絕連線。
+    // 用 function 形式，重連時才會重新取一次最新的 token。
     socket = io(BACKEND_URL, {
       path: socketPath,
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
+      auth: (cb) => cb({ token: LoginModule.getToken() }),
     });
 
     // 連線事件

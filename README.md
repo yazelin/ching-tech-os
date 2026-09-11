@@ -45,6 +45,12 @@ ChingTech OS 是擎添工業內部使用的整合式工作平台，以 Web 技�
 ### 2026-09
 
 - **排程結果推播**：動態排程跑完可把結果推回 LINE / Telegram（`executor_config.notify` 設定目標，沒設就不推），失敗訊息帶連續失敗次數（`scheduled_tasks.consecutive_failures`，成功歸零）。推播失敗只記 warning，不影響排程結果。Skill Script 模式也補寫 `ai_logs`。
+- **AI 管理寫入端點與 Socket.IO 補後端權限**：prompts 的 `POST`/`PUT`/`DELETE` 套
+  `require_app_permission("prompt-editor")`，agents 的 `POST`/`PUT`/`DELETE` 與 `POST /api/ai/test` 套
+  `require_app_permission("agent-settings")`，GET 端點維持登入即可。Socket.IO 連線改為必須帶 token
+  （舊桌面以 `auth.token` 傳，也相容 query string），驗不過拒絕連線，之後各事件一律用連線身分，
+  AI 對話、終端機、訊息中心都不再相信 client 送來的 `user_id`。與 AI Log 同樣是既有的客戶端防護缺口
+  （前端擋點擊、後端沒擋），不是新功能；部署後舊桌面要重新整理頁面才會帶新程式。
 - **AI Log 端點補後端權限**：`/api/ai/logs`、`/api/ai/logs/stats`、`/api/ai/logs/{id}` 三個端點補上
   `require_app_permission("ai-log")`，`ai-log` 預設權限改為關閉、由管理員逐人開放。舊桌面原本靠前端
   `openApp` 擋住點擊，後端端點從未套用權限檢查；新前端沒有那道客戶端防護，問題因此浮上檯面，修法

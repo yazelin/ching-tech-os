@@ -190,6 +190,21 @@ AI 對話使用 Socket.IO 實現串流回應，讓使用者可以即時看到 AI
 
 ---
 
+## 連線驗證
+
+連線時必須帶 token，驗不過會被拒絕；連線後所有事件都以連線身分為準，不看 payload 的 `user_id` / `userId`。
+完整流程與各事件行為見 [security.md 的「Socket.IO 連線驗證」](security.md#socketio-連線驗證)。
+
+```javascript
+// 前端：function 形式，重連時會重新取最新 token
+socket = io(BACKEND_URL, {
+  path: socketPath,
+  auth: (cb) => cb({ token: LoginModule.getToken() }),
+});
+```
+
+---
+
 ## 前端 Socket 客戶端
 
 位置：`frontend/js/socket-client.js`

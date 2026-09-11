@@ -2,6 +2,8 @@
 
 import socketio
 
+from ..services.permissions import has_app_permission
+from ..services.socket_auth import get_socket_identity
 from ..services.terminal import terminal_service
 
 
@@ -29,11 +31,21 @@ def register_events(sio: socketio.AsyncServer) -> None:
 
     @sio.on('terminal:create')
     async def handle_create(sid: str, data: dict) -> dict:
-        """建立新的終端機 session"""
+        """建立新的終端機 session（身分以連線時的 token 為準）"""
+        identity = await get_socket_identity(sio, sid)
+        if identity is None:
+            return {'success': False, 'error': '未授權'}
+
+        role = identity.get('role', 'user')
+        app_permissions = identity.get('app_permissions') or {}
+        if not has_app_permission(role, {"apps": app_permissions}, 'terminal'):
+            return {'success': False, 'error': '無「終端機」功能權限'}
+
         try:
             cols = data.get('cols', 80)
             rows = data.get('rows', 24)
-            user_id = data.get('user_id')
+            # 忽略 client 送來的 user_id，一律用連線身分
+            user_id = identity.get('user_id')
 
             session = await terminal_service.create_session(
                 websocket_sid=sid,
@@ -111,9 +123,12 @@ def register_events(sio: socketio.AsyncServer) -> None:
 
     @sio.on('terminal:list')
     async def handle_list(sid: str, data: dict) -> dict:
-        """列出可重連的 sessions"""
-        user_id = data.get('user_id')
-        sessions = terminal_service.get_detached_sessions(user_id)
+        """列出可重連的 sessions（只列連線身分自己的）"""
+        identity = await get_socket_identity(sio, sid)
+        if identity is None:
+            return {'sessions': []}
+
+        sessions = terminal_service.get_detached_sessions(identity.get('user_id'))
 
         return {
             'sessions': [
@@ -134,6 +149,15 @@ def register_events(sio: socketio.AsyncServer) -> None:
 
         if not session_id:
             return {'success': False, 'error': 'Missing session_id'}
+
+        identity = await get_socket_identity(sio, sid)
+        if identity is None:
+            return {'success': False, 'error': '未授權'}
+
+        # 只能重連自己的 session
+        existing = terminal_service.get_session(session_id)
+        if existing is None or existing.user_id != identity.get('user_id'):
+            return {'success': False, 'error': 'Session not found or already connected'}
 
         success = terminal_service.reattach_websocket(session_id, sid)
         if success:

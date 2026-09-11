@@ -501,9 +501,34 @@ app.mount("/data/projects/attachments", StaticFiles(directory=PROJECT_ATTACHMENT
 # === Socket.IO 事件 ===
 
 @sio.event
-async def connect(sid, environ):
-    """客戶端連線"""
-    print(f"Client connected: {sid}")
+async def connect(sid, environ, auth=None):
+    """客戶端連線（必須帶有效 token）
+
+    token 來源：client 的 `auth.token`（優先），或連線 query string 的 `token=`。
+    驗不過一律拒絕連線；通過則把身分存進 sio session，供各事件使用。
+    """
+    from .api.auth import _resolve_session
+    from .services.socket_auth import extract_token
+
+    token = extract_token(auth, environ)
+    if not token:
+        raise socketio.exceptions.ConnectionRefusedError("unauthorized")
+
+    session = await _resolve_session(token)
+    if session is None:
+        raise socketio.exceptions.ConnectionRefusedError("unauthorized")
+
+    await sio.save_session(
+        sid,
+        {
+            "user_id": session.user_id,
+            "username": session.username,
+            "role": session.role,
+            "app_permissions": session.app_permissions or {},
+            "auth_type": session.auth_type,
+        },
+    )
+    print(f"Client connected: {sid} (user={session.username})")
 
 
 @sio.event

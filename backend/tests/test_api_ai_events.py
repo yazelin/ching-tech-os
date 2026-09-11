@@ -13,13 +13,19 @@ from ching_tech_os.services.ai_provider import AIResponse, ToolCall
 
 
 class _FakeSio:
-    def __init__(self) -> None:
+    """連線身分由 connect 存進 sio session，測試直接餵一份。"""
+
+    def __init__(self, identity: dict | None = None) -> None:
         self.handlers = {}
         self.emit = AsyncMock()
+        self.identity = identity if identity is not None else {"user_id": 1, "role": "user"}
 
     def event(self, fn):
         self.handlers[fn.__name__] = fn
         return fn
+
+    async def get_session(self, sid):
+        return self.identity
 
 
 def _response(

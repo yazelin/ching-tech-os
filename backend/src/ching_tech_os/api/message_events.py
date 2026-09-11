@@ -3,6 +3,7 @@
 from socketio import AsyncServer
 
 from ..services.message import get_unread_count
+from ..services.socket_auth import get_socket_user_id
 from ..models.message import MessageSeverity, MessageSource
 
 # 儲存 sio 實例供外部使用
@@ -27,13 +28,13 @@ def register_events(sio: AsyncServer):
     async def join_user_room(sid, data):
         """使用者加入個人房間（用於接收訊息通知）
 
+        房間以連線身分為準，忽略 data 裡的 userId。
+
         Args:
             sid: Socket.IO session ID
-            data: {
-                userId: int  # 使用者 ID
-            }
+            data: 保留相容，內容不使用
         """
-        user_id = data.get("userId")
+        user_id = await get_socket_user_id(sio, sid)
         if user_id:
             room_name = f"user:{user_id}"
             await sio.enter_room(sid, room_name)
@@ -49,15 +50,13 @@ def register_events(sio: AsyncServer):
 
     @sio.event
     async def leave_user_room(sid, data):
-        """使用者離開個人房間
+        """使用者離開個人房間（房間以連線身分為準）
 
         Args:
             sid: Socket.IO session ID
-            data: {
-                userId: int
-            }
+            data: 保留相容，內容不使用
         """
-        user_id = data.get("userId")
+        user_id = await get_socket_user_id(sio, sid)
         if user_id:
             room_name = f"user:{user_id}"
             await sio.leave_room(sid, room_name)
@@ -65,15 +64,13 @@ def register_events(sio: AsyncServer):
 
     @sio.event
     async def get_unread_count_event(sid, data):
-        """取得未讀訊息數量
+        """取得未讀訊息數量（以連線身分計算）
 
         Args:
             sid: Socket.IO session ID
-            data: {
-                userId: int | None
-            }
+            data: 保留相容，內容不使用
         """
-        user_id = data.get("userId")
+        user_id = await get_socket_user_id(sio, sid)
         count = await get_unread_count(user_id)
         await sio.emit(
             "message:unread_count",
