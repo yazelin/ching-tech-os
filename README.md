@@ -44,6 +44,10 @@ ChingTech OS 是擎添工業內部使用的整合式工作平台，以 Web 技�
 
 ### 2026-09
 
+- **AI Log 端點補後端權限**：`/api/ai/logs`、`/api/ai/logs/stats`、`/api/ai/logs/{id}` 三個端點補上
+  `require_app_permission("ai-log")`，`ai-log` 預設權限改為關閉、由管理員逐人開放。舊桌面原本靠前端
+  `openApp` 擋住點擊，後端端點從未套用權限檢查；新前端沒有那道客戶端防護，問題因此浮上檯面，修法
+  是把防護移到後端。這是既有的客戶端防護缺口，不是新功能。
 - **三種登入方式**：登入分 auto（預設，行為同舊版）、NAS 帳號（SMB 驗證，自動建帳號）、平台帳號（管理員建立、只驗密碼）三種方式。平台帳號可綁定 NAS 帳號與 LINE。`users.nas_username` 為綁定欄位。
 - **CORS_EXTRA_ORIGINS**：給獨立部署的新前端（os.ching-tech.com）用。
 

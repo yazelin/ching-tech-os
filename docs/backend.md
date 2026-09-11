@@ -2,6 +2,11 @@
 
 使用 FastAPI + NAS SMB 認證的後端服務。
 
+## 近期重點（2026-09）
+
+- AI Log 三個端點（`/api/ai/logs`、`/api/ai/logs/stats`、`/api/ai/logs/{id}`）補上
+  `require_app_permission("ai-log")`，`ai-log` 預設權限改為關閉，需管理員逐人開放。
+
 ## 近期重點（2026-02）
 
 - 引入 `modules.py` 模組 registry，透過 `ENABLED_MODULES` 做條件式路由 / MCP / 排程載入。
@@ -183,6 +188,12 @@ uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8088 --reload
 | GET | `/api/ai/logs` | 列表 Logs（分頁、過濾）|
 | GET | `/api/ai/logs/{id}` | 取得 Log 詳情 |
 | GET | `/api/ai/logs/stats` | 取得統計資料 |
+
+以上三個端點套用 `require_app_permission("ai-log")`：舊桌面原本靠前端 `openApp` 擋住點擊，
+後端端點從未套用權限檢查，任何登入者直接呼叫 API 就讀得到全部 AI log（含 system prompt）；
+新前端沒有那道客戶端防護，問題因此浮上檯面，修法是把防護移到後端。這是既有的客戶端防護
+缺口，不是新功能。`ai-log` 預設權限已改為關閉，需管理員逐人開放；`GET /api/ai/agents` 只含
+名稱與模型、不敏感，維持原本的一般登入即可存取。
 
 ### Line Bot
 

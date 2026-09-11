@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..models.auth import SessionData
 from .auth import get_current_session
+from ..services.permissions import require_app_permission
 from ..models.ai import (
     AiAgentCreate,
     AiAgentListResponse,
@@ -230,7 +231,7 @@ async def list_logs(
     end_date: datetime | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
-    session: SessionData = Depends(get_current_session),
+    session: SessionData = Depends(require_app_permission("ai-log")),
 ):
     """取得 AI Log 列表（分頁）
 
@@ -262,7 +263,7 @@ async def get_log_stats(
     agent_id: UUID | None = None,
     start_date: datetime | None = None,
     end_date: datetime | None = None,
-    session: SessionData = Depends(get_current_session),
+    session: SessionData = Depends(require_app_permission("ai-log")),
 ):
     """取得 AI Log 統計
 
@@ -278,7 +279,7 @@ async def get_log_stats(
 @router.get("/logs/{log_id}", response_model=AiLogResponse)
 async def get_log(
     log_id: UUID,
-    session: SessionData = Depends(get_current_session),
+    session: SessionData = Depends(require_app_permission("ai-log")),
 ):
     """取得 AI Log 詳情"""
     log = await ai_manager.get_log(log_id)
