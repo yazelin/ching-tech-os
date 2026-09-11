@@ -49,7 +49,7 @@ def is_tool_deprecated(tool_name: str) -> tuple[bool, str | None]:
 
 # 工具名稱對應需要的 App 權限
 # None 表示不需要特定權限（基礎功能）
-# 注意：專案/廠商/物料管理工具已移除（遷移至 ERPNext）
+# 往來對象 → vendor-management，物料／庫存／採購 → inventory-management
 TOOL_APP_MAPPING: dict[str, str | None] = {
     # 知識庫工具
     "search_knowledge": "knowledge-base",
@@ -86,6 +86,33 @@ TOOL_APP_MAPPING: dict[str, str | None] = {
 
     # 列印前置處理工具
     "prepare_print_file": "printer",
+
+    # 往來對象工具（往來與物料模組，migration 030）
+    "find_party": "vendor-management",
+    "get_party": "vendor-management",
+    "create_party": "vendor-management",
+    "update_party": "vendor-management",
+    "add_party_contact": "vendor-management",
+    "add_party_address": "vendor-management",
+    "merge_parties": "vendor-management",
+    "extract_party_from_document": "vendor-management",
+    "summarize_party": "vendor-management",
+
+    # 物料、庫存與採購工具
+    "find_item": "inventory-management",
+    "get_item": "inventory-management",
+    "create_item": "inventory-management",
+    "update_item": "inventory-management",
+    "get_stock": "inventory-management",
+    "adjust_stock": "inventory-management",
+    "transfer_stock": "inventory-management",
+    "create_purchase_order": "inventory-management",
+    "get_purchase_order": "inventory-management",
+    "list_purchase_orders": "inventory-management",
+    "receive_purchase_order": "inventory-management",
+    "cancel_purchase_order": "inventory-management",
+    "extract_purchase_order_from_document": "inventory-management",
+    "summarize_item": "inventory-management",
 
     # 通用工具（不需要特定權限）
     "get_message_attachments": None,  # 基礎訊息功能
