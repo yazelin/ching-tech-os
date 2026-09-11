@@ -130,29 +130,152 @@ def test_migration_032_old_sections_match_seed_data() -> None:
 def test_migration_032_rewrite_replaces_and_reports_missing() -> None:
     module = _load_migration_032()
     content = "前言\n" + module.SECTIONS["personal_party"][0] + "\n結尾"
-    rewritten, missing = module.rewrite(content, ["personal_party", "personal_inventory"])
+    rewritten, missing, already = module.rewrite(
+        content, ["personal_party", "personal_inventory"]
+    )
     assert module.SECTIONS["personal_party"][1] in rewritten
     assert module.SECTIONS["personal_party"][0] not in rewritten
     # 找不到的段落只回報、不炸
     assert missing == ["personal_inventory"]
+    assert already == []
 
 
 def test_migration_032_rewrite_is_reversible() -> None:
     module = _load_migration_032()
     names = list(module.SECTIONS)
     original = "\n".join(old for old, _new in module.SECTIONS.values())
-    upgraded, missing = module.rewrite(original, names)
-    assert missing == []
-    downgraded, missing_back = module.rewrite(upgraded, names, reverse=True)
-    assert missing_back == []
+    upgraded, missing, already = module.rewrite(original, names)
+    assert missing == [] and already == []
+    downgraded, missing_back, already_back = module.rewrite(upgraded, names, reverse=True)
+    assert missing_back == [] and already_back == []
     assert downgraded == original
 
 
 def test_migration_032_rewrite_never_raises_on_unknown_content() -> None:
     module = _load_migration_032()
-    rewritten, missing = module.rewrite("完全無關的 prompt", list(module.SECTIONS))
+    rewritten, missing, already = module.rewrite("完全無關的 prompt", list(module.SECTIONS))
     assert rewritten == "完全無關的 prompt"
     assert missing == list(module.SECTIONS)
+    assert already == []
+
+
+def test_migration_032_rewrite_reports_already_switched() -> None:
+    """段落已經是新版（新文字在、舊文字不在）算「已切換」，不是「找不到」"""
+    module = _load_migration_032()
+    content = module.SECTIONS["personal_party"][1]
+    rewritten, missing, already = module.rewrite(content, ["personal_party"])
+    assert rewritten == content
+    assert missing == []
+    assert already == ["personal_party"]
+
+
+def test_migration_032_new_sections_match_linebot_agents_verbatim() -> None:
+    """migration 的新段落要和 linebot_agents.py 的對應段落逐字相等
+
+    兩份文字是分開維護的（migration 必須自足），這條擋的是只改一邊。
+    """
+    module = _load_migration_032()
+    prompts = {
+        module.PERSONAL: linebot_agents.LINEBOT_PERSONAL_PROMPT,
+        module.GROUP: linebot_agents.LINEBOT_GROUP_PROMPT,
+    }
+    for prompt_name, names in module.PROMPT_SECTIONS.items():
+        for name in names:
+            new = module.SECTIONS[name][1]
+            assert new in prompts[prompt_name], (
+                f"{name} 的新段落和 linebot_agents.py 的 {prompt_name} 對不起來"
+            )
+
+
+# ---- _apply（假連線，不碰真資料庫）----
+
+
+class _FakeRow:
+    def __init__(self, id_, name, content):
+        self.id = id_
+        self.name = name
+        self.content = content
+
+
+class _FakeResult:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def fetchall(self):
+        return self._rows
+
+
+class _FakeConn:
+    """只認得 SELECT 與 UPDATE 兩種語句，記錄所有 UPDATE"""
+
+    def __init__(self, rows):
+        self.rows = rows
+        self.updates = []
+
+    def execute(self, statement, params=None):
+        sql = str(statement)
+        if sql.strip().upper().startswith("SELECT"):
+            return _FakeResult(self.rows)
+        self.updates.append(params)
+        return _FakeResult([])
+
+
+class _FakeOp:
+    def __init__(self, conn):
+        self._conn = conn
+
+    def get_bind(self):
+        return self._conn
+
+
+def _run_apply(module, rows, reverse=False):
+    conn = _FakeConn(rows)
+    original = module.op
+    module.op = _FakeOp(conn)
+    try:
+        module._apply(reverse=reverse)
+    finally:
+        module.op = original
+    return conn
+
+
+def test_migration_032_apply_skips_when_prompt_row_missing(caplog) -> None:
+    module = _load_migration_032()
+    with caplog.at_level("WARNING"):
+        conn = _run_apply(module, [])
+    assert conn.updates == []
+    assert "linebot-personal" in caplog.text
+    assert "linebot-group" in caplog.text
+
+
+def test_migration_032_apply_updates_content() -> None:
+    module = _load_migration_032()
+    original = "\n".join(
+        module.SECTIONS[name][0] for name in module.PROMPT_SECTIONS[module.PERSONAL]
+    )
+    rows = [_FakeRow("id-1", module.PERSONAL, original)]
+    conn = _run_apply(module, rows)
+    assert len(conn.updates) == 1
+    assert conn.updates[0]["id"] == "id-1"
+    written = conn.updates[0]["content"]
+    assert "mcp__erpnext__" not in written
+    assert "find_party" in written
+
+
+def test_migration_032_apply_does_not_update_when_already_switched(caplog) -> None:
+    """已經切換過的內容不再下 UPDATE（不動 updated_at），且只記 info 不記 warning"""
+    module = _load_migration_032()
+    switched = "\n".join(
+        module.SECTIONS[name][1] for name in module.PROMPT_SECTIONS[module.GROUP]
+    )
+    rows = [_FakeRow("id-2", module.GROUP, switched)]
+    with caplog.at_level("INFO"):
+        conn = _run_apply(module, rows)
+    assert conn.updates == []
+    assert "已切換" in caplog.text
+    # 「已切換」不能被記成 warning（重跑 migration 是正常情況）
+    warnings = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+    assert not [w for w in warnings if module.GROUP in w]
 
 
 # ============================================================
@@ -179,6 +302,73 @@ def test_project_skill_has_no_erpnext_tools() -> None:
     assert "mcp__erpnext__" not in text
     assert "ct.erp" not in text
     assert "os.ching-tech.com/projects" in text
+
+
+@pytest.mark.asyncio
+async def test_erp_skill_loads_for_inventory_only_user() -> None:
+    """skills/erp 掛兩個 app，只有 inventory-management 的一般使用者也要拿得到"""
+    from ching_tech_os.skills import get_skill_manager
+
+    sm = get_skill_manager()
+    skills = await sm.get_skills_for_user({"inventory-management": True}, role="user")
+    assert "erp" in {s.name for s in skills}
+
+
+@pytest.mark.asyncio
+async def test_erp_skill_loads_for_vendor_only_user() -> None:
+    from ching_tech_os.skills import get_skill_manager
+
+    sm = get_skill_manager()
+    skills = await sm.get_skills_for_user({"vendor-management": True}, role="user")
+    assert "erp" in {s.name for s in skills}
+
+
+@pytest.mark.asyncio
+async def test_erp_skill_hidden_without_either_app() -> None:
+    from ching_tech_os.skills import get_skill_manager
+
+    sm = get_skill_manager()
+    skills = await sm.get_skills_for_user({"knowledge-base": True}, role="user")
+    assert "erp" not in {s.name for s in skills}
+
+
+@pytest.mark.asyncio
+async def test_single_string_requires_app_still_works() -> None:
+    """既有的單字串 skill 行為不變"""
+    from ching_tech_os.skills import get_skill_manager
+
+    sm = get_skill_manager()
+    with_app = await sm.get_skills_for_user({"knowledge-base": True}, role="user")
+    without_app = await sm.get_skills_for_user({}, role="user")
+    assert "knowledge" in {s.name for s in with_app}
+    assert "knowledge" not in {s.name for s in without_app}
+
+
+def test_required_apps_normalises_str_and_list() -> None:
+    from ching_tech_os.skills import has_required_app, required_apps
+
+    assert required_apps(None) == []
+    assert required_apps("a") == ["a"]
+    assert required_apps(["a", "b"]) == ["a", "b"]
+    assert required_apps(["a", None, "", 3]) == ["a"]
+    # 沒宣告就放行；清單是「任一」
+    assert has_required_app(None, {}) is True
+    assert has_required_app("a", {"a": True}) is True
+    assert has_required_app("a", {"a": False}) is False
+    assert has_required_app(["a", "b"], {"b": True}) is True
+    assert has_required_app(["a", "b"], {"a": False, "b": False}) is False
+
+
+def test_erp_skill_requires_both_apps() -> None:
+    import yaml
+
+    text = (SKILLS_DIR / "erp" / "SKILL.md").read_text(encoding="utf-8")
+    front = text.split("---", 2)[1]
+    config = yaml.safe_load(front)
+    assert config["metadata"]["ctos"]["requires_app"] == [
+        "vendor-management",
+        "inventory-management",
+    ]
 
 
 def test_script_mcp_matrix_has_no_erpnext_notes() -> None:
@@ -312,6 +502,32 @@ def test_cli_erp_stock_resolves_warehouse_name(cli_main, monkeypatch) -> None:
     assert rec.calls[-1][1]["warehouse_id"] == warehouse_id
 
 
+def test_cli_erp_find_clamps_limit(cli_main, monkeypatch) -> None:
+    """/api/items 的 page_size 上限是 100，超過要夾住而不是讓後端回 422"""
+    rec = _Recorder([("/api/items", {"items": [], "total": 0})])
+    monkeypatch.setattr(cli_main, "_api", rec)
+    args = cli_main.build_parser().parse_args(["erp", "find", "x", "--limit", "500"])
+    args.func(args)
+    assert rec.calls[0][1]["page_size"] == 100
+
+
+def test_cli_erp_find_clamps_limit_lower_bound(cli_main, monkeypatch) -> None:
+    rec = _Recorder([("/api/items", {"items": [], "total": 0})])
+    monkeypatch.setattr(cli_main, "_api", rec)
+    args = cli_main.build_parser().parse_args(["erp", "find", "x", "--limit", "0"])
+    args.func(args)
+    assert rec.calls[0][1]["page_size"] == 1
+
+
+def test_cli_version_bumped(cli_main) -> None:
+    """移除子命令＋端點搬家是 breaking change"""
+    import tomllib
+
+    meta = tomllib.loads((REPO_ROOT / "cli" / "pyproject.toml").read_text(encoding="utf-8"))
+    assert meta["project"]["version"] == "0.2.0"
+    assert cli_main.__version__ == "0.2.0"
+
+
 def test_cli_erp_bom_subcommands_removed(cli_main) -> None:
     parser = cli_main.build_parser()
     for argv in (["erp", "boms", "CTOS-A1"], ["erp", "bom", "BOM-1"]):
@@ -327,6 +543,27 @@ def test_cli_source_has_no_erp_proxy_paths(cli_main) -> None:
 # ============================================================
 # 5. 舊桌面
 # ============================================================
+
+
+def test_share_tools_points_to_new_frontend() -> None:
+    """最後一處 http://ct.erp"""
+    text = (
+        BACKEND_ROOT / "src" / "ching_tech_os" / "services" / "mcp" / "share_tools.py"
+    ).read_text(encoding="utf-8")
+    assert "ct.erp" not in text
+    assert "ERPNext" not in text
+    assert "os.ching-tech.com/projects" in text
+
+
+def test_no_ct_erp_left_in_backend_or_cli() -> None:
+    """整個 backend src 與 cli 都不該再有 ct.erp（extends/ 是 submodule，不在範圍）"""
+    roots = [BACKEND_ROOT / "src", REPO_ROOT / "cli" / "src"]
+    hits = []
+    for root in roots:
+        for path in root.rglob("*.py"):
+            if "ct.erp" in path.read_text(encoding="utf-8"):
+                hits.append(str(path))
+    assert hits == []
 
 
 def test_legacy_desktop_has_no_erpnext_app() -> None:

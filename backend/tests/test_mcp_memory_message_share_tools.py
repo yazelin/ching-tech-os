@@ -231,7 +231,7 @@ async def test_create_share_link(monkeypatch: pytest.MonkeyPatch) -> None:
     import ching_tech_os.services.share as share_module
 
     moved = await share_tools.create_share_link("project", "P-1")
-    assert "已遷移至 ERPNext" in moved
+    assert "os.ching-tech.com/projects" in moved
 
     invalid_type = await share_tools.create_share_link("bad", "X")
     assert "資源類型必須是" in invalid_type

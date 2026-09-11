@@ -216,21 +216,30 @@ PROMPT_SECTIONS: dict[str, list[str]] = {
 }
 
 
-def rewrite(content: str, names: list[str], reverse: bool = False) -> tuple[str, list[str]]:
-    """逐段替換，回傳（改寫後內容, 找不到而略過的段落名稱）
+def rewrite(
+    content: str, names: list[str], reverse: bool = False
+) -> tuple[str, list[str], list[str]]:
+    """逐段替換，回傳（改寫後內容, 找不到的段落, 已經是目標版本的段落）
 
     `reverse=True` 是 downgrade 方向（新段落換回 ERPNext 段落）。
+
+    「找不到」與「已切換」要分開：前者代表段落被人改過、需要人工補，
+    後者是重跑 migration 的正常情況，不該吵。
     """
     missing: list[str] = []
+    already: list[str] = []
     for name in names:
         old, new = SECTIONS[name]
         if reverse:
             old, new = new, old
         if old not in content:
-            missing.append(name)
+            if new in content:
+                already.append(name)
+            else:
+                missing.append(name)
             continue
         content = content.replace(old, new)
-    return content, missing
+    return content, missing, already
 
 
 def _apply(reverse: bool) -> None:
@@ -245,7 +254,11 @@ def _apply(reverse: bool) -> None:
             logger.warning("ai_prompts 沒有 %s，略過", name)
 
     for row in rows:
-        new_content, missing = rewrite(row.content, PROMPT_SECTIONS[row.name], reverse=reverse)
+        new_content, missing, already = rewrite(
+            row.content, PROMPT_SECTIONS[row.name], reverse=reverse
+        )
+        if already:
+            logger.info("%s 這些段落已切換，略過：%s", row.name, "、".join(already))
         if missing:
             logger.warning("%s 找不到這些段落，已略過：%s", row.name, "、".join(missing))
         if new_content == row.content:
@@ -255,7 +268,11 @@ def _apply(reverse: bool) -> None:
             sa.text("UPDATE ai_prompts SET content = :content, updated_at = NOW() WHERE id = :id"),
             {"content": new_content, "id": row.id},
         )
-        logger.info("%s 已更新（%d 段）", row.name, len(PROMPT_SECTIONS[row.name]) - len(missing))
+        logger.info(
+            "%s 已更新（%d 段）",
+            row.name,
+            len(PROMPT_SECTIONS[row.name]) - len(missing) - len(already),
+        )
 
 
 def upgrade() -> None:

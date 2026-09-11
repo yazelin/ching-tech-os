@@ -548,7 +548,7 @@ def _resolve_item(code: str) -> dict:
 
 def _resolve_warehouse(name: str) -> dict:
     """倉庫代碼或名稱 → 倉庫"""
-    resp = _api("/api/warehouses", params={"page_size": 100})
+    resp = _api("/api/warehouses", params={"page_size": _MAX_PAGE_SIZE})
     rows = resp.get("items", [])
     matched = [
         w
@@ -567,8 +567,14 @@ def _resolve_warehouse(name: str) -> dict:
     return matched[0]
 
 
+# /api/items 與 /api/stock 的 page_size 上限是 100（後端 Query(le=100)）
+_MAX_PAGE_SIZE = 100
+
+
 def cmd_erp_find(args: argparse.Namespace) -> None:
-    resp = _api("/api/items", params={"q": args.query, "page_size": args.limit})
+    # 夾住而不是照送，否則後端回 422 使用者只會看到一串驗證錯誤
+    page_size = max(1, min(args.limit, _MAX_PAGE_SIZE))
+    resp = _api("/api/items", params={"q": args.query, "page_size": page_size})
     if args.json:
         print(json.dumps(resp, ensure_ascii=False, indent=2))
         return
@@ -585,7 +591,7 @@ def cmd_erp_find(args: argparse.Namespace) -> None:
         )
     total = resp.get("total")
     if total is not None and total > len(items):
-        print(f"（共 {total} 筆，只列出 {len(items)} 筆，用 --limit 調整）")
+        print(f"（共 {total} 筆，只列出 {len(items)} 筆，用 --limit 調整，上限 {_MAX_PAGE_SIZE}）")
 
 
 def cmd_erp_item(args: argparse.Namespace) -> None:
@@ -618,7 +624,7 @@ def cmd_erp_item(args: argparse.Namespace) -> None:
 
 def cmd_erp_stock(args: argparse.Namespace) -> None:
     item = _resolve_item(args.item_code)
-    params = {"item_id": item["id"], "page_size": 100}
+    params = {"item_id": item["id"], "page_size": _MAX_PAGE_SIZE}
     if args.warehouse:
         params["warehouse_id"] = _resolve_warehouse(args.warehouse)["id"]
     resp = _api("/api/stock", params=params)
@@ -763,7 +769,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_efind = erp_sub.add_parser("find", help="關鍵字搜尋物料")
     p_efind.add_argument("query", help="關鍵字（比對料號、品名、規格、別名）")
-    p_efind.add_argument("--limit", type=int, default=20)
+    p_efind.add_argument("--limit", type=int, default=20, help=f"回傳筆數上限（最多 {_MAX_PAGE_SIZE}）")
     p_efind.add_argument("--json", action="store_true")
     p_efind.set_defaults(func=cmd_erp_find)
 

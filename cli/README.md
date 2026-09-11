@@ -73,10 +73,14 @@ CTOS_PASSWORD=<密碼> ctos login --url https://ching-tech.ddns.net/ctos --usern
 ERP 查詢需要 token scope 含 `inventory-management`（0.1.5 起 `ctos login` 預設已涵蓋；
 舊 token 要用 erp 指令請重新 `ctos login`）。全部唯讀。
 
-2026-09 起改打往來與物料模組的 `/api/items`、`/api/items/{id}`、`/api/stock`（原本走
-ERPNext proxy `/api/erp`）。`item` 與 `stock` 吃的仍是料號，CLI 會先用 `/api/items?q=`
+**0.2.0 起需要後端 #192 以上**（往來與物料模組的 `/api/items`、`/api/stock`）：
+指令改打 `/api/items`、`/api/items/{id}`、`/api/stock`，原本走的 ERPNext proxy
+`/api/erp` 不再使用，對舊版後端會 404。`erp boms` / `erp bom` 兩個子命令一併移除
+（ERPNext 沒有 BOM 資料，0 筆），所以 0.2.0 是 breaking change。
+
+`item` 與 `stock` 吃的仍是料號，CLI 會先用 `/api/items?q=`
 解析成 id 再查；對到多筆會把候選列出來要你給完整料號。`--warehouse` 吃倉庫代碼或名稱，
-用 `/api/warehouses` 解析。ERPNext 沒有 BOM 資料（0 筆），`erp boms` / `erp bom` 已移除。
+用 `/api/warehouses` 解析。`find --limit` 會夾在 1–100（後端 `page_size` 的上限）。
 
 ## 環境變數
 
