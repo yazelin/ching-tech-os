@@ -2,7 +2,9 @@
 name: erp
 description: 往來對象（供應商／客戶）、物料庫存與採購單
 allowed-tools: find_party get_party create_party update_party add_party_contact
-  add_party_address merge_parties summarize_party extract_party_from_document
+  add_party_address update_party_contact delete_party_contact
+  update_party_address delete_party_address merge_parties summarize_party
+  extract_party_from_document
   find_item get_item create_item update_item summarize_item
   get_stock adjust_stock transfer_stock
   create_purchase_order get_purchase_order list_purchase_orders
@@ -27,7 +29,7 @@ metadata:
 
 ■ 往來對象（供應商／客戶合併成一張主檔，同一家可以同時是兩者）
 - find_party(query, role?)：名稱、簡稱、別名、聯絡人、電話、統編都可以丟進來。
-  role 給 "supplier" 或 "customer" 可縮小範圍。
+  role 給 "supplier"、"customer" 或 "both"（同時是供應商與客戶）可縮小範圍。
 - get_party(party_id | name)：完整資料，含聯絡人、地址、近期採購單、相關專案、
   知識庫條目數。
 - create_party(name, is_supplier?, is_customer?, tax_id?, contacts?, addresses?, ...)
@@ -35,6 +37,12 @@ metadata:
   · addresses：`[{"label":"公司","address":"桃園市…","is_primary":true}]`
 - update_party(party_id | name, fields)：fields 是要改的欄位 dict。
 - add_party_contact / add_party_address：補聯絡人與地址。
+- update_party_contact(contact_id, party_id | party_name, fields) /
+  update_party_address(address_id, party_id | party_name, fields)：
+  改既有聯絡人或地址；fields 設 `is_primary: true` 會把同一家其他筆降級。
+- delete_party_contact(contact_id, party_id | party_name) /
+  delete_party_address(address_id, party_id | party_name)：
+  刪掉聯絡人或地址；刪掉主要那筆不會自動指派新主要，要改就再呼叫一次 update。
 - merge_parties(keep_id, drop_id)：發現重複主檔時用；drop 的資料會掛到 keep，
   名稱變成 keep 的別名。**合併不可逆，先問人。**
 - summarize_party(party_id | name)：回答「這家最近有什麼往來」用這個。
