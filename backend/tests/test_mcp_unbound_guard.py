@@ -20,7 +20,15 @@ import pytest
 
 from ching_tech_os.services import permissions as permissions_module
 from ching_tech_os.services.mcp import server as mcp_server
-from ching_tech_os.services.mcp import erp_tools, nas_tools, project_tools
+from ching_tech_os.services.mcp import nas_tools
+
+# hotfix 分支（從 0b982f1 切出）沒有 ERP／專案工具，對應測試跳過
+try:
+    from ching_tech_os.services.mcp import erp_tools, project_tools
+except ImportError:  # pragma: no cover
+    erp_tools = None
+    project_tools = None
+_needs_erp = pytest.mark.skipif(erp_tools is None, reason="hotfix 分支沒有 ERP／專案工具")
 
 
 class _ConnCtx:
@@ -38,10 +46,9 @@ class _ConnCtx:
 
 # 每個 app 至少一支代表工具，涵蓋 APPS_REQUIRE_BOUND_USER 全集合
 _REQUIRED_APP_TOOLS = [
-    ("project-management", "get_project"),
-    ("project-management", "list_tasks"),
-    ("vendor-management", "find_party"),
-    ("inventory-management", "get_stock"),
+    *([("project-management", "get_project"), ("project-management", "list_tasks"),
+       ("vendor-management", "find_party"), ("inventory-management", "get_stock")]
+      if erp_tools is not None else []),
     ("file-manager", "search_nas_files"),
 ]
 
@@ -87,7 +94,7 @@ async def test_unbound_user_denied_for_required_apps(
 async def test_unbound_user_denial_message_matches_real_bind_flow() -> None:
     """訊息要對應 bot 實際的綁定流程（登入 CTOS 系統→Bot 管理頁面→驗證碼），
     不是隨口寫的「輸入『綁定』」（沒有這個指令）。"""
-    _, message = await mcp_server.check_mcp_tool_permission("get_project", None)
+    _, message = await mcp_server.check_mcp_tool_permission("search_nas_files", None)
     assert "驗證碼" in message
     assert "輸入「綁定」" not in message
 
@@ -164,6 +171,7 @@ async def test_bound_admin_still_allowed(
 
 
 @pytest.mark.asyncio
+@_needs_erp
 async def test_get_project_unbound_denied_and_service_not_awaited(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -181,6 +189,7 @@ async def test_get_project_unbound_denied_and_service_not_awaited(
 
 
 @pytest.mark.asyncio
+@_needs_erp
 async def test_list_tasks_unbound_denied_and_service_not_awaited(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -198,6 +207,7 @@ async def test_list_tasks_unbound_denied_and_service_not_awaited(
 
 
 @pytest.mark.asyncio
+@_needs_erp
 async def test_find_party_unbound_denied_and_service_not_awaited(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -215,6 +225,7 @@ async def test_find_party_unbound_denied_and_service_not_awaited(
 
 
 @pytest.mark.asyncio
+@_needs_erp
 async def test_get_stock_unbound_denied_and_service_not_awaited(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
