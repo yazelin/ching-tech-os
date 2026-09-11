@@ -559,7 +559,7 @@ skill script 用 framework 注入的 `ctos_user_id`。取不到的一律留 NULL
 | `his-integration` | HIS 整合 | 需搭配 extends/his |
 | `ct-his` | 展望 HIS 叫號 | 需搭配 extends/his |
 | `printer` | 列印功能 | 需搭配 extends/printer |
-| `erpnext` | ERPNext ERP 整合 | 需搭配 extends/erpnext |
+| `erpnext` | ERPNext ERP 整合 | 需搭配 extends/erpnext；已由往來與物料模組取代（2026-09），停用步驟見規格第七節 |
 
 ### Bot 設定
 

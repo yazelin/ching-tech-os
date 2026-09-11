@@ -17,7 +17,7 @@ HubSource = Literal["clawhub", "skillhub"]
 
 from ..models.auth import SessionData
 from .auth import require_admin, get_current_session
-from ..skills import get_skill_manager
+from ..skills import get_skill_manager, has_required_app, required_apps
 from ..services.clawhub_client import ClawHubClient, ClawHubError, get_clawhub_client_di, validate_slug
 from ..services.skillhub_client import (
     SkillHubClient,
@@ -143,7 +143,7 @@ def _ensure_skill_md_frontmatter(
 # === Request Models ===
 
 class SkillUpdateRequest(BaseModel):
-    requires_app: str | None = None
+    requires_app: str | list[str] | None = None
     allowed_tools: list[str] | None = None
     mcp_servers: list[str] | None = None
 
@@ -539,12 +539,13 @@ async def run_skill_script(
     if not skill:
         raise HTTPException(status_code=404, detail=f"Skill '{name}' not found")
 
-    # 權限檢查：requires_app
-    if skill.requires_app and session.role != "admin":
-        if not session.app_permissions.get(skill.requires_app, False):
+    # 權限檢查：requires_app（可以是單一 app 或清單，清單是「任一」）
+    needed = required_apps(skill.requires_app)
+    if needed and session.role != "admin":
+        if not has_required_app(skill.requires_app, session.app_permissions):
             raise HTTPException(
                 status_code=403,
-                detail=f"無權限使用 skill '{name}'（需要 {skill.requires_app} 權限）",
+                detail=f"無權限使用 skill '{name}'（需要 {' 或 '.join(needed)} 權限）",
             )
 
     # 取得 script 路徑

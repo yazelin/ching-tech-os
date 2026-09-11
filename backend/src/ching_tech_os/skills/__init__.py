@@ -64,7 +64,7 @@ class Skill:
     metadata: dict = field(default_factory=dict)
 
     # === CTOS 擴充（從 metadata.ctos 讀取）===
-    requires_app: Optional[str] = None
+    requires_app: Optional[str | list[str]] = None
     mcp_servers: list[str] = field(default_factory=list)
 
     # === 內部欄位 ===
@@ -76,11 +76,45 @@ class Skill:
     skill_dir: Path | None = None
 
 
-def _extract_ctos_metadata(config: dict) -> tuple[Optional[str], list[str]]:
+def required_apps(requires_app: str | list[str] | None) -> list[str]:
+    """把 `requires_app` 正規化成 app id 清單。
+
+    `None`、空字串、空清單都代表「不需要任何 app 權限」。
+    清單裡非字串或空字串的項目直接忽略（SKILL.md 是人手寫的）。
+    """
+    if requires_app is None:
+        return []
+    if isinstance(requires_app, str):
+        return [requires_app] if requires_app else []
+    if isinstance(requires_app, (list, tuple)):
+        return [a for a in requires_app if isinstance(a, str) and a]
+    return []
+
+
+def has_required_app(
+    requires_app: str | list[str] | None,
+    app_permissions: dict[str, bool],
+) -> bool:
+    """有宣告的 app 權限之一就算通過；沒有宣告就通過。
+
+    清單是 OR 不是 AND：一個 skill 服務兩個 app（例如 erp 同時給
+    vendor-management 與 inventory-management）時，只要有一邊就該看得到說明。
+    工具本身的權限仍然逐支檢查（services/permissions.py），這裡不放寬。
+    """
+    apps = required_apps(requires_app)
+    if not apps:
+        return True
+    return any(app_permissions.get(app, False) for app in apps)
+
+
+def _extract_ctos_metadata(config: dict) -> tuple[Optional[str | list[str]], list[str]]:
     """從 frontmatter 提取 CTOS 擴充欄位。
 
     優先從 metadata.ctos 讀取（標準相容），
     回退到頂層 requires_app / mcp_servers（舊版相容）。
+
+    `requires_app` 可以是單一字串，也可以是 YAML 清單
+    （語意是「有其中任一 app 權限就載入」）。
     """
     ctos = (config.get("metadata") or {}).get("ctos", {})
 
@@ -419,11 +453,7 @@ class SkillManager:
         await self.load_skills()
         result = []
         for skill in self._skills.values():
-            if role == "admin":
-                result.append(skill)
-            elif skill.requires_app is None:
-                result.append(skill)
-            elif app_permissions.get(skill.requires_app, False):
+            if role == "admin" or has_required_app(skill.requires_app, app_permissions):
                 result.append(skill)
         return result
 
@@ -481,7 +511,7 @@ class SkillManager:
         self,
         name: str,
         *,
-        requires_app: str | None = ...,
+        requires_app: str | list[str] | None = ...,
         allowed_tools: list[str] | None = ...,
         mcp_servers: list[str] | None = ...,
     ) -> bool:

@@ -52,6 +52,12 @@ ChingTech OS 是擎添工業內部使用的整合式工作平台，以 Web 技�
   問人，不自己猜；REST（`/api/parties` 等）只服務新前端，兩者共用同一層 service。
   每筆寫入同交易寫稽核並回 `audit_id`，主檔是軟刪除、採購單是取消不是刪。前端進行中。
 
+- **bot 與舊程式切換到往來與物料模組**：Line／Telegram bot 的 prompt（程式碼與
+  `ai_prompts`，migration 032）、`skills/erp`、`skills/project`、ctos CLI 的 `erp`
+  子命令與舊桌面都已改指新工具與新前端，不再出現 `mcp__erpnext__*` 與 `http://ct.erp`。
+  ERPNext 已由往來與物料模組取代（2026-09），停用步驟見規格
+  `docs/superpowers/specs/2026-09-12-ai-native-erp-design.md` 第七節。
+
 - **專案模組重建（後端）**：ERPNext 停用後專案進度回到自己的系統。四張表 `projects` /
   `project_members` / `milestones` / `tasks`（migration 028），`/api/projects` 提供清單、明細、成員、
   里程碑、任務與 dashboard 摘要。進度百分比與逾期里程碑都是查詢時算，不存欄位；逾期要到期日已過、

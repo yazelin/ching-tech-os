@@ -23,7 +23,7 @@ async def create_share_link(
         resource_id: 資源 ID（如 kb-001 或 NAS 檔案路徑）
         expires_in: 有效期限，可選 1h、24h、7d、null（永久），預設 24h
 
-    注意：專案分享功能已遷移至 ERPNext，請直接在 ERPNext 系統操作。
+    注意：專案分享功能不在這支工具裡，請到新前端 os.ching-tech.com/projects 操作。
     """
     await ensure_db_connection()
 
@@ -34,11 +34,14 @@ async def create_share_link(
     )
     from ...models.share import ShareLinkCreate
 
-    # 驗證資源類型（專案相關類型已移除，遷移至 ERPNext）
+    # 驗證資源類型（專案相關類型已移除，改由新前端處理）
     valid_types = ("knowledge", "nas_file")
     if resource_type not in valid_types:
         if resource_type in ("project", "project_attachment"):
-            return "錯誤：專案分享功能已遷移至 ERPNext，請直接在 ERPNext 系統操作：http://ct.erp"
+            return (
+                "錯誤：專案分享功能不在這支工具裡，"
+                "請到新前端操作：os.ching-tech.com/projects"
+            )
         return f"錯誤：資源類型必須是 {', '.join(valid_types)}，收到：{resource_type}"
 
     # 驗證有效期限

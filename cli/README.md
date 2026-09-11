@@ -66,14 +66,21 @@ CTOS_PASSWORD=<密碼> ctos login --url https://ching-tech.ddns.net/ctos --usern
 | `ctos lib get <路徑> [--out 檔名或目錄]` | 下載圖書館檔案 |
 | `ctos files ls [來源/子路徑] [--json]` | 瀏覽 NAS 掛載區（projects / circuits / library；不給路徑列出來源） |
 | `ctos files get <來源/路徑> [--out]` | 下載 NAS 掛載區檔案（如 `circuits/某機台/線路圖.pdf`） |
-| `ctos erp find <關鍵字>` | ERPNext 物料搜尋（比對料號與品名） |
-| `ctos erp item <料號>` | 物料明細（單位、採購價、交期） |
-| `ctos erp stock <料號> [--warehouse]` | 各倉庫存（含保留/在途） |
-| `ctos erp boms <料號>` / `ctos erp bom <BOM名>` | BOM 清單與明細 |
+| `ctos erp find <關鍵字>` | 物料搜尋（比對料號、品名、規格、別名） |
+| `ctos erp item <料號>` | 物料明細（規格、單位、採購價、交期、各倉餘額） |
+| `ctos erp stock <料號> [--warehouse]` | 各倉庫存餘額 |
 
 ERP 查詢需要 token scope 含 `inventory-management`（0.1.5 起 `ctos login` 預設已涵蓋；
-舊 token 要用 erp 指令請重新 `ctos login`）。全部唯讀，走 CTOS 的 `/api/erp` proxy，
-ERPNext 憑證只存在伺服器端，不會發到個人機器。
+舊 token 要用 erp 指令請重新 `ctos login`）。全部唯讀。
+
+**0.2.0 起需要後端 #192 以上**（往來與物料模組的 `/api/items`、`/api/stock`）：
+指令改打 `/api/items`、`/api/items/{id}`、`/api/stock`，原本走的 ERPNext proxy
+`/api/erp` 不再使用，對舊版後端會 404。`erp boms` / `erp bom` 兩個子命令一併移除
+（ERPNext 沒有 BOM 資料，0 筆），所以 0.2.0 是 breaking change。
+
+`item` 與 `stock` 吃的仍是料號，CLI 會先用 `/api/items?q=`
+解析成 id 再查；對到多筆會把候選列出來要你給完整料號。`--warehouse` 吃倉庫代碼或名稱，
+用 `/api/warehouses` 解析。`find --limit` 會夾在 1–100（後端 `page_size` 的上限）。
 
 ## 環境變數
 
