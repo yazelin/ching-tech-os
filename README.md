@@ -31,7 +31,7 @@ ChingTech OS 是擎添工業內部使用的整合式工作平台，以 Web 技�
 | 程式編輯器 | 完成 | code-server 整合（VS Code 體驗） |
 | 文字檢視器 | 完成 | Markdown/JSON/YAML/XML 格式化顯示、語法色彩 |
 | 專案管理 | 後端完成，新前端 ctos-web 進行中 | 專案主檔（客戶、負責人、狀態、起迄日）、成員、里程碑與逾期判定、任務與進度百分比、dashboard 摘要、綁定 Bot 群組與知識庫條目 |
-| 物料/庫存管理 | 完成 | 物料主檔（型號、存放庫位）、進出貨記錄、庫存查詢、盤點調整、低庫存警示、訂購記錄 |
+| 往來與物料 | 後端完成，前端進行中 | 往來對象主檔（供應商／客戶合一、聯絡人、地址、別名模糊比對、重複合併）、物料主檔與多倉庫存（異動累計餘額、調撥、負庫存防呆）、採購單（自動單號、收貨入庫、取消）、稽核與軟刪除；MCP 工具是主要介面，REST 服務新前端 |
 | 記憶管理 | 完成 | Line Bot 群組/個人自訂記憶、記憶啟用/停用 |
 | Line Bot | 完成 | 群組管理、訊息記錄、用戶綁定、AI 對話整合、MCP 工具、NAS 檔案搜尋與發送、AI 圖片生成（含 Hugging Face FLUX 備用）、文件讀取、群組 @ 提及回覆、回覆引用、自訂記憶、物料/庫存管理、簡報生成、MD2PPT/MD2DOC 文件轉換、統一斜線指令（/start、/help、/reset、/debug、/agent）、歡迎訊息（加好友時自動推送）、Intent Guard 意圖過濾、月度 Token 上限、黑名單管理 |
 | Telegram Bot | 完成 | Telegram 私訊/群組 AI 對話、帳號綁定、圖片/檔案接收、回覆引用、與 Line Bot 共用 MCP 工具、AI Agent 和斜線指令 |
@@ -43,6 +43,14 @@ ChingTech OS 是擎添工業內部使用的整合式工作平台，以 Web 技�
 ## 近期架構更新（2026-03）
 
 ### 2026-09
+
+- **往來與物料模組（後端）**：停用 ERPNext 後，供應商／客戶、物料庫存與採購改回自己的系統。
+  十張表（migration 030）：`parties` / `party_contacts` / `party_addresses` / `items` /
+  `warehouses` / `stock_balances` / `stock_movements` / `purchase_orders` /
+  `purchase_order_lines` / `erp_audit`。設計原則是 AI 先行：23 支 MCP 工具是主要介面，
+  輸入吃名稱與別名（pg_trgm 模糊比對＋統編／電話精確命中），解析到多個候選就回候選讓 agent
+  問人，不自己猜；REST（`/api/parties` 等）只服務新前端，兩者共用同一層 service。
+  每筆寫入同交易寫稽核並回 `audit_id`，主檔是軟刪除、採購單是取消不是刪。前端進行中。
 
 - **專案模組重建（後端）**：ERPNext 停用後專案進度回到自己的系統。四張表 `projects` /
   `project_members` / `milestones` / `tasks`（migration 028），`/api/projects` 提供清單、明細、成員、

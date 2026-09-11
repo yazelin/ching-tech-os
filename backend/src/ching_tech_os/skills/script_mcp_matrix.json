@@ -60,6 +60,14 @@
       "notes": "跨系統 ERPNext 整合，保留 MCP-only"
     },
     {
+      "name": "vendor-management",
+      "skill": "erp",
+      "script": null,
+      "script_first": false,
+      "fallback_mcp_tool": null,
+      "notes": "往來與物料模組的 MCP 工具（migration 030），保留 MCP-only"
+    },
+    {
       "name": "inventory-management",
       "skill": "inventory",
       "script": null,

@@ -179,11 +179,65 @@ uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8088 --reload
 逾期里程碑 = `due_date < CURRENT_DATE` 且 `status <> 'completed'` 且所屬專案 `status = 'active'`。
 清單的計數、明細的 `is_overdue` 與 `/summary` 三處用同一套定義：結案或取消的專案不會一直紅著。
 
-清單的 `q` 會跳脫 `%` 與 `_` 後才進 `ILIKE`。更新請求對資料表 NOT NULL 的欄位
+清單的 `q` 會跳脫 `%` 與 `_` 後才進 `ILIKE`。收貨行項的 key 是 `line_id`（同一張單可以有兩行同一個物料）。只給 `item_id` 時，
+該物料只出現在一行才算指定，出現多行會回 409 並附上行候選，要呼叫端指定 `line_id`
+（行項的 `id` 就在採購單明細的 `lines` 裡）。
+
+建立與更新端點的回應 body 帶 `audit_id`（就是這次寫入的 `erp_audit.id`）；
+GET 明細的 `audit_id` 是 `null`。
+
+更新請求對資料表 NOT NULL 的欄位
 （專案 `name`／`status`，里程碑 `name`／`due_date`／`status`／`sort_order`，任務 `title`／`status`／`sort_order`）
 明確送 `null` 會被擋在 422；`owner_id`、`assignee_id`、`milestone_id`、日期欄位送 `null` 是清空，放行。
 `owner_id`／`assignee_id` 指到不存在的使用者回 404「使用者不存在」，`milestone_id` 不屬於該專案回
 400「里程碑不屬於此專案」。
+
+### 往來與物料（往來對象、物料庫存、採購）
+
+`/api/parties` 需要 `vendor-management` app 權限，`/api/items`、`/api/warehouses`、
+`/api/stock`、`/api/purchase-orders` 需要 `inventory-management`。讀寫都只看 app 權限，
+不做成員制（規格第四節：管理層要「AI 操控第一」），admin 一律過。
+與 MCP 工具共用同一層 service（`services/erp*.py`），寫入端點回傳的 body 都帶 `audit_id`。
+
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| GET | `/api/parties` | 清單。query：`q`（名稱／簡稱／別名／統編）、`role`（supplier／customer）、`page`、`page_size` |
+| POST | `/api/parties` | 建立；可一次帶 `contacts`、`addresses` |
+| POST | `/api/parties/merge` | 合併重複主檔。body `{keep_id, drop_id}`。宣告在 `/{party_id}` 之前 |
+| GET | `/api/parties/{id}` | 明細：主檔＋聯絡人＋地址＋近期採購單＋相關專案＋`knowledge_count` |
+| PUT | `/api/parties/{id}` | 更新主檔 |
+| DELETE | `/api/parties/{id}` | 軟刪除（寫 `deleted_at`），之後不進清單也不進模糊解析 |
+| POST | `/api/parties/{id}/contacts` | 新增聯絡人；`is_primary` 會把原本的主要聯絡人取消 |
+| POST | `/api/parties/{id}/addresses` | 新增地址 |
+| GET | `/api/items` | 清單。query：`q`（料號／品名／規格／別名）、`item_group`、`page`、`page_size`。item 帶 `total_qty` |
+| POST | `/api/items` | 建立；料號重複回 400 |
+| GET | `/api/items/{id}` | 明細：主檔＋各倉餘額＋最近異動＋預設供應商 |
+| PUT | `/api/items/{id}` | 更新 |
+| DELETE | `/api/items/{id}` | 軟刪除；庫存異動紀錄保留 |
+| GET | `/api/warehouses` | 倉庫清單 |
+| POST | `/api/warehouses` | 建立；代碼重複回 400 |
+| PUT | `/api/warehouses/{id}` | 更新；代碼撞到別的倉回 400 |
+| DELETE | `/api/warehouses/{id}` | 軟刪除；還有餘額回 400 |
+| GET | `/api/stock` | 庫存查詢（item × warehouse 一列）。query：`item_id`、`warehouse_id` |
+| POST | `/api/stock/adjust` | 調整庫存。`{item_id, warehouse_id, qty_delta, reason, note}`；異動後為負回 400 |
+| POST | `/api/stock/transfer` | 倉別調撥。`{item_id, from_warehouse_id, to_warehouse_id, qty}` |
+| GET | `/api/purchase-orders` | 清單。query：`supplier_id`、`status`、`project_id`、`since`（訂購日起始）、`page`、`page_size` |
+| POST | `/api/purchase-orders` | 建立；單號 `PO-YYYYMM-NNN` 在同一交易產生 |
+| GET | `/api/purchase-orders/{id}` | 明細（含行項與金額合計） |
+| PUT | `/api/purchase-orders/{id}` | 更新單頭；`status` 只收 `draft`／`ordered`（其餘 422），已收貨或已取消的單回 400 |
+| POST | `/api/purchase-orders/{id}/receive` | 收貨入庫。`{lines:[{line_id, qty}], all, warehouse_id}`；超收回 400，只給 `item_id` 而該物料有兩行以上回 409 |
+| POST | `/api/purchase-orders/{id}/cancel` | 取消（不是刪除）；已收過貨回 400 |
+
+庫存是簡化分類帳：每次異動寫一筆 `stock_movements`，同一交易用
+`INSERT ... ON CONFLICT (item_id, warehouse_id) DO UPDATE SET qty = qty + delta` 累計
+`stock_balances`；餘額不可為負，違反時整個交易回滾（異動紀錄也不會留下）。
+收貨全收改 `received`、部分改 `partial`。
+
+更新請求對資料表 NOT NULL 的欄位（`parties.name`／`aliases`／`is_supplier`／`is_customer`、
+`items.code`／`name`／`aliases`、`warehouses.code`／`name`、`purchase_orders.supplier_id`／`status`）
+明確送 `null` 會被擋在 422。清單的 `q` 會跳脫 `%` 與 `_` 後才進 `ILIKE`。
+每筆寫入都在同一交易寫 `erp_audit`（`entity_type`、`action`、`diff`、`actor_user_id`、
+`via`＝`rest`／`mcp`、`agent_name`）。
 
 ### AI 對話
 
