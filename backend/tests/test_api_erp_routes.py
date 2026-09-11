@@ -20,6 +20,8 @@ from ching_tech_os.models.auth import SessionData
 from ching_tech_os.services import erp as erp_core
 
 PARTY_ID = uuid4()
+CONTACT_ID = uuid4()
+ADDRESS_ID = uuid4()
 ITEM_ID = uuid4()
 WAREHOUSE_ID = uuid4()
 PO_ID = uuid4()
@@ -174,6 +176,30 @@ _ENDPOINTS = [
     ("delete", f"/api/parties/{PARTY_ID}", None, "vendor"),
     ("post", f"/api/parties/{PARTY_ID}/contacts", {"name": "陳先生"}, "vendor"),
     ("post", f"/api/parties/{PARTY_ID}/addresses", {"address": "桃園"}, "vendor"),
+    (
+        "put",
+        f"/api/parties/{PARTY_ID}/contacts/{CONTACT_ID}",
+        {"notes": "x"},
+        "vendor",
+    ),
+    (
+        "delete",
+        f"/api/parties/{PARTY_ID}/contacts/{CONTACT_ID}",
+        None,
+        "vendor",
+    ),
+    (
+        "put",
+        f"/api/parties/{PARTY_ID}/addresses/{ADDRESS_ID}",
+        {"city": "台北"},
+        "vendor",
+    ),
+    (
+        "delete",
+        f"/api/parties/{PARTY_ID}/addresses/{ADDRESS_ID}",
+        None,
+        "vendor",
+    ),
     ("get", "/api/items", None, "inventory"),
     ("post", "/api/items", {"code": "A1", "name": "螺絲"}, "inventory"),
     ("get", f"/api/items/{ITEM_ID}", None, "inventory"),
@@ -434,6 +460,158 @@ async def test_add_contact_and_address_404(monkeypatch) -> None:
             f"/api/parties/{PARTY_ID}/addresses", json={"address": "桃園"}
         )
     assert contact.status_code == 404 and address.status_code == 404
+
+
+def _contact_row(**overrides) -> dict:
+    base = {
+        "id": CONTACT_ID,
+        "party_id": PARTY_ID,
+        "name": "陳先生",
+        "title": None,
+        "phone": None,
+        "mobile": None,
+        "email": None,
+        "is_primary": False,
+        "notes": None,
+        "created_at": NOW,
+        "updated_at": NOW,
+        "audit_id": AUDIT_ID,
+    }
+    base.update(overrides)
+    return base
+
+
+def _address_row(**overrides) -> dict:
+    base = {
+        "id": ADDRESS_ID,
+        "party_id": PARTY_ID,
+        "label": "公司",
+        "address": "桃園",
+        "city": None,
+        "is_primary": False,
+        "created_at": NOW,
+        "updated_at": NOW,
+        "audit_id": AUDIT_ID,
+    }
+    base.update(overrides)
+    return base
+
+
+@pytest.mark.asyncio
+async def test_update_party_contact(monkeypatch) -> None:
+    monkeypatch.setattr(
+        erp_api.party_service,
+        "update_contact",
+        AsyncMock(return_value=_contact_row(notes="改過")),
+    )
+    async with _client(_make_app()) as client:
+        resp = await client.put(
+            f"/api/parties/{PARTY_ID}/contacts/{CONTACT_ID}", json={"notes": "改過"}
+        )
+    assert resp.status_code == 200
+    assert resp.json()["notes"] == "改過"
+    assert resp.json()["audit_id"] == str(AUDIT_ID)
+
+
+@pytest.mark.asyncio
+async def test_update_party_contact_404(monkeypatch) -> None:
+    monkeypatch.setattr(
+        erp_api.party_service, "update_contact", AsyncMock(return_value=None)
+    )
+    async with _client(_make_app()) as client:
+        resp = await client.put(
+            f"/api/parties/{PARTY_ID}/contacts/{CONTACT_ID}", json={"notes": "x"}
+        )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_update_party_contact_rejects_null_on_not_null_field() -> None:
+    async with _client(_make_app()) as client:
+        resp = await client.put(
+            f"/api/parties/{PARTY_ID}/contacts/{CONTACT_ID}", json={"name": None}
+        )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_delete_party_contact(monkeypatch) -> None:
+    delete = AsyncMock(return_value=AUDIT_ID)
+    monkeypatch.setattr(erp_api.party_service, "delete_contact", delete)
+    async with _client(_make_app()) as client:
+        resp = await client.delete(f"/api/parties/{PARTY_ID}/contacts/{CONTACT_ID}")
+    assert resp.status_code == 200
+    assert resp.json()["audit_id"] == str(AUDIT_ID)
+    assert delete.await_args.kwargs["via"] == "rest"
+
+
+@pytest.mark.asyncio
+async def test_delete_party_contact_404(monkeypatch) -> None:
+    monkeypatch.setattr(
+        erp_api.party_service, "delete_contact", AsyncMock(return_value=None)
+    )
+    async with _client(_make_app()) as client:
+        resp = await client.delete(f"/api/parties/{PARTY_ID}/contacts/{CONTACT_ID}")
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_update_party_address(monkeypatch) -> None:
+    monkeypatch.setattr(
+        erp_api.party_service,
+        "update_address",
+        AsyncMock(return_value=_address_row(city="台北")),
+    )
+    async with _client(_make_app()) as client:
+        resp = await client.put(
+            f"/api/parties/{PARTY_ID}/addresses/{ADDRESS_ID}", json={"city": "台北"}
+        )
+    assert resp.status_code == 200
+    assert resp.json()["city"] == "台北"
+    assert resp.json()["audit_id"] == str(AUDIT_ID)
+
+
+@pytest.mark.asyncio
+async def test_update_party_address_404(monkeypatch) -> None:
+    monkeypatch.setattr(
+        erp_api.party_service, "update_address", AsyncMock(return_value=None)
+    )
+    async with _client(_make_app()) as client:
+        resp = await client.put(
+            f"/api/parties/{PARTY_ID}/addresses/{ADDRESS_ID}", json={"city": "台北"}
+        )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_update_party_address_rejects_null_on_not_null_field() -> None:
+    async with _client(_make_app()) as client:
+        resp = await client.put(
+            f"/api/parties/{PARTY_ID}/addresses/{ADDRESS_ID}",
+            json={"address": None},
+        )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_delete_party_address(monkeypatch) -> None:
+    delete = AsyncMock(return_value=AUDIT_ID)
+    monkeypatch.setattr(erp_api.party_service, "delete_address", delete)
+    async with _client(_make_app()) as client:
+        resp = await client.delete(f"/api/parties/{PARTY_ID}/addresses/{ADDRESS_ID}")
+    assert resp.status_code == 200
+    assert resp.json()["audit_id"] == str(AUDIT_ID)
+    assert delete.await_args.kwargs["via"] == "rest"
+
+
+@pytest.mark.asyncio
+async def test_delete_party_address_404(monkeypatch) -> None:
+    monkeypatch.setattr(
+        erp_api.party_service, "delete_address", AsyncMock(return_value=None)
+    )
+    async with _client(_make_app()) as client:
+        resp = await client.delete(f"/api/parties/{PARTY_ID}/addresses/{ADDRESS_ID}")
+    assert resp.status_code == 404
 
 
 @pytest.mark.asyncio
