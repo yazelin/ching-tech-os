@@ -67,7 +67,7 @@ async def list_prompts(
 @router.post("/prompts", response_model=AiPromptResponse)
 async def create_prompt(
     data: AiPromptCreate,
-    session: SessionData = Depends(get_current_session),
+    session: SessionData = Depends(require_app_permission("prompt-editor")),
 ):
     """建立新 Prompt"""
     try:
@@ -100,7 +100,7 @@ async def get_prompt(
 async def update_prompt(
     prompt_id: UUID,
     data: AiPromptUpdate,
-    session: SessionData = Depends(get_current_session),
+    session: SessionData = Depends(require_app_permission("prompt-editor")),
 ):
     """更新 Prompt"""
     try:
@@ -117,7 +117,7 @@ async def update_prompt(
 @router.delete("/prompts/{prompt_id}")
 async def delete_prompt(
     prompt_id: UUID,
-    session: SessionData = Depends(get_current_session),
+    session: SessionData = Depends(require_app_permission("prompt-editor")),
 ):
     """刪除 Prompt
 
@@ -148,7 +148,7 @@ async def list_agents(
 @router.post("/agents", response_model=AiAgentResponse)
 async def create_agent(
     data: AiAgentCreate,
-    session: SessionData = Depends(get_current_session),
+    session: SessionData = Depends(require_app_permission("agent-settings")),
 ):
     """建立新 Agent"""
     try:
@@ -188,7 +188,7 @@ async def get_agent(
 async def update_agent(
     agent_id: UUID,
     data: AiAgentUpdate,
-    session: SessionData = Depends(get_current_session),
+    session: SessionData = Depends(require_app_permission("agent-settings")),
 ):
     """更新 Agent"""
     try:
@@ -205,7 +205,7 @@ async def update_agent(
 @router.delete("/agents/{agent_id}")
 async def delete_agent(
     agent_id: UUID,
-    session: SessionData = Depends(get_current_session),
+    session: SessionData = Depends(require_app_permission("agent-settings")),
 ):
     """刪除 Agent
 
@@ -296,7 +296,7 @@ async def get_log(
 @router.post("/test", response_model=AiTestResponse)
 async def test_agent(
     data: AiTestRequest,
-    session: SessionData = Depends(get_current_session),
+    session: SessionData = Depends(require_app_permission("agent-settings")),
 ):
     """測試 Agent
 

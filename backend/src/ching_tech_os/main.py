@@ -501,9 +501,12 @@ app.mount("/data/projects/attachments", StaticFiles(directory=PROJECT_ATTACHMENT
 # === Socket.IO 事件 ===
 
 @sio.event
-async def connect(sid, environ):
-    """客戶端連線"""
-    print(f"Client connected: {sid}")
+async def connect(sid, environ, auth=None):
+    """客戶端連線（必須帶有效 token，邏輯在 services/socket_auth.authenticate_connect）"""
+    from .services.socket_auth import authenticate_connect
+
+    identity = await authenticate_connect(sio, sid, auth)
+    print(f"Client connected: {sid} (user={identity['username']})")
 
 
 @sio.event

@@ -110,8 +110,9 @@ DEFAULT_APP_PERMISSIONS: dict[str, bool] = {
     "inventory-management": True,
     "vendor-management": True,
     "ai-assistant": True,
-    "prompt-editor": True,
-    "agent-settings": True,
+    # ai_prompts / ai_agents 是全域表，一個人改就影響所有人，預設關閉，由管理員逐人開放
+    "prompt-editor": False,
+    "agent-settings": False,
     "ai-log": False,  # AI log 含所有人的 prompt 與 system prompt，預設關閉，由管理員逐人開放
     "knowledge-base": True,
     "linebot": True,
@@ -658,16 +659,11 @@ def require_app_permission(app_id: str, allow_query_token: bool = False) -> Call
         if session.role == "admin":
             return session
 
-        # 檢查 session 中的權限快取
-        if session.app_permissions:
-            if session.app_permissions.get(app_id, False):
-                return session
-        else:
-            # Session 沒有權限快取，使用 has_app_permission 函數計算
-            # 將 session.app_permissions 轉換為 permissions 格式
-            permissions = {"apps": session.app_permissions} if session.app_permissions else None
-            if has_app_permission(session.role, permissions, app_id):
-                return session
+        # 一律走 has_app_permission：session 的權限快取沒帶到這個 app_id 時，
+        # 回退到 get_effective_app_permissions() 的預設值，與其他呼叫端一致。
+        permissions = {"apps": session.app_permissions} if session.app_permissions else None
+        if has_app_permission(session.role, permissions, app_id):
+            return session
 
         # 無權限
         app_name = get_app_display_names().get(app_id, app_id)

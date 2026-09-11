@@ -11,6 +11,7 @@ from ..services.ai_pipelines import summarize_messages
 from ..services.ai_provider import attach_routing_metadata
 from ..services.ai_router import RoutingContext, call_ai
 from ..services.message import log_message
+from ..services.socket_auth import disconnect_socket, revalidate_socket_session
 
 
 def register_events(sio: AsyncServer):
@@ -61,14 +62,40 @@ def register_events(sio: AsyncServer):
             )
             return
 
-        # 從 DB 載入對話
-        chat = await ai_chat.get_chat(chat_id)
+        # 進入時重新解析一次 token：連線後才登出或撤銷的 token 不能繼續跑 AI
+        session = await revalidate_socket_session(sio, sid)
+        if session is None:
+            await sio.emit(
+                "ai_error",
+                {
+                    "chatId": chat_id_str,
+                    "error": "連線未授權，請重新登入",
+                },
+                to=sid,
+            )
+            await disconnect_socket(sio, sid)
+            return
+
+        if session.read_only:
+            await sio.emit(
+                "ai_error",
+                {
+                    "chatId": chat_id_str,
+                    "error": "此 API token 為唯讀，無法使用 AI 對話",
+                },
+                to=sid,
+            )
+            return
+
+        # 以連線身分取對話（不是自己的對話就不往下走，也不呼叫 AI）
+        user_id = session.user_id
+        chat = await ai_chat.get_chat(chat_id, user_id) if user_id else None
         if chat is None:
             await sio.emit(
                 "ai_error",
                 {
                     "chatId": chat_id_str,
-                    "error": "對話不存在",
+                    "error": "對話不存在或無權限",
                 },
                 to=sid,
             )
@@ -202,8 +229,7 @@ def register_events(sio: AsyncServer):
                 except Exception as e:
                     print(f"[ai] create_log error: {e}")
 
-            # 記錄 AI 對話訊息到訊息中心
-            user_id = chat.get("user_id")
+            # 記錄 AI 對話訊息到訊息中心（用連線身分）
             if user_id:
                 try:
                     await log_message(
@@ -285,14 +311,40 @@ def register_events(sio: AsyncServer):
             )
             return
 
-        # 從 DB 載入對話
-        chat = await ai_chat.get_chat(chat_id)
+        # 進入時重新解析一次 token（同 ai_chat_event）
+        session = await revalidate_socket_session(sio, sid)
+        if session is None:
+            await sio.emit(
+                "compress_error",
+                {
+                    "chatId": chat_id_str,
+                    "error": "連線未授權，請重新登入",
+                },
+                to=sid,
+            )
+            await disconnect_socket(sio, sid)
+            return
+
+        if session.read_only:
+            await sio.emit(
+                "compress_error",
+                {
+                    "chatId": chat_id_str,
+                    "error": "此 API token 為唯讀，無法壓縮對話",
+                },
+                to=sid,
+            )
+            return
+
+        # 以連線身分取對話（不是自己的對話就不往下走，也不呼叫 AI）
+        user_id = session.user_id
+        chat = await ai_chat.get_chat(chat_id, user_id) if user_id else None
         if chat is None:
             await sio.emit(
                 "compress_error",
                 {
                     "chatId": chat_id_str,
-                    "error": "對話不存在",
+                    "error": "對話不存在或無權限",
                 },
                 to=sid,
             )

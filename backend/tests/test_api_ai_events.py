@@ -2,24 +2,59 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
 
+import ching_tech_os.api.auth as auth_api
 from ching_tech_os.api import ai as ai_api
+from ching_tech_os.models.auth import SessionData
 from ching_tech_os.services.ai_provider import AIResponse, ToolCall
 
 
 class _FakeSio:
-    def __init__(self) -> None:
+    """連線身分由 connect 存進 sio session，測試直接餵一份。"""
+
+    def __init__(self, identity: dict | None = None) -> None:
         self.handlers = {}
         self.emit = AsyncMock()
+        self.disconnect = AsyncMock()
+        self.identity = (
+            identity
+            if identity is not None
+            else {"user_id": 1, "role": "user", "app_permissions": {}, "token": "tok"}
+        )
 
     def event(self, fn):
         self.handlers[fn.__name__] = fn
         return fn
+
+    async def get_session(self, sid):
+        return self.identity
+
+
+def _stub_resolve_session(
+    monkeypatch: pytest.MonkeyPatch, *, user_id: int = 1, read_only: bool = False
+) -> AsyncMock:
+    """ai_chat_event／compress_chat 進入時會重新解析一次 token"""
+    now = datetime.now(timezone.utc)
+    session = SessionData(
+        username="tester",
+        password="xxx",
+        nas_host="localhost",
+        user_id=user_id,
+        created_at=now,
+        expires_at=now,
+        role="user",
+        app_permissions={},
+        read_only=read_only,
+    )
+    resolve = AsyncMock(return_value=session)
+    monkeypatch.setattr(auth_api, "_resolve_session", resolve)
+    return resolve
 
 
 def _response(
@@ -48,6 +83,7 @@ def _response(
 async def test_ai_chat_event_validation_and_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
     sio = _FakeSio()
     ai_api.register_events(sio)
+    _stub_resolve_session(monkeypatch)
 
     await sio.handlers["ai_chat_event"]("sid-1", {"chatId": "", "message": ""})
     await sio.handlers["ai_chat_event"]("sid-1", {"chatId": "bad-uuid", "message": "hi"})
@@ -63,6 +99,7 @@ async def test_ai_chat_event_validation_and_not_found(monkeypatch: pytest.Monkey
 async def test_ai_chat_event_success(monkeypatch: pytest.MonkeyPatch) -> None:
     sio = _FakeSio()
     ai_api.register_events(sio)
+    _stub_resolve_session(monkeypatch)
 
     chat_id = uuid4()
     agent_id = uuid4()
@@ -130,6 +167,7 @@ async def test_ai_chat_event_success(monkeypatch: pytest.MonkeyPatch) -> None:
 async def test_ai_chat_event_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     sio = _FakeSio()
     ai_api.register_events(sio)
+    _stub_resolve_session(monkeypatch)
 
     chat_id = uuid4()
     agent_id = uuid4()
@@ -185,6 +223,7 @@ async def test_ai_chat_event_failure(monkeypatch: pytest.MonkeyPatch) -> None:
 async def test_compress_chat_success_and_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     sio = _FakeSio()
     ai_api.register_events(sio)
+    _stub_resolve_session(monkeypatch)
     handler = sio.handlers["compress_chat"]
 
     # 缺少 chatId / 格式錯誤 / 對話不存在 / 訊息不足

@@ -7,12 +7,16 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from fastapi import HTTPException
+from fastapi import Depends, HTTPException
 
 from ching_tech_os.api import auth as auth_api
 from ching_tech_os.models.auth import ApiTokenCreateRequest, SessionData
 from ching_tech_os.services import api_token as api_token_service
 from ching_tech_os.services import permissions as permissions_service
+from ching_tech_os.services.permissions import (
+    get_effective_app_permissions,
+    require_app_permission,
+)
 
 
 # ============================================================
@@ -189,9 +193,13 @@ async def test_verify_api_token_paths(monkeypatch: pytest.MonkeyPatch) -> None:
     assert session.role == "user"
     assert session.read_only is True
     assert session.password == ""
-    assert session.app_permissions == {"knowledge-base": True}
+    # scopes 只給 knowledge-base：表補滿，其餘一律 False（含使用者本來有的 file-manager）
+    assert session.app_permissions["knowledge-base"] is True
+    assert session.app_permissions["file-manager"] is False
+    assert set(session.app_permissions) >= set(get_effective_app_permissions())
+    assert not any(v for k, v in session.app_permissions.items() if k != "knowledge-base")
 
-    # 空 scopes：使用者全部權限
+    # 空 scopes：不限縮，沿用使用者當下的完整權限表
     no_scope = _token_row(scopes=[])
     conn.fetchrow = AsyncMock(return_value=no_scope)
     session = await api_token_service.verify_api_token(token)
@@ -219,7 +227,9 @@ async def test_verify_api_token_scope_excludes_unpermitted_app(
     session = await api_token_service.verify_api_token(
         api_token_service.generate_token()
     )
-    assert session.app_permissions == {"knowledge-base": True, "terminal": False}
+    assert session.app_permissions["knowledge-base"] is True
+    assert session.app_permissions["terminal"] is False
+    assert not any(v for k, v in session.app_permissions.items() if k != "knowledge-base")
 
 
 @pytest.mark.asyncio
@@ -363,3 +373,48 @@ async def test_list_and_revoke_token_endpoints(
     with pytest.raises(HTTPException) as e:
         await auth_api.revoke_token(1, session=_session(auth_type="pat"))
     assert e.value.status_code == 403
+
+
+# ============================================================
+# scopes 與 require_app_permission 的交互（N1 回歸）
+# ============================================================
+
+
+@pytest.mark.asyncio
+async def test_scoped_pat_denied_on_out_of_scope_app(monkeypatch: pytest.MonkeyPatch) -> None:
+    """scopes=["knowledge-base"] 的 PAT 不能打 file-manager 端點
+
+    require_app_permission 的 checker 對權限表沒帶到的 app_id 會回退到預設值，
+    所以 verify_api_token 必須把 scopes 以外的 app 明確寫成 False，
+    否則 file-manager 這種預設開放的 app 會反而通得過。
+    """
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+
+    conn, ctx = _mock_conn()
+    monkeypatch.setattr(api_token_service, "get_connection", ctx)
+    monkeypatch.setattr(
+        permissions_service,
+        "get_user_app_permissions",
+        AsyncMock(return_value={"knowledge-base": True, "file-manager": True}),
+    )
+    conn.fetchrow = AsyncMock(return_value=_token_row(scopes=["knowledge-base"], read_only=False))
+
+    session = await api_token_service.verify_api_token(api_token_service.generate_token())
+    assert session is not None
+
+    app = FastAPI()
+
+    @app.get("/kb")
+    async def _kb(s: SessionData = Depends(require_app_permission("knowledge-base"))):
+        return {"ok": True}
+
+    @app.get("/files")
+    async def _files(s: SessionData = Depends(require_app_permission("file-manager"))):
+        return {"ok": True}
+
+    app.dependency_overrides[auth_api.get_current_session] = lambda: session
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        assert (await client.get("/kb")).status_code == 200
+        assert (await client.get("/files")).status_code == 403

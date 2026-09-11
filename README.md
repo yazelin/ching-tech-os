@@ -45,6 +45,14 @@ ChingTech OS 是擎添工業內部使用的整合式工作平台，以 Web 技�
 ### 2026-09
 
 - **排程結果推播**：動態排程跑完可把結果推回 LINE / Telegram（`executor_config.notify` 設定目標，沒設就不推），失敗訊息帶連續失敗次數（`scheduled_tasks.consecutive_failures`，成功歸零）。推播失敗只記 warning，不影響排程結果。Skill Script 模式也補寫 `ai_logs`。
+- **AI 管理寫入端點與 Socket.IO 補後端權限**：prompts 的 `POST`/`PUT`/`DELETE` 套
+  `require_app_permission("prompt-editor")`，agents 的 `POST`/`PUT`/`DELETE` 與 `POST /api/ai/test` 套
+  `require_app_permission("agent-settings")`；這兩個 app 權限改為**預設關閉、由管理員逐人開放**
+  （`ai_prompts` 與 `ai_agents` 是全域表，一個人改就影響所有人），**GET 不受影響**。
+  Socket.IO 連線改為必須以 `auth.token` 帶 token（不收 query string），驗不過拒絕連線；
+  之後各事件一律用連線身分，AI 對話、終端機、訊息中心都不再相信 client 送來的 `user_id`，
+  跑 AI 與開終端機還會在進入時重新解析一次 token。與 AI Log 同樣是既有的客戶端防護缺口
+  （前端擋點擊、後端沒擋），不是新功能；部署後舊桌面要重新整理頁面才會帶新程式。
 - **AI Log 端點補後端權限**：`/api/ai/logs`、`/api/ai/logs/stats`、`/api/ai/logs/{id}` 三個端點補上
   `require_app_permission("ai-log")`，`ai-log` 預設權限改為關閉、由管理員逐人開放。舊桌面原本靠前端
   `openApp` 擋住點擊，後端端點從未套用權限檢查；新前端沒有那道客戶端防護，問題因此浮上檯面，修法
