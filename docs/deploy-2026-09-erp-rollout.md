@@ -22,6 +22,7 @@
 | #196 | 往來對象聯絡人／地址編輯刪除端點、搜尋含聯絡人電話、role=both | 往來對象頁的編輯／刪除／設主要可用 |
 | #198 | bot prompt、skills、CLI、舊桌面切到新模組；`requires_app` 支援清單 | **LINE／Telegram bot 開始用新工具**回答廠商／物料／庫存／採購問題；舊桌面少了 ERPNext 圖示；CLI 0.2.0 |
 | #202 | 專案模組 MCP 工具九支，bot prompt 專案段改工具指引 | bot 能代查專案、開任務、完成里程碑（成員才能寫） |
+| #206 | 未綁定 CTOS 帳號的 bot 使用者不得使用專案、往來對象、物料庫存、檔案工具（issue #201，既有缺口） | LINE／Telegram 未綁定者問專案／廠商／NAS 檔案會得到「請先綁定」；已綁定者不變。**無 migration，建議與這批一起上，且不要晚於 #192／#202** |
 | #197 | ERPNext 匯入腳本 | 不影響服務；匯入是**另一次授權**（見第 6 節） |
 | #191／#193／#195／#190 | 規格與備份文件、備份腳本 | 無 |
 
@@ -68,6 +69,7 @@ journalctl -u ching-tech-os --since "5 minutes ago" --no-pager | grep -E "找不
 2. `journalctl` 無 032／033 的「找不到這些段落」warning（有就人工比對 prompt）。
 3. REST：一般使用者 `GET /api/parties` 200、`POST /api/parties` 空 body 422、無 token 401；`GET /api/projects` 200。
 4. MCP：journal 的工具載入行含 `find_party`、`find_project`。
+4a. 未綁定防護（#206）：用一個沒綁 CTOS 帳號的 LINE 帳號問「查一下有哪些專案」，應回「請先綁定」而不是資料；同一句用已綁定帳號問要有回覆。
 5. **LINE bot 還能回話**：請 yazelin 用自己的 LINE 傳「你好」與「查一下有哪些專案」，兩句都要有回覆（第二句在匯入前會說沒有資料）。這是每天有人在用的東西，最優先。
 6. 新前端：AI 助手頁送一句話有回覆且有工具時間軸；往來對象頁打開是空清單不是錯誤。
 7. 舊桌面：AI 助手開一次能對話；桌面沒有 ERPNext 圖示。
