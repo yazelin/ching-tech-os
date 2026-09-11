@@ -296,6 +296,49 @@ result = await execute_tool("generate_md2doc", {
 > - 支援更豐富的排版功能（圖表、雙欄、動畫等）
 > - 可匯出為多種格式（PPTX、Word、PDF）
 
+### 往來與物料（erp_tools.py）
+
+規格：`docs/superpowers/specs/2026-09-12-ai-native-erp-design.md` 第三節。
+資料表見 migration 030，service 在 `services/erp.py`、`erp_parties.py`、
+`erp_inventory.py`、`erp_purchasing.py`。往來對象工具需要 `vendor-management`
+權限，其餘需要 `inventory-management`。
+
+| 工具名稱 | 說明 | 參數 |
+|----------|------|------|
+| `find_party` | 模糊找往來對象（名稱、簡稱、別名、聯絡人、電話、統編） | `query`（必填）, `role`, `ctos_user_id` |
+| `get_party` | 完整資料＋聯絡人＋地址＋近期採購單＋相關專案＋知識庫條目數 | `party_id` 或 `name`, `ctos_user_id` |
+| `create_party` | 建立往來對象 | `name`（必填）, `short_name`, `is_supplier`, `is_customer`, `tax_id`, `industry`, `payment_terms`, `aliases`, `notes`, `contacts`, `addresses`, `ctos_user_id` |
+| `update_party` | 更新主檔 | `party_id` 或 `name`, `fields`（必填）, `ctos_user_id` |
+| `add_party_contact` | 新增聯絡人 | `party_id` 或 `party_name`, `name`（必填）, `title`, `phone`, `mobile`, `email`, `is_primary`, `notes`, `ctos_user_id` |
+| `add_party_address` | 新增地址 | `party_id` 或 `party_name`, `address`（必填）, `label`, `city`, `is_primary`, `ctos_user_id` |
+| `merge_parties` | 合併重複主檔（drop 的資料掛到 keep，名稱變別名） | `keep_id`（必填）, `drop_id`（必填）, `ctos_user_id` |
+| `summarize_party` | 聚合成一段上下文（不是模型生成） | `party_id` 或 `name`, `ctos_user_id` |
+| `extract_party_from_document` | 名片／文件欄位整理成草稿並比對重複主檔 | `file_path`（必填）, `name`（必填）, `short_name`, `tax_id`, `contact_name`, `contact_title`, `phone`, `mobile`, `email`, `address`, `is_supplier`, `is_customer`, `notes`, `ctos_user_id` |
+| `find_item` | 模糊找物料（料號、品名、別名、規格） | `query`（必填）, `ctos_user_id` |
+| `get_item` | 主檔＋各倉餘額＋最近異動＋預設供應商 | `item_id` 或 `code`, `ctos_user_id` |
+| `create_item` | 建立物料 | `code`（必填）, `name`（必填）, `spec`, `unit`, `item_group`, `default_supplier`, `purchase_price`, `lead_days`, `aliases`, `notes`, `ctos_user_id` |
+| `update_item` | 更新物料 | `item_id` 或 `code`, `fields`（必填）, `ctos_user_id` |
+| `summarize_item` | 聚合庫存、供應商、最近異動 | `item_id` 或 `code`, `ctos_user_id` |
+| `get_stock` | 查餘額 | `item`, `warehouse`, `ctos_user_id` |
+| `adjust_stock` | 調整庫存（正數入庫、負數出庫） | `item`（必填）, `warehouse`（必填）, `qty_delta`（必填）, `reason`, `note`, `ctos_user_id` |
+| `transfer_stock` | 倉別調撥 | `item`（必填）, `from_warehouse`（必填）, `to_warehouse`（必填）, `qty`（必填）, `note`, `ctos_user_id` |
+| `create_purchase_order` | 開採購單（單號自動產生） | `supplier`（必填）, `lines`（必填）, `project`, `expected_date`, `notes`, `ctos_user_id` |
+| `get_purchase_order` | 採購單明細 | `po`（單號或 UUID，必填）, `ctos_user_id` |
+| `list_purchase_orders` | 採購單清單 | `supplier`, `status`, `project`, `since`, `ctos_user_id` |
+| `receive_purchase_order` | 收貨入庫 | `po`（必填）, `lines` 或 `all`, `warehouse`, `note`, `ctos_user_id` |
+| `cancel_purchase_order` | 取消採購單（不是刪除） | `po`（必填）, `reason`, `ctos_user_id` |
+| `extract_purchase_order_from_document` | 詢價／報價單欄位整理成草稿並解析供應商與物料 | `file_path`（必填）, `supplier`（必填）, `lines`（必填）, `expected_date`, `project`, `notes`, `ctos_user_id` |
+
+三條與其他工具不同的約定：
+
+1. **回傳是 dict 不是字串**：寫入類工具回傳含 `audit_id`（對應 `erp_audit` 那一筆），
+   agent 回覆時要引用。
+2. **解析到多個候選不猜**：`supplier`、`item`、`party` 這種吃名稱的參數解析不唯一時，
+   回 `{"ok": false, "need_confirmation": true, "candidates": [...]}`，
+   零命中回 `{"ok": false, "not_found": true}`，工具不丟例外。
+3. **文件擷取不呼叫模型**：`extract_*_from_document` 只把 agent 讀出來的欄位整理成草稿、
+   比對重複主檔，擷取由 agent 自己做（AI Log 才看得到過程）。
+
 ### 排程管理（scheduler_tools.py）
 
 | 工具名稱 | 說明 | 參數 |

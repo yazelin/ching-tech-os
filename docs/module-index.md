@@ -196,7 +196,11 @@ services/task_scheduler.py ← 動態排程（DB 定義 + APScheduler 註冊 + �
 | `services/document_reader.py` | 文件讀取（docx/xlsx/pptx/pdf） |
 | `services/message.py` | 系統訊息 |
 | `services/project.py` | 專案模組（asyncpg raw SQL：清單／明細／成員／里程碑／任務／dashboard 摘要），路由在 `api/project.py` |
-| `services/inventory.py` | 庫存管理（1,150 行） |
+| `services/erp.py` | 往來與物料共用層（稽核 `audit()`、`resolve_party`／`resolve_item`／`resolve_warehouse` 模糊解析、例外） |
+| `services/erp_parties.py` | 往來對象（主檔／聯絡人／地址／合併／摘要），路由在 `api/erp.py` |
+| `services/erp_inventory.py` | 物料、倉庫與庫存（movement 累計 balances、調撥、負庫存防呆） |
+| `services/erp_purchasing.py` | 採購單（`PO-YYYYMM-NNN` 產生、收貨入庫、取消、文件擷取輔助） |
+| `services/mcp/erp_tools.py` | 往來與物料的 23 支 MCP 工具（主要介面） |
 | `utils/crypto.py` | 加密工具 |
 
 ---
