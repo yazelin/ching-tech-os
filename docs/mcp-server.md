@@ -298,6 +298,10 @@ result = await execute_tool("generate_md2doc", {
 
 ### 往來與物料（erp_tools.py）
 
+> 這一組取代了原本的 ERPNext MCP 工具（`mcp__erpnext__*`，`extends/erpnext`）。
+> Bot prompt、`skills/erp`、`skills/project`、ctos CLI 的 `erp` 子命令與舊桌面
+> 都已在 2026-09 切過來；ERPNext 停用步驟見規格第七節。
+
 規格：`docs/superpowers/specs/2026-09-12-ai-native-erp-design.md` 第三節。
 資料表見 migration 030，service 在 `services/erp.py`、`erp_parties.py`、
 `erp_inventory.py`、`erp_purchasing.py`。往來對象工具需要 `vendor-management`
@@ -442,7 +446,7 @@ result = await execute_tool("add_note", {
 ### 錯誤訊息
 
 - 未關聯 CTOS 帳號：使用預設權限判斷
-- 工具已停用（遷移至 ERPNext）：回傳停用訊息
+- 工具已停用：回傳停用訊息
 - 權限不足：回傳需要的功能權限名稱
 
 ## 新增工具

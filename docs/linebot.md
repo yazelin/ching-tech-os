@@ -69,7 +69,7 @@ Line Platform
 | 簡報生成 | 根據主題或大綱生成 PowerPoint 簡報 |
 | MD2PPT/MD2DOC 文件轉換 | 透過對話產生可線上編輯的簡報（PPT）或文件（Word） |
 | 文件讀取 | 支援讀取 Word、Excel、PowerPoint、PDF 文件內容 |
-| 專案管理 | 透過對話建立專案、新增成員和里程碑 |
+| 往來與物料 | 查詢廠商／客戶、物料庫存，開採購單與收貨（取代 ERPNext） |
 | 知識庫 | 透過對話新增筆記、搜尋知識、管理附件、讀取附件內容 |
 | NAS 檔案搜尋 | 搜尋並發送 NAS 共享檔案（圖片直接發送） |
 | 媒體下載 | 從網路下載影片/音訊檔案到 NAS |
@@ -338,11 +338,22 @@ LINE 和 Telegram 共用 `CommandRouter` 框架（`services/bot/commands.py`）�
 AI 助理可使用的工具（完整列表見 [docs/mcp-server.md](mcp-server.md)）：
 
 **專案管理**
-- `query_project` - 查詢專案
-- `create_project` - 建立專案
-- `add_project_member` - 新增成員（is_internal 預設 True，外部人員設 False）
-- `add_project_milestone` - 新增里程碑
-- `get_project_milestones` / `get_project_meetings` / `get_project_members` - 查詢
+
+專案模組沒有 MCP 工具，只有 REST API 與新前端。Bot 收到專案相關的問題時，
+prompt 會引導使用者到 os.ching-tech.com/projects。
+
+**往來與物料（取代 ERPNext）**
+
+2026-09 起供應商／客戶、物料庫存與採購改用 CTOS 自己的資料庫
+（`services/mcp/erp_tools.py`），原本的 `mcp__erpnext__*` 工具不再出現在 prompt 裡。
+ERPNext 停用步驟見規格 `docs/superpowers/specs/2026-09-12-ai-native-erp-design.md` 第七節。
+
+- `find_party` / `get_party` / `create_party` - 往來對象搜尋、明細、建立
+- `add_party_contact` / `update_party_contact` - 聯絡人維護
+- `merge_parties` - 合併重複主檔（不可逆）
+- `find_item` / `get_item` / `get_stock` - 物料與庫存查詢
+- `adjust_stock` - 入出庫調整
+- `create_purchase_order` / `receive_purchase_order` - 開採購單與收貨入庫
 
 **知識庫**
 - `search_knowledge` - 搜尋知識庫
