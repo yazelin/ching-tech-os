@@ -17,6 +17,8 @@ from .erp import (
     audit,
     build_diff,
     like_pattern,
+    pick_fields,
+    update_assignments,
 )
 
 logger = logging.getLogger(__name__)
@@ -200,10 +202,6 @@ def count_party_knowledge(name: str) -> int:
 # ============================================================
 
 
-def _pick(data: dict, fields: tuple[str, ...]) -> dict[str, Any]:
-    return {k: v for k, v in data.items() if k in fields}
-
-
 async def create_party(
     data: dict,
     actor_user_id: int | None = None,
@@ -242,7 +240,7 @@ async def create_party(
             "party",
             row["id"],
             "create",
-            build_diff(None, _pick(dict(row), _PARTY_FIELDS)),
+            build_diff(None, pick_fields(dict(row), _PARTY_FIELDS)),
             actor_user_id,
             via,
             agent_name,
@@ -261,7 +259,7 @@ async def update_party(
     agent_name: str | None = None,
 ) -> dict[str, Any] | None:
     """更新主檔（只更新有給的欄位），回傳主檔＋audit_id；找不到回 None"""
-    fields = _pick(data, _PARTY_UPDATE_FIELDS)
+    fields = pick_fields(data, _PARTY_UPDATE_FIELDS)
     async with get_connection() as conn, conn.transaction():
         before = await conn.fetchrow(
             "SELECT * FROM parties WHERE id = $1 AND deleted_at IS NULL", party_id
@@ -269,8 +267,7 @@ async def update_party(
         if before is None:
             return None
         if fields:
-            names = list(fields.keys())
-            assignments = ", ".join(f"{n} = ${i + 2}" for i, n in enumerate(names))
+            assignments, values = update_assignments(fields)
             row = await conn.fetchrow(
                 f"""
                 UPDATE parties
@@ -279,7 +276,7 @@ async def update_party(
                 RETURNING *
                 """,
                 party_id,
-                *[fields[n] for n in names],
+                *values,
             )
         else:
             row = before
@@ -288,7 +285,7 @@ async def update_party(
             "party",
             party_id,
             "update",
-            build_diff(_pick(dict(before), _PARTY_FIELDS), _pick(dict(row), _PARTY_FIELDS)),
+            build_diff(pick_fields(dict(before), _PARTY_FIELDS), pick_fields(dict(row), _PARTY_FIELDS)),
             actor_user_id,
             via,
             agent_name,
@@ -395,13 +392,13 @@ async def add_contact(
     async with get_connection() as conn, conn.transaction():
         if not await _party_alive(conn, party_id):
             return None
-        row = await _insert_contact(conn, party_id, _pick(data, _CONTACT_FIELDS), actor_user_id)
+        row = await _insert_contact(conn, party_id, pick_fields(data, _CONTACT_FIELDS), actor_user_id)
         audit_id = await audit(
             conn,
             "party_contact",
             row["id"],
             "create",
-            {"party_id": str(party_id), **build_diff(None, _pick(dict(row), _CONTACT_FIELDS))},
+            {"party_id": str(party_id), **build_diff(None, pick_fields(dict(row), _CONTACT_FIELDS))},
             actor_user_id,
             via,
             agent_name,
@@ -422,13 +419,13 @@ async def add_address(
     async with get_connection() as conn, conn.transaction():
         if not await _party_alive(conn, party_id):
             return None
-        row = await _insert_address(conn, party_id, _pick(data, _ADDRESS_FIELDS), actor_user_id)
+        row = await _insert_address(conn, party_id, pick_fields(data, _ADDRESS_FIELDS), actor_user_id)
         audit_id = await audit(
             conn,
             "party_address",
             row["id"],
             "create",
-            {"party_id": str(party_id), **build_diff(None, _pick(dict(row), _ADDRESS_FIELDS))},
+            {"party_id": str(party_id), **build_diff(None, pick_fields(dict(row), _ADDRESS_FIELDS))},
             actor_user_id,
             via,
             agent_name,
@@ -477,15 +474,47 @@ async def merge_parties(
         if keep is None or drop is None:
             raise InvalidOperationError("要合併的往來對象不存在或已刪除")
 
-        await conn.execute(
-            "UPDATE party_contacts SET party_id = $1 WHERE party_id = $2",
-            keep_id,
-            drop_id,
+        # keep 這邊已經有主要聯絡人／地址時，drop 搬過來的要降級，
+        # 不然合併完會出現兩個 is_primary
+        keep_has_primary_contact = bool(
+            await conn.fetchval(
+                """
+                SELECT 1 FROM party_contacts
+                WHERE party_id = $1 AND is_primary
+                """,
+                keep_id,
+            )
         )
         await conn.execute(
-            "UPDATE party_addresses SET party_id = $1 WHERE party_id = $2",
+            """
+            UPDATE party_contacts
+            SET party_id = $1,
+                is_primary = CASE WHEN $3 THEN false ELSE is_primary END
+            WHERE party_id = $2
+            """,
             keep_id,
             drop_id,
+            keep_has_primary_contact,
+        )
+        keep_has_primary_address = bool(
+            await conn.fetchval(
+                """
+                SELECT 1 FROM party_addresses
+                WHERE party_id = $1 AND is_primary
+                """,
+                keep_id,
+            )
+        )
+        await conn.execute(
+            """
+            UPDATE party_addresses
+            SET party_id = $1,
+                is_primary = CASE WHEN $3 THEN false ELSE is_primary END
+            WHERE party_id = $2
+            """,
+            keep_id,
+            drop_id,
+            keep_has_primary_address,
         )
         await conn.execute(
             "UPDATE purchase_orders SET supplier_id = $1 WHERE supplier_id = $2",

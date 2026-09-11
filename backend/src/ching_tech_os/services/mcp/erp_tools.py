@@ -17,7 +17,10 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
+from pydantic import ValidationError
+
 from .server import check_mcp_tool_permission, ensure_db_connection, logger, mcp
+from ...models.erp import ItemUpdate, PartyUpdate
 from ...services import erp as erp_core
 from ...services import erp_inventory as inventory_service
 from ...services import erp_parties as party_service
@@ -95,6 +98,26 @@ async def _item_id_from(item_id: str | None, query: str | None) -> UUID:
         raise erp_core.NotFoundError("物料", "")
     hit = await erp_core.resolve_item(query)
     return hit["id"]
+
+
+def _validated_fields(model, fields: dict) -> dict:
+    """把 agent 給的 fields 過一次 Update 模型
+
+    NOT NULL 欄位送 null、狀態值不在 Literal 裡，都在這裡就被擋下來，
+    不會變成資料庫例外（回給 agent 的是「哪個欄位不行」）。
+
+    Raises:
+        InvalidOperationError: 驗證失敗（呼叫端會翻成 {"ok": false, "error": ...}）
+    """
+    try:
+        body = model.model_validate(fields)
+    except ValidationError as e:
+        problems = "；".join(
+            f"{'.'.join(str(x) for x in err['loc']) or '欄位'}：{err['msg']}"
+            for err in e.errors()
+        )
+        raise erp_core.InvalidOperationError(f"欄位不合法（{problems}）") from e
+    return body.model_dump(exclude_unset=True)
 
 
 async def _warehouse_id_from(warehouse: str | None) -> UUID | None:
@@ -241,9 +264,10 @@ async def update_party(
     if not fields:
         return _error("沒有要更新的欄位")
     try:
+        payload = _validated_fields(PartyUpdate, fields)
         pid = await _party_id_from(party_id, name)
         row = await party_service.update_party(
-            pid, fields, actor_user_id=ctos_user_id, via="mcp"
+            pid, payload, actor_user_id=ctos_user_id, via="mcp"
         )
     except Exception as e:
         return _fail(e)
@@ -524,10 +548,8 @@ async def update_item(
     if not fields:
         return _error("沒有要更新的欄位")
     try:
+        payload = _validated_fields(ItemUpdate, fields)
         iid = await _item_id_from(item_id, code)
-        payload = dict(fields)
-        if payload.get("purchase_price") is not None:
-            payload["purchase_price"] = Decimal(str(payload["purchase_price"]))
         row = await inventory_service.update_item(
             iid, payload, actor_user_id=ctos_user_id, via="mcp"
         )
@@ -748,8 +770,9 @@ async def _resolve_project_id(project: str | None) -> UUID | None:
 
     async with get_connection() as conn:
         rows = await conn.fetch(
-            "SELECT id, name, status FROM projects WHERE name ILIKE $1 LIMIT 4",
-            f"%{project}%",
+            r"SELECT id, name, status FROM projects "
+            r"WHERE name ILIKE $1 ESCAPE '\' LIMIT 4",
+            erp_core.like_pattern(project),
         )
     if not rows:
         raise erp_core.NotFoundError("專案", project)
@@ -763,7 +786,7 @@ async def get_purchase_order(
     po: str,
     ctos_user_id: int | None = None,
 ) -> dict:
-    """取得採購單明細
+    """取得採購單明細（行項的 `id` 就是收貨要用的 line_id）
 
     Args:
         po: 單號（PO-YYYYMM-NNN）或 UUID
@@ -782,10 +805,14 @@ async def get_purchase_order(
 
 
 async def _load_po(po: str) -> dict | None:
+    """`po` 可以是 UUID 或單號；try 只包 UUID 解析，不要吞掉 service 的錯"""
     try:
-        return await purchasing_service.get_purchase_order(po_id=UUID(po))
+        po_id = UUID(po)
     except ValueError:
-        return await purchasing_service.get_purchase_order(po_no=po)
+        po_id = None
+    if po_id is not None:
+        return await purchasing_service.get_purchase_order(po_id=po_id)
+    return await purchasing_service.get_purchase_order(po_no=po)
 
 
 @mcp.tool()
@@ -837,7 +864,8 @@ async def receive_purchase_order(
 
     Args:
         po: 單號或 UUID
-        lines: `[{"item": "料號", "qty": 5}]`；要全收就用 all=True
+        lines: `[{"line_id": "...", "qty": 5}]`，或用 `[{"item": "料號", "qty": 5}]`
+            （同一張單同一物料有兩行時會回候選要你指定 line_id）；要全收就用 all=True
         all: 收下所有行項的未收數量
         warehouse: 入庫倉（代碼、名稱或 UUID）；只有一個倉時可省略
         note: 備註
@@ -852,8 +880,14 @@ async def receive_purchase_order(
             return {"ok": False, "not_found": True, "error": f"找不到採購單：{po}"}
         resolved = []
         for line in lines or []:
-            item_id = await _item_id_from(line.get("item_id"), line.get("item"))
-            resolved.append({"item_id": item_id, "qty": Decimal(str(line["qty"]))})
+            entry: dict[str, Any] = {"qty": Decimal(str(line["qty"]))}
+            if line.get("line_id"):
+                entry["line_id"] = UUID(str(line["line_id"]))
+            else:
+                entry["item_id"] = await _item_id_from(
+                    line.get("item_id"), line.get("item")
+                )
+            resolved.append(entry)
         warehouse_id = await _warehouse_id_from(warehouse)
         result = await purchasing_service.receive_purchase_order(
             detail["id"],

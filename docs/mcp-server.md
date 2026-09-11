@@ -325,7 +325,7 @@ result = await execute_tool("generate_md2doc", {
 | `create_purchase_order` | 開採購單（單號自動產生） | `supplier`（必填）, `lines`（必填）, `project`, `expected_date`, `notes`, `ctos_user_id` |
 | `get_purchase_order` | 採購單明細 | `po`（單號或 UUID，必填）, `ctos_user_id` |
 | `list_purchase_orders` | 採購單清單 | `supplier`, `status`, `project`, `since`, `ctos_user_id` |
-| `receive_purchase_order` | 收貨入庫 | `po`（必填）, `lines` 或 `all`, `warehouse`, `note`, `ctos_user_id` |
+| `receive_purchase_order` | 收貨入庫 | `po`（必填）, `lines`（`[{line_id, qty}]`，或 `[{item, qty}]`）或 `all`, `warehouse`, `note`, `ctos_user_id` |
 | `cancel_purchase_order` | 取消採購單（不是刪除） | `po`（必填）, `reason`, `ctos_user_id` |
 | `extract_purchase_order_from_document` | 詢價／報價單欄位整理成草稿並解析供應商與物料 | `file_path`（必填）, `supplier`（必填）, `lines`（必填）, `expected_date`, `project`, `notes`, `ctos_user_id` |
 
@@ -336,6 +336,11 @@ result = await execute_tool("generate_md2doc", {
 2. **解析到多個候選不猜**：`supplier`、`item`、`party` 這種吃名稱的參數解析不唯一時，
    回 `{"ok": false, "need_confirmation": true, "candidates": [...]}`，
    零命中回 `{"ok": false, "not_found": true}`，工具不丟例外。
+   收貨也一樣：同一張單同一物料有兩行時，`receive_purchase_order` 只給 `item` 會回行候選，
+   要用 `lines: [{"line_id": ..., "qty": ...}]` 指定（`line_id` 就是
+   `get_purchase_order` 回的行項 `id`）。
+   `update_party`／`update_item` 的 `fields` 會先過 `PartyUpdate`／`ItemUpdate` 驗證，
+   NOT NULL 欄位送 `null` 直接回 `{"ok": false, "error": "欄位不合法（…）"}`，不會變成資料庫例外。
 3. **文件擷取不呼叫模型**：`extract_*_from_document` 只把 agent 讀出來的欄位整理成草稿、
    比對重複主檔，擷取由 agent 自己做（AI Log 才看得到過程）。
 

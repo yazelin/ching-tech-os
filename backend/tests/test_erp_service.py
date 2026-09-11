@@ -158,6 +158,16 @@ def test_like_pattern_escapes(raw, expected) -> None:
     assert erp_core.like_pattern(raw) == expected
 
 
+def test_pick_fields_drops_unknown_keys() -> None:
+    assert erp_core.pick_fields({"a": 1, "b": 2}, ("a",)) == {"a": 1}
+
+
+def test_update_assignments_builds_numbered_clause() -> None:
+    clause, values = erp_core.update_assignments({"name": "A", "notes": "B"})
+    assert clause == "name = $2, notes = $3"
+    assert values == ["A", "B"]
+
+
 def test_build_diff_only_records_changes() -> None:
     diff = erp_core.build_diff(
         {"name": "A", "notes": None, "qty": Decimal("1")},
@@ -622,19 +632,59 @@ async def test_merge_parties_moves_children_and_soft_deletes(monkeypatch) -> Non
     drop = _party_row(name="鴻佰工業", short_name=None, aliases=["鴻佰工"], is_customer=True)
     merged = _party_row(id=keep["id"], aliases=["鴻佰", "鴻佰工業", "鴻佰工"])
     audit_id = uuid4()
-    conn = _FakeConn(fetchrow=[keep, drop, merged], fetchval=[audit_id])
+    # 前兩個 fetchval 是「keep 這邊有沒有主要聯絡人／地址」
+    conn = _FakeConn(fetchrow=[keep, drop, merged], fetchval=[None, None, audit_id])
     _patch(monkeypatch, party_service, conn)
 
     result = await party_service.merge_parties(keep["id"], drop["id"])
 
     assert result["audit_id"] == audit_id
-    assert conn.find("UPDATE party_contacts SET party_id")
+    assert conn.find("UPDATE party_contacts")
     assert conn.find("UPDATE purchase_orders SET supplier_id")
     assert conn.find("UPDATE items SET default_supplier_id")
     # drop 被軟刪除
     assert any(
         "SET deleted_at = NOW()" in sql for sql in conn.sqls()
     )
+
+
+@pytest.mark.asyncio
+async def test_merge_parties_demotes_drop_primary_when_keep_has_one(
+    monkeypatch,
+) -> None:
+    """F9：keep 已經有主要聯絡人／地址時，drop 搬過來的要降級"""
+    keep = _party_row()
+    drop = _party_row()
+    conn = _FakeConn(
+        fetchrow=[keep, drop, _party_row(id=keep["id"])],
+        fetchval=[1, 1, uuid4()],  # keep 兩邊都已經有 primary
+    )
+    _patch(monkeypatch, party_service, conn)
+
+    await party_service.merge_parties(keep["id"], drop["id"])
+
+    contacts = conn.find("UPDATE party_contacts")[0]
+    addresses = conn.find("UPDATE party_addresses")[0]
+    assert "is_primary = CASE WHEN $3 THEN false ELSE is_primary END" in contacts[1]
+    assert contacts[2][2] is True
+    assert addresses[2][2] is True
+
+
+@pytest.mark.asyncio
+async def test_merge_parties_keeps_drop_primary_when_keep_has_none(
+    monkeypatch,
+) -> None:
+    keep = _party_row()
+    drop = _party_row()
+    conn = _FakeConn(
+        fetchrow=[keep, drop, _party_row(id=keep["id"])],
+        fetchval=[None, None, uuid4()],
+    )
+    _patch(monkeypatch, party_service, conn)
+
+    await party_service.merge_parties(keep["id"], drop["id"])
+
+    assert conn.find("UPDATE party_contacts")[0][2][2] is False
 
 
 @pytest.mark.asyncio
@@ -747,6 +797,9 @@ async def test_get_item_detail_sums_balances(monkeypatch) -> None:
     detail = await inventory_service.get_item_detail(row["id"])
     assert detail["total_qty"] == Decimal("100")
     assert len(detail["movements"]) == 1
+    # F8：餘額 join 的倉庫要排除軟刪除
+    balance_sql = conn.find("FROM stock_balances b")[0][1]
+    assert "JOIN warehouses w ON w.id = b.warehouse_id AND w.deleted_at IS NULL" in balance_sql
 
 
 @pytest.mark.asyncio
@@ -868,6 +921,18 @@ async def test_update_warehouse(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_update_warehouse_rejects_duplicate_code(monkeypatch) -> None:
+    """F3：改代碼撞到別的倉要擋下來，不要讓 unique 例外變成 500"""
+    before = _DictRecord({"id": uuid4(), "code": "MAIN", "name": "主倉"})
+    conn = _FakeConn(fetchrow=[before], fetchval=[1])
+    _patch(monkeypatch, inventory_service, conn)
+
+    with pytest.raises(erp_core.InvalidOperationError):
+        await inventory_service.update_warehouse(before["id"], {"code": "SUB"})
+    assert not conn.find("UPDATE warehouses\n                SET")
+
+
+@pytest.mark.asyncio
 async def test_update_warehouse_missing_and_noop(monkeypatch) -> None:
     conn = _FakeConn(fetchrow=[None])
     _patch(monkeypatch, inventory_service, conn)
@@ -916,6 +981,9 @@ async def test_get_stock_filters(monkeypatch) -> None:
     assert result["total"] == 1
     assert conn.calls[0][2] == (item_id, warehouse_id)
     assert "i.deleted_at IS NULL" in conn.calls[0][1]
+    # F8：軟刪除的倉庫不列
+    assert "w.deleted_at IS NULL" in conn.calls[0][1]
+    assert "JOIN warehouses w" in conn.calls[0][1]
 
 
 @pytest.mark.asyncio
@@ -1237,6 +1305,13 @@ async def test_get_purchase_order_sums_amount(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_purchase_order_requires_a_key() -> None:
+    """F5：兩個參數都沒給是程式錯誤，不能讓 SQL 撈回第一筆"""
+    with pytest.raises(ValueError):
+        await purchasing_service.get_purchase_order()
+
+
+@pytest.mark.asyncio
 async def test_get_purchase_order_missing(monkeypatch) -> None:
     conn = _FakeConn(fetchrow=[None])
     _patch(monkeypatch, purchasing_service, conn)
@@ -1299,6 +1374,60 @@ def test_receive_plan_all_takes_outstanding_only() -> None:
     lines = [_po_line(a, "10", "10"), _po_line(b, "5", "2")]
     plan = purchasing_service._receive_plan(lines, None, True)
     assert [(item, qty) for _lid, item, qty in plan] == [(b, Decimal("3"))]
+
+
+def test_receive_plan_all_covers_two_lines_of_same_item() -> None:
+    """F1：同一物料兩行時，receive_all 要兩行都收（舊版會漏掉一行）"""
+    item = uuid4()
+    first, second = _po_line(item, "10"), _po_line(item, "4")
+    plan = purchasing_service._receive_plan([first, second], None, True)
+
+    assert [line_id for line_id, _item, _qty in plan] == [first["id"], second["id"]]
+    assert [qty for _lid, _item, qty in plan] == [Decimal("10"), Decimal("4")]
+
+
+def test_receive_plan_by_line_id() -> None:
+    item = uuid4()
+    first, second = _po_line(item, "10"), _po_line(item, "4")
+    plan = purchasing_service._receive_plan(
+        [first, second], [{"line_id": second["id"], "qty": 4}], False
+    )
+    assert plan == [(second["id"], item, Decimal("4"))]
+
+
+def test_receive_plan_by_item_is_ambiguous_when_two_lines() -> None:
+    """F1 裁定：只給 item 而該物料有兩行 → 回候選，不准猜"""
+    item = uuid4()
+    lines = [_po_line(item, "10"), _po_line(item, "4")]
+    with pytest.raises(erp_core.AmbiguousError) as exc:
+        purchasing_service._receive_plan(lines, [{"item_id": item, "qty": 1}], False)
+
+    assert len(exc.value.candidates) == 2
+    assert exc.value.candidates[0]["line_id"] == str(lines[0]["id"])
+    assert exc.value.candidates[0]["item_code"] == "CTOS-A1"
+
+
+def test_receive_plan_by_item_ok_when_single_line() -> None:
+    item = uuid4()
+    line = _po_line(item, "10")
+    plan = purchasing_service._receive_plan(
+        [line], [{"item_id": item, "qty": 4}], False
+    )
+    assert plan == [(line["id"], item, Decimal("4"))]
+
+
+def test_receive_plan_rejects_unknown_line_id() -> None:
+    with pytest.raises(erp_core.InvalidOperationError):
+        purchasing_service._receive_plan(
+            [_po_line(uuid4(), "10")], [{"line_id": uuid4(), "qty": 1}], False
+        )
+
+
+def test_receive_plan_requires_line_or_item() -> None:
+    with pytest.raises(erp_core.InvalidOperationError):
+        purchasing_service._receive_plan(
+            [_po_line(uuid4(), "10")], [{"qty": 1}], False
+        )
 
 
 def test_receive_plan_rejects_over_receive() -> None:
@@ -1394,6 +1523,52 @@ async def test_receive_purchase_order_updates_lines_and_status(monkeypatch) -> N
     assert result["audit_id"] == audit_id
     assert conn.find("SET received_qty = received_qty + $2")
     assert conn.find("INSERT INTO stock_movements")[0][2][3] == "receipt"
+    # 稽核 diff 記 line_id（F1）
+    assert '"line_id"' in conn.find("INSERT INTO erp_audit")[0][2][3]
+
+
+@pytest.mark.asyncio
+async def test_receive_all_two_lines_of_same_item(monkeypatch) -> None:
+    """F1 回歸：同一物料兩行的 PO，receive_all 兩行都收、狀態到 received"""
+    po_id, item_id, wh_id = uuid4(), uuid4(), uuid4()
+    first, second = _po_line(item_id, "10"), _po_line(item_id, "4")
+    conn = _FakeConn(
+        fetchrow=[
+            _DictRecord({"id": po_id, "po_no": "PO-202609-001", "status": "ordered"}),
+            _DictRecord({"id": uuid4()}),                       # 第一行 movement
+            _DictRecord({"id": uuid4(), "qty": Decimal("10")}),  # 第一行 balance
+            _DictRecord({"id": uuid4()}),                       # 第二行 movement
+            _DictRecord({"id": uuid4(), "qty": Decimal("14")}),  # 第二行 balance
+            _DictRecord({"total_qty": Decimal("14"), "received_qty": Decimal("14")}),
+        ],
+        fetchval=[1, uuid4()],
+        fetch=[[first, second]],
+    )
+    _patch(monkeypatch, purchasing_service, conn)
+
+    result = await purchasing_service.receive_purchase_order(
+        po_id, receive_all=True, warehouse_id=wh_id
+    )
+
+    assert result["status"] == "received"
+    assert len(result["movements"]) == 2
+    updated_lines = [c[2][0] for c in conn.find("SET received_qty = received_qty + $2")]
+    assert updated_lines == [first["id"], second["id"]]
+
+
+@pytest.mark.asyncio
+async def test_receive_by_item_with_two_lines_raises_ambiguous(monkeypatch) -> None:
+    po_id, item_id = uuid4(), uuid4()
+    conn = _FakeConn(
+        fetchrow=[_DictRecord({"id": po_id, "po_no": "PO-1", "status": "ordered"})],
+        fetch=[[_po_line(item_id, "10"), _po_line(item_id, "4")]],
+    )
+    _patch(monkeypatch, purchasing_service, conn)
+
+    with pytest.raises(erp_core.AmbiguousError):
+        await purchasing_service.receive_purchase_order(
+            po_id, lines=[{"item_id": item_id, "qty": 1}], warehouse_id=uuid4()
+        )
 
 
 @pytest.mark.asyncio

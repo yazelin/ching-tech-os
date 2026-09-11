@@ -20,6 +20,8 @@ from .erp import (
     audit,
     build_diff,
     like_pattern,
+    pick_fields,
+    update_assignments,
 )
 
 logger = logging.getLogger(__name__)
@@ -39,10 +41,6 @@ _ITEM_FIELDS = (
 )
 
 _WAREHOUSE_FIELDS = ("code", "name")
-
-
-def _pick(data: dict, fields: tuple[str, ...]) -> dict[str, Any]:
-    return {k: v for k, v in data.items() if k in fields}
 
 
 # ============================================================
@@ -123,7 +121,7 @@ async def get_item_detail(
             SELECT b.warehouse_id, w.code AS warehouse_code,
                    w.name AS warehouse_name, b.qty
             FROM stock_balances b
-            JOIN warehouses w ON w.id = b.warehouse_id
+            JOIN warehouses w ON w.id = b.warehouse_id AND w.deleted_at IS NULL
             WHERE b.item_id = $1
             ORDER BY w.code
             """,
@@ -195,7 +193,7 @@ async def create_item(
             "item",
             row["id"],
             "create",
-            build_diff(None, _pick(dict(row), _ITEM_FIELDS)),
+            build_diff(None, pick_fields(dict(row), _ITEM_FIELDS)),
             actor_user_id,
             via,
             agent_name,
@@ -213,7 +211,7 @@ async def update_item(
     agent_name: str | None = None,
 ) -> dict[str, Any] | None:
     """更新物料主檔；找不到回 None"""
-    fields = _pick(data, _ITEM_FIELDS)
+    fields = pick_fields(data, _ITEM_FIELDS)
     async with get_connection() as conn, conn.transaction():
         before = await conn.fetchrow(
             "SELECT * FROM items WHERE id = $1 AND deleted_at IS NULL", item_id
@@ -229,8 +227,7 @@ async def update_item(
             if clash:
                 raise InvalidOperationError(f"料號已存在：{fields['code']}")
         if fields:
-            names = list(fields.keys())
-            assignments = ", ".join(f"{n} = ${i + 2}" for i, n in enumerate(names))
+            assignments, values = update_assignments(fields)
             row = await conn.fetchrow(
                 f"""
                 UPDATE items
@@ -239,7 +236,7 @@ async def update_item(
                 RETURNING *
                 """,
                 item_id,
-                *[fields[n] for n in names],
+                *values,
             )
         else:
             row = before
@@ -248,7 +245,7 @@ async def update_item(
             "item",
             item_id,
             "update",
-            build_diff(_pick(dict(before), _ITEM_FIELDS), _pick(dict(row), _ITEM_FIELDS)),
+            build_diff(pick_fields(dict(before), _ITEM_FIELDS), pick_fields(dict(row), _ITEM_FIELDS)),
             actor_user_id,
             via,
             agent_name,
@@ -343,7 +340,7 @@ async def create_warehouse(
             "warehouse",
             row["id"],
             "create",
-            build_diff(None, _pick(dict(row), _WAREHOUSE_FIELDS)),
+            build_diff(None, pick_fields(dict(row), _WAREHOUSE_FIELDS)),
             actor_user_id,
             via,
             agent_name,
@@ -361,7 +358,7 @@ async def update_warehouse(
     agent_name: str | None = None,
 ) -> dict[str, Any] | None:
     """更新倉庫；找不到回 None"""
-    fields = _pick(data, _WAREHOUSE_FIELDS)
+    fields = pick_fields(data, _WAREHOUSE_FIELDS)
     async with get_connection() as conn, conn.transaction():
         before = await conn.fetchrow(
             "SELECT * FROM warehouses WHERE id = $1 AND deleted_at IS NULL",
@@ -369,9 +366,16 @@ async def update_warehouse(
         )
         if before is None:
             return None
+        if "code" in fields:
+            clash = await conn.fetchval(
+                "SELECT 1 FROM warehouses WHERE lower(code) = lower($1) AND id <> $2",
+                fields["code"],
+                warehouse_id,
+            )
+            if clash:
+                raise InvalidOperationError(f"倉庫代碼已存在：{fields['code']}")
         if fields:
-            names = list(fields.keys())
-            assignments = ", ".join(f"{n} = ${i + 2}" for i, n in enumerate(names))
+            assignments, values = update_assignments(fields)
             row = await conn.fetchrow(
                 f"""
                 UPDATE warehouses
@@ -380,7 +384,7 @@ async def update_warehouse(
                 RETURNING *
                 """,
                 warehouse_id,
-                *[fields[n] for n in names],
+                *values,
             )
         else:
             row = before
@@ -390,8 +394,8 @@ async def update_warehouse(
             warehouse_id,
             "update",
             build_diff(
-                _pick(dict(before), _WAREHOUSE_FIELDS),
-                _pick(dict(row), _WAREHOUSE_FIELDS),
+                pick_fields(dict(before), _WAREHOUSE_FIELDS),
+                pick_fields(dict(row), _WAREHOUSE_FIELDS),
             ),
             actor_user_id,
             via,
@@ -456,6 +460,7 @@ async def get_stock(
     offset = (max(page, 1) - 1) * page_size
     where = """
         WHERE i.deleted_at IS NULL
+          AND w.deleted_at IS NULL
           AND ($1::uuid IS NULL OR b.item_id = $1)
           AND ($2::uuid IS NULL OR b.warehouse_id = $2)
     """
@@ -465,6 +470,7 @@ async def get_stock(
             SELECT count(*)
             FROM stock_balances b
             JOIN items i ON i.id = b.item_id
+            JOIN warehouses w ON w.id = b.warehouse_id
             {where}
             """,
             item_id,

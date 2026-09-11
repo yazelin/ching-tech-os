@@ -10,10 +10,12 @@ from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 # 規格第二節定義的集合
 PurchaseOrderStatus = Literal["draft", "ordered", "partial", "received", "cancelled"]
+# 單頭可以直接改成的狀態：partial／received 由收貨算出來、cancelled 只能走 cancel
+EditablePurchaseOrderStatus = Literal["draft", "ordered"]
 StockReason = Literal[
     "receipt", "issue", "adjust", "transfer_in", "transfer_out", "import"
 ]
@@ -122,6 +124,13 @@ class PartyUpdate(BaseModel):
     )(_not_null)
 
 
+class PartyMergeRequest(BaseModel):
+    """合併請求：把 drop 併進 keep"""
+
+    keep_id: UUID
+    drop_id: UUID
+
+
 class PartyListItem(BaseModel):
     """往來對象列表項目"""
 
@@ -165,9 +174,13 @@ class PartyProjectItem(BaseModel):
 
 
 class PartyDetailResponse(PartyBase):
-    """往來對象明細（聚合聯絡人、地址、近期採購單、相關專案、知識庫條目數）"""
+    """往來對象明細（聚合聯絡人、地址、近期採購單、相關專案、知識庫條目數）
+
+    `audit_id` 只有建立／更新的回應才有值（GET 明細是 None）。
+    """
 
     id: UUID
+    audit_id: UUID | None = None
     created_by: int | None = None
     created_at: datetime
     updated_at: datetime
@@ -259,7 +272,6 @@ class StockMovementItem(BaseModel):
 
     id: UUID
     item_id: UUID
-    item_code: str | None = None
     warehouse_id: UUID
     warehouse_name: str | None = None
     qty_delta: Decimal
@@ -272,9 +284,13 @@ class StockMovementItem(BaseModel):
 
 
 class ItemDetailResponse(ItemBase):
-    """物料明細（主檔＋各倉餘額＋最近異動＋預設供應商）"""
+    """物料明細（主檔＋各倉餘額＋最近異動＋預設供應商）
+
+    `audit_id` 只有建立／更新的回應才有值。
+    """
 
     id: UUID
+    audit_id: UUID | None = None
     default_supplier_name: str | None = None
     created_by: int | None = None
     created_at: datetime
@@ -310,9 +326,10 @@ class WarehouseUpdate(BaseModel):
 
 
 class WarehouseResponse(WarehouseBase):
-    """倉庫回應"""
+    """倉庫回應（`audit_id` 只有建立／更新才有值）"""
 
     id: UUID
+    audit_id: UUID | None = None
     created_by: int | None = None
     created_at: datetime
     updated_at: datetime
@@ -419,11 +436,15 @@ class PurchaseOrderCreate(BaseModel):
 
 
 class PurchaseOrderUpdate(BaseModel):
-    """更新採購單請求（行項不在這裡改）"""
+    """更新採購單請求（行項不在這裡改）
+
+    `status` 只收 `draft`／`ordered`：`partial`／`received` 是收貨算出來的，
+    `cancelled` 只能走 `POST /{id}/cancel`，從這裡送會被擋在 422。
+    """
 
     supplier_id: UUID | None = None
     project_id: UUID | None = None
-    status: PurchaseOrderStatus | None = None
+    status: EditablePurchaseOrderStatus | None = None
     order_date: date | None = None
     expected_date: date | None = None
     notes: str | None = None
@@ -457,9 +478,10 @@ class PurchaseOrderListResponse(BaseModel):
 
 
 class PurchaseOrderDetailResponse(BaseModel):
-    """採購單明細"""
+    """採購單明細（`audit_id` 只有建立／更新才有值）"""
 
     id: UUID
+    audit_id: UUID | None = None
     po_no: str
     supplier_id: UUID
     supplier_name: str | None = None
@@ -477,10 +499,21 @@ class PurchaseOrderDetailResponse(BaseModel):
 
 
 class ReceiveLine(BaseModel):
-    """收貨行（item_id ＋ 這次收的數量）"""
+    """收貨行：`line_id` 指定行項，或用 `item_id`（該物料只有一行時才行）
 
-    item_id: UUID
+    同一張採購單可以有兩行同一個物料，所以行項的 key 是 `line_id`。
+    只給 `item_id` 而該物料有多行時，service 會回候選要呼叫端挑。
+    """
+
+    line_id: UUID | None = None
+    item_id: UUID | None = None
     qty: Decimal
+
+    @model_validator(mode="after")
+    def _require_line_or_item(self) -> "ReceiveLine":
+        if self.line_id is None and self.item_id is None:
+            raise ValueError("收貨行項要給 line_id 或 item_id")
+        return self
 
 
 class PurchaseOrderReceiveRequest(BaseModel):

@@ -10,6 +10,7 @@
 """
 
 import logging
+from datetime import date
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -23,6 +24,7 @@ from ..models.erp import (
     PartyAddressCreate,
     PartyContactCreate,
     PartyCreate,
+    PartyMergeRequest,
     PartyDetailResponse,
     PartyListResponse,
     PartyUpdate,
@@ -109,25 +111,24 @@ async def create_party(
         )
     except _ERP_ERRORS as e:
         raise _http_error(e)
-    return await _party_detail(row["id"])
+    return await _party_detail(row["id"], audit_id=row["audit_id"])
 
 
 @parties_router.post(
     "/merge", response_model=PartyDetailResponse, summary="合併重複的往來對象"
 )
 async def merge_parties(
-    keep_id: UUID = Query(..., description="保留的往來對象"),
-    drop_id: UUID = Query(..., description="要被合併掉的往來對象"),
+    body: PartyMergeRequest,
     session: SessionData = Depends(require_vendor_access),
 ) -> PartyDetailResponse:
     """把 drop 的聯絡人、地址、採購單掛到 keep，drop 軟刪除"""
     try:
         row = await party_service.merge_parties(
-            keep_id, drop_id, actor_user_id=session.user_id, via="rest"
+            body.keep_id, body.drop_id, actor_user_id=session.user_id, via="rest"
         )
     except _ERP_ERRORS as e:
         raise _http_error(e)
-    return await _party_detail(row["id"])
+    return await _party_detail(row["id"], audit_id=row["audit_id"])
 
 
 @parties_router.get(
@@ -163,7 +164,7 @@ async def update_party(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="往來對象不存在"
         )
-    return await _party_detail(party_id)
+    return await _party_detail(party_id, audit_id=row["audit_id"])
 
 
 @parties_router.delete("/{party_id}", summary="軟刪除往來對象")
@@ -232,13 +233,16 @@ async def add_party_address(
     }
 
 
-async def _party_detail(party_id: UUID) -> PartyDetailResponse:
+async def _party_detail(
+    party_id: UUID, audit_id: UUID | None = None
+) -> PartyDetailResponse:
+    """明細；寫入端點會把剛寫下的 audit_id 一起帶回去（規格第三節）"""
     detail = await party_service.get_party_detail(party_id)
     if detail is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="往來對象不存在"
         )
-    return PartyDetailResponse(**detail)
+    return PartyDetailResponse(**detail, audit_id=audit_id)
 
 
 # ============================================================
@@ -278,7 +282,7 @@ async def create_item(
         )
     except _ERP_ERRORS as e:
         raise _http_error(e)
-    return await _item_detail(row["id"])
+    return await _item_detail(row["id"], audit_id=row["audit_id"])
 
 
 @items_router.get("/{item_id}", response_model=ItemDetailResponse, summary="物料明細")
@@ -308,7 +312,7 @@ async def update_item(
         raise _http_error(e)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="物料不存在")
-    return await _item_detail(item_id)
+    return await _item_detail(item_id, audit_id=row["audit_id"])
 
 
 @items_router.delete("/{item_id}", summary="軟刪除物料")
@@ -325,11 +329,14 @@ async def delete_item(
     return {"success": True, "audit_id": str(audit_id)}
 
 
-async def _item_detail(item_id: UUID) -> ItemDetailResponse:
+async def _item_detail(
+    item_id: UUID, audit_id: UUID | None = None
+) -> ItemDetailResponse:
+    """明細；寫入端點會把剛寫下的 audit_id 一起帶回去"""
     detail = await inventory_service.get_item_detail(item_id)
     if detail is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="物料不存在")
-    return ItemDetailResponse(**detail)
+    return ItemDetailResponse(**detail, audit_id=audit_id)
 
 
 # ============================================================
@@ -365,7 +372,7 @@ async def create_warehouse(
         )
     except _ERP_ERRORS as e:
         raise _http_error(e)
-    return WarehouseResponse(**row)
+    return WarehouseResponse(**_warehouse_payload(row))
 
 
 @warehouses_router.put(
@@ -388,7 +395,20 @@ async def update_warehouse(
         raise _http_error(e)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="倉庫不存在")
-    return WarehouseResponse(**row)
+    return WarehouseResponse(**_warehouse_payload(row))
+
+
+def _warehouse_payload(row: dict) -> dict:
+    """service 回的 dict 只挑 WarehouseResponse 要的欄位（含 audit_id）"""
+    return {
+        "id": row["id"],
+        "code": row["code"],
+        "name": row["name"],
+        "created_by": row.get("created_by"),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+        "audit_id": row.get("audit_id"),
+    }
 
 
 @warehouses_router.delete("/{warehouse_id}", summary="軟刪除倉庫")
@@ -491,15 +511,17 @@ async def list_purchase_orders(
     supplier_id: UUID | None = Query(None),
     status_filter: str | None = Query(None, alias="status"),
     project_id: UUID | None = Query(None),
+    since: date | None = Query(None, description="訂購日起始（YYYY-MM-DD）"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     session: SessionData = Depends(require_inventory_access),
 ) -> PurchaseOrderListResponse:
-    """採購單清單（可依供應商、狀態、專案篩選）"""
+    """採購單清單（可依供應商、狀態、專案、起始日期篩選）"""
     result = await purchasing_service.list_purchase_orders(
         supplier_id=supplier_id,
         status=status_filter,
         project_id=project_id,
+        since=since,
         page=page,
         page_size=page_size,
     )
@@ -523,7 +545,7 @@ async def create_purchase_order(
         )
     except _ERP_ERRORS as e:
         raise _http_error(e)
-    return await _po_detail(row["id"])
+    return await _po_detail(row["id"], audit_id=row["audit_id"])
 
 
 @po_router.get(
@@ -559,7 +581,7 @@ async def update_purchase_order(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="採購單不存在"
         )
-    return await _po_detail(po_id)
+    return await _po_detail(po_id, audit_id=row["audit_id"])
 
 
 @po_router.post("/{po_id}/receive", summary="採購收貨")
@@ -616,13 +638,16 @@ async def cancel_purchase_order(
     }
 
 
-async def _po_detail(po_id: UUID) -> PurchaseOrderDetailResponse:
+async def _po_detail(
+    po_id: UUID, audit_id: UUID | None = None
+) -> PurchaseOrderDetailResponse:
+    """明細；寫入端點會把剛寫下的 audit_id 一起帶回去"""
     detail = await purchasing_service.get_purchase_order(po_id=po_id)
     if detail is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="採購單不存在"
         )
-    return PurchaseOrderDetailResponse(**detail)
+    return PurchaseOrderDetailResponse(**detail, audit_id=audit_id)
 
 
 # 五個子 router 合成模組唯一的 router（modules.py 只註冊一個）

@@ -15,7 +15,14 @@ from typing import Any
 from uuid import UUID
 
 from ..database import get_connection
-from .erp import InvalidOperationError, audit, build_diff
+from .erp import (
+    AmbiguousError,
+    InvalidOperationError,
+    audit,
+    build_diff,
+    pick_fields,
+    update_assignments,
+)
 from .erp_inventory import apply_movement
 
 logger = logging.getLogger(__name__)
@@ -32,10 +39,6 @@ _PO_UPDATE_FIELDS = (
 
 # 已結案的單不給改狀態以外的東西
 _CLOSED_STATUSES = ("received", "cancelled")
-
-
-def _pick(data: dict, fields: tuple[str, ...]) -> dict[str, Any]:
-    return {k: v for k, v in data.items() if k in fields}
 
 
 async def next_po_no(conn, on_date: date | None = None) -> str:
@@ -117,7 +120,13 @@ async def list_purchase_orders(
 async def get_purchase_order(
     po_id: UUID | None = None, po_no: str | None = None
 ) -> dict[str, Any] | None:
-    """採購單明細（用 id 或單號查）"""
+    """採購單明細（用 id 或單號查）
+
+    Raises:
+        ValueError: `po_id` 與 `po_no` 都沒給（不然 SQL 會把整張表的第一筆撈回來）
+    """
+    if po_id is None and po_no is None:
+        raise ValueError("get_purchase_order 需要 po_id 或 po_no")
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
@@ -265,7 +274,7 @@ async def update_purchase_order(
     agent_name: str | None = None,
 ) -> dict[str, Any] | None:
     """更新單頭；找不到回 None，已收貨／已取消的單不給改"""
-    fields = _pick(data, _PO_UPDATE_FIELDS)
+    fields = pick_fields(data, _PO_UPDATE_FIELDS)
     async with get_connection() as conn, conn.transaction():
         before = await conn.fetchrow(
             "SELECT * FROM purchase_orders WHERE id = $1", po_id
@@ -277,8 +286,7 @@ async def update_purchase_order(
                 f"採購單狀態為 {before['status']}，不能修改"
             )
         if fields:
-            names = list(fields.keys())
-            assignments = ", ".join(f"{n} = ${i + 2}" for i, n in enumerate(names))
+            assignments, values = update_assignments(fields)
             row = await conn.fetchrow(
                 f"""
                 UPDATE purchase_orders
@@ -287,7 +295,7 @@ async def update_purchase_order(
                 RETURNING *
                 """,
                 po_id,
-                *[fields[n] for n in names],
+                *values,
             )
         else:
             row = before
@@ -297,8 +305,8 @@ async def update_purchase_order(
             po_id,
             "update",
             build_diff(
-                _pick(dict(before), _PO_UPDATE_FIELDS),
-                _pick(dict(row), _PO_UPDATE_FIELDS),
+                pick_fields(dict(before), _PO_UPDATE_FIELDS),
+                pick_fields(dict(row), _PO_UPDATE_FIELDS),
             ),
             actor_user_id,
             via,
@@ -327,8 +335,9 @@ async def receive_purchase_order(
     """收貨入庫：更新 received_qty、產生 receipt 異動、更新單頭狀態
 
     Args:
-        lines: `[{"item_id": ..., "qty": ...}]`；`receive_all=True` 時忽略，
-            收下所有行項的未收數量。
+        lines: `[{"line_id": ..., "qty": ...}]`（只給 `item_id` 也可以，
+            但該物料在單上有兩行以上時會拋 `AmbiguousError`）；
+            `receive_all=True` 時忽略，收下所有行項的未收數量。
         warehouse_id: 入庫倉；沒給且系統只有一個倉時自動採用該倉。
 
     Returns:
@@ -397,8 +406,12 @@ async def receive_purchase_order(
                 "warehouse_id": str(warehouse_id),
                 "status": status,
                 "lines": [
-                    {"item_id": str(item_id), "qty": str(qty)}
-                    for _lid, item_id, qty in target
+                    {
+                        "line_id": str(line_id),
+                        "item_id": str(item_id),
+                        "qty": str(qty),
+                    }
+                    for line_id, item_id, qty in target
                 ],
             },
             actor_user_id,
@@ -409,27 +422,48 @@ async def receive_purchase_order(
     return {"audit_id": audit_id, "status": status, "movements": movements}
 
 
+def _line_candidates(po_lines) -> list[dict[str, Any]]:
+    """把行項整理成回給 agent 的候選（同一物料多行時要人挑哪一行）"""
+    return [
+        {
+            "line_id": str(row["id"]),
+            "item_id": str(row["item_id"]),
+            "item_code": row["item_code"],
+            "qty": str(row["qty"]),
+            "received_qty": str(row["received_qty"]),
+        }
+        for row in po_lines
+    ]
+
+
 def _receive_plan(
     po_lines, requested: list[dict] | None, receive_all: bool
 ) -> list[tuple[UUID, UUID, Decimal]]:
-    """算出這次每一行要收多少；超收與未知物料直接擋掉"""
-    outstanding = {
-        row["item_id"]: (row["id"], Decimal(row["qty"]) - Decimal(row["received_qty"]))
+    """算出這次每一行要收多少；超收、未知行項、同物料多行都擋下來
+
+    行項以 `line_id` 為 key（同一張單可以有兩行同物料）。呼叫端也可以只給
+    `item_id`：該物料只出現在一行時視為指定那一行，出現多行就拋
+    `AmbiguousError(candidates=行清單)`，要人或 agent 指定 `line_id`。
+
+    Raises:
+        InvalidOperationError: 數量 ≤ 0、超收、行項不屬於這張單
+        AmbiguousError: 只給 item_id 但該物料有多行
+    """
+    by_line = {
+        row["id"]: (row["item_id"], Decimal(row["qty"]) - Decimal(row["received_qty"]))
         for row in po_lines
     }
     if receive_all:
         return [
             (line_id, item_id, remain)
-            for item_id, (line_id, remain) in outstanding.items()
+            for line_id, (item_id, remain) in by_line.items()
             if remain > 0
         ]
 
     plan: list[tuple[UUID, UUID, Decimal]] = []
     for entry in requested or []:
-        item_id = entry["item_id"]
-        if item_id not in outstanding:
-            raise InvalidOperationError(f"採購單沒有這個物料的行項：{item_id}")
-        line_id, remain = outstanding[item_id]
+        line_id = _pick_line_id(po_lines, entry)
+        item_id, remain = by_line[line_id]
         qty = Decimal(entry["qty"])
         if qty <= 0:
             raise InvalidOperationError("收貨數量必須大於 0")
@@ -439,6 +473,27 @@ def _receive_plan(
             )
         plan.append((line_id, item_id, qty))
     return plan
+
+
+def _pick_line_id(po_lines, entry: dict) -> UUID:
+    """從收貨請求的一筆找出對應的行項 id"""
+    line_id = entry.get("line_id")
+    if line_id is not None:
+        if not any(row["id"] == line_id for row in po_lines):
+            raise InvalidOperationError(f"採購單沒有這個行項：{line_id}")
+        return line_id
+
+    item_id = entry.get("item_id")
+    if item_id is None:
+        raise InvalidOperationError("收貨行項要給 line_id 或 item_id")
+    matched = [row for row in po_lines if row["item_id"] == item_id]
+    if not matched:
+        raise InvalidOperationError(f"採購單沒有這個物料的行項：{item_id}")
+    if len(matched) > 1:
+        raise AmbiguousError(
+            "採購單行項", str(item_id), _line_candidates(matched)
+        )
+    return matched[0]["id"]
 
 
 async def _resolve_receive_warehouse(conn, warehouse_id: UUID | None) -> UUID:

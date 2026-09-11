@@ -74,7 +74,19 @@ def test_update_unset_fields_are_excluded() -> None:
 def test_purchase_order_status_literal() -> None:
     with pytest.raises(ValidationError):
         models.PurchaseOrderUpdate(status="open")
-    assert models.PurchaseOrderUpdate(status="partial").status == "partial"
+    assert models.PurchaseOrderUpdate(status="draft").status == "draft"
+    assert models.PurchaseOrderUpdate(status="ordered").status == "ordered"
+
+
+@pytest.mark.parametrize("status", ["partial", "received", "cancelled"])
+def test_purchase_order_update_rejects_computed_status(status) -> None:
+    """F10：partial／received 由收貨算出來，cancelled 只能走 cancel 端點"""
+    with pytest.raises(ValidationError):
+        models.PurchaseOrderUpdate(status=status)
+    # 建立時仍可指定 draft／ordered 以外的值由 service 決定，這裡只鎖更新
+    assert models.PurchaseOrderCreate(
+        supplier_id=uuid4(), lines=[{"item_id": uuid4(), "qty": 1}], status="draft"
+    ).status == "draft"
 
 
 def test_stock_reason_literal() -> None:
@@ -128,6 +140,25 @@ def test_receive_request_defaults() -> None:
     assert body.all is False and body.lines == []
 
 
+def test_receive_line_accepts_line_id_or_item_id() -> None:
+    """F1：行項的 key 是 line_id，item_id 只在該物料單獨一行時夠用"""
+    line_id = uuid4()
+    assert models.ReceiveLine(line_id=line_id, qty=1).line_id == line_id
+    assert models.ReceiveLine(item_id=uuid4(), qty=1).line_id is None
+
+
+def test_receive_line_requires_one_of_them() -> None:
+    with pytest.raises(ValidationError) as exc:
+        models.ReceiveLine(qty=1)
+    assert "line_id 或 item_id" in str(exc.value)
+
+
+def test_party_merge_request() -> None:
+    keep, drop = uuid4(), uuid4()
+    body = models.PartyMergeRequest(keep_id=keep, drop_id=drop)
+    assert (body.keep_id, body.drop_id) == (keep, drop)
+
+
 # ============================================================
 # 回應模型
 # ============================================================
@@ -139,6 +170,33 @@ def test_party_detail_response_defaults() -> None:
     )
     assert detail.contacts == []
     assert detail.knowledge_count == 0
+    assert detail.audit_id is None
+
+
+@pytest.mark.parametrize(
+    "model, extra",
+    [
+        (models.PartyDetailResponse, {"name": "鴻佰科技"}),
+        (models.ItemDetailResponse, {"code": "A1", "name": "螺絲"}),
+        (models.WarehouseResponse, {"code": "MAIN", "name": "主倉"}),
+        (
+            models.PurchaseOrderDetailResponse,
+            {"po_no": "PO-202609-001", "supplier_id": uuid4(), "status": "ordered"},
+        ),
+    ],
+)
+def test_write_responses_carry_audit_id(model, extra) -> None:
+    """F2：建立／更新的回應要帶得動 audit_id"""
+    audit_id = uuid4()
+    obj = model(
+        id=uuid4(), created_at=NOW, updated_at=NOW, audit_id=audit_id, **extra
+    )
+    assert obj.audit_id == audit_id
+
+
+def test_stock_movement_item_has_no_item_code() -> None:
+    """nit：沒人填的 item_code 已經拿掉，不要再宣告假欄位"""
+    assert "item_code" not in models.StockMovementItem.model_fields
 
 
 def test_item_detail_response_accepts_balances() -> None:

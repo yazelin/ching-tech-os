@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
@@ -62,7 +63,13 @@ class AmbiguousError(ErpError):
 class NegativeStockError(ErpError):
     """異動後餘額會變成負數"""
 
-    def __init__(self, item_id: UUID, warehouse_id: UUID, current, delta) -> None:
+    def __init__(
+        self,
+        item_id: UUID,
+        warehouse_id: UUID,
+        current: Decimal,
+        delta: Decimal,
+    ) -> None:
         self.item_id = item_id
         self.warehouse_id = warehouse_id
         self.current = current
@@ -88,6 +95,22 @@ def like_pattern(q: str) -> str:
     """
     escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     return f"%{escaped}%"
+
+
+def pick_fields(data: dict, fields: tuple[str, ...]) -> dict[str, Any]:
+    """只留白名單內的欄位（擋掉呼叫端亂送的 key，也擋掉 SQL 注入用的欄位名）"""
+    return {k: v for k, v in data.items() if k in fields}
+
+
+def update_assignments(fields: dict, start: int = 2) -> tuple[str, list[Any]]:
+    """把 {欄位: 值} 組成 UPDATE 的 SET 片段與對應的參數串
+
+    欄位名一律來自 `pick_fields` 的白名單，不會是使用者輸入。
+    `start` 是第一個值的參數編號（$1 通常留給主鍵）。
+    """
+    names = list(fields.keys())
+    clause = ", ".join(f"{name} = ${i + start}" for i, name in enumerate(names))
+    return clause, [fields[name] for name in names]
 
 
 def build_diff(before: dict | None, after: dict | None) -> dict[str, Any]:

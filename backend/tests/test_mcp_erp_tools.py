@@ -228,6 +228,46 @@ async def test_update_party(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_update_party_validates_fields(monkeypatch) -> None:
+    """F4：null 進 NOT NULL 欄位要回錯誤 dict，不能等資料庫爆"""
+    update = AsyncMock()
+    monkeypatch.setattr(erp_tools.party_service, "update_party", update)
+
+    result = await erp_tools.update_party(
+        party_id=str(PARTY_ID), fields={"name": None}
+    )
+
+    assert result["ok"] is False
+    assert "欄位不合法" in result["error"]
+    update.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_update_party_drops_unknown_fields(monkeypatch) -> None:
+    update = AsyncMock(
+        return_value={"id": PARTY_ID, "name": "鴻佰", "audit_id": AUDIT_ID}
+    )
+    monkeypatch.setattr(erp_tools.party_service, "update_party", update)
+
+    await erp_tools.update_party(
+        party_id=str(PARTY_ID), fields={"notes": "x", "不存在的欄位": 1}
+    )
+
+    assert update.await_args[0][1] == {"notes": "x"}
+
+
+@pytest.mark.asyncio
+async def test_update_item_validates_fields(monkeypatch) -> None:
+    update = AsyncMock()
+    monkeypatch.setattr(erp_tools.inventory_service, "update_item", update)
+
+    result = await erp_tools.update_item(item_id=str(ITEM_ID), fields={"code": None})
+
+    assert result["ok"] is False
+    update.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_update_party_not_found(monkeypatch) -> None:
     monkeypatch.setattr(
         erp_tools.party_service, "update_party", AsyncMock(return_value=None)
@@ -410,6 +450,7 @@ async def test_update_item(monkeypatch) -> None:
         item_id=str(ITEM_ID), fields={"purchase_price": 9}
     )
     assert result["audit_id"] == str(AUDIT_ID)
+    # 模型把它轉成 Decimal（F4：驗證與轉型都在 Pydantic）
     assert update.await_args[0][1]["purchase_price"] == Decimal("9")
 
 
@@ -609,8 +650,12 @@ async def test_resolve_project_id_variants(monkeypatch) -> None:
     class _Conn:
         def __init__(self, rows):
             self.rows = rows
+            self.sql = ""
+            self.args: tuple = ()
 
-        async def fetch(self, *_args):
+        async def fetch(self, sql, *args):
+            self.sql = sql
+            self.args = args
             return self.rows
 
     class _CM:
@@ -625,14 +670,21 @@ async def test_resolve_project_id_variants(monkeypatch) -> None:
 
     import ching_tech_os.database as database
 
-    monkeypatch.setattr(
-        database, "get_connection", lambda: _CM(_Conn([{"id": pid, "name": "A 案"}]))
-    )
+    conn = _Conn([{"id": pid, "name": "A 案"}])
+    monkeypatch.setattr(database, "get_connection", lambda: _CM(conn))
     assert await erp_tools._resolve_project_id("A 案") == pid
+    # F7：% 與 _ 要跳脫，ILIKE 要帶 ESCAPE
+    assert conn.args[0] == "%A 案%"
+    assert "ESCAPE" in conn.sql
 
     monkeypatch.setattr(database, "get_connection", lambda: _CM(_Conn([])))
     with pytest.raises(erp_core.NotFoundError):
         await erp_tools._resolve_project_id("查無")
+
+    escaped = _Conn([{"id": pid, "name": "折扣 50%"}])
+    monkeypatch.setattr(database, "get_connection", lambda: _CM(escaped))
+    await erp_tools._resolve_project_id("50%")
+    assert escaped.args[0] == r"%50\%%"
 
     monkeypatch.setattr(
         database,
@@ -651,6 +703,27 @@ async def test_get_purchase_order_by_po_no(monkeypatch) -> None:
     result = await erp_tools.get_purchase_order("PO-202609-001")
     assert result["purchase_order"]["po_no"] == "PO-202609-001"
     assert get.await_args.kwargs == {"po_no": "PO-202609-001"}
+
+
+@pytest.mark.asyncio
+async def test_load_po_by_uuid(monkeypatch) -> None:
+    get = AsyncMock(return_value={"id": PO_ID, "po_no": "PO-202609-001"})
+    monkeypatch.setattr(erp_tools.purchasing_service, "get_purchase_order", get)
+
+    await erp_tools.get_purchase_order(str(PO_ID))
+    assert get.await_args.kwargs == {"po_id": PO_ID}
+
+
+@pytest.mark.asyncio
+async def test_load_po_does_not_swallow_service_value_error(monkeypatch) -> None:
+    """F6：try 只包 UUID 解析；service 自己丟的 ValueError 不能被當成「這是單號」"""
+    get = AsyncMock(side_effect=ValueError("service 壞了"))
+    monkeypatch.setattr(erp_tools.purchasing_service, "get_purchase_order", get)
+
+    result = await erp_tools.get_purchase_order(str(PO_ID))
+
+    assert result["ok"] is False
+    assert get.await_count == 1
 
 
 @pytest.mark.asyncio
@@ -707,6 +780,63 @@ async def test_receive_purchase_order(monkeypatch) -> None:
     assert result["status"] == "received"
     assert result["received_lines"] == 1
     assert receive.await_args.kwargs["lines"][0]["qty"] == Decimal("4")
+    assert receive.await_args.kwargs["lines"][0]["item_id"] == ITEM_ID
+
+
+@pytest.mark.asyncio
+async def test_receive_purchase_order_passes_line_id(monkeypatch) -> None:
+    """F1：給了 line_id 就直接用，不要再去解析物料"""
+    line_id = uuid4()
+    monkeypatch.setattr(
+        erp_tools.purchasing_service,
+        "get_purchase_order",
+        AsyncMock(return_value={"id": PO_ID, "po_no": "PO-202609-001"}),
+    )
+    resolve_item = AsyncMock()
+    monkeypatch.setattr(erp_core, "resolve_item", resolve_item)
+    receive = AsyncMock(
+        return_value={"audit_id": AUDIT_ID, "status": "partial", "movements": [{}]}
+    )
+    monkeypatch.setattr(erp_tools.purchasing_service, "receive_purchase_order", receive)
+
+    await erp_tools.receive_purchase_order(
+        "PO-202609-001", lines=[{"line_id": str(line_id), "qty": 4}]
+    )
+
+    assert receive.await_args.kwargs["lines"][0]["line_id"] == line_id
+    assert "item_id" not in receive.await_args.kwargs["lines"][0]
+    resolve_item.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_receive_purchase_order_ambiguous_line(monkeypatch) -> None:
+    """同物料兩行、只給 item 時，工具回 need_confirmation ＋ 行候選"""
+    monkeypatch.setattr(
+        erp_tools.purchasing_service,
+        "get_purchase_order",
+        AsyncMock(return_value={"id": PO_ID, "po_no": "PO-202609-001"}),
+    )
+    monkeypatch.setattr(
+        erp_core, "resolve_item", AsyncMock(return_value={"id": ITEM_ID})
+    )
+    monkeypatch.setattr(
+        erp_tools.purchasing_service,
+        "receive_purchase_order",
+        AsyncMock(
+            side_effect=erp_core.AmbiguousError(
+                "採購單行項",
+                str(ITEM_ID),
+                [{"line_id": str(uuid4())}, {"line_id": str(uuid4())}],
+            )
+        ),
+    )
+
+    result = await erp_tools.receive_purchase_order(
+        "PO-202609-001", lines=[{"item": "螺絲", "qty": 1}]
+    )
+
+    assert result["need_confirmation"] is True
+    assert len(result["candidates"]) == 2
 
 
 @pytest.mark.asyncio

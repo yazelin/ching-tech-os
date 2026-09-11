@@ -121,6 +121,7 @@ def _warehouse(**overrides) -> dict:
         "created_by": 1,
         "created_at": NOW,
         "updated_at": NOW,
+        "audit_id": None,
     }
     base.update(overrides)
     return base
@@ -162,7 +163,12 @@ def _client(app: FastAPI) -> AsyncClient:
 _ENDPOINTS = [
     ("get", "/api/parties", None, "vendor"),
     ("post", "/api/parties", {"name": "新廠商"}, "vendor"),
-    ("post", f"/api/parties/merge?keep_id={PARTY_ID}&drop_id={uuid4()}", None, "vendor"),
+    (
+        "post",
+        "/api/parties/merge",
+        {"keep_id": str(PARTY_ID), "drop_id": str(uuid4())},
+        "vendor",
+    ),
     ("get", f"/api/parties/{PARTY_ID}", None, "vendor"),
     ("put", f"/api/parties/{PARTY_ID}", {"notes": "x"}, "vendor"),
     ("delete", f"/api/parties/{PARTY_ID}", None, "vendor"),
@@ -292,6 +298,8 @@ async def test_create_party(monkeypatch) -> None:
         resp = await client.post("/api/parties", json={"name": "鴻佰科技"})
     assert resp.status_code == 201
     assert resp.json()["name"] == "鴻佰科技"
+    # F2：寫入端點要把稽核 id 回給呼叫端
+    assert resp.json()["audit_id"] == str(AUDIT_ID)
 
 
 @pytest.mark.asyncio
@@ -315,6 +323,20 @@ async def test_get_party_404(monkeypatch) -> None:
     async with _client(_make_app()) as client:
         resp = await client.get(f"/api/parties/{PARTY_ID}")
     assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_party_detail_has_no_audit_id(monkeypatch) -> None:
+    """F2：只有寫入才有 audit_id，GET 明細是 null"""
+    monkeypatch.setattr(
+        erp_api.party_service,
+        "get_party_detail",
+        AsyncMock(return_value=_party_detail()),
+    )
+    async with _client(_make_app()) as client:
+        resp = await client.get(f"/api/parties/{PARTY_ID}")
+    assert resp.status_code == 200
+    assert resp.json()["audit_id"] is None
 
 
 @pytest.mark.asyncio
@@ -343,6 +365,7 @@ async def test_update_party(monkeypatch) -> None:
         resp = await client.put(f"/api/parties/{PARTY_ID}", json={"notes": "改過"})
     assert resp.status_code == 200
     assert resp.json()["notes"] == "改過"
+    assert resp.json()["audit_id"] == str(AUDIT_ID)
 
 
 @pytest.mark.asyncio
@@ -423,10 +446,12 @@ async def test_merge_route_not_swallowed_by_party_id(monkeypatch) -> None:
 
     async with _client(_make_app()) as client:
         resp = await client.post(
-            f"/api/parties/merge?keep_id={PARTY_ID}&drop_id={uuid4()}"
+            "/api/parties/merge",
+            json={"keep_id": str(PARTY_ID), "drop_id": str(uuid4())},
         )
     assert resp.status_code == 200
     merge.assert_awaited()
+    assert resp.json()["audit_id"] == str(AUDIT_ID)
 
 
 @pytest.mark.asyncio
@@ -438,7 +463,8 @@ async def test_merge_conflict_is_400(monkeypatch) -> None:
     )
     async with _client(_make_app()) as client:
         resp = await client.post(
-            f"/api/parties/merge?keep_id={PARTY_ID}&drop_id={PARTY_ID}"
+            "/api/parties/merge",
+            json={"keep_id": str(PARTY_ID), "drop_id": str(PARTY_ID)},
         )
     assert resp.status_code == 400
 
@@ -480,6 +506,7 @@ async def test_item_crud(monkeypatch) -> None:
             "/api/items", json={"code": "CTOS-A1", "name": "不鏽鋼螺絲"}
         )
         assert created.status_code == 201
+        assert created.json()["audit_id"] == str(AUDIT_ID)
         assert (await client.get(f"/api/items/{ITEM_ID}")).status_code == 200
         assert (
             await client.put(f"/api/items/{ITEM_ID}", json={"name": "螺絲"})
@@ -525,12 +552,12 @@ async def test_warehouse_crud(monkeypatch) -> None:
     monkeypatch.setattr(
         erp_api.inventory_service,
         "create_warehouse",
-        AsyncMock(return_value=_warehouse()),
+        AsyncMock(return_value=_warehouse(audit_id=AUDIT_ID)),
     )
     monkeypatch.setattr(
         erp_api.inventory_service,
         "update_warehouse",
-        AsyncMock(return_value=_warehouse(name="總倉")),
+        AsyncMock(return_value=_warehouse(name="總倉", audit_id=AUDIT_ID)),
     )
     monkeypatch.setattr(
         erp_api.inventory_service, "delete_warehouse", AsyncMock(return_value=AUDIT_ID)
@@ -538,13 +565,16 @@ async def test_warehouse_crud(monkeypatch) -> None:
 
     async with _client(_make_app()) as client:
         assert (await client.get("/api/warehouses")).json()["total"] == 1
-        assert (
-            await client.post("/api/warehouses", json={"code": "MAIN", "name": "主倉"})
-        ).status_code == 201
+        created = await client.post(
+            "/api/warehouses", json={"code": "MAIN", "name": "主倉"}
+        )
+        assert created.status_code == 201
+        assert created.json()["audit_id"] == str(AUDIT_ID)
         updated = await client.put(
             f"/api/warehouses/{WAREHOUSE_ID}", json={"name": "總倉"}
         )
         assert updated.json()["name"] == "總倉"
+        assert updated.json()["audit_id"] == str(AUDIT_ID)
         assert (
             await client.delete(f"/api/warehouses/{WAREHOUSE_ID}")
         ).status_code == 200
@@ -576,6 +606,19 @@ async def test_warehouse_errors(monkeypatch) -> None:
         assert (
             await client.delete(f"/api/warehouses/{WAREHOUSE_ID}")
         ).status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_update_warehouse_duplicate_code_is_400(monkeypatch) -> None:
+    """F3"""
+    monkeypatch.setattr(
+        erp_api.inventory_service,
+        "update_warehouse",
+        AsyncMock(side_effect=erp_core.InvalidOperationError("倉庫代碼已存在：SUB")),
+    )
+    async with _client(_make_app()) as client:
+        resp = await client.put(f"/api/warehouses/{WAREHOUSE_ID}", json={"code": "SUB"})
+    assert resp.status_code == 400
 
 
 @pytest.mark.asyncio
@@ -733,6 +776,7 @@ async def test_purchase_order_flow(monkeypatch) -> None:
         )
         assert created.status_code == 201
         assert created.json()["po_no"] == "PO-202609-001"
+        assert created.json()["audit_id"] == str(AUDIT_ID)
         assert (await client.get(f"/api/purchase-orders/{PO_ID}")).status_code == 200
         assert (
             await client.put(f"/api/purchase-orders/{PO_ID}", json={"notes": "急件"})
@@ -745,6 +789,67 @@ async def test_purchase_order_flow(monkeypatch) -> None:
             f"/api/purchase-orders/{PO_ID}/cancel", json={"reason": "改採別家"}
         )
         assert cancelled.json()["status"] == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_list_purchase_orders_passes_since(monkeypatch) -> None:
+    """F11"""
+    from datetime import date
+
+    listed = AsyncMock(return_value={"items": [], "total": 0})
+    monkeypatch.setattr(erp_api.purchasing_service, "list_purchase_orders", listed)
+
+    async with _client(_make_app()) as client:
+        resp = await client.get("/api/purchase-orders?since=2026-09-01&status=ordered")
+
+    assert resp.status_code == 200
+    assert listed.await_args.kwargs["since"] == date(2026, 9, 1)
+    assert listed.await_args.kwargs["status"] == "ordered"
+
+
+@pytest.mark.asyncio
+async def test_receive_passes_line_id(monkeypatch) -> None:
+    """F1：REST 也要把 line_id 傳到 service"""
+    line_id = uuid4()
+    receive = AsyncMock(return_value={"status": "partial", "audit_id": AUDIT_ID})
+    monkeypatch.setattr(erp_api.purchasing_service, "receive_purchase_order", receive)
+
+    async with _client(_make_app()) as client:
+        resp = await client.post(
+            f"/api/purchase-orders/{PO_ID}/receive",
+            json={"lines": [{"line_id": str(line_id), "qty": 4}]},
+        )
+
+    assert resp.status_code == 200
+    assert receive.await_args.kwargs["lines"][0]["line_id"] == line_id
+
+
+@pytest.mark.asyncio
+async def test_receive_line_requires_line_or_item() -> None:
+    async with _client(_make_app()) as client:
+        resp = await client.post(
+            f"/api/purchase-orders/{PO_ID}/receive", json={"lines": [{"qty": 4}]}
+        )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_receive_ambiguous_line_is_409(monkeypatch) -> None:
+    monkeypatch.setattr(
+        erp_api.purchasing_service,
+        "receive_purchase_order",
+        AsyncMock(
+            side_effect=erp_core.AmbiguousError(
+                "採購單行項", str(ITEM_ID), [{"line_id": str(uuid4())}]
+            )
+        ),
+    )
+    async with _client(_make_app()) as client:
+        resp = await client.post(
+            f"/api/purchase-orders/{PO_ID}/receive",
+            json={"lines": [{"item_id": str(ITEM_ID), "qty": 1}]},
+        )
+    assert resp.status_code == 409
 
 
 @pytest.mark.asyncio
@@ -816,6 +921,17 @@ async def test_receive_and_cancel_invalid_state(monkeypatch) -> None:
         )
     assert received.status_code == 400
     assert cancelled.status_code == 400
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bad_status", ["received", "cancelled", "partial"])
+async def test_put_purchase_order_rejects_computed_status(bad_status) -> None:
+    """F10：收貨與取消不能用 PUT status 走後門"""
+    async with _client(_make_app()) as client:
+        resp = await client.put(
+            f"/api/purchase-orders/{PO_ID}", json={"status": bad_status}
+        )
+    assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
