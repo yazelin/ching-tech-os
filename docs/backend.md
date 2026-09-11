@@ -228,6 +228,22 @@ uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8088 --reload
 | GET | `/api/ai/logs/{id}` | 取得 Log 詳情 |
 | GET | `/api/ai/logs/stats` | 取得統計資料 |
 
+`/api/ai/logs` 的過濾參數：`agent_id`、`context_type`、`success`、`start_date`、
+`end_date`、`user_id`、`page`、`page_size`。`/api/ai/logs/stats` 吃
+`agent_id`、`start_date`、`end_date`、`user_id`。
+
+**`user_id` 的 0 是特殊值**：代表「未記錄使用者」，查的是 `user_id IS NULL`，
+包含 migration 029 之前的舊資料、未綁定 CTOS 帳號的 bot 對話，以及排程建立者被刪掉
+的紀錄。不帶 `user_id` 則完全不過濾。合法值是 `>= 0` 的整數，負數回 422。
+
+列表與詳情都會 LEFT JOIN `users` 帶出 `username`（`user_id` 為 NULL 或使用者已刪除時
+是 `null`）。`ai_logs.user_id` 刻意沒有外鍵，理由見 migration 029 的說明。
+
+寫入端各自的 `user_id` 來源：web-chat 與 compress 用 Socket.IO 連線身分、
+`POST /api/ai/test` 用呼叫者 session、排程用 `executor_config.ctos_user_id`
+或 `scheduled_tasks.created_by`、Line／Telegram 用已綁定的 `bot_users.user_id`、
+skill script 用 framework 注入的 `ctos_user_id`。取不到的一律留 NULL。
+
 以上三個端點套用 `require_app_permission("ai-log")`：舊桌面原本靠前端 `openApp` 擋住點擊，
 後端端點從未套用權限檢查，任何登入者直接呼叫 API 就讀得到全部 AI log（含 system prompt）；
 新前端沒有那道客戶端防護，問題因此浮上檯面，修法是把防護移到後端。這是既有的客戶端防護
