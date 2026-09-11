@@ -264,7 +264,7 @@ async def test_create_share_link(
     import ching_tech_os.services.share as share_module
 
     moved = await share_tools.create_share_link("project", "P-1", ctos_user_id=1)
-    assert "os.ching-tech.com/projects" in moved
+    assert "已遷移至 ERPNext" in moved  # hotfix 分支沒有 #198，訊息仍指 ERPNext
 
     invalid_type = await share_tools.create_share_link("bad", "X", ctos_user_id=1)
     assert "資源類型必須是" in invalid_type
