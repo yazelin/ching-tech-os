@@ -498,11 +498,11 @@ async def create_log(data: AiLogCreate) -> dict:
             """
             INSERT INTO ai_logs (agent_id, prompt_id, context_type, context_id,
                                 input_prompt, system_prompt, allowed_tools, raw_response, parsed_response, model,
-                                success, error_message, duration_ms, input_tokens, output_tokens)
-            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9::jsonb, $10, $11, $12, $13, $14, $15)
+                                success, error_message, duration_ms, input_tokens, output_tokens, user_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9::jsonb, $10, $11, $12, $13, $14, $15, $16)
             RETURNING id, agent_id, prompt_id, context_type, context_id,
                       input_prompt, system_prompt, allowed_tools, raw_response, parsed_response, model,
-                      success, error_message, duration_ms, input_tokens, output_tokens, created_at
+                      success, error_message, duration_ms, input_tokens, output_tokens, user_id, created_at
             """,
             data.agent_id,
             data.prompt_id,
@@ -519,6 +519,7 @@ async def create_log(data: AiLogCreate) -> dict:
             data.duration_ms,
             data.input_tokens,
             data.output_tokens,
+            data.user_id,
         )
         result = dict(row)
         if result.get("parsed_response"):
@@ -534,6 +535,8 @@ async def get_logs(
     page_size: int = 50,
 ) -> tuple[list[dict], int]:
     """取得 AI Log 列表（分頁）
+
+    `filter_data.user_id` 的特殊值 0 代表「未記錄使用者」（user_id IS NULL）。
 
     Returns:
         (items, total)
@@ -568,6 +571,15 @@ async def get_logs(
             params.append(filter_data.end_date)
             param_idx += 1
 
+        # user_id=0 是特殊值：代表「未記錄使用者」，查 user_id IS NULL
+        if filter_data.user_id is not None:
+            if filter_data.user_id == 0:
+                where_clauses.append("l.user_id IS NULL")
+            else:
+                where_clauses.append(f"l.user_id = ${param_idx}")
+                params.append(filter_data.user_id)
+                param_idx += 1
+
     where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
     async with get_connection() as conn:
@@ -590,9 +602,11 @@ async def get_logs(
             f"""
             SELECT l.id, l.agent_id, a.name as agent_name, l.context_type,
                    l.model, l.input_prompt, l.allowed_tools, l.parsed_response,
-                   l.success, l.duration_ms, l.input_tokens, l.output_tokens, l.created_at
+                   l.success, l.duration_ms, l.input_tokens, l.output_tokens,
+                   l.user_id, u.username, l.created_at
             FROM ai_logs l
             LEFT JOIN ai_agents a ON l.agent_id = a.id
+            LEFT JOIN users u ON l.user_id = u.id
             {where_sql}
             ORDER BY l.created_at DESC
             LIMIT ${param_idx} OFFSET ${param_idx + 1}
@@ -653,9 +667,11 @@ async def get_log(log_id: UUID) -> dict | None:
             SELECT l.id, l.agent_id, a.name as agent_name, l.prompt_id,
                    l.context_type, l.context_id, l.input_prompt, l.system_prompt,
                    l.allowed_tools, l.raw_response, l.parsed_response, l.model, l.success, l.error_message,
-                   l.duration_ms, l.input_tokens, l.output_tokens, l.created_at
+                   l.duration_ms, l.input_tokens, l.output_tokens,
+                   l.user_id, u.username, l.created_at
             FROM ai_logs l
             LEFT JOIN ai_agents a ON l.agent_id = a.id
+            LEFT JOIN users u ON l.user_id = u.id
             WHERE l.id = $1
             """,
             log_id,
@@ -674,8 +690,13 @@ async def get_log_stats(
     agent_id: UUID | None = None,
     start_date: datetime | None = None,
     end_date: datetime | None = None,
+    user_id: int | None = None,
 ) -> dict:
-    """取得 AI Log 統計"""
+    """取得 AI Log 統計
+
+    Args:
+        user_id: 指定使用者 ID；特殊值 0 代表「未記錄使用者」（user_id IS NULL）
+    """
     where_clauses = []
     params = []
     param_idx = 1
@@ -694,6 +715,15 @@ async def get_log_stats(
         where_clauses.append(f"created_at <= ${param_idx}")
         params.append(end_date)
         param_idx += 1
+
+    # user_id=0 是特殊值：代表「未記錄使用者」，查 user_id IS NULL
+    if user_id is not None:
+        if user_id == 0:
+            where_clauses.append("user_id IS NULL")
+        else:
+            where_clauses.append(f"user_id = ${param_idx}")
+            params.append(user_id)
+            param_idx += 1
 
     where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
