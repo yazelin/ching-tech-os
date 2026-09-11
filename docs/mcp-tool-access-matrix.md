@@ -41,38 +41,11 @@
   `line_group_id`／`line_user_id` 但還沒接上注入，模型帶進來的值會被採用（殘留風險，
   見下方「已知缺口」）；`無` ＝ 工具不帶身分。
 
-共 74 支工具：未綁定可呼叫 25 支、寫入類 45 支。
+共 38 支工具：未綁定可呼叫 25 支、寫入類 24 支。
 
 | 工具 | 模組 | App 權限 | 未綁定可呼叫 | 寫入 | 身分來源 |
 |------|------|----------|--------------|------|----------|
 | `codex_image_tool` | `codex_image_tools` | —（未登錄） | 是（未檢查） | 是 | 無 |
-| `add_party_address` | `erp_tools` | `vendor-management`（廠商管理） | 否（需綁定） | 是 | `ctos_user_id` |
-| `add_party_contact` | `erp_tools` | `vendor-management`（廠商管理） | 否（需綁定） | 是 | `ctos_user_id` |
-| `adjust_stock` | `erp_tools` | `inventory-management`（物料管理） | 否（需綁定） | 是 | `ctos_user_id` |
-| `cancel_purchase_order` | `erp_tools` | `inventory-management`（物料管理） | 否（需綁定） | 是 | `ctos_user_id` |
-| `create_item` | `erp_tools` | `inventory-management`（物料管理） | 否（需綁定） | 是 | `ctos_user_id` |
-| `create_party` | `erp_tools` | `vendor-management`（廠商管理） | 否（需綁定） | 是 | `ctos_user_id` |
-| `create_purchase_order` | `erp_tools` | `inventory-management`（物料管理） | 否（需綁定） | 是 | `ctos_user_id` |
-| `delete_party_address` | `erp_tools` | `vendor-management`（廠商管理） | 否（需綁定） | 是 | `ctos_user_id` |
-| `delete_party_contact` | `erp_tools` | `vendor-management`（廠商管理） | 否（需綁定） | 是 | `ctos_user_id` |
-| `extract_party_from_document` | `erp_tools` | `vendor-management`（廠商管理） | 否（需綁定） | 否 | `ctos_user_id` |
-| `extract_purchase_order_from_document` | `erp_tools` | `inventory-management`（物料管理） | 否（需綁定） | 否 | `ctos_user_id` |
-| `find_item` | `erp_tools` | `inventory-management`（物料管理） | 否（需綁定） | 否 | `ctos_user_id` |
-| `find_party` | `erp_tools` | `vendor-management`（廠商管理） | 否（需綁定） | 否 | `ctos_user_id` |
-| `get_item` | `erp_tools` | `inventory-management`（物料管理） | 否（需綁定） | 否 | `ctos_user_id` |
-| `get_party` | `erp_tools` | `vendor-management`（廠商管理） | 否（需綁定） | 否 | `ctos_user_id` |
-| `get_purchase_order` | `erp_tools` | `inventory-management`（物料管理） | 否（需綁定） | 否 | `ctos_user_id` |
-| `get_stock` | `erp_tools` | `inventory-management`（物料管理） | 否（需綁定） | 否 | `ctos_user_id` |
-| `list_purchase_orders` | `erp_tools` | `inventory-management`（物料管理） | 否（需綁定） | 否 | `ctos_user_id` |
-| `merge_parties` | `erp_tools` | `vendor-management`（廠商管理） | 否（需綁定） | 是 | `ctos_user_id` |
-| `receive_purchase_order` | `erp_tools` | `inventory-management`（物料管理） | 否（需綁定） | 是 | `ctos_user_id` |
-| `summarize_item` | `erp_tools` | `inventory-management`（物料管理） | 否（需綁定） | 否 | `ctos_user_id` |
-| `summarize_party` | `erp_tools` | `vendor-management`（廠商管理） | 否（需綁定） | 否 | `ctos_user_id` |
-| `transfer_stock` | `erp_tools` | `inventory-management`（物料管理） | 否（需綁定） | 是 | `ctos_user_id` |
-| `update_item` | `erp_tools` | `inventory-management`（物料管理） | 否（需綁定） | 是 | `ctos_user_id` |
-| `update_party` | `erp_tools` | `vendor-management`（廠商管理） | 否（需綁定） | 是 | `ctos_user_id` |
-| `update_party_address` | `erp_tools` | `vendor-management`（廠商管理） | 否（需綁定） | 是 | `ctos_user_id` |
-| `update_party_contact` | `erp_tools` | `vendor-management`（廠商管理） | 否（需綁定） | 是 | `ctos_user_id` |
 | `add_attachments_to_knowledge` | `knowledge_tools` | `knowledge-base`（知識庫） | 是 | 是 | `ctos_user_id` |
 | `add_note` | `knowledge_tools` | `knowledge-base`（知識庫） | 否（工具自檢） | 是 | `ctos_user_id` ＋ bot 身分（模型參數） |
 | `add_note_with_attachments` | `knowledge_tools` | `knowledge-base`（知識庫） | 否（工具自檢） | 是 | `ctos_user_id` ＋ bot 身分（模型參數） |
@@ -103,15 +76,6 @@
 | `generate_md2ppt` | `presentation_tools` | `md2ppt`（簡報生成） | 是（未檢查） | 是 | `ctos_user_id` |
 | `generate_presentation` | `presentation_tools` | `md2ppt`（簡報生成） | 是（未檢查） | 是 | 無 |
 | `prepare_print_file` | `presentation_tools` | `printer`（列印） | 是 | 是 | `ctos_user_id` |
-| `add_project_member` | `project_tools` | `project-management`（專案管理） | 否（需綁定） | 是 | `ctos_user_id` |
-| `complete_milestone` | `project_tools` | `project-management`（專案管理） | 否（需綁定） | 是 | `ctos_user_id` |
-| `create_milestone` | `project_tools` | `project-management`（專案管理） | 否（需綁定） | 是 | `ctos_user_id` |
-| `create_task` | `project_tools` | `project-management`（專案管理） | 否（需綁定） | 是 | `ctos_user_id` |
-| `find_project` | `project_tools` | `project-management`（專案管理） | 否（需綁定） | 否 | `ctos_user_id` |
-| `get_project` | `project_tools` | `project-management`（專案管理） | 否（需綁定） | 否 | `ctos_user_id` |
-| `list_overdue_milestones` | `project_tools` | `project-management`（專案管理） | 否（需綁定） | 否 | `ctos_user_id` |
-| `list_tasks` | `project_tools` | `project-management`（專案管理） | 否（需綁定） | 否 | `ctos_user_id` |
-| `update_task` | `project_tools` | `project-management`（專案管理） | 否（需綁定） | 是 | `ctos_user_id` |
 | `list_scheduled_tasks` | `scheduler_tools` | —（未登錄） | 是（未檢查） | 否 | `ctos_user_id` |
 | `manage_scheduled_task` | `scheduler_tools` | —（未登錄） | 是（未檢查） | 是 | `ctos_user_id` |
 | `create_share_link` | `share_tools` | `share-manager`（分享管理） | 否（需綁定） | 是 | `ctos_user_id` |
