@@ -87,6 +87,17 @@ TOOL_APP_MAPPING: dict[str, str | None] = {
     # 列印前置處理工具
     "prepare_print_file": "printer",
 
+    # 專案模組工具（migration 028；建立專案不開放給 bot，網頁做）
+    "find_project": "project-management",
+    "get_project": "project-management",
+    "list_overdue_milestones": "project-management",
+    "list_tasks": "project-management",
+    "create_task": "project-management",
+    "update_task": "project-management",
+    "create_milestone": "project-management",
+    "complete_milestone": "project-management",
+    "add_project_member": "project-management",
+
     # 往來對象工具（往來與物料模組，migration 030）
     "find_party": "vendor-management",
     "get_party": "vendor-management",
