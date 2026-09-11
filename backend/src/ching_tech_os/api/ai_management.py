@@ -229,6 +229,7 @@ async def list_logs(
     success: bool | None = None,
     start_date: datetime | None = None,
     end_date: datetime | None = None,
+    user_id: int | None = Query(None, ge=0),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     session: SessionData = Depends(require_app_permission("ai-log")),
@@ -241,6 +242,9 @@ async def list_logs(
     - success: 依成功/失敗過濾
     - start_date: 開始日期
     - end_date: 結束日期
+    - user_id: 依發起的 CTOS 使用者過濾。**特殊值 0 代表「未記錄使用者」**
+      （`user_id IS NULL`，例如 029 之前的舊資料、未綁定帳號的 bot 對話）；
+      不帶這個參數則不過濾。
     """
     filter_data = AiLogFilter(
         agent_id=agent_id,
@@ -248,6 +252,7 @@ async def list_logs(
         success=success,
         start_date=start_date,
         end_date=end_date,
+        user_id=user_id,
     )
     items, total = await ai_manager.get_logs(filter_data, page, page_size)
     return {
@@ -263,6 +268,7 @@ async def get_log_stats(
     agent_id: UUID | None = None,
     start_date: datetime | None = None,
     end_date: datetime | None = None,
+    user_id: int | None = Query(None, ge=0),
     session: SessionData = Depends(require_app_permission("ai-log")),
 ):
     """取得 AI Log 統計
@@ -271,8 +277,12 @@ async def get_log_stats(
     - agent_id: 依 Agent 過濾
     - start_date: 開始日期
     - end_date: 結束日期
+    - user_id: 依發起的 CTOS 使用者過濾。**特殊值 0 代表「未記錄使用者」**
+      （`user_id IS NULL`）；不帶這個參數則不過濾。
     """
-    stats = await ai_manager.get_log_stats(agent_id, start_date, end_date)
+    stats = await ai_manager.get_log_stats(
+        agent_id, start_date, end_date, user_id=user_id
+    )
     return stats
 
 

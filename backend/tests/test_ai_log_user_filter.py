@@ -632,3 +632,88 @@ async def test_skill_script_log_uses_ctos_user_id(monkeypatch: pytest.MonkeyPatc
         skill="s", script="r", input="{}", ctos_user_id=66
     )
     assert create_log.await_args.args[0].user_id == 66
+
+
+# ============================================================
+# 5. API 篩選參數
+# ============================================================
+
+
+@pytest.mark.asyncio
+async def test_list_logs_endpoint_passes_user_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    from ching_tech_os.api import ai_management
+
+    get_logs = AsyncMock(return_value=([], 0))
+    monkeypatch.setattr(ai_management.ai_manager, "get_logs", get_logs)
+    session = SimpleNamespace(user_id=1, username="tester")
+
+    await ai_management.list_logs(
+        agent_id=None,
+        context_type=None,
+        success=None,
+        start_date=None,
+        end_date=None,
+        user_id=5,
+        page=1,
+        page_size=50,
+        session=session,
+    )
+    assert get_logs.await_args.args[0].user_id == 5
+
+    # 0 = 未記錄使用者，要原封不動傳下去（不能被當成 falsy 丟掉）
+    get_logs.reset_mock()
+    await ai_management.list_logs(
+        agent_id=None,
+        context_type=None,
+        success=None,
+        start_date=None,
+        end_date=None,
+        user_id=0,
+        page=1,
+        page_size=50,
+        session=session,
+    )
+    assert get_logs.await_args.args[0].user_id == 0
+
+
+@pytest.mark.asyncio
+async def test_log_stats_endpoint_passes_user_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    from ching_tech_os.api import ai_management
+
+    stats = AsyncMock(return_value={})
+    monkeypatch.setattr(ai_management.ai_manager, "get_log_stats", stats)
+    session = SimpleNamespace(user_id=1, username="tester")
+
+    await ai_management.get_log_stats(
+        agent_id=None, start_date=None, end_date=None, user_id=0, session=session
+    )
+    assert stats.await_args.kwargs["user_id"] == 0
+
+
+def test_log_endpoints_keep_ai_log_permission() -> None:
+    """權限不變：兩個端點維持 require_app_permission("ai-log")。"""
+    from fastapi.routing import APIRoute
+
+    from ching_tech_os.api import ai_management
+
+    routes = {
+        r.path: r
+        for r in ai_management.router.routes
+        if isinstance(r, APIRoute)
+    }
+    for path in ("/api/ai/logs", "/api/ai/logs/stats", "/api/ai/logs/{log_id}"):
+        route = routes[path]
+        param = route.dependant.dependencies
+        assert any(
+            getattr(d.call, "__qualname__", "").startswith("require_app_permission")
+            for d in param
+        ), path
+
+
+def test_user_id_zero_semantics_documented() -> None:
+    """0 的語意要寫在 docstring 裡，不然前端會猜。"""
+    from ching_tech_os.api import ai_management
+
+    assert "0" in (ai_management.list_logs.__doc__ or "")
+    assert "未記錄使用者" in (ai_management.list_logs.__doc__ or "")
+    assert "未記錄使用者" in (ai_management.get_log_stats.__doc__ or "")
