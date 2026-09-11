@@ -59,6 +59,7 @@ backend/src/ching_tech_os/
         ├── message_tools.py          # 訊息相關工具（core，永遠載入）
         ├── nas_tools.py              # NAS 檔案工具（搜尋、讀取、發送、圖書館）
         ├── presentation_tools.py     # 簡報/文件生成、列印工具
+        ├── project_tools.py           # 專案模組工具（專案、里程碑、任務、成員）
         ├── scheduler_tools.py        # 排程管理工具
         ├── share_tools.py            # 分享連結工具
         ├── skill_script_tools.py     # AI Skills 腳本執行
@@ -295,6 +296,43 @@ result = await execute_tool("generate_md2doc", {
 > - 可線上即時編輯內容
 > - 支援更豐富的排版功能（圖表、雙欄、動畫等）
 > - 可匯出為多種格式（PPTX、Word、PDF）
+
+### 專案模組（project_tools.py）
+
+規格：`docs/superpowers/specs/2026-09-11-project-module-design.md`。
+資料表見 migration 028，service 在 `services/project.py`，REST 在 `api/project.py`。
+九支工具都需要 `project-management` 權限。
+
+| 工具名稱 | 說明 | 參數 |
+|----------|------|------|
+| `find_project` | 模糊找專案（名稱或客戶） | `query`（必填）, `status`（planning／active／on_hold／completed／cancelled）, `ctos_user_id` |
+| `get_project` | 明細＝主檔＋進度＋成員＋里程碑（含 `is_overdue`）＋任務＋綁定群組＋知識條目數 | `project_id` 或 `name`, `ctos_user_id` |
+| `list_overdue_milestones` | 逾期里程碑清單（依到期日升冪，最多 20 筆）＋進行中專案數 | `ctos_user_id` |
+| `list_tasks` | 任務清單 | `project`（必填）, `status`（todo／doing／done）, `assignee`, `ctos_user_id` |
+| `create_task` | 建立任務 | `project`（必填）, `title`（必填）, `assignee`, `milestone`, `due_date`（YYYY-MM-DD）, `ctos_user_id` |
+| `update_task` | 更新任務（狀態、負責人、到期日） | `project`（必填）, `task`（標題或 UUID，必填）, `fields`（必填）, `ctos_user_id` |
+| `create_milestone` | 建立里程碑 | `project`（必填）, `name`（必填）, `due_date`（必填）, `ctos_user_id` |
+| `complete_milestone` | 里程碑標記完成（完成日填今天） | `project`（必填）, `milestone`（必填）, `ctos_user_id` |
+| `add_project_member` | 加入專案成員 | `project`（必填）, `user`（username 或顯示名稱，必填）, `ctos_user_id` |
+
+三條與其他工具不同的約定：
+
+1. **寫入要是專案成員**：`create_task`／`update_task`／`create_milestone`／
+   `complete_milestone`／`add_project_member` 會做 `api/project.py` 的
+   `require_project_editor` 等價檢查——admin 一律過，否則必須是該專案成員，
+   不是就回 `{"ok": false, "error": "只有專案成員能編輯"}`。沒綁 CTOS 帳號
+   （`ctos_user_id` 是 `None`）一律擋。讀取只看工具權限，與 REST 一致。
+2. **建立專案不開放給 bot**：開新專案、刪專案是管理員在網頁做的事，
+   所以這一組沒有 `create_project`／`delete_project`，prompt 會把人導到
+   os.ching-tech.com/projects。
+3. **解析到多個候選不猜**：`project`、`task`、`milestone`、`user`／`assignee`
+   都吃名稱，完全同名優先、其餘比子字串；不唯一時回
+   `{"ok": false, "need_confirmation": true, "candidates": [...]}`，
+   零命中回 `{"ok": false, "not_found": true}`，工具不丟例外。
+   `update_task` 的 `fields` 會先過 `TaskUpdate` 驗證（`fields` 可以用
+   `assignee`／`milestone` 給名稱，會先解析成 `assignee_id`／`milestone_id`），
+   狀態不在 todo／doing／done 裡或 NOT NULL 欄位送 `null`，直接回
+   `{"ok": false, "error": "欄位不合法（…）"}`，不會變成資料庫例外。
 
 ### 往來與物料（erp_tools.py）
 

@@ -57,7 +57,7 @@
       "script": null,
       "script_first": false,
       "fallback_mcp_tool": null,
-      "notes": "專案模組只有 REST API 與新前端，沒有 MCP 工具"
+      "notes": "專案模組的 MCP 工具（PR 7b），保留 MCP-only"
     },
     {
       "name": "vendor-management",

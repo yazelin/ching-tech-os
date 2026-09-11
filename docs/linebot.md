@@ -339,8 +339,11 @@ AI 助理可使用的工具（完整列表見 [docs/mcp-server.md](mcp-server.md
 
 **專案管理**
 
-專案模組沒有 MCP 工具，只有 REST API 與新前端。Bot 收到專案相關的問題時，
-prompt 會引導使用者到 os.ching-tech.com/projects。
+`services/mcp/project_tools.py` 提供 `find_project`、`get_project`、
+`list_overdue_milestones`、`list_tasks`、`create_task`、`update_task`、
+`create_milestone`、`complete_milestone`、`add_project_member` 九支工具
+（migration 033 把 prompt 切過去）。寫入類要 admin 或該專案成員；
+建立專案不開放給 bot，prompt 會把人導到 os.ching-tech.com/projects。
 
 **往來與物料（取代 ERPNext）**
 
