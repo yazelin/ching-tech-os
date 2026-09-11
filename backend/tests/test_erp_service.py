@@ -346,6 +346,18 @@ async def test_find_parties_passes_role_threshold_and_limit(monkeypatch) -> None
 
 
 @pytest.mark.asyncio
+async def test_find_parties_role_both_in_sql(monkeypatch) -> None:
+    """F4：find_party 的 role 也吃 both（同時是供應商與客戶）"""
+    conn = _FakeConn(fetch=[[]])
+    _patch(monkeypatch, erp_core, conn)
+
+    await erp_core.find_parties("鴻佰", role="both")
+    _method, sql, args = conn.calls[0]
+    assert "$3 = 'both' AND p.is_supplier AND p.is_customer" in sql
+    assert args[2] == "both"
+
+
+@pytest.mark.asyncio
 async def test_find_parties_reuses_given_connection(monkeypatch) -> None:
     """呼叫端已經在交易裡時，解析要走同一條連線"""
     conn = _FakeConn(fetch=[[]])
@@ -416,7 +428,36 @@ async def test_list_parties_filters_soft_deleted(monkeypatch) -> None:
     assert result["total"] == 2
     count_sql = conn.calls[0][1]
     assert "p.deleted_at IS NULL" in count_sql
-    assert conn.calls[0][2] == ("supplier", "%鴻佰%")
+    assert conn.calls[0][2] == ("supplier", "%鴻佰%", "鴻佰")
+
+
+@pytest.mark.asyncio
+async def test_list_parties_role_both_requires_supplier_and_customer(monkeypatch) -> None:
+    conn = _FakeConn(fetchval=[1], fetch=[[_party_row()]])
+    _patch(monkeypatch, party_service, conn)
+
+    await party_service.list_parties(role="both")
+
+    count_sql = conn.calls[0][1]
+    assert "$1 = 'both' AND p.is_supplier AND p.is_customer" in count_sql
+    assert conn.calls[0][2] == ("both", None, None)
+
+
+@pytest.mark.asyncio
+async def test_list_parties_q_matches_contact_name_and_exact_phone(monkeypatch) -> None:
+    """F3：搜尋要能命中聯絡人姓名（模糊）與電話／手機（等值）"""
+    conn = _FakeConn(fetchval=[1], fetch=[[_party_row()]])
+    _patch(monkeypatch, party_service, conn)
+
+    await party_service.list_parties(q="03-1234567")
+
+    count_sql = conn.calls[0][1]
+    assert "party_contacts c" in count_sql
+    assert "c.name ILIKE $2" in count_sql
+    assert "c.phone = $3" in count_sql
+    assert "c.mobile = $3" in count_sql
+    # $3 是原字串（等值比對），$2 是包了萬用字元的模糊樣式
+    assert conn.calls[0][2] == (None, "%03-1234567%", "03-1234567")
 
 
 @pytest.mark.asyncio
@@ -624,6 +665,202 @@ async def test_add_address_writes_audit(monkeypatch) -> None:
     )
     assert result["audit_id"] == audit_id
     assert conn.find("UPDATE party_addresses SET is_primary = false")
+
+
+# ============================================================
+# 聯絡人／地址：更新與刪除（PR 4b）
+# ============================================================
+
+
+def _contact_row(**overrides) -> _DictRecord:
+    base = {
+        "id": uuid4(),
+        "party_id": uuid4(),
+        "name": "陳先生",
+        "title": None,
+        "phone": None,
+        "mobile": None,
+        "email": None,
+        "is_primary": False,
+        "notes": None,
+        "created_at": NOW,
+        "updated_at": NOW,
+    }
+    base.update(overrides)
+    return _DictRecord(base)
+
+
+def _address_row(**overrides) -> _DictRecord:
+    base = {
+        "id": uuid4(),
+        "party_id": uuid4(),
+        "label": "公司",
+        "address": "桃園",
+        "city": None,
+        "is_primary": False,
+        "created_at": NOW,
+        "updated_at": NOW,
+    }
+    base.update(overrides)
+    return _DictRecord(base)
+
+
+@pytest.mark.asyncio
+async def test_update_contact_not_found_when_not_belonging_to_party(monkeypatch) -> None:
+    """contact 不屬於該 party（或不存在）要回 None（404）"""
+    conn = _FakeConn(fetchrow=[None])
+    _patch(monkeypatch, party_service, conn)
+
+    result = await party_service.update_contact(uuid4(), uuid4(), {"notes": "x"})
+    assert result is None
+    sql = conn.calls[0][1]
+    assert "party_id = $2" in sql
+
+
+@pytest.mark.asyncio
+async def test_update_contact_computes_diff_and_audits(monkeypatch) -> None:
+    before = _contact_row(notes="舊備註")
+    after = _contact_row(id=before["id"], party_id=before["party_id"], notes="新備註")
+    audit_id = uuid4()
+    conn = _FakeConn(fetchrow=[before, after], fetchval=[audit_id])
+    _patch(monkeypatch, party_service, conn)
+
+    result = await party_service.update_contact(
+        before["party_id"], before["id"], {"notes": "新備註", "ignored": 1}
+    )
+
+    assert result["audit_id"] == audit_id
+    update_sql = conn.calls[1][1]
+    assert "notes = $3" in update_sql
+    assert "ignored" not in update_sql
+    diff_json = conn.find("INSERT INTO erp_audit")[0][2][3]
+    assert "新備註" in diff_json
+
+
+@pytest.mark.asyncio
+async def test_update_contact_without_fields_still_audits(monkeypatch) -> None:
+    before = _contact_row()
+    conn = _FakeConn(fetchrow=[before], fetchval=[uuid4()])
+    _patch(monkeypatch, party_service, conn)
+
+    result = await party_service.update_contact(before["party_id"], before["id"], {})
+    assert result["id"] == before["id"]
+    assert not conn.find("UPDATE party_contacts SET name")
+
+
+@pytest.mark.asyncio
+async def test_update_contact_is_primary_demotes_others(monkeypatch) -> None:
+    """F9：設 is_primary 時同交易把同 party 其他筆降級，且不降級自己"""
+    before = _contact_row(is_primary=False)
+    after = _contact_row(id=before["id"], party_id=before["party_id"], is_primary=True)
+    conn = _FakeConn(fetchrow=[before, after], fetchval=[uuid4()])
+    _patch(monkeypatch, party_service, conn)
+
+    await party_service.update_contact(
+        before["party_id"], before["id"], {"is_primary": True}
+    )
+
+    demote = conn.find("UPDATE party_contacts SET is_primary = false")
+    assert demote
+    sql, args = demote[0][1], demote[0][2]
+    assert "id != $2" in sql
+    assert args == (before["party_id"], before["id"])
+
+
+@pytest.mark.asyncio
+async def test_delete_contact_not_found_when_not_belonging_to_party(monkeypatch) -> None:
+    conn = _FakeConn(fetchrow=[None])
+    _patch(monkeypatch, party_service, conn)
+    result = await party_service.delete_contact(uuid4(), uuid4())
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_delete_contact_writes_audit(monkeypatch) -> None:
+    audit_id = uuid4()
+    party_id = uuid4()
+    contact_id = uuid4()
+    conn = _FakeConn(
+        fetchrow=[_DictRecord({"id": contact_id, "name": "陳先生"})],
+        fetchval=[audit_id],
+    )
+    _patch(monkeypatch, party_service, conn)
+
+    result = await party_service.delete_contact(party_id, contact_id)
+    assert result == audit_id
+    sql = conn.calls[0][1]
+    assert "DELETE FROM party_contacts" in sql
+    assert "party_id = $2" in sql
+    # 刪掉主要那筆不自動指派新主要：不應該有任何額外的 UPDATE
+    assert not conn.find("UPDATE party_contacts")
+
+
+@pytest.mark.asyncio
+async def test_update_address_not_found_when_not_belonging_to_party(monkeypatch) -> None:
+    conn = _FakeConn(fetchrow=[None])
+    _patch(monkeypatch, party_service, conn)
+    result = await party_service.update_address(uuid4(), uuid4(), {"city": "台北"})
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_update_address_computes_diff_and_audits(monkeypatch) -> None:
+    before = _address_row(city=None)
+    after = _address_row(id=before["id"], party_id=before["party_id"], city="台北")
+    audit_id = uuid4()
+    conn = _FakeConn(fetchrow=[before, after], fetchval=[audit_id])
+    _patch(monkeypatch, party_service, conn)
+
+    result = await party_service.update_address(
+        before["party_id"], before["id"], {"city": "台北"}
+    )
+    assert result["audit_id"] == audit_id
+    diff_json = conn.find("INSERT INTO erp_audit")[0][2][3]
+    assert "台北" in diff_json
+
+
+@pytest.mark.asyncio
+async def test_update_address_is_primary_demotes_others(monkeypatch) -> None:
+    before = _address_row(is_primary=False)
+    after = _address_row(id=before["id"], party_id=before["party_id"], is_primary=True)
+    conn = _FakeConn(fetchrow=[before, after], fetchval=[uuid4()])
+    _patch(monkeypatch, party_service, conn)
+
+    await party_service.update_address(
+        before["party_id"], before["id"], {"is_primary": True}
+    )
+
+    demote = conn.find("UPDATE party_addresses SET is_primary = false")
+    assert demote
+    sql, args = demote[0][1], demote[0][2]
+    assert "id != $2" in sql
+    assert args == (before["party_id"], before["id"])
+
+
+@pytest.mark.asyncio
+async def test_delete_address_not_found_when_not_belonging_to_party(monkeypatch) -> None:
+    conn = _FakeConn(fetchrow=[None])
+    _patch(monkeypatch, party_service, conn)
+    result = await party_service.delete_address(uuid4(), uuid4())
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_delete_address_writes_audit(monkeypatch) -> None:
+    audit_id = uuid4()
+    party_id = uuid4()
+    address_id = uuid4()
+    conn = _FakeConn(
+        fetchrow=[_DictRecord({"id": address_id, "address": "桃園"})],
+        fetchval=[audit_id],
+    )
+    _patch(monkeypatch, party_service, conn)
+
+    result = await party_service.delete_address(party_id, address_id)
+    assert result == audit_id
+    sql = conn.calls[0][1]
+    assert "DELETE FROM party_addresses" in sql
+    assert "party_id = $2" in sql
 
 
 @pytest.mark.asyncio

@@ -268,6 +268,7 @@ _PARTY_CANDIDATE_SQL = """
             $3::text IS NULL
             OR ($3 = 'supplier' AND p.is_supplier)
             OR ($3 = 'customer' AND p.is_customer)
+            OR ($3 = 'both' AND p.is_supplier AND p.is_customer)
           )
     )
     SELECT id, name, short_name, is_supplier, is_customer, tax_id,
