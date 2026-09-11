@@ -98,6 +98,51 @@ async def test_ai_chat_event_validation_and_not_found(monkeypatch: pytest.Monkey
 
 
 @pytest.mark.asyncio
+async def test_ai_chat_event_prompt_name_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    """chat dict 沒有 prompt_name 時，ai_chat_event 要退回 'web-chat-default'
+
+    行為測試：不看原始碼字面（inspect.getsource 太脆，字串一改就假綠），
+    直接驅動 ai_chat_event，斷言 get_agent_system_prompt／get_agent_config
+    實際收到的 agent_name 引數是 'web-chat-default'。
+    """
+    sio = _FakeSio()
+    ai_api.register_events(sio)
+    _stub_resolve_session(monkeypatch)
+
+    chat_id = uuid4()
+
+    monkeypatch.setattr(
+        ai_api.ai_chat,
+        "get_chat",
+        AsyncMock(
+            return_value={
+                "id": chat_id,
+                "user_id": 1,
+                "title": "新對話",
+                # 沒有 "prompt_name" key（模擬舊資料或未指定）
+                "messages": [],
+            }
+        ),
+    )
+    get_system_prompt = AsyncMock(return_value="sys")
+    get_agent_config = AsyncMock(return_value=None)
+    monkeypatch.setattr(ai_api.ai_chat, "get_agent_system_prompt", get_system_prompt)
+    monkeypatch.setattr(ai_api.ai_chat, "get_agent_config", get_agent_config)
+    monkeypatch.setattr(ai_api, "call_ai", AsyncMock(return_value=_response(success=True, message="ok")))
+    monkeypatch.setattr(ai_api.ai_chat, "update_chat_messages", AsyncMock())
+    monkeypatch.setattr(ai_api.ai_chat, "update_chat_title", AsyncMock())
+    monkeypatch.setattr(ai_api, "log_message", AsyncMock())
+
+    await sio.handlers["ai_chat_event"](
+        "sid-1",
+        {"chatId": str(chat_id), "message": "hi", "model": "claude-sonnet"},
+    )
+
+    get_system_prompt.assert_awaited_once_with("web-chat-default")
+    get_agent_config.assert_awaited_once_with("web-chat-default")
+
+
+@pytest.mark.asyncio
 async def test_ai_chat_event_success(monkeypatch: pytest.MonkeyPatch) -> None:
     sio = _FakeSio()
     ai_api.register_events(sio)

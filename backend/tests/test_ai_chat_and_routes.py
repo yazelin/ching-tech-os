@@ -14,7 +14,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from starlette.requests import Request
 
-from ching_tech_os.api import ai as ai_api, ai_management, ai_router
+from ching_tech_os.api import ai_management, ai_router
 from ching_tech_os.models.ai import ChatCreate, ChatMessage, ChatUpdate
 from ching_tech_os.models.auth import SessionData
 from ching_tech_os.services import ai_chat
@@ -381,12 +381,14 @@ def test_chat_message_tool_calls_field() -> None:
 
 
 def test_prompt_name_default_matches_seeded_agent() -> None:
-    """PR 3b：ChatCreate.prompt_name 預設值要與 api/ai.py 的退回值、實際存在的 agent 名稱一致"""
-    assert ChatCreate().prompt_name == "web-chat-default"
+    """PR 3b：ChatCreate.prompt_name 預設值要與實際存在的 agent 名稱一致
 
-    # api/ai.py 沒有 prompt_name 時的退回值（chat.get("prompt_name", ...)）
-    fallback_source = inspect.getsource(ai_api.register_events)
-    assert 'chat.get("prompt_name", "web-chat-default")' in fallback_source
+    api/ai.py 沒有 prompt_name 時的退回值是行為，不是字面：
+    見 test_api_ai_events.py::test_ai_chat_event_prompt_name_fallback
+    （直接驅動 ai_chat_event，斷言 get_agent_system_prompt／get_agent_config
+    實際收到 "web-chat-default"，不靠 inspect.getsource 抓原始碼字串）。
+    """
+    assert ChatCreate().prompt_name == "web-chat-default"
 
     # 服務層 create_chat 的預設參數也要對齊，避免直接呼叫時退回不存在的 agent 名稱
     assert inspect.signature(ai_chat.create_chat).parameters["prompt_name"].default == "web-chat-default"
