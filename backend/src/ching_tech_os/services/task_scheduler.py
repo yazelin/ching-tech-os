@@ -255,7 +255,9 @@ async def execute_dynamic_task(task_id: UUID) -> None:
     # 排程建立者作為 ctos_user_id 的 fallback（繼承管理員權限）
     fallback_user_id = task.get("created_by")
 
-    notify = _notify_target(executor_config)
+    notify = _notify_target(executor_config, task["name"])
+    succeeded = False
+    result_text = ""
 
     try:
         if executor_type == "agent":
@@ -270,14 +272,18 @@ async def execute_dynamic_task(task_id: UUID) -> None:
             raise ValueError(f"未知的 executor_type: {executor_type}")
 
         await update_task_run_result(task_id, success=True)
+        succeeded = True
         logger.info("動態排程執行成功: %s", task["name"])
-        await _notify_result(notify, task["name"], True, result_text)
 
     except Exception as e:
         error_msg = str(e)[:1000]
         failures = await update_task_run_result(task_id, success=False, error=error_msg)
         logger.error("動態排程執行失敗: %s - %s", task["name"], error_msg)
         await _notify_result(notify, task["name"], False, error_msg, failures)
+
+    # 成功推播放在 try 之外：推播或組訊息出錯不該把已記成功的任務改記成失敗
+    if succeeded:
+        await _notify_result(notify, task["name"], True, result_text)
 
 
 async def _execute_agent_task(
@@ -325,7 +331,7 @@ async def _execute_agent_task(
         log_data = AiLogCreate(
             agent_id=agent.get("id"),
             context_type="scheduler",
-            context_id=task_name,
+            context_id=task_name[:64],  # AiLogCreate.context_id max_length=64
             input_prompt=prompt,
             system_prompt=system_prompt,
             allowed_tools=tools,
@@ -355,8 +361,6 @@ async def _execute_skill_script_task(
 
     回傳 script 的輸出內容（供推播使用），並寫一筆 ai_logs 留痕。
     """
-    import json
-
     from ..models.ai import AiLogCreate
     from ..skills import get_skill_manager
     from ..skills.script_runner import ScriptRunner
@@ -400,8 +404,9 @@ async def _execute_skill_script_task(
     try:
         log_data = AiLogCreate(
             context_type="scheduler_script",
-            context_id=task_name,
-            input_prompt=f"{skill}/{script} {json.dumps(input_data, ensure_ascii=False)}",
+            context_id=task_name[:64],  # AiLogCreate.context_id max_length=64
+            # input_data 本身已是 JSON 字串，不再編碼一次
+            input_prompt=f"{skill}/{script} {input_data}",
             raw_response=output,
             parsed_response={
                 "source": "scheduler_script",
@@ -431,19 +436,32 @@ async def _execute_skill_script_task(
 _NOTIFY_MAX_LEN = 4000
 
 
-def _notify_target(config: dict | None) -> dict | None:
+# 支援推播的平台（與 proactive_push_service 一致）
+_NOTIFY_PLATFORMS = ("line", "telegram")
+
+
+def _notify_target(config: dict | None, task_name: str = "") -> dict | None:
     """從 executor_config 取出推播設定
 
     格式：``notify: {platform, target_id, is_group, group_id}``。
-    沒設定（或缺平台 / 缺目標）就回傳 None，維持不推播的既有行為。
+    沒設定就回傳 None，維持不推播的既有行為；設了但內容不完整則另外寫 warning。
     """
     notify = (config or {}).get("notify")
     if not isinstance(notify, dict):
         return None
-    if not notify.get("platform"):
+    platform = notify.get("platform")
+    if platform not in _NOTIFY_PLATFORMS:
+        logger.warning(
+            "排程 %s 的推播設定 platform 無效（%r，需為 %s），略過推播",
+            task_name,
+            platform,
+            " / ".join(_NOTIFY_PLATFORMS),
+        )
         return None
     if not (notify.get("target_id") or notify.get("group_id")):
-        logger.warning("排程推播設定缺少 target_id / group_id，略過推播")
+        logger.warning(
+            "排程 %s 的推播設定缺少 target_id / group_id，略過推播", task_name
+        )
         return None
     return notify
 
@@ -470,10 +488,10 @@ async def _notify_result(
     if not notify:
         return
 
-    message = _format_notify_message(task_name, success, body, failures)
     try:
         from . import proactive_push_service
 
+        message = _format_notify_message(task_name, success, body, failures)
         await proactive_push_service.notify_job_complete(
             platform=notify["platform"],
             platform_user_id=notify.get("target_id") or "",

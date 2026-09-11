@@ -29,6 +29,14 @@ backend/
 │       ├── 016_add_voice_auto_trigger.py      # bot_groups 新增語音自動觸發開關
 │       ├── 017_voice_module_independence.py   # users/bot_groups/ai_agents 新增 voice_settings
 │       ├── 018_add_law_tables.py              # 律師事務所模組（law_parties/law_cases）
+│       ├── 019_add_github_to_bot_prompt.py    # Bot Prompt 加入 GitHub 工具說明
+│       ├── 020_add_asana_to_bot_prompt.py     # Bot Prompt 加入 Asana 工具說明
+│       ├── 021_add_bot_user_blocklist.py      # bot_users 黑名單欄位
+│       ├── 022_consultation_transcripts.py    # 諮詢逐字稿表
+│       ├── 023_fix_queue_status_prompt.py     # 候診狀態 Prompt 修正
+│       ├── 024_add_telegram_media_group_id_to_bot_files.py  # bot_files 新增 media_group_id
+│       ├── 025_add_api_tokens.py              # API Token（PAT）表
+│       ├── 026_add_users_nas_username.py      # users 新增 nas_username
 │       └── 027_add_scheduled_tasks_consecutive_failures.py  # 排程連續失敗計數
 ```
 

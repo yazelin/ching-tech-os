@@ -67,7 +67,11 @@ def _agent_task(notify: dict | None = None) -> dict:
 def _skill_task(notify: dict | None = None) -> dict:
     task = _agent_task(notify)
     task["executor_type"] = "skill_script"
-    config: dict = {"skill": "test-skill", "script": "run.py", "input": ""}
+    config: dict = {
+        "skill": "test-skill",
+        "script": "run.py",
+        "input": '{"days": 7}',
+    }
     if notify is not None:
         config["notify"] = notify
     task["executor_config"] = config
@@ -188,15 +192,39 @@ async def test_no_notify_config_never_pushes(monkeypatch: pytest.MonkeyPatch) ->
     "notify",
     [
         {"target_id": "12345"},  # 缺 platform
+        {"platform": "slack", "target_id": "12345"},  # 不支援的平台
+        {"platform": None, "target_id": "12345"},
         {"platform": "telegram"},  # 缺 target
         "not-a-dict",
     ],
 )
 def test_notify_target_rejects_incomplete_config(notify) -> None:
-    """推播設定不完整時視同沒設定"""
-    assert task_scheduler._notify_target({"notify": notify}) is None
-    assert task_scheduler._notify_target({}) is None
-    assert task_scheduler._notify_target(None) is None
+    """推播設定不完整或平台值無效時視同沒設定"""
+    assert task_scheduler._notify_target({"notify": notify}, "每日盤點") is None
+    assert task_scheduler._notify_target({}, "每日盤點") is None
+    assert task_scheduler._notify_target(None, "每日盤點") is None
+
+
+@pytest.mark.parametrize("field", ["target_id", "group_id"])
+def test_notify_target_accepts_either_target(field: str) -> None:
+    """target_id 或 group_id 任一個有值就成立（負控制：上一個測試不是永遠回 None）"""
+    notify = {"platform": "line", field: "abc"}
+    assert task_scheduler._notify_target({"notify": notify}, "每日盤點") == notify
+
+
+def test_notify_target_warns_with_task_name(caplog: pytest.LogCaptureFixture) -> None:
+    """平台無效與缺目標兩種情況都要在 warning 裡指名是哪個排程"""
+    with caplog.at_level("WARNING"):
+        task_scheduler._notify_target(
+            {"notify": {"platform": "slack", "target_id": "1"}}, "每日盤點"
+        )
+        task_scheduler._notify_target({"notify": {"platform": "line"}}, "每日盤點")
+
+    warnings = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+    assert len(warnings) == 2
+    assert all("每日盤點" in w for w in warnings)
+    assert "platform" in warnings[0]
+    assert "target_id" in warnings[1]
 
 
 def test_notify_message_truncated_to_4000() -> None:
@@ -284,6 +312,30 @@ async def test_push_exception_does_not_break_task(monkeypatch: pytest.MonkeyPatc
     assert update.call_args.kwargs["success"] is True
 
 
+@pytest.mark.asyncio
+async def test_success_notify_error_does_not_rerecord_as_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """成功推播在 try 之外：推播路徑丟例外也不能把已記成功的任務改記成失敗"""
+    task = _agent_task(_NOTIFY)
+    monkeypatch.setattr(task_scheduler, "get_scheduled_task", AsyncMock(return_value=task))
+    update = AsyncMock(return_value=0)
+    monkeypatch.setattr(task_scheduler, "update_task_run_result", update)
+    _patch_agent_run(monkeypatch, SimpleNamespace(success=True, message="ok", error=None))
+
+    # _notify_result 自己的 try/except 之外再破一次（例如 helper 本身出錯）
+    monkeypatch.setattr(
+        task_scheduler, "_notify_result", AsyncMock(side_effect=RuntimeError("boom"))
+    )
+
+    with pytest.raises(RuntimeError, match="boom"):
+        await task_scheduler.execute_dynamic_task(task["id"])
+
+    # 只記一次，且是成功；沒有被 except 分支改寫成失敗
+    update.assert_awaited_once()
+    assert update.call_args.kwargs["success"] is True
+
+
 # ============================================================
 # Skill Script：AI Log + 推播
 # ============================================================
@@ -332,7 +384,8 @@ async def test_skill_script_writes_ai_log_and_notifies(
     log = create_log.call_args[0][0]
     assert log.context_type == "scheduler_script"
     assert log.context_id == "每日盤點"
-    assert log.input_prompt.startswith("test-skill/run.py")
+    # input 本身已是 JSON 字串，不應再被 json.dumps 包一層引號
+    assert log.input_prompt == 'test-skill/run.py {"days": 7}'
     assert log.raw_response == "腳本輸出"
     assert log.success is True
     assert log.duration_ms == 42
@@ -393,6 +446,38 @@ async def test_skill_script_ai_log_failure_does_not_break_task(
         await task_scheduler.execute_dynamic_task(task["id"])
 
     assert update.call_args.kwargs["success"] is True
+
+
+# ============================================================
+# ai_logs 欄位長度
+# ============================================================
+
+
+@pytest.mark.asyncio
+async def test_context_id_truncated_to_64(monkeypatch: pytest.MonkeyPatch) -> None:
+    """排程名稱最長 128 字，但 AiLogCreate.context_id 上限 64，兩種模式都要截斷"""
+    long_name = "排" * 100
+
+    # Agent 模式
+    create_log = _patch_agent_run(
+        monkeypatch, SimpleNamespace(success=True, message="ok", error=None)
+    )
+    await task_scheduler._execute_agent_task(
+        long_name, {"agent_name": "bot", "prompt": "x"}
+    )
+    assert create_log.call_args[0][0].context_id == long_name[:64]
+
+    # Skill Script 模式
+    script_log = AsyncMock()
+    monkeypatch.setattr("ching_tech_os.services.ai_manager.create_log", script_log)
+    sm_patch, runner_patch = _patch_skill_run(
+        {"success": True, "output": "ok", "error": "", "duration_ms": 1}
+    )
+    with sm_patch, runner_patch:
+        await task_scheduler._execute_skill_script_task(
+            long_name, {"skill": "s", "script": "r.py", "input": ""}
+        )
+    assert script_log.call_args[0][0].context_id == long_name[:64]
 
 
 # ============================================================

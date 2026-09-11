@@ -34,7 +34,11 @@ class IntervalTriggerConfig(BaseModel):
 
 
 class NotifyConfig(BaseModel):
-    """排程結果推播設定（放在 executor_config.notify，未設定就不推播）"""
+    """排程結果推播設定（放在 executor_config.notify，未設定就不推播）
+
+    註：本類別與下方兩個 ExecutorConfig 只作為文件與型別提示，API 實際收到的
+    `executor_config` 仍是未驗證的 `dict`（見 `ScheduledTaskBase`），以維持向下相容。
+    """
 
     platform: Literal["line", "telegram"] = Field(..., description="推播平台")
     target_id: str | None = Field(None, description="Line user ID 或 Telegram chat_id")
@@ -43,7 +47,7 @@ class NotifyConfig(BaseModel):
 
 
 class AgentExecutorConfig(BaseModel):
-    """Agent 執行設定"""
+    """Agent 執行設定（文件用途，executor_config 實際不做驗證）"""
 
     agent_name: str = Field(..., description="對應 ai_agents.name")
     prompt: str = Field(..., description="要求 Agent 執行的指令")
@@ -52,7 +56,7 @@ class AgentExecutorConfig(BaseModel):
 
 
 class SkillScriptExecutorConfig(BaseModel):
-    """Skill Script 執行設定"""
+    """Skill Script 執行設定（文件用途，executor_config 實際不做驗證）"""
 
     skill: str = Field(..., description="Skill 名稱")
     script: str = Field(..., description="Script 名稱")

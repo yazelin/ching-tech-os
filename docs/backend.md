@@ -344,6 +344,14 @@ uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8088 --reload
 - 成功訊息：`【排程】{排程名稱} 完成\n{結果內容}`；失敗訊息：`【排程失敗】{排程名稱}（連續第 N 次）\n{錯誤}`。
   訊息截斷到 4000 字（LINE 單則上限 5000 字）。
 - 推播失敗只寫 warning，不影響排程執行結果，也不影響 `ai_logs` 寫入。
+- `platform` 不是 `line` / `telegram`，或 `target_id` 與 `group_id` 都空，會寫一則帶排程名稱的
+  warning 後略過推播。
+
+> **目前只能透過 API 或資料庫設定；從舊桌面的排程 UI 編輯該排程會清掉 notify 設定。**
+> 舊桌面的 `frontend/js/task-scheduler.js` 存檔時是用表單欄位重新組一份 `executor_config`
+> 送 PUT，而 PUT 會整包覆寫該 JSONB 欄位，表單上沒有的 `notify` 就這樣被靜默丟掉。
+> 設過 `notify` 的排程，請改用 `PUT /api/scheduler/tasks/{task_id}`（帶完整 `executor_config`）
+> 或直接改資料庫。
 
 #### 連續失敗計數
 
