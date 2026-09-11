@@ -19,7 +19,7 @@ EditablePurchaseOrderStatus = Literal["draft", "ordered"]
 StockReason = Literal[
     "receipt", "issue", "adjust", "transfer_in", "transfer_out", "import"
 ]
-PartyRole = Literal["supplier", "customer"]
+PartyRole = Literal["supplier", "customer", "both"]
 AuditVia = Literal["mcp", "rest"]
 
 
@@ -51,6 +51,21 @@ class PartyContactCreate(PartyContactBase):
     """新增聯絡人請求"""
 
 
+class PartyContactUpdate(BaseModel):
+    """更新聯絡人請求（只更新有給的欄位）"""
+
+    name: str | None = None
+    title: str | None = None
+    phone: str | None = None
+    mobile: str | None = None
+    email: str | None = None
+    is_primary: bool | None = None
+    notes: str | None = None
+
+    # 資料表 NOT NULL 的欄位不接受明確送 null
+    _reject_null = field_validator("name", "is_primary", mode="before")(_not_null)
+
+
 class PartyContactResponse(PartyContactBase):
     """聯絡人回應"""
 
@@ -58,6 +73,12 @@ class PartyContactResponse(PartyContactBase):
     party_id: UUID
     created_at: datetime
     updated_at: datetime
+
+
+class PartyContactUpdateResponse(PartyContactResponse):
+    """更新聯絡人回應（多帶 `audit_id`）"""
+
+    audit_id: UUID | None = None
 
 
 class PartyAddressBase(BaseModel):
@@ -73,6 +94,17 @@ class PartyAddressCreate(PartyAddressBase):
     """新增地址請求"""
 
 
+class PartyAddressUpdate(BaseModel):
+    """更新地址請求（只更新有給的欄位）"""
+
+    address: str | None = None
+    label: str | None = None
+    city: str | None = None
+    is_primary: bool | None = None
+
+    _reject_null = field_validator("address", "is_primary", mode="before")(_not_null)
+
+
 class PartyAddressResponse(PartyAddressBase):
     """地址回應"""
 
@@ -80,6 +112,12 @@ class PartyAddressResponse(PartyAddressBase):
     party_id: UUID
     created_at: datetime
     updated_at: datetime
+
+
+class PartyAddressUpdateResponse(PartyAddressResponse):
+    """更新地址回應（多帶 `audit_id`）"""
+
+    audit_id: UUID | None = None
 
 
 class PartyBase(BaseModel):
