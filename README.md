@@ -30,7 +30,7 @@ ChingTech OS 是擎添工業內部使用的整合式工作平台，以 Web 技�
 | 知識庫 | 完成 | Markdown 知識管理、全文搜尋、版本歷史、附件管理、附件內容讀取、公開分享、個人/專案/全域 scope |
 | 程式編輯器 | 完成 | code-server 整合（VS Code 體驗） |
 | 文字檢視器 | 完成 | Markdown/JSON/YAML/XML 格式化顯示、語法色彩 |
-| 專案管理 | 完成 | 專案、成員、會議、附件、連結、里程碑、發包期程管理、廠商主檔 |
+| 專案管理 | 完成 | 專案主檔（客戶、負責人、狀態、起迄日）、成員、里程碑與逾期判定、任務與進度百分比、dashboard 摘要、綁定 Bot 群組與知識庫條目 |
 | 物料/庫存管理 | 完成 | 物料主檔（型號、存放庫位）、進出貨記錄、庫存查詢、盤點調整、低庫存警示、訂購記錄 |
 | 記憶管理 | 完成 | Line Bot 群組/個人自訂記憶、記憶啟用/停用 |
 | Line Bot | 完成 | 群組管理、訊息記錄、用戶綁定、AI 對話整合、MCP 工具、NAS 檔案搜尋與發送、AI 圖片生成（含 Hugging Face FLUX 備用）、文件讀取、群組 @ 提及回覆、回覆引用、自訂記憶、物料/庫存管理、簡報生成、MD2PPT/MD2DOC 文件轉換、統一斜線指令（/start、/help、/reset、/debug、/agent）、歡迎訊息（加好友時自動推送）、Intent Guard 意圖過濾、月度 Token 上限、黑名單管理 |
@@ -44,6 +44,10 @@ ChingTech OS 是擎添工業內部使用的整合式工作平台，以 Web 技�
 
 ### 2026-09
 
+- **專案模組重建**：ERPNext 停用後專案進度回到自己的系統。四張表 `projects` / `project_members` /
+  `milestones` / `tasks`（migration 028），`/api/projects` 提供清單、明細、成員、里程碑、任務與
+  dashboard 摘要。進度百分比與逾期里程碑都是查詢時算，不存欄位。讀取只要有 `project-management`
+  權限，建立與刪除限管理員，編輯限管理員或該專案成員。
 - **排程結果推播**：動態排程跑完可把結果推回 LINE / Telegram（`executor_config.notify` 設定目標，沒設就不推），失敗訊息帶連續失敗次數（`scheduled_tasks.consecutive_failures`，成功歸零）。推播失敗只記 warning，不影響排程結果。Skill Script 模式也補寫 `ai_logs`。
 - **AI 管理寫入端點與 Socket.IO 補後端權限**：prompts 的 `POST`/`PUT`/`DELETE` 套
   `require_app_permission("prompt-editor")`，agents 的 `POST`/`PUT`/`DELETE` 與 `POST /api/ai/test` 套

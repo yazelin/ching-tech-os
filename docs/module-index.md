@@ -195,7 +195,7 @@ services/task_scheduler.py ← 動態排程（DB 定義 + APScheduler 註冊 + �
 |------|------|
 | `services/document_reader.py` | 文件讀取（docx/xlsx/pptx/pdf） |
 | `services/message.py` | 系統訊息 |
-| `services/project.py` | 專案管理（1,157 行） |
+| `services/project.py` | 專案模組（asyncpg raw SQL：清單／明細／成員／里程碑／任務／dashboard 摘要），路由在 `api/project.py` |
 | `services/inventory.py` | 庫存管理（1,150 行） |
 | `utils/crypto.py` | 加密工具 |
 

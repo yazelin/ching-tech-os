@@ -4,6 +4,10 @@
 
 ## 近期重點（2026-09）
 
+- 專案模組重建（migration 028：`projects` / `project_members` / `milestones` / `tasks`）。
+  `/api/projects` 全部端點過 `require_app_permission("project-management")`；建立與刪除限管理員，
+  編輯類走 `require_project_editor`（admin 或該專案成員）。`GET /api/knowledge` 同時加了
+  `project_id` 參數，供專案頁列關聯知識條目。
 - AI Log 三個端點（`/api/ai/logs`、`/api/ai/logs/stats`、`/api/ai/logs/{id}`）補上
   `require_app_permission("ai-log")`，`ai-log` 預設權限改為關閉，需管理員逐人開放。
 - 排程執行結果可推回 LINE / Telegram：`executor_config.notify` 設定推播目標，失敗訊息帶連續失敗次數
@@ -140,13 +144,40 @@ uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8088 --reload
 
 | 方法 | 端點 | 說明 |
 |------|------|------|
-| GET | `/api/knowledge` | 搜尋/列表知識 |
+| GET | `/api/knowledge` | 搜尋/列表知識（`project_id` 過濾專案關聯條目，`project` 是 tags 裡的專案名稱） |
 | GET | `/api/knowledge/{id}` | 取得單一知識 |
 | POST | `/api/knowledge` | 新增知識 |
 | PUT | `/api/knowledge/{id}` | 更新知識 |
 | DELETE | `/api/knowledge/{id}` | 刪除知識 |
 | GET | `/api/knowledge/tags` | 取得所有標籤 |
 | GET | `/api/knowledge/{id}/history` | 取得版本歷史 |
+
+### 專案管理
+
+全部端點需要 `project-management` app 權限。編輯類（PUT 專案、成員、里程碑、任務的寫入）
+走 `require_project_editor`：admin 直接過，否則要是 `project_members` 裡的成員，
+不是成員回 403「只有專案成員能編輯」，專案不存在回 404。
+
+| 方法 | 端點 | 額外權限 | 說明 |
+|------|------|----------|------|
+| GET | `/api/projects` | — | 清單。query：`status`、`q`（名稱／客戶模糊）、`page`、`page_size`（預設 20，上限 100）。item 帶 `progress`、`member_count`、`overdue_milestones` |
+| POST | `/api/projects` | 管理員 | 建立專案；指定 `owner_id` 時自動補成員 |
+| GET | `/api/projects/summary` | — | dashboard：`active_count` 與逾期里程碑清單（依到期日升冪，最多 20 筆） |
+| GET | `/api/projects/{id}` | — | 明細：主檔＋`progress`＋`members`＋`milestones`（各帶 `is_overdue`）＋`tasks`＋`bot_groups`＋`knowledge_count` |
+| PUT | `/api/projects/{id}` | 成員 | 更新主檔；改 `owner_id` 時自動補成員，原負責人降成一般成員 |
+| DELETE | `/api/projects/{id}` | 管理員 | 刪除；先把 `bot_groups.project_id` 設回 NULL |
+| POST | `/api/projects/{id}/members` | 成員 | `{user_id}` |
+| DELETE | `/api/projects/{id}/members/{user_id}` | 成員 | 負責人不能移除（400） |
+| POST | `/api/projects/{id}/milestones` | 成員 | 建立里程碑 |
+| PUT | `/api/projects/{id}/milestones/{mid}` | 成員 | 更新里程碑 |
+| DELETE | `/api/projects/{id}/milestones/{mid}` | 成員 | 刪除里程碑 |
+| POST | `/api/projects/{id}/tasks` | 成員 | 建立任務 |
+| PUT | `/api/projects/{id}/tasks/{tid}` | 成員 | 更新任務 |
+| DELETE | `/api/projects/{id}/tasks/{tid}` | 成員 | 刪除任務 |
+
+進度百分比 = `done` 任務數 ÷ 任務總數，四捨五入到整數，沒有任務時為 0，不存欄位、查詢時算。
+逾期里程碑 = `due_date < CURRENT_DATE` 且 `status <> 'completed'`；`/summary` 另外只看
+`status = 'active'` 的專案。
 
 ### AI 對話
 
@@ -430,6 +461,7 @@ uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8088 --reload
 |---------|------|------|
 | `core` | 核心功能 | 永遠啟用，不需列入 |
 | `knowledge-base` | 知識庫 | |
+| `project-management` | 專案管理 | |
 | `file-manager` | 檔案管理器 | |
 | `ai-agent` | AI Agent（Claude 對話） | |
 | `line-bot` | Line Bot 整合 | |
