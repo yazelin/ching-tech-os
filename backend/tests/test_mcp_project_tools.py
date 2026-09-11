@@ -250,6 +250,42 @@ async def test_resolve_project_ambiguous(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_resolve_project_flags_more_when_over_page(monkeypatch) -> None:
+    """命中數超過這一頁：候選不完整，回 more 讓 agent 請人講具體一點"""
+    items = [{"id": uuid4(), "name": f"專案 {i}"} for i in range(4)]
+    monkeypatch.setattr(
+        project_service,
+        "list_projects",
+        AsyncMock(return_value={"items": items, "total": 42}),
+    )
+    with pytest.raises(project_tools.AmbiguousError) as exc:
+        await project_tools._resolve_project("專案")
+    assert exc.value.more is True
+    assert len(project_tools._fail(exc.value)["candidates"]) == 3
+    assert project_tools._fail(exc.value)["more"] is True
+
+
+@pytest.mark.asyncio
+async def test_resolve_project_not_more_when_page_covers_all(monkeypatch) -> None:
+    monkeypatch.setattr(
+        project_service,
+        "list_projects",
+        AsyncMock(
+            return_value={
+                "items": [
+                    {"id": PROJECT_ID, "name": "亦達自動化"},
+                    {"id": OTHER_PROJECT_ID, "name": "亦達二期"},
+                ],
+                "total": 2,
+            }
+        ),
+    )
+    with pytest.raises(project_tools.AmbiguousError) as exc:
+        await project_tools._resolve_project("亦達")
+    assert exc.value.more is False
+
+
+@pytest.mark.asyncio
 async def test_resolve_project_requires_input() -> None:
     with pytest.raises(project_tools.NotFoundError):
         await project_tools._resolve_project("")
@@ -495,16 +531,57 @@ async def test_create_task_requires_title(monkeypatch) -> None:
     created.assert_not_awaited()
 
 
-@pytest.mark.asyncio
-async def test_create_task_denied_for_non_member(monkeypatch) -> None:
-    _as_member(monkeypatch, False)
-    created = AsyncMock()
-    monkeypatch.setattr(project_service, "create_task", created)
+# 五支寫入工具與它們會呼叫到的 service 函式（成員檢查掃描用）
+_WRITE_CALLS: list[tuple[str, tuple, dict, str]] = [
+    ("create_task", (str(PROJECT_ID), "配線"), {}, "create_task"),
+    (
+        "update_task",
+        (str(PROJECT_ID), str(TASK_ID), {"status": "done"}),
+        {},
+        "update_task",
+    ),
+    (
+        "create_milestone",
+        (str(PROJECT_ID), "出機", "2026-11-01"),
+        {},
+        "create_milestone",
+    ),
+    (
+        "complete_milestone",
+        (str(PROJECT_ID), str(MILESTONE_ID)),
+        {},
+        "update_milestone",
+    ),
+    ("add_project_member", (str(PROJECT_ID), "amin"), {}, "add_member"),
+]
 
-    result = await project_tools.create_task(str(PROJECT_ID), "配線", ctos_user_id=7)
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("tool_name, args, kwargs, service_fn", _WRITE_CALLS)
+async def test_write_tools_denied_for_non_member(
+    monkeypatch, tool_name, args, kwargs, service_fn
+) -> None:
+    """非 admin 又不是成員：五支寫入工具都要擋在 service 之前"""
+    _as_member(monkeypatch, False)
+    _detail(monkeypatch)
+    service = AsyncMock()
+    monkeypatch.setattr(project_service, service_fn, service)
+
+    result = await getattr(project_tools, tool_name)(*args, **kwargs)
 
     assert result == {"ok": False, "error": "只有專案成員能編輯"}
-    created.assert_not_awaited()
+    service.assert_not_awaited()
+
+
+def test_write_calls_cover_every_write_tool() -> None:
+    """新增寫入工具忘了補成員檢查掃描會直接紅"""
+    assert [name for name, _a, _k, _s in _WRITE_CALLS] == [
+        "create_task",
+        "update_task",
+        "create_milestone",
+        "complete_milestone",
+        "add_project_member",
+    ]
 
 
 @pytest.mark.asyncio
@@ -582,6 +659,49 @@ async def test_update_task_requires_fields(monkeypatch) -> None:
     result = await project_tools.update_task(str(PROJECT_ID), str(TASK_ID), {}, ctos_user_id=7)
     assert result["ok"] is False
     updated.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_update_task_rejects_unknown_field_names(monkeypatch) -> None:
+    """欄位名拼錯會被模型整批忽略，這時不能假裝更新成功"""
+    _detail(monkeypatch)
+    updated = AsyncMock()
+    monkeypatch.setattr(project_service, "update_task", updated)
+
+    result = await project_tools.update_task(
+        str(PROJECT_ID), str(TASK_ID), {"staus": "done", "assinee": "亞澤"}, ctos_user_id=7
+    )
+
+    assert result == {"ok": False, "error": "沒有可更新的欄位（欄位名稱可能拼錯）"}
+    updated.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_update_task_clears_assignee_and_milestone(monkeypatch) -> None:
+    """送 null 是「拿掉負責人／脫離里程碑」，不是沒給"""
+    _detail(monkeypatch)
+    resolver = AsyncMock(side_effect=AssertionError("null 不該去解析人名"))
+    monkeypatch.setattr(project_tools, "get_all_users", resolver)
+    updated = AsyncMock(
+        return_value={
+            "id": TASK_ID,
+            "project_id": PROJECT_ID,
+            "title": "配電盤配線",
+            "status": "todo",
+        }
+    )
+    monkeypatch.setattr(project_service, "update_task", updated)
+
+    result = await project_tools.update_task(
+        str(PROJECT_ID),
+        str(TASK_ID),
+        {"assignee": None, "milestone": None},
+        ctos_user_id=7,
+    )
+
+    assert result["ok"] is True
+    payload = updated.await_args[0][2]
+    assert payload == {"assignee_id": None, "milestone_id": None}
 
 
 @pytest.mark.asyncio
@@ -891,3 +1011,14 @@ async def test_list_tasks_filters_by_display_name(monkeypatch) -> None:
     result = await project_tools.list_tasks(str(PROJECT_ID), assignee="阿明", ctos_user_id=7)
     assert [t["title"] for t in result["tasks"]] == ["現場試車"]
     assert result["project_name"] == "亦達自動化"
+
+
+@pytest.mark.asyncio
+async def test_complete_milestone_service_error_becomes_return_value(monkeypatch) -> None:
+    _detail(monkeypatch)
+    monkeypatch.setattr(
+        project_service, "update_milestone", AsyncMock(side_effect=RuntimeError("boom"))
+    )
+    result = await project_tools.complete_milestone(str(PROJECT_ID), "出機", ctos_user_id=7)
+    assert result["ok"] is False
+    assert "執行失敗" in result["error"]

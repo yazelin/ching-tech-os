@@ -59,7 +59,7 @@ backend/src/ching_tech_os/
         ├── message_tools.py          # 訊息相關工具（core，永遠載入）
         ├── nas_tools.py              # NAS 檔案工具（搜尋、讀取、發送、圖書館）
         ├── presentation_tools.py     # 簡報/文件生成、列印工具
-        ├── project_tools.py           # 專案模組工具（專案、里程碑、任務、成員）
+        ├── project_tools.py          # 專案模組工具（專案、里程碑、任務、成員）
         ├── scheduler_tools.py        # 排程管理工具
         ├── share_tools.py            # 分享連結工具
         ├── skill_script_tools.py     # AI Skills 腳本執行
@@ -327,12 +327,17 @@ result = await execute_tool("generate_md2doc", {
    os.ching-tech.com/projects。
 3. **解析到多個候選不猜**：`project`、`task`、`milestone`、`user`／`assignee`
    都吃名稱，完全同名優先、其餘比子字串；不唯一時回
-   `{"ok": false, "need_confirmation": true, "candidates": [...]}`，
+   `{"ok": false, "need_confirmation": true, "candidates": [...]}`（最多三個），
    零命中回 `{"ok": false, "not_found": true}`，工具不丟例外。
+   候選被截掉時（命中數超過回傳上限或一頁搜尋上限）會多帶 `"more": true`，
+   agent 該請使用者把查詢講具體一點，不要從這三個裡硬挑。
    `update_task` 的 `fields` 會先過 `TaskUpdate` 驗證（`fields` 可以用
-   `assignee`／`milestone` 給名稱，會先解析成 `assignee_id`／`milestone_id`），
+   `assignee`／`milestone` 給名稱，會先解析成 `assignee_id`／`milestone_id`；
+   送 `{"assignee": null}` 是拿掉負責人、`{"milestone": null}` 是脫離里程碑），
    狀態不在 todo／doing／done 裡或 NOT NULL 欄位送 `null`，直接回
-   `{"ok": false, "error": "欄位不合法（…）"}`，不會變成資料庫例外。
+   `{"ok": false, "error": "欄位不合法（…）"}`，不會變成資料庫例外；
+   欄位名稱全部拼錯（模型整批忽略）回
+   `{"ok": false, "error": "沒有可更新的欄位（欄位名稱可能拼錯）"}`，不會假裝更新成功。
 
 ### 往來與物料（erp_tools.py）
 

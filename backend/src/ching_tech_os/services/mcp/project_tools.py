@@ -66,13 +66,28 @@ class NotFoundError(ProjectToolError):
 
 
 class AmbiguousError(ProjectToolError):
-    """解析到多個候選，要人或 agent 挑一個"""
+    """解析到多個候選，要人或 agent 挑一個
 
-    def __init__(self, entity: str, query: str, candidates: list[dict[str, Any]]) -> None:
+    `more=True` 表示候選被截掉了（命中數超過回傳上限或搜尋上限），
+    agent 該請使用者把查詢講具體一點，而不是從這三個裡硬挑。
+    """
+
+    def __init__(
+        self,
+        entity: str,
+        query: str,
+        candidates: list[dict[str, Any]],
+        more: bool = False,
+    ) -> None:
         self.entity = entity
         self.query = query
         self.candidates = candidates
-        super().__init__(f"{entity}「{query}」有 {len(candidates)} 個候選，請確認")
+        self.more = more
+        super().__init__(
+            f"{entity}「{query}」有 {len(candidates)} 個候選"
+            + ("（還有更多，請講具體一點）" if more else "")
+            + "，請確認"
+        )
 
 
 class InvalidFieldError(ProjectToolError):
@@ -110,6 +125,7 @@ def _fail(exc: Exception) -> dict:
             "entity": exc.entity,
             "query": exc.query,
             "candidates": _clean(exc.candidates),
+            "more": exc.more,
             "message": str(exc),
         }
     if isinstance(exc, NotFoundError):
@@ -173,12 +189,23 @@ def _validated_fields(model, fields: dict) -> dict:
 # ============================================================
 
 
-def _unique(entity: str, query: str, matches: list[dict], key: str) -> Any:
-    """唯一命中才回，多個候選拋 Ambiguous，零命中拋 NotFound"""
+def _unique(
+    entity: str, query: str, matches: list[dict], key: str, more: bool = False
+) -> Any:
+    """唯一命中才回，多個候選拋 Ambiguous，零命中拋 NotFound
+
+    `more` 由呼叫端補（例如命中數超過搜尋上限）；候選本身被 `CANDIDATE_LIMIT`
+    截掉時也算。
+    """
     if not matches:
         raise NotFoundError(entity, query)
     if len(matches) > 1:
-        raise AmbiguousError(entity, query, matches[:CANDIDATE_LIMIT])
+        raise AmbiguousError(
+            entity,
+            query,
+            matches[:CANDIDATE_LIMIT],
+            more=more or len(matches) > CANDIDATE_LIMIT,
+        )
     return matches[0][key]
 
 
@@ -201,6 +228,8 @@ async def _resolve_project(project: str | None) -> UUID:
     items = result.get("items") or []
     exact = [item for item in items if item.get("name") == project]
     candidates = exact or items
+    # 命中數超過這一頁：候選一定不完整，回 more 讓 agent 請使用者縮小查詢
+    more = not exact and int(result.get("total") or 0) > len(items)
     return _unique(
         "專案",
         project,
@@ -214,6 +243,7 @@ async def _resolve_project(project: str | None) -> UUID:
             for item in candidates
         ],
         "id",
+        more=more,
     )
 
 
@@ -499,7 +529,7 @@ async def create_task(
     }
 
 
-# fields 裡吃名稱的鍵 → 轉成資料表欄位
+# fields 裡吃名稱的鍵 → 對應的資料表欄位（值給 null 就是清空）
 _TASK_FIELD_ALIASES = {"assignee": "assignee_id", "milestone": "milestone_id"}
 
 
@@ -517,7 +547,8 @@ async def update_task(
         task: 任務標題或 UUID
         fields: 要改的欄位，例如 `{"status": "done"}`、`{"assignee": "亞澤"}`、
             `{"due_date": "2026-10-01"}`；`assignee`／`milestone` 吃名稱，
-            也可以直接給 `assignee_id`／`milestone_id`
+            也可以直接給 `assignee_id`／`milestone_id`；
+            送 `{"assignee": null}` 是拿掉負責人、`{"milestone": null}` 是脫離里程碑
         ctos_user_id: CTOS 用戶 ID
     """
     guard = await _guard("update_task", ctos_user_id)
@@ -533,17 +564,22 @@ async def update_task(
         detail = await _project_detail(pid)
         task_id = await _resolve_task(pid, task, detail)
         payload = dict(fields)
-        if payload.get("assignee") is not None:
-            payload["assignee_id"] = await _resolve_user(payload["assignee"])
-        if payload.get("milestone") is not None:
-            payload["milestone_id"] = str(
-                await _resolve_milestone(pid, payload["milestone"], detail)
-            )
-        for alias in _TASK_FIELD_ALIASES:
-            payload.pop(alias, None)
-        row = await project_service.update_task(
-            pid, task_id, _validated_fields(TaskUpdate, payload)
-        )
+        for alias, column in _TASK_FIELD_ALIASES.items():
+            if alias not in payload:
+                continue
+            value = payload.pop(alias)
+            if value is None:
+                # 明確送 null＝拿掉負責人／脫離里程碑
+                payload[column] = None
+            elif alias == "assignee":
+                payload[column] = await _resolve_user(value)
+            else:
+                payload[column] = str(await _resolve_milestone(pid, value, detail))
+        payload = _validated_fields(TaskUpdate, payload)
+        if not payload:
+            # 欄位名稱拼錯會被模型整批忽略，這時不能假裝更新成功
+            return _error("沒有可更新的欄位（欄位名稱可能拼錯）")
+        row = await project_service.update_task(pid, task_id, payload)
     except Exception as e:
         return _fail(e)
     if row is None:
