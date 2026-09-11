@@ -1,7 +1,7 @@
 # CTOS 往來與物料模組（AI native 類 ERP，取代 ERPNext）設計
 
 日期：2026-09-12
-狀態：規格草案；設計原則已由管理層定（AI Agent 能操作為第一優先），其餘假設列在第八節
+狀態：已拍板（設計原則由管理層定：AI Agent 能操作為第一優先），實作中；PR 1 後端 #192 已合併
 上位規格：`2026-09-10-ctos-web-react-frontend-design.md`（第五節「ERPNext 資料搬出」）、`2026-09-11-project-module-design.md`（專案模組，已上線）
 
 ## 一、背景與原則
@@ -33,7 +33,7 @@
 - `parties`：`name`、`short_name`、`aliases text[]`（模糊比對用）、`is_supplier`、`is_customer`、`tax_id`（統編）、`industry`、`payment_terms`、`notes`、`source_ref`（ERPNext 的 Supplier／Customer name，匯入對照）。一家公司同時是供應商與客戶只有一筆。
 - `party_contacts`：`party_id`、`name`、`title`、`phone`、`mobile`、`email`、`is_primary`、`notes`。
 - `party_addresses`：`party_id`、`label`（公司／工廠／收貨）、`address`、`city`、`is_primary`。
-- 搜尋：`name`、`short_name`、`aliases`、聯絡人姓名、電話、統編都進 `pg_trgm` 索引；工具回傳前三個候選讓 agent 挑或問人。
+- 搜尋：`name`、`short_name`、`aliases`、聯絡人姓名走 `pg_trgm` 模糊比對；電話與統編用等值比對（btree），精確命中優先於模糊結果；工具回傳候選讓 agent 挑或問人。（2026-09-12 PR #192 實作後修正）
 
 ### 物料與庫存（inventory-management）
 
