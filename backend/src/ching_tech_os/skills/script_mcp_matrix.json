@@ -57,7 +57,7 @@
       "script": null,
       "script_first": false,
       "fallback_mcp_tool": null,
-      "notes": "跨系統 ERPNext 整合，保留 MCP-only"
+      "notes": "專案模組只有 REST API 與新前端，沒有 MCP 工具"
     },
     {
       "name": "vendor-management",
@@ -69,11 +69,11 @@
     },
     {
       "name": "inventory-management",
-      "skill": "inventory",
+      "skill": "erp",
       "script": null,
       "script_first": false,
       "fallback_mcp_tool": null,
-      "notes": "跨系統 ERPNext 整合，保留 MCP-only"
+      "notes": "物料庫存與採購沿用 erp skill 的 MCP 工具，保留 MCP-only"
     },
     {
       "name": "printer",

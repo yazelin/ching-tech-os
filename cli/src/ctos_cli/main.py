@@ -525,12 +525,50 @@ def cmd_files_get(args: argparse.Namespace) -> None:
 
 
 # ============================================================
-# erp 子命令（ERPNext 唯讀查詢，走 CTOS /api/erp proxy）
+# erp 子命令（往來與物料模組唯讀查詢，走 /api/items 與 /api/stock）
 # ============================================================
 
 
+def _resolve_item(code: str) -> dict:
+    """料號／品名 → 物料（新端點的明細與庫存都吃 UUID，這裡先解析一次）"""
+    resp = _api("/api/items", params={"q": code, "page_size": 20})
+    items = resp.get("items", [])
+    if not items:
+        _die(f"查無物料：{code}")
+    exact = [it for it in items if (it.get("code") or "").lower() == code.lower()]
+    if len(exact) == 1:
+        return exact[0]
+    if len(items) == 1:
+        return items[0]
+    print(f"「{code}」對到多筆物料，請改用完整料號：", file=sys.stderr)
+    for it in items[:10]:
+        print(f"  {it.get('code')}  {it.get('name', '')}", file=sys.stderr)
+    sys.exit(1)
+
+
+def _resolve_warehouse(name: str) -> dict:
+    """倉庫代碼或名稱 → 倉庫"""
+    resp = _api("/api/warehouses", params={"page_size": 100})
+    rows = resp.get("items", [])
+    matched = [
+        w
+        for w in rows
+        if (w.get("code") or "").lower() == name.lower() or (w.get("name") or "") == name
+    ]
+    if not matched:
+        matched = [w for w in rows if name.lower() in (w.get("name") or "").lower()]
+    if not matched:
+        _die(f"查無倉庫：{name}")
+    if len(matched) > 1:
+        print(f"「{name}」對到多個倉庫，請用倉庫代碼：", file=sys.stderr)
+        for w in matched[:10]:
+            print(f"  {w.get('code')}  {w.get('name', '')}", file=sys.stderr)
+        sys.exit(1)
+    return matched[0]
+
+
 def cmd_erp_find(args: argparse.Namespace) -> None:
-    resp = _api("/api/erp/items", params={"q": args.query, "limit": args.limit})
+    resp = _api("/api/items", params={"q": args.query, "page_size": args.limit})
     if args.json:
         print(json.dumps(resp, ensure_ascii=False, indent=2))
         return
@@ -539,85 +577,66 @@ def cmd_erp_find(args: argparse.Namespace) -> None:
         print("查無物料。")
         return
     for it in items:
-        disabled = "（停用）" if it.get("disabled") else ""
-        print(f"  {it['name']:<24} {it.get('item_name', '')}{disabled}  [{it.get('item_group', '')}] {it.get('stock_uom', '')}")
+        spec = f" {it['spec']}" if it.get("spec") else ""
+        group = f" [{it['item_group']}]" if it.get("item_group") else ""
+        print(
+            f"  {it.get('code', ''):<24} {it.get('name', '')}{spec}{group} "
+            f"{it.get('unit', '') or ''}  庫存 {it.get('total_qty', 0)}"
+        )
+    total = resp.get("total")
+    if total is not None and total > len(items):
+        print(f"（共 {total} 筆，只列出 {len(items)} 筆，用 --limit 調整）")
 
 
 def cmd_erp_item(args: argparse.Namespace) -> None:
-    resp = _api(f"/api/erp/items/{args.item_code}")
+    item = _resolve_item(args.item_code)
+    resp = _api(f"/api/items/{item['id']}")
     if args.json:
         print(json.dumps(resp, ensure_ascii=False, indent=2))
         return
-    it = resp.get("item", {})
-    print(f"料號：{it.get('name')}")
-    print(f"品名：{it.get('item_name')}")
-    if it.get("description"):
-        print(f"說明：{it['description']}")
-    print(f"群組：{it.get('item_group')}；單位：{it.get('stock_uom')}")
-    if it.get("last_purchase_rate") is not None:
-        print(f"最近採購價：{it['last_purchase_rate']}")
-    if it.get("lead_time_days"):
-        print(f"交期（天）：{it['lead_time_days']}")
-    if it.get("disabled"):
-        print("狀態：已停用")
+    print(f"料號：{resp.get('code')}")
+    print(f"品名：{resp.get('name')}")
+    if resp.get("spec"):
+        print(f"規格：{resp['spec']}")
+    print(f"分類：{resp.get('item_group')}；單位：{resp.get('unit')}")
+    if resp.get("default_supplier_name"):
+        print(f"預設供應商：{resp['default_supplier_name']}")
+    if resp.get("purchase_price") is not None:
+        print(f"採購價：{resp['purchase_price']}")
+    if resp.get("lead_days"):
+        print(f"交期（天）：{resp['lead_days']}")
+    if resp.get("aliases"):
+        print(f"別名：{'、'.join(resp['aliases'])}")
+    balances = resp.get("balances") or []
+    if balances:
+        print("各倉庫存：")
+        for b in balances:
+            label = b.get("warehouse_name") or b.get("warehouse_code") or "?"
+            print(f"  {label:<30} {b.get('qty', 0)}")
+    print(f"總庫存：{resp.get('total_qty', 0)}")
 
 
 def cmd_erp_stock(args: argparse.Namespace) -> None:
-    params = {"item": args.item_code}
+    item = _resolve_item(args.item_code)
+    params = {"item_id": item["id"], "page_size": 100}
     if args.warehouse:
-        params["warehouse"] = args.warehouse
-    resp = _api("/api/erp/stock", params=params)
+        params["warehouse_id"] = _resolve_warehouse(args.warehouse)["id"]
+    resp = _api("/api/stock", params=params)
     if args.json:
         print(json.dumps(resp, ensure_ascii=False, indent=2))
         return
-    bins = resp.get("bins", [])
-    if not bins:
-        print(f"{args.item_code}：無庫存記錄。")
+    rows = resp.get("items", [])
+    if not rows:
+        print(f"{item.get('code', args.item_code)}：無庫存記錄。")
         return
     total = 0.0
-    print(f"{args.item_code} 庫存：")
-    for b in bins:
-        qty = b.get("actual_qty") or 0
+    print(f"{item.get('code', args.item_code)} {item.get('name', '')} 庫存：")
+    for r in rows:
+        qty = float(r.get("qty") or 0)
         total += qty
-        extra = []
-        if b.get("reserved_qty"):
-            extra.append(f"保留 {b['reserved_qty']}")
-        if b.get("ordered_qty"):
-            extra.append(f"在途 {b['ordered_qty']}")
-        extra_str = f"（{'、'.join(extra)}）" if extra else ""
-        print(f"  {b.get('warehouse', '?'):<30} {qty}{extra_str}")
-    print(f"合計：{total}")
-
-
-def cmd_erp_boms(args: argparse.Namespace) -> None:
-    resp = _api("/api/erp/boms", params={"item": args.item_code})
-    if args.json:
-        print(json.dumps(resp, ensure_ascii=False, indent=2))
-        return
-    boms = resp.get("boms", [])
-    if not boms:
-        print(f"{args.item_code}：沒有 BOM。")
-        return
-    for b in boms:
-        flags = []
-        if b.get("is_default"):
-            flags.append("預設")
-        if b.get("is_active"):
-            flags.append("啟用")
-        flag_str = f"（{'、'.join(flags)}）" if flags else ""
-        print(f"  {b['name']}{flag_str}")
-    print(f"明細：ctos erp bom <BOM 名稱>")
-
-
-def cmd_erp_bom(args: argparse.Namespace) -> None:
-    resp = _api(f"/api/erp/bom/{args.bom_name}")
-    if args.json:
-        print(json.dumps(resp, ensure_ascii=False, indent=2))
-        return
-    bom = resp.get("bom", {})
-    print(f"BOM：{bom.get('name')}（{bom.get('item')} {bom.get('item_name', '')} x {bom.get('quantity')}）")
-    for it in bom.get("items", []):
-        print(f"  {it.get('item_code'):<24} {it.get('item_name', '')}  x {it.get('qty')} {it.get('uom', '')}")
+        label = r.get("warehouse_name") or r.get("warehouse_code") or "?"
+        print(f"  {label:<30} {r.get('qty', 0)}")
+    print(f"合計：{total:g}")
 
 
 # ============================================================
@@ -739,11 +758,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_fget.add_argument("--out", help="輸出檔名或目錄")
     p_fget.set_defaults(func=cmd_files_get)
 
-    p_erp = sub.add_parser("erp", help="ERPNext 查詢（物料 / 庫存 / BOM，唯讀）")
+    p_erp = sub.add_parser("erp", help="往來與物料查詢（物料 / 庫存，唯讀）")
     erp_sub = p_erp.add_subparsers(dest="erp_command", required=True)
 
     p_efind = erp_sub.add_parser("find", help="關鍵字搜尋物料")
-    p_efind.add_argument("query", help="關鍵字（比對料號與品名）")
+    p_efind.add_argument("query", help="關鍵字（比對料號、品名、規格、別名）")
     p_efind.add_argument("--limit", type=int, default=20)
     p_efind.add_argument("--json", action="store_true")
     p_efind.set_defaults(func=cmd_erp_find)
@@ -753,21 +772,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_eitem.add_argument("--json", action="store_true")
     p_eitem.set_defaults(func=cmd_erp_item)
 
-    p_estock = erp_sub.add_parser("stock", help="庫存查詢（各倉 Bin）")
+    p_estock = erp_sub.add_parser("stock", help="庫存查詢（各倉餘額）")
     p_estock.add_argument("item_code", help="料號")
-    p_estock.add_argument("--warehouse", help="倉庫過濾")
+    p_estock.add_argument("--warehouse", help="倉庫代碼或名稱")
     p_estock.add_argument("--json", action="store_true")
     p_estock.set_defaults(func=cmd_erp_stock)
-
-    p_eboms = erp_sub.add_parser("boms", help="物料的 BOM 清單")
-    p_eboms.add_argument("item_code", help="料號")
-    p_eboms.add_argument("--json", action="store_true")
-    p_eboms.set_defaults(func=cmd_erp_boms)
-
-    p_ebom = erp_sub.add_parser("bom", help="BOM 明細（含組成物料）")
-    p_ebom.add_argument("bom_name", help="BOM 名稱（如 BOM-ITEM-001）")
-    p_ebom.add_argument("--json", action="store_true")
-    p_ebom.set_defaults(func=cmd_erp_bom)
 
     return parser
 

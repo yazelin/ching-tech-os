@@ -11,7 +11,6 @@ const DesktopModule = (function() {
     { id: 'file-manager', name: '檔案管理', icon: 'mdi-folder' },
     { id: 'terminal', name: '終端機', icon: 'mdi-console' },
     { id: 'code-editor', name: 'VSCode', icon: 'mdi-code-braces' },
-    { id: 'erpnext', name: 'ERPNext', icon: 'erpnext' },  // 整合專案/物料/廠商管理
     { id: 'ai-assistant', name: 'AI 助手', icon: 'mdi-robot' },
     { id: 'prompt-editor', name: 'Prompt 編輯器', icon: 'mdi-script-text' },
     { id: 'agent-settings', name: 'Agent 設定', icon: 'mdi-tune-variant' },
@@ -294,10 +293,6 @@ const DesktopModule = (function() {
     }
 
     // ── 不需要 lazy-load 的特殊 App ──
-    if (appId === 'erpnext') {
-      window.open('http://ct.erp', '_blank');
-      return;
-    }
     if (appId === 'md2ppt') {
       if (typeof ExternalAppModule !== 'undefined' && window.EXTERNAL_APP_CONFIG?.md2ppt) {
         ExternalAppModule.open(window.EXTERNAL_APP_CONFIG.md2ppt);
