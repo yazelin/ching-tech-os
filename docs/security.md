@@ -381,18 +381,41 @@ session 的權限快取沒帶到某個 `app_id` 時，`require_app_permission` �
 LINE／Telegram Bot 是對外開放的入口：任何人加好友或把 bot 拉進群組就能對話，
 `ctos_user_id is None`（沒有綁定 CTOS 帳號）是常態，不是例外。這套權限設計原本
 假設呼叫者是已綁定的自己人，未綁定者因此一路走得進來——issue #201、#204、#205、
-#207 都是同一個根因的不同出口。
+#207 都是同一個根因的不同出口，四個都已修。
 
 **逐支工具的實際範圍看 [MCP 工具存取矩陣](mcp-tool-access-matrix.md)**
 （由 `backend/scripts/gen_tool_access_matrix.py` 從程式內省產生，測試會比對逐字相同）。
 
-三道關卡各擋不同的東西：
+四道關卡各擋不同的東西：
 
 | 關卡 | 實作 | 擋什麼 |
 |------|------|--------|
-| app 權限 | `check_mcp_tool_permission()`＋`APPS_REQUIRE_BOUND_USER` | 這個人有沒有這個功能；專案／往來／物料／NAS 檔案未綁定一律拒絕（#201） |
+| app 權限 | `check_mcp_tool_permission()`＋`APPS_REQUIRE_BOUND_USER` | 這個人有沒有這個功能；專案／往來／物料／NAS 檔案／分享未綁定一律拒絕（#201、#205） |
 | 條目層級 | 知識庫 `_check_item_access()`、記憶的擁有者條件 | 這一筆是不是你的；未綁定只讀得到 `scope=global` 且 `is_public` |
 | 工具內部自檢 | `require_bound_user()`＋`TOOLS_REQUIRE_BOUND_USER` | 憑空建立新資料的寫入（`add_note`、`add_note_with_attachments`，#207） |
+| 資源存取檢查 | `share.check_resource_access()` | 把讀不到的東西送出去（#205，見下節） |
+
+### 公開分享連結（#205）
+
+分享連結不需要帳號就打得開，所以「能不能建立連結」必須等於「建立的人讀不讀得到」。
+
+`services/share.py` 的 `get_resource_title()` 只驗資源存在，原本 knowledge 不看
+scope／owner／is_public、nas_file 也沒帶 `source_permissions`，任何呼叫者都能把
+別人的知識條目或自己讀不到的 NAS 檔案變成公開連結。修法是兩層：
+
+1. `create_share_link`／`share_knowledge_attachment` 在 `TOOL_APP_MAPPING` 對到
+   `share-manager`，`share-manager` 進 `APPS_REQUIRE_BOUND_USER`：未綁定一律拒絕，
+   已綁定者還要有 `share-manager` app 權限（預設開放）。
+2. `share.check_resource_access()`（REST 的 `POST /api/share` 與 MCP 工具共用這一層）
+   在建立連結前做真正的存取檢查，而且刻意走與「讀」完全相同的路：
+
+   | 資源類型 | 走哪條路 | 與哪支工具相同 |
+   |----------|----------|----------------|
+   | `knowledge` | `check_knowledge_permission_async(..., action="read")`；未綁定只放行 `scope=global` 且 `is_public` | `get_knowledge_item` 的 `_check_item_access()` |
+   | `nas_file` | `validate_nas_file_path(..., source_permissions=...)`；未綁定一律拒絕 | `read_document`／`send_nas_file` |
+   | `content` | 內容由呼叫端自己提供，沒有別人的資源可洩漏，不檢查 | — |
+
+   沒權限回 403（`ShareAccessDenied`），連結不會被建立。
 
 bot 走的路徑上，身分一律由伺服器注入，模型在工具參數裡宣稱的一律不算數：
 

@@ -58,12 +58,17 @@ def _no_env_identity(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_apps_require_bound_user_set() -> None:
-    """釘住第 3 點查證的結論：這四個 app 的工具會回人名／聯絡方式／內部檔案內容。"""
+    """釘住查證結論：這些 app 的工具會回人名／聯絡方式／內部檔案內容，或把它們送出去。
+
+    前四個是第 3 點查證的結論（issue #201）；`share-manager` 是 issue #205——
+    分享工具會把知識條目或 NAS 檔案變成不用帳號就打得開的公開連結。
+    """
     assert permissions_module.APPS_REQUIRE_BOUND_USER == {
         "project-management",
         "vendor-management",
         "inventory-management",
         "file-manager",
+        "share-manager",
     }
 
 

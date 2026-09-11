@@ -14,13 +14,16 @@
 | #201 | 未綁定者可查專案／往來對象／物料／NAS 檔案（app 預設開放） | 已修（PR #206，`APPS_REQUIRE_BOUND_USER`） |
 | #207 | 未綁定者可用 `add_note`／`add_note_with_attachments` 寫進全域知識庫 | 已修（工具內部自檢 `TOOLS_REQUIRE_BOUND_USER`） |
 | #204 | 記憶工具直接吃模型帶的 `line_group_id`／`line_user_id`，可冒充別的群組／別人 | 已修（`resolve_bot_identity`，伺服器注入優先） |
-| #205 | 分享工具（`create_share_link`／`share_knowledge_attachment`）的範圍 | 未處理，另一支 PR |
+| #205 | 分享工具（`create_share_link`／`share_knowledge_attachment`）可把任何知識條目／NAS 檔案變成公開連結 | 已修（`share-manager` 進 `APPS_REQUIRE_BOUND_USER` ＋ `share.check_resource_access()`） |
 
-三道關卡各擋不同的東西，缺一不可：
+四道關卡各擋不同的東西，缺一不可：
 
 1. **app 權限**（`check_mcp_tool_permission`）：擋「這個人有沒有這個功能」。
 2. **條目層級**（知識庫的 `_check_item_access`、記憶的擁有者條件）：擋「這一筆是不是你的」。
 3. **工具內部自檢**（`require_bound_user`）：擋「憑空建立新資料」——沒有既有條目可比對的寫入。
+4. **資源存取檢查**（`share.check_resource_access`）：擋「把讀不到的東西送出去」——
+   建立公開連結前，knowledge 走 `check_knowledge_permission_async(..., action="read")`、
+   nas_file 走帶 `source_permissions` 的 `validate_nas_file_path()`，與讀取工具同一條路。
 
 ## 欄位說明
 
@@ -38,7 +41,7 @@
   `line_group_id`／`line_user_id` 但還沒接上注入，模型帶進來的值會被採用（殘留風險，
   見下方「已知缺口」）；`無` ＝ 工具不帶身分。
 
-共 74 支工具：未綁定可呼叫 27 支、寫入類 45 支。
+共 74 支工具：未綁定可呼叫 25 支、寫入類 45 支。
 
 | 工具 | 模組 | App 權限 | 未綁定可呼叫 | 寫入 | 身分來源 |
 |------|------|----------|--------------|------|----------|
@@ -111,19 +114,19 @@
 | `update_task` | `project_tools` | `project-management`（專案管理） | 否（需綁定） | 是 | `ctos_user_id` |
 | `list_scheduled_tasks` | `scheduler_tools` | —（未登錄） | 是（未檢查） | 否 | `ctos_user_id` |
 | `manage_scheduled_task` | `scheduler_tools` | —（未登錄） | 是（未檢查） | 是 | `ctos_user_id` |
-| `create_share_link` | `share_tools` | —（無需權限） | 是（未檢查） | 是 | 無 |
-| `share_knowledge_attachment` | `share_tools` | —（無需權限） | 是（未檢查） | 是 | 無 |
+| `create_share_link` | `share_tools` | `share-manager`（分享管理） | 否（需綁定） | 是 | `ctos_user_id` |
+| `share_knowledge_attachment` | `share_tools` | `share-manager`（分享管理） | 否（需綁定） | 是 | `ctos_user_id` |
 | `run_skill_script` | `skill_script_tools` | —（未登錄） | 是（未檢查） | 否 | `ctos_user_id` |
 | `text_to_speech` | `voice_tools` | —（未登錄） | 是（未檢查） | 是 | `ctos_user_id` |
 | `browse_webpage` | `web_tools` | —（未登錄） | 是（未檢查） | 否 | `ctos_user_id` |
 
 ## 已知缺口（本次未修）
 
-**沒有工具層權限檢查的 18 支**：`codex_image_tool`、`download_web_image`、`add_memory`、`delete_memory`、`get_memories`、`update_memory`、`get_message_attachments`、`summarize_chat`、`generate_md2doc`、`generate_md2ppt`、`generate_presentation`、`list_scheduled_tasks`、`manage_scheduled_task`、`create_share_link`、`share_knowledge_attachment`、`run_skill_script`、`text_to_speech`、`browse_webpage`。這些工具連 `check_mcp_tool_permission()` 都沒呼叫，`TOOL_APP_MAPPING` 的對應只是裝飾，未綁定者只要模型肯呼叫就跑得動。#205 處理分享那兩支，其餘尚未有 issue。
+**沒有工具層權限檢查的 16 支**：`codex_image_tool`、`download_web_image`、`add_memory`、`delete_memory`、`get_memories`、`update_memory`、`get_message_attachments`、`summarize_chat`、`generate_md2doc`、`generate_md2ppt`、`generate_presentation`、`list_scheduled_tasks`、`manage_scheduled_task`、`run_skill_script`、`text_to_speech`、`browse_webpage`。這些工具連 `check_mcp_tool_permission()` 都沒呼叫，`TOOL_APP_MAPPING` 的對應只是裝飾，未綁定者只要模型肯呼叫就跑得動。目前尚未有對應 issue。
 
 **完全不在 `TOOL_APP_MAPPING` 的模組（5 個）**：`codex_image_tools`、`scheduler_tools`、`skill_script_tools`、`voice_tools`、`web_tools`。新增工具沒登錄 registry 就等於不檢查，預設是開的。
 
-**未綁定可呼叫又會寫入／送出的 17 支**：`codex_image_tool`、`download_web_image`、`add_memory`、`delete_memory`、`update_memory`、`generate_md2doc`、`generate_md2ppt`、`generate_presentation`、`prepare_print_file`、`manage_scheduled_task`、`create_share_link`、`share_knowledge_attachment`、`text_to_speech` 沒有第二道關卡（例如 `prepare_print_file` 會把檔案送進印表機佇列）；`add_attachments_to_knowledge`、`delete_knowledge_item`、`update_knowledge_attachment`、`update_knowledge_item` 還有條目層級 `_check_item_access()` 擋著，未綁定實際上寫不進去。
+**未綁定可呼叫又會寫入／送出的 15 支**：`codex_image_tool`、`download_web_image`、`add_memory`、`delete_memory`、`update_memory`、`generate_md2doc`、`generate_md2ppt`、`generate_presentation`、`prepare_print_file`、`manage_scheduled_task`、`text_to_speech` 沒有第二道關卡（例如 `prepare_print_file` 會把檔案送進印表機佇列）；`add_attachments_to_knowledge`、`delete_knowledge_item`、`update_knowledge_attachment`、`update_knowledge_item` 還有條目層級 `_check_item_access()` 擋著，未綁定實際上寫不進去。
 
 **bot 身分還是模型說了算的 6 支**：`add_note`、`add_note_with_attachments`、`search_knowledge`、`get_message_attachments`、`summarize_chat`、`send_nas_file`。這些工具收 `line_group_id`／`line_user_id` 但沒接 `resolve_bot_identity()`，已綁定的使用者可以宣稱別的群組，把筆記寫進別的專案範圍或讀到別的群組的訊息附件。修法與 #204 相同，不在這支 PR 的範圍。
 

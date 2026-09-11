@@ -129,11 +129,13 @@ TOOL_APP_MAPPING: dict[str, str | None] = {
     "extract_purchase_order_from_document": "inventory-management",
     "summarize_item": "inventory-management",
 
+    # 分享連結工具（issue #205）：建立對外公開連結，等同把內部資料送出去
+    "create_share_link": "share-manager",
+    "share_knowledge_attachment": "share-manager",
+
     # 通用工具（不需要特定權限）
     "get_message_attachments": None,  # 基礎訊息功能
     "summarize_chat": None,           # 群組對話摘要
-    "create_share_link": None,        # 分享連結（基礎功能）
-    "share_knowledge_attachment": None,  # 分享知識庫附件（基礎功能）
     "download_web_image": None,       # 下載網路圖片
     "download_web_file": "file-manager",  # 下載網路文件（歸檔用）
 }
@@ -186,11 +188,17 @@ DEFAULT_APP_PERMISSIONS: dict[str, bool] = {
 # - memory-manager：`memory_tools.py` 的工具完全不呼叫
 #   `check_mcp_tool_permission`（直接吃 `line_group_id`／`line_user_id`），加進
 #   這個集合不會有任何效果，需要另外的程式改動，不在本次修復範圍內。
+# - share-manager（issue #205）：`create_share_link`／`share_knowledge_attachment`
+#   會把知識條目或 NAS 檔案變成不需要帳號就打得開的公開連結。未綁定者沒有任何
+#   可歸屬的身分，也就沒有「他讀得到什麼」可以比對，一律拒絕。已綁定者除了這道
+#   app 權限，還要通過 `services/share.py` 的 `check_resource_access()`：讀不到
+#   的資源不能分享。
 APPS_REQUIRE_BOUND_USER: set[str] = {
     "project-management",
     "vendor-management",
     "inventory-management",
     "file-manager",
+    "share-manager",
 }
 
 # 未綁定／帳號不存在時，若工具屬於 APPS_REQUIRE_BOUND_USER，一律回這則訊息。

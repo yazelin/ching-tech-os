@@ -199,7 +199,7 @@ Schema 會自動從 type hints 和 docstring 生成。
 
 | 工具名稱 | 說明 | 參數 |
 |----------|------|------|
-| `create_share_link` | 建立公開分享連結 | `resource_type`（必填，knowledge/project/nas_file/project_attachment/content）, `resource_id`（必填）, `expires_in`（1h/24h/7d/null）, `password`（選填，4 位數密碼） |
+| `create_share_link` | 建立公開分享連結（需 `share-manager` 權限，未綁定拒絕；只能分享自己讀得到的資源） | `resource_type`（必填，knowledge/nas_file）, `resource_id`（必填）, `expires_in`（1h/24h/7d/null）, `ctos_user_id`（伺服器注入） |
 | `share_knowledge_attachment` | 分享知識庫附件（.md2ppt/.md2doc） | `kb_id`（必填，如 kb-001）, `attachment_idx`（必填，附件索引從 0 開始）, `expires_in`（1h/24h/7d/null） |
 
 > **密碼保護**：分享連結可設定 4 位數密碼保護，5 次輸入錯誤後將鎖定 30 分鐘。
