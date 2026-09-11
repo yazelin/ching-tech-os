@@ -136,11 +136,13 @@ AI 調用記錄，使用月份分區。
 | duration_ms | INTEGER | 執行時間（毫秒） |
 | input_tokens | INTEGER | 輸入 tokens |
 | output_tokens | INTEGER | 輸出 tokens |
-| user_id | INTEGER | 發起這次呼叫的 CTOS 使用者（無外鍵，取不到留 NULL） |
+| user_id | INTEGER | 發起這次呼叫的 CTOS 使用者（FK users.id，取不到留 NULL） |
 | created_at | TIMESTAMP | 建立時間 |
 
-`user_id` 由 migration 029 加入，刻意不建外鍵：`ai_logs` 是分區表，`users` 每刪一筆
-就得掃過所有分區驗參照，代價不值得；讀端改用 LEFT JOIN 取 `username`，孤兒 ID 顯示為空。
+`user_id` 由 migration 029 加入，`REFERENCES users(id) ON DELETE SET NULL`。外鍵建在
+分區父表上，既有分區與之後由 `create_ai_logs_partition()` 建的新分區都會繼承
+（新分區走 `CREATE TABLE … PARTITION OF`）。使用者被刪除時那些 log 的 `user_id` 變成
+NULL，所以**「使用者已刪除」等同「未記錄使用者」**，不會留下查不到名字的孤兒 ID。
 `GET /api/ai/logs` 與 `/stats` 的 `user_id` 參數用 **0 代表「未記錄使用者」**
 （`user_id IS NULL`）。
 

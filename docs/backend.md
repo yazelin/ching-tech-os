@@ -236,8 +236,10 @@ uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8088 --reload
 包含 migration 029 之前的舊資料、未綁定 CTOS 帳號的 bot 對話，以及排程建立者被刪掉
 的紀錄。不帶 `user_id` 則完全不過濾。合法值是 `>= 0` 的整數，負數回 422。
 
-列表與詳情都會 LEFT JOIN `users` 帶出 `username`（`user_id` 為 NULL 或使用者已刪除時
-是 `null`）。`ai_logs.user_id` 刻意沒有外鍵，理由見 migration 029 的說明。
+列表與詳情都會 LEFT JOIN `users` 帶出 `username`（`user_id` 為 NULL 時是 `null`）。
+`ai_logs.user_id` 是 `REFERENCES users(id) ON DELETE SET NULL`：使用者被刪除時
+那些 log 的 `user_id` 直接變成 NULL，**「使用者已刪除」等同「未記錄使用者」**，
+前端只需要處理 NULL 一種情形，不會出現查不到名字的孤兒 ID。
 
 寫入端各自的 `user_id` 來源：web-chat 與 compress 用 Socket.IO 連線身分、
 `POST /api/ai/test` 用呼叫者 session、排程用 `executor_config.ctos_user_id`
