@@ -55,7 +55,11 @@ async def list_parties(
     page: int = 1,
     page_size: int = 20,
 ) -> dict[str, Any]:
-    """往來對象清單（搜尋名稱／簡稱／別名／統編，可依供應商／客戶篩選）"""
+    """往來對象清單（搜尋名稱／簡稱／別名／統編／聯絡人姓名／電話，可依角色篩選）
+
+    `role` 除了 `supplier`／`customer`，也吃 `both`（同時是供應商與客戶）。
+    聯絡人姓名走模糊（`ILIKE`），電話／手機走等值比對（避免片段號碼誤中）。
+    """
     offset = (max(page, 1) - 1) * page_size
     pattern = like_pattern(q) if q else None
     where = r"""
@@ -64,6 +68,7 @@ async def list_parties(
             $1::text IS NULL
             OR ($1 = 'supplier' AND p.is_supplier)
             OR ($1 = 'customer' AND p.is_customer)
+            OR ($1 = 'both' AND p.is_supplier AND p.is_customer)
           )
           AND (
             $2::text IS NULL
@@ -73,11 +78,20 @@ async def list_parties(
             OR EXISTS (
                 SELECT 1 FROM unnest(p.aliases) AS a WHERE a ILIKE $2 ESCAPE '\'
             )
+            OR EXISTS (
+                SELECT 1 FROM party_contacts c
+                WHERE c.party_id = p.id
+                  AND (
+                    c.name ILIKE $2 ESCAPE '\'
+                    OR c.phone = $3
+                    OR c.mobile = $3
+                  )
+            )
           )
     """
     async with get_connection() as conn:
         total = await conn.fetchval(
-            f"SELECT count(*) FROM parties p {where}", role, pattern
+            f"SELECT count(*) FROM parties p {where}", role, pattern, q
         )
         rows = await conn.fetch(
             f"""
@@ -99,10 +113,11 @@ async def list_parties(
             FROM parties p
             {where}
             ORDER BY p.updated_at DESC
-            LIMIT $3 OFFSET $4
+            LIMIT $4 OFFSET $5
             """,
             role,
             pattern,
+            q,
             page_size,
             offset,
         )
@@ -440,6 +455,206 @@ async def _party_alive(conn, party_id: UUID) -> bool:
         "SELECT 1 FROM parties WHERE id = $1 AND deleted_at IS NULL", party_id
     )
     return found is not None
+
+
+async def update_contact(
+    party_id: UUID,
+    contact_id: UUID,
+    data: dict,
+    actor_user_id: int | None = None,
+    via: str = "rest",
+    agent_name: str | None = None,
+) -> dict[str, Any] | None:
+    """更新聯絡人（只更新有給的欄位）；不屬於該 party（或不存在）回 None
+
+    `is_primary=true` 時同交易把同 party 其他筆降級（沿用新增時的規則）。
+    """
+    fields = pick_fields(data, _CONTACT_FIELDS)
+    async with get_connection() as conn, conn.transaction():
+        before = await conn.fetchrow(
+            "SELECT * FROM party_contacts WHERE id = $1 AND party_id = $2",
+            contact_id,
+            party_id,
+        )
+        if before is None:
+            return None
+        if fields.get("is_primary"):
+            await conn.execute(
+                "UPDATE party_contacts SET is_primary = false "
+                "WHERE party_id = $1 AND id != $2",
+                party_id,
+                contact_id,
+            )
+        if fields:
+            assignments, values = update_assignments(fields, start=3)
+            row = await conn.fetchrow(
+                f"""
+                UPDATE party_contacts
+                SET {assignments}, updated_at = NOW()
+                WHERE id = $1 AND party_id = $2
+                RETURNING *
+                """,
+                contact_id,
+                party_id,
+                *values,
+            )
+        else:
+            row = before
+        audit_id = await audit(
+            conn,
+            "party_contact",
+            contact_id,
+            "update",
+            {
+                "party_id": str(party_id),
+                **build_diff(
+                    pick_fields(dict(before), _CONTACT_FIELDS),
+                    pick_fields(dict(row), _CONTACT_FIELDS),
+                ),
+            },
+            actor_user_id,
+            via,
+            agent_name,
+        )
+
+    result = dict(row)
+    result["audit_id"] = audit_id
+    return result
+
+
+async def delete_contact(
+    party_id: UUID,
+    contact_id: UUID,
+    actor_user_id: int | None = None,
+    via: str = "rest",
+    agent_name: str | None = None,
+) -> UUID | None:
+    """刪除聯絡人；不屬於該 party（或不存在）回 None
+
+    硬刪除（沒有 `deleted_at`），刪掉主要那筆不自動指派新主要。
+    """
+    async with get_connection() as conn, conn.transaction():
+        row = await conn.fetchrow(
+            """
+            DELETE FROM party_contacts
+            WHERE id = $1 AND party_id = $2
+            RETURNING id, name
+            """,
+            contact_id,
+            party_id,
+        )
+        if row is None:
+            return None
+        return await audit(
+            conn,
+            "party_contact",
+            contact_id,
+            "delete",
+            {"party_id": str(party_id), "name": row["name"]},
+            actor_user_id,
+            via,
+            agent_name,
+        )
+
+
+async def update_address(
+    party_id: UUID,
+    address_id: UUID,
+    data: dict,
+    actor_user_id: int | None = None,
+    via: str = "rest",
+    agent_name: str | None = None,
+) -> dict[str, Any] | None:
+    """更新地址（只更新有給的欄位）；不屬於該 party（或不存在）回 None
+
+    `is_primary=true` 時同交易把同 party 其他筆降級（沿用新增時的規則）。
+    """
+    fields = pick_fields(data, _ADDRESS_FIELDS)
+    async with get_connection() as conn, conn.transaction():
+        before = await conn.fetchrow(
+            "SELECT * FROM party_addresses WHERE id = $1 AND party_id = $2",
+            address_id,
+            party_id,
+        )
+        if before is None:
+            return None
+        if fields.get("is_primary"):
+            await conn.execute(
+                "UPDATE party_addresses SET is_primary = false "
+                "WHERE party_id = $1 AND id != $2",
+                party_id,
+                address_id,
+            )
+        if fields:
+            assignments, values = update_assignments(fields, start=3)
+            row = await conn.fetchrow(
+                f"""
+                UPDATE party_addresses
+                SET {assignments}, updated_at = NOW()
+                WHERE id = $1 AND party_id = $2
+                RETURNING *
+                """,
+                address_id,
+                party_id,
+                *values,
+            )
+        else:
+            row = before
+        audit_id = await audit(
+            conn,
+            "party_address",
+            address_id,
+            "update",
+            {
+                "party_id": str(party_id),
+                **build_diff(
+                    pick_fields(dict(before), _ADDRESS_FIELDS),
+                    pick_fields(dict(row), _ADDRESS_FIELDS),
+                ),
+            },
+            actor_user_id,
+            via,
+            agent_name,
+        )
+
+    result = dict(row)
+    result["audit_id"] = audit_id
+    return result
+
+
+async def delete_address(
+    party_id: UUID,
+    address_id: UUID,
+    actor_user_id: int | None = None,
+    via: str = "rest",
+    agent_name: str | None = None,
+) -> UUID | None:
+    """刪除地址；不屬於該 party（或不存在）回 None
+
+    硬刪除（沒有 `deleted_at`），刪掉主要那筆不自動指派新主要。
+    """
+    async with get_connection() as conn, conn.transaction():
+        row = await conn.fetchrow(
+            """
+            DELETE FROM party_addresses
+            WHERE id = $1 AND party_id = $2
+            RETURNING id, address
+            """,
+            address_id,
+            party_id,
+        )
+        if row is None:
+            return None
+        return await audit(
+            conn,
+            "party_address",
+            address_id,
+            "delete",
+            {"party_id": str(party_id), "address": row["address"]},
+            actor_user_id,
+            via,
+            agent_name,
+        )
 
 
 # ============================================================

@@ -22,11 +22,16 @@ from ..models.erp import (
     ItemListResponse,
     ItemUpdate,
     PartyAddressCreate,
+    PartyAddressUpdate,
+    PartyAddressUpdateResponse,
     PartyContactCreate,
+    PartyContactUpdate,
+    PartyContactUpdateResponse,
     PartyCreate,
     PartyMergeRequest,
     PartyDetailResponse,
     PartyListResponse,
+    PartyRole,
     PartyUpdate,
     PurchaseOrderCancelRequest,
     PurchaseOrderCreate,
@@ -81,8 +86,10 @@ _ERP_ERRORS = (erp_core.ErpError,)
 
 @parties_router.get("", response_model=PartyListResponse, summary="往來對象清單")
 async def list_parties(
-    q: str | None = Query(None, description="名稱／簡稱／別名／統編模糊搜尋"),
-    role: str | None = Query(None, description="supplier 或 customer"),
+    q: str | None = Query(
+        None, description="名稱／簡稱／別名／統編／聯絡人姓名或電話模糊搜尋"
+    ),
+    role: PartyRole | None = Query(None, description="supplier／customer／both"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     session: SessionData = Depends(require_vendor_access),
@@ -231,6 +238,92 @@ async def add_party_address(
         "address_id": str(row["id"]),
         "audit_id": str(row["audit_id"]),
     }
+
+
+@parties_router.put(
+    "/{party_id}/contacts/{contact_id}",
+    response_model=PartyContactUpdateResponse,
+    summary="更新聯絡人",
+)
+async def update_party_contact(
+    party_id: UUID,
+    contact_id: UUID,
+    body: PartyContactUpdate,
+    session: SessionData = Depends(require_vendor_access),
+) -> PartyContactUpdateResponse:
+    """只更新有給的欄位；`is_primary=true` 會把同一家其他聯絡人降級"""
+    row = await party_service.update_contact(
+        party_id,
+        contact_id,
+        body.model_dump(exclude_unset=True),
+        actor_user_id=session.user_id,
+        via="rest",
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="聯絡人不存在"
+        )
+    return PartyContactUpdateResponse(**row)
+
+
+@parties_router.delete("/{party_id}/contacts/{contact_id}", summary="刪除聯絡人")
+async def delete_party_contact(
+    party_id: UUID,
+    contact_id: UUID,
+    session: SessionData = Depends(require_vendor_access),
+) -> dict:
+    """刪除聯絡人；刪掉主要那筆不自動指派新主要"""
+    audit_id = await party_service.delete_contact(
+        party_id, contact_id, actor_user_id=session.user_id, via="rest"
+    )
+    if audit_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="聯絡人不存在"
+        )
+    return {"success": True, "audit_id": str(audit_id)}
+
+
+@parties_router.put(
+    "/{party_id}/addresses/{address_id}",
+    response_model=PartyAddressUpdateResponse,
+    summary="更新地址",
+)
+async def update_party_address(
+    party_id: UUID,
+    address_id: UUID,
+    body: PartyAddressUpdate,
+    session: SessionData = Depends(require_vendor_access),
+) -> PartyAddressUpdateResponse:
+    """只更新有給的欄位；`is_primary=true` 會把同一家其他地址降級"""
+    row = await party_service.update_address(
+        party_id,
+        address_id,
+        body.model_dump(exclude_unset=True),
+        actor_user_id=session.user_id,
+        via="rest",
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="地址不存在"
+        )
+    return PartyAddressUpdateResponse(**row)
+
+
+@parties_router.delete("/{party_id}/addresses/{address_id}", summary="刪除地址")
+async def delete_party_address(
+    party_id: UUID,
+    address_id: UUID,
+    session: SessionData = Depends(require_vendor_access),
+) -> dict:
+    """刪除地址；刪掉主要那筆不自動指派新主要"""
+    audit_id = await party_service.delete_address(
+        party_id, address_id, actor_user_id=session.user_id, via="rest"
+    )
+    if audit_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="地址不存在"
+        )
+    return {"success": True, "audit_id": str(audit_id)}
 
 
 async def _party_detail(

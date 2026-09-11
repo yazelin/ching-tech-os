@@ -37,6 +37,10 @@ NOW = datetime.now(timezone.utc)
         (models.WarehouseUpdate, "name"),
         (models.PurchaseOrderUpdate, "supplier_id"),
         (models.PurchaseOrderUpdate, "status"),
+        (models.PartyContactUpdate, "name"),
+        (models.PartyContactUpdate, "is_primary"),
+        (models.PartyAddressUpdate, "address"),
+        (models.PartyAddressUpdate, "is_primary"),
     ],
 )
 def test_update_rejects_explicit_null(model, field) -> None:
@@ -54,6 +58,10 @@ def test_update_rejects_explicit_null(model, field) -> None:
         (models.ItemUpdate, "default_supplier_id"),
         (models.PurchaseOrderUpdate, "project_id"),
         (models.PurchaseOrderUpdate, "expected_date"),
+        (models.PartyContactUpdate, "phone"),
+        (models.PartyContactUpdate, "notes"),
+        (models.PartyAddressUpdate, "city"),
+        (models.PartyAddressUpdate, "label"),
     ],
 )
 def test_update_allows_null_for_nullable_fields(model, field) -> None:
@@ -192,6 +200,30 @@ def test_write_responses_carry_audit_id(model, extra) -> None:
         id=uuid4(), created_at=NOW, updated_at=NOW, audit_id=audit_id, **extra
     )
     assert obj.audit_id == audit_id
+
+
+def test_contact_and_address_update_responses_carry_audit_id() -> None:
+    """PR 4b：PUT contacts／addresses 回傳更新後的物件＋audit_id"""
+    audit_id = uuid4()
+    contact = models.PartyContactUpdateResponse(
+        id=uuid4(),
+        party_id=uuid4(),
+        name="陳先生",
+        created_at=NOW,
+        updated_at=NOW,
+        audit_id=audit_id,
+    )
+    assert contact.audit_id == audit_id
+
+    address = models.PartyAddressUpdateResponse(
+        id=uuid4(),
+        party_id=uuid4(),
+        address="桃園",
+        created_at=NOW,
+        updated_at=NOW,
+        audit_id=audit_id,
+    )
+    assert address.audit_id == audit_id
 
 
 def test_stock_movement_item_has_no_item_code() -> None:
