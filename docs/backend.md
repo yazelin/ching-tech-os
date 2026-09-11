@@ -6,8 +6,8 @@
 
 - 專案模組重建（migration 028：`projects` / `project_members` / `milestones` / `tasks`）。
   `/api/projects` 全部端點過 `require_app_permission("project-management")`；建立與刪除限管理員，
-  編輯類走 `require_project_editor`（admin 或該專案成員）。`GET /api/knowledge` 同時加了
-  `project_id` 參數，供專案頁列關聯知識條目。
+  編輯類走 `require_project_editor`（admin 或該專案成員）。專案頁的關聯知識條目用既有的
+  `GET /api/knowledge?scope=project&project_id=…`。
 - AI Log 三個端點（`/api/ai/logs`、`/api/ai/logs/stats`、`/api/ai/logs/{id}`）補上
   `require_app_permission("ai-log")`，`ai-log` 預設權限改為關閉，需管理員逐人開放。
 - 排程執行結果可推回 LINE / Telegram：`executor_config.notify` 設定推播目標，失敗訊息帶連續失敗次數
@@ -163,7 +163,7 @@ uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8088 --reload
 | GET | `/api/projects` | — | 清單。query：`status`、`q`（名稱／客戶模糊）、`page`、`page_size`（預設 20，上限 100）。item 帶 `progress`、`member_count`、`overdue_milestones` |
 | POST | `/api/projects` | 管理員 | 建立專案；指定 `owner_id` 時自動補成員 |
 | GET | `/api/projects/summary` | — | dashboard：`active_count` 與逾期里程碑清單（依到期日升冪，最多 20 筆） |
-| GET | `/api/projects/{id}` | — | 明細：主檔＋`progress`＋`members`＋`milestones`（各帶 `is_overdue`）＋`tasks`＋`bot_groups`＋`knowledge_count` |
+| GET | `/api/projects/{id}` | — | 明細：主檔＋`progress`＋`member_count`＋`overdue_milestones`（數）＋`members`＋`milestones`（各帶 `is_overdue`）＋`tasks`＋`bot_groups`＋`knowledge_count` |
 | PUT | `/api/projects/{id}` | 成員 | 更新主檔；改 `owner_id` 時自動補成員，原負責人降成一般成員 |
 | DELETE | `/api/projects/{id}` | 管理員 | 刪除；先把 `bot_groups.project_id` 設回 NULL |
 | POST | `/api/projects/{id}/members` | 成員 | `{user_id}` |
@@ -176,8 +176,14 @@ uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8088 --reload
 | DELETE | `/api/projects/{id}/tasks/{tid}` | 成員 | 刪除任務 |
 
 進度百分比 = `done` 任務數 ÷ 任務總數，四捨五入到整數，沒有任務時為 0，不存欄位、查詢時算。
-逾期里程碑 = `due_date < CURRENT_DATE` 且 `status <> 'completed'`；`/summary` 另外只看
-`status = 'active'` 的專案。
+逾期里程碑 = `due_date < CURRENT_DATE` 且 `status <> 'completed'` 且所屬專案 `status = 'active'`。
+清單的計數、明細的 `is_overdue` 與 `/summary` 三處用同一套定義：結案或取消的專案不會一直紅著。
+
+清單的 `q` 會跳脫 `%` 與 `_` 後才進 `ILIKE`。更新請求對資料表 NOT NULL 的欄位
+（專案 `name`／`status`，里程碑 `name`／`due_date`／`status`／`sort_order`，任務 `title`／`status`／`sort_order`）
+明確送 `null` 會被擋在 422；`owner_id`、`assignee_id`、`milestone_id`、日期欄位送 `null` 是清空，放行。
+`owner_id`／`assignee_id` 指到不存在的使用者回 404「使用者不存在」，`milestone_id` 不屬於該專案回
+400「里程碑不屬於此專案」。
 
 ### AI 對話
 
