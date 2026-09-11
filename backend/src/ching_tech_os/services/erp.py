@@ -154,6 +154,9 @@ async def audit(
 ) -> UUID:
     """寫一筆稽核；conn 由呼叫端給，確保與寫入同一個交易
 
+    `via` 是自由文字（資料表沒有 CHECK）：`mcp`（agent）、`rest`（前端／API）、
+    `import`（`scripts/erpnext_import.py` 的 ERPNext 匯入）。
+
     Returns:
         erp_audit.id，工具與 REST 都會把它回給呼叫者（規格第三節）
     """

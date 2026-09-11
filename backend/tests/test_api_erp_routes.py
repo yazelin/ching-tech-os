@@ -993,6 +993,39 @@ async def test_purchase_order_flow(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_create_purchase_order_rejects_import_only_fields(monkeypatch) -> None:
+    """`po_no` 與行項 `received_qty` 只給匯入腳本用，REST 送進來要 422
+
+    不擋的話 pydantic 預設會靜默丟掉，呼叫端會以為自己指定得了單號。
+    """
+    created = AsyncMock(return_value={"id": PO_ID, "po_no": "PO-202609-001"})
+    monkeypatch.setattr(
+        erp_api.purchasing_service, "create_purchase_order", created
+    )
+
+    async with _client(_make_app()) as client:
+        with_po_no = await client.post(
+            "/api/purchase-orders",
+            json={
+                "supplier_id": str(PARTY_ID),
+                "po_no": "PUR-ORD-TEST-00001",
+                "lines": [{"item_id": str(ITEM_ID), "qty": 10}],
+            },
+        )
+        with_received = await client.post(
+            "/api/purchase-orders",
+            json={
+                "supplier_id": str(PARTY_ID),
+                "lines": [{"item_id": str(ITEM_ID), "qty": 10, "received_qty": 3}],
+            },
+        )
+
+    assert with_po_no.status_code == 422
+    assert with_received.status_code == 422
+    created.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_list_purchase_orders_passes_since(monkeypatch) -> None:
     """F11"""
     from datetime import date
