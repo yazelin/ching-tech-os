@@ -549,6 +549,11 @@ async def test_handle_text_with_ai_success(monkeypatch: pytest.MonkeyPatch) -> N
     # AI Log 記綁定的 CTOS 帳號（bot_users.user_id）
     assert handler.log_linebot_ai_call.await_args.kwargs["user_id"] == 1
 
+    # #204：連線身分注入 MCP 子行程（Telegram 之前完全沒注入）
+    env = captured_call_ai_kwargs["extra_mcp_env"]
+    assert env["CTOS_BOT_USER_ID"] == "9"
+    assert "CTOS_BOT_GROUP_ID" not in env
+
 
 @pytest.mark.asyncio
 async def test_handle_text_with_ai_failure_paths(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -628,3 +633,91 @@ async def test_handle_text_with_ai_failure_paths(monkeypatch: pytest.MonkeyPatch
         adapter=adapter,
     )
     assert adapter.send_text.await_args.args[1] == "AI 回應失敗，請稍後再試。"
+
+
+@pytest.mark.asyncio
+async def test_handle_text_with_ai_group_injects_bot_group_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """群組對話注入的 CTOS_BOT_GROUP_ID 必須是 bot_groups.id（issue #204）。
+
+    記憶工具拿這個值當 `bot_group_memories.bot_group_id`，傳錯（例如傳 Telegram 的
+    chat_id）會寫到不存在的群組，或更糟：對得上別的群組。
+    """
+    bot_group_id = "00000000-0000-0000-0000-000000000020"
+    chat_id = "-1001234567890"  # Telegram 的 chat id，不是內部 UUID
+
+    conn = AsyncMock()
+    conn.fetchrow = AsyncMock(return_value={"user_id": 1})
+    monkeypatch.setattr(handler, "get_connection", lambda: _CM(conn))
+    monkeypatch.setattr(handler, "_save_message", AsyncMock(return_value="msg-user"))
+    monkeypatch.setattr(
+        handler, "get_conversation_context", AsyncMock(return_value=([], [], []))
+    )
+    monkeypatch.setattr(
+        handler,
+        "get_linebot_agent",
+        AsyncMock(
+            return_value={
+                "id": "agent-7",
+                "model": "claude-sonnet",
+                "system_prompt": {"content": "你是助理"},
+                "tools": [],
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        handler,
+        "get_user_role_and_permissions",
+        AsyncMock(return_value={"role": "admin", "permissions": [], "user_data": {}}),
+    )
+    monkeypatch.setattr(
+        handler, "get_user_app_permissions_sync", lambda *_args, **_kwargs: {}
+    )
+    monkeypatch.setattr(handler, "build_system_prompt", AsyncMock(return_value="sys"))
+    monkeypatch.setattr(handler, "get_mcp_tool_names", AsyncMock(return_value=[]))
+    monkeypatch.setattr(handler, "get_mcp_tools_for_user", lambda *_args: [])
+    monkeypatch.setattr(handler, "get_tool_routing_for_user", AsyncMock(return_value={}))
+    monkeypatch.setattr(handler, "get_tools_for_user", AsyncMock(return_value=[]))
+    monkeypatch.setattr(
+        handler, "get_mcp_servers_for_user", AsyncMock(return_value=["ching-tech-os"])
+    )
+    monkeypatch.setattr(handler, "log_linebot_ai_call", AsyncMock())
+    monkeypatch.setattr(
+        handler, "auto_prepare_generated_images", AsyncMock(return_value="ai-response")
+    )
+    monkeypatch.setattr(handler, "parse_ai_response", lambda _msg: ("AI 回覆", [], []))
+
+    captured: dict = {}
+
+    async def _fake_call_ai(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(success=True, message="ok", tool_calls=[], error=None)
+
+    monkeypatch.setattr(handler, "call_ai", _fake_call_ai)
+
+    adapter = SimpleNamespace(
+        bot=SimpleNamespace(send_chat_action=AsyncMock()),
+        send_text=AsyncMock(return_value=SimpleNamespace(message_id="101")),
+        send_progress=AsyncMock(return_value=SimpleNamespace(message_id="p1")),
+        update_progress=AsyncMock(return_value=None),
+        finish_progress=AsyncMock(return_value=None),
+    )
+
+    await handler._handle_text_with_ai(
+        text="記住這件事",
+        chat_id=chat_id,
+        user=SimpleNamespace(id=9),
+        message_id=88,
+        bot_user_id="u1",
+        bot_group_id=bot_group_id,
+        is_group=True,
+        adapter=adapter,
+    )
+
+    env = captured["extra_mcp_env"]
+    assert env["CTOS_BOT_GROUP_ID"] == bot_group_id
+    assert env["CTOS_GROUP_ID"] == bot_group_id
+    assert env["CTOS_BOT_USER_ID"] == "9"  # bot_users.platform_user_id
+    assert chat_id not in env.values()
+    assert env["CTOS_AGENT_ID"] == "agent-7"

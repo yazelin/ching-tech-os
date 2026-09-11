@@ -541,3 +541,42 @@ class TestRestrictedModeCallAiMigration:
         record_token_usage.assert_awaited_once_with(
             "bu-1", input_tokens=11, output_tokens=22
         )
+
+
+class TestRestrictedModeIdentityInjection:
+    """受限模式（未綁定者）一樣要注入連線身分給 MCP 子行程（issue #204）"""
+
+    @pytest.mark.asyncio
+    async def test_group_identity_injected_into_mcp_env(self):
+        from uuid import uuid4
+
+        agent = _make_agent()
+        group_uuid = uuid4()
+        with _restricted_mode_patches(agent=agent) as call_ai_mock:
+            await handle_restricted_mode(
+                content="你好",
+                platform_user_id="U123",
+                bot_user_id=None,
+                is_group=True,
+                line_group_id=group_uuid,
+            )
+
+        env = call_ai_mock.await_args.kwargs["extra_mcp_env"]
+        assert env["CTOS_BOT_GROUP_ID"] == str(group_uuid)
+        assert env["CTOS_GROUP_ID"] == str(group_uuid)
+        assert env["CTOS_BOT_USER_ID"] == "U123"
+
+    @pytest.mark.asyncio
+    async def test_private_identity_injected_into_mcp_env(self):
+        agent = _make_agent()
+        with _restricted_mode_patches(agent=agent) as call_ai_mock:
+            await handle_restricted_mode(
+                content="你好",
+                platform_user_id="U123",
+                bot_user_id=None,
+                is_group=False,
+            )
+
+        env = call_ai_mock.await_args.kwargs["extra_mcp_env"]
+        assert env["CTOS_BOT_USER_ID"] == "U123"
+        assert "CTOS_BOT_GROUP_ID" not in env
