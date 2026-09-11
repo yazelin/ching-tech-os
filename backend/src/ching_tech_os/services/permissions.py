@@ -112,7 +112,7 @@ DEFAULT_APP_PERMISSIONS: dict[str, bool] = {
     "ai-assistant": True,
     "prompt-editor": True,
     "agent-settings": True,
-    "ai-log": True,
+    "ai-log": False,  # AI log 含所有人的 prompt 與 system prompt，預設關閉，由管理員逐人開放
     "knowledge-base": True,
     "linebot": True,
     "memory-manager": True,
