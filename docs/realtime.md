@@ -143,37 +143,53 @@ term.onData((data) => {
 
 ---
 
-## AI 串流
+## AI 對話
 
 ### 技術說明
 
-AI 對話使用 Socket.IO 實現串流回應，讓使用者可以即時看到 AI 的回覆。
+AI 對話走 Socket.IO 事件（非串流，一次性回應），實作在 `backend/src/ching_tech_os/api/ai.py`。
 
 ### Socket.IO 事件
 
 | 事件 | 方向 | 說明 |
 |------|------|------|
-| `ai:message` | Client → Server | 發送訊息 |
-| `ai:stream:start` | Server → Client | 開始串流 |
-| `ai:stream:chunk` | Server → Client | 串流片段 |
-| `ai:stream:end` | Server → Client | 串流結束 |
-| `ai:error` | Server → Client | 錯誤通知 |
+| `ai_chat_event` | Client → Server | 發送訊息 |
+| `ai_typing` | Server → Client | typing 狀態（開始/結束各一次） |
+| `ai_response` | Server → Client | AI 回應完成 |
+| `ai_error` | Server → Client | 錯誤通知 |
+| `compress_chat` | Client → Server | 要求壓縮對話歷史 |
+| `compress_started` / `compress_complete` / `compress_error` | Server → Client | 壓縮進度 |
 
 ### 資料結構
 
 ```javascript
-// ai:message
+// ai_chat_event
 {
-  conversation_id: "uuid",
-  content: "使用者訊息"
+  chatId: "uuid",
+  message: "使用者訊息",
+  model: "claude-sonnet"  // 可選，預設 claude-sonnet
 }
 
-// ai:stream:chunk
+// ai_response
 {
-  conversation_id: "uuid",
-  chunk: "AI 回應片段"
+  chatId: "uuid",
+  message: "AI 回應文字",
+  toolCalls: [              // 這次呼叫用到的工具，沒有就是空陣列
+    { id: "tc1", name: "search_knowledge", input: { query: "x" }, output: "ok" }
+  ],
+  toolTimings: []           // 各工具耗時（provider 有回才有內容）
+}
+
+// ai_error
+{
+  chatId: "uuid",
+  error: "錯誤訊息"
 }
 ```
+
+`toolCalls` 每筆的形狀與 AI Log（`ai_logs.parsed_response.tool_calls`）一致，也是持久化到
+`ai_chats.messages` 裡 assistant 訊息 `tool_calls` 欄位的同一份資料（沒有工具呼叫則為 `null`）。
+舊版桌面前端 `frontend/js/ai-assistant.js` 只讀 `chatId` / `message`，忽略多出的欄位。
 
 ---
 

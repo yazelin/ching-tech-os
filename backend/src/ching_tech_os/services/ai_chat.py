@@ -104,7 +104,7 @@ async def create_chat(
     user_id: int,
     title: str = "新對話",
     model: str = "claude-sonnet",
-    prompt_name: str = "default",
+    prompt_name: str = "web-chat-default",
 ) -> dict:
     """建立新對話"""
     async with get_connection() as conn:
