@@ -104,6 +104,79 @@ def resolve_ctos_user_id(ctos_user_id: int | None) -> int | None:
     return ctos_user_id
 
 
+def require_bound_user(tool_name: str, ctos_user_id: int | None) -> str | None:
+    """工具層級的未綁定自檢（issue #207）。
+
+    `check_mcp_tool_permission` 擋的是「app 權限」，`_check_item_access` 擋的是
+    「既有條目」。`add_note` 這類「憑空建立條目」的工具兩者都套不上——未綁定者
+    沒有帳號可歸屬，卻能把內容寫進全域知識庫。名單放在
+    `permissions.TOOLS_REQUIRE_BOUND_USER`，同時是存取矩陣的來源。
+
+    Args:
+        tool_name: 工具名稱（不含 mcp__ching-tech-os__ 前綴）
+        ctos_user_id: CTOS 用戶 ID（會先走 resolve_ctos_user_id 認伺服器身分）
+
+    Returns:
+        None 表示放行；否則回傳要給使用者的錯誤訊息
+    """
+    from ..permissions import BOUND_USER_REQUIRED_MESSAGE, TOOLS_REQUIRE_BOUND_USER
+
+    if tool_name not in TOOLS_REQUIRE_BOUND_USER:
+        return None
+    if resolve_ctos_user_id(ctos_user_id) is not None:
+        return None
+    return BOUND_USER_REQUIRED_MESSAGE
+
+
+def resolve_bot_identity(
+    line_group_id: str | None,
+    line_user_id: str | None,
+) -> tuple[str | None, str | None]:
+    """解析 bot 對話身分：伺服器注入優先，模型參數只在沒有注入時採用（issue #204）。
+
+    與 `resolve_ctos_user_id` 同一套想法：bot 走 MCP 子行程時，呼叫端把這次
+    對話的身分放進環境變數（`CTOS_BOT_GROUP_ID`／`CTOS_BOT_USER_ID`，群組沿用
+    既有的 `CTOS_GROUP_ID`），模型在工具參數裡宣稱別人的 id 一律無效。
+
+    模型「挑哪一種記憶」（群組 vs 個人）的意圖會保留，被換掉的只有 id 的值：
+    - 模型只帶 group → 用注入的群組 id（沒有注入的群組 id 就退回個人身分）
+    - 模型只帶 user → 用注入的個人 id
+    - 兩個都帶或都沒帶 → 兩個都用注入值（工具本身是群組優先）
+
+    環境變數都不存在時（網頁端 `execute_tool` 直接呼叫），才採用參數。
+
+    Args:
+        line_group_id: 模型帶進來的群組 UUID（bot_groups.id）
+        line_user_id: 模型帶進來的平台使用者 ID（bot_users.platform_user_id）
+
+    Returns:
+        (line_group_id, line_user_id)：實際要用的身分
+    """
+    env_group = os.environ.get("CTOS_BOT_GROUP_ID") or os.environ.get("CTOS_GROUP_ID")
+    env_user = os.environ.get("CTOS_BOT_USER_ID")
+
+    if not env_group and not env_user:
+        return line_group_id, line_user_id
+
+    if line_group_id and not line_user_id:
+        resolved_group, resolved_user = env_group, None
+    elif line_user_id and not line_group_id:
+        resolved_group, resolved_user = None, env_user
+    else:
+        resolved_group, resolved_user = env_group, env_user
+
+    # 模型指定的種類在這次連線不存在（例如個人對話卻要寫群組記憶）：退回連線身分
+    if not resolved_group and not resolved_user:
+        resolved_group, resolved_user = env_group, env_user
+
+    if (line_group_id and line_group_id != resolved_group) or (
+        line_user_id and line_user_id != resolved_user
+    ):
+        logger.warning("[memory] 模型帶入的 id 與連線身分不符，已改用連線身分")
+
+    return resolved_group, resolved_user
+
+
 def resolve_agent_allowed_shared_sources() -> list[str] | None:
     """從環境變數讀取 Agent 允許的 shared 來源列表。
 

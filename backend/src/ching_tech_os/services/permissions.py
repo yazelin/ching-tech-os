@@ -202,6 +202,23 @@ BOUND_USER_REQUIRED_MESSAGE = (
     "在 Bot 管理頁面點擊「綁定帳號」產生驗證碼，並將驗證碼傳送給我完成綁定"
 )
 
+# ============================================================
+# 工具層級的未綁定自檢（issue #207）
+# ============================================================
+
+# 這些工具所屬的 app 沒有整包擋（knowledge-base 的讀取端靠條目層級控管，
+# 只放行 scope=global 且 is_public 的條目），但工具本身會「憑空建立」條目，
+# 沒有既有條目可以做條目層級檢查，因此在工具內部自檢 `ctos_user_id is None`
+# 一律拒絕（不做強制 personal 的折衷——未綁定者根本沒有 personal 可歸屬）。
+#
+# 實作入口：`services/mcp/server.py` 的 `require_bound_user()`；
+# 這份 registry 同時是 `docs/mcp-tool-access-matrix.md` 的來源，
+# 改了工具卻忘了改 registry，矩陣測試會紅。
+TOOLS_REQUIRE_BOUND_USER: set[str] = {
+    "add_note",
+    "add_note_with_attachments",
+}
+
 # 知識庫預設權限
 DEFAULT_KNOWLEDGE_PERMISSIONS: dict[str, bool] = {
     "global_write": False,      # 預設關閉，需管理員開放
