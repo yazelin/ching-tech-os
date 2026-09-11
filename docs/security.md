@@ -362,11 +362,20 @@ App 權限定義在 `services/permissions.py` 的 `DEFAULT_APP_PERMISSIONS`，
 | `prompt-editor` | 關閉 | `POST` / `PUT` / `DELETE /api/ai/prompts*` |
 | `agent-settings` | 關閉 | `POST` / `PUT` / `DELETE /api/ai/agents*`、`POST /api/ai/test` |
 | `terminal` | 關閉 | Socket.IO `terminal:create` |
+| `share-manager` | 關閉（issue #217） | `POST /api/share`（建立分享連結） |
 
 `prompt-editor` 與 `agent-settings` 預設關閉、由管理員逐人開放：`ai_prompts` 與 `ai_agents`
 是全域表，一個人改 system prompt 或工具白名單就影響所有人。**GET 不受影響**，
 AI 管理的讀取端點（prompts、agents、agents/by-name、agents/{id}）維持登入即可，
 AI 助手選 agent、AI Log 篩選、排程 UI 都要讀。
+
+`share-manager` 原本預設開放，issue #217 改成預設關閉：#205 只保證「分享連結不能繞過
+資源存取檢查」，但 `check_knowledge_permission_async(action="read")` 對 `scope=global`
+一律放行、`scope=project` 不看成員，加上這道 app 權限預設開放，等於任何已登入者都能把
+公司整理過的 global 知識或專案文件變成不需要帳號就打得開的公開連結——「內部讀得到」
+不該直接等於「可以發到網路上」。改成預設關閉後，管理員逐人開放才能建立分享連結；
+`GET /api/share`（列出）與 `DELETE /api/share/{token}`（撤銷）維持只要登入即可，
+不掛這道權限——權限被收回之後，使用者仍要能撤掉自己先前建立的連結，不能被鎖在外面。
 
 session 的權限快取沒帶到某個 `app_id` 時，`require_app_permission` 會回退到
 `get_effective_app_permissions()` 的預設值，與 `has_app_permission()` 一致。
@@ -405,7 +414,7 @@ scope／owner／is_public、nas_file 也沒帶 `source_permissions`，任何呼�
 
 1. `create_share_link`／`share_knowledge_attachment` 在 `TOOL_APP_MAPPING` 對到
    `share-manager`，`share-manager` 進 `APPS_REQUIRE_BOUND_USER`：未綁定一律拒絕，
-   已綁定者還要有 `share-manager` app 權限（預設開放）。
+   已綁定者還要有 `share-manager` app 權限（issue #217 之後**預設關閉**，見下節）。
 2. `share.check_resource_access()`（REST 的 `POST /api/share` 與 MCP 工具共用這一層）
    在建立連結前做真正的存取檢查，而且刻意走與「讀」完全相同的路：
 
@@ -416,6 +425,26 @@ scope／owner／is_public、nas_file 也沒帶 `source_permissions`，任何呼�
    | `content` | 內容由呼叫端自己提供，沒有別人的資源可洩漏，不檢查 | — |
 
    沒權限回 403（`ShareAccessDenied`），連結不會被建立。
+
+### `share-manager` 預設關閉（#217）
+
+`check_knowledge_permission_async(action="read")` 對 `scope=global` 一律放行、
+`scope=project` 不看成員——這是既有的讀取行為，不是這次改的。問題出在分享連結拿
+「讀得到」直接當「可以公開」：`share-manager` 原本預設開放，等於任何已登入使用者
+都能把公司整理過的 global 知識條目或專案文件變成不需要帳號就打得開的公開連結。
+「內部讀得到」不該等於「可以發到網路上」。
+
+最小修法：
+
+- `services/permissions.py` 的 `DEFAULT_APP_PERMISSIONS["share-manager"]` 改 `False`，
+  管理員逐人開放（同 `ai-log`／`prompt-editor`／`agent-settings` 的模式）。
+- REST `POST /api/share`（建立）原本只掛 `get_current_session`，等於完全沒檢查
+  這道 app 權限（MCP 工具走的 `check_mcp_tool_permission()` 一直都有檢查）；
+  改掛 `require_app_permission("share-manager")`，與 MCP 工具同一個判斷式
+  （`has_app_permission()`），行為一致。
+- `GET /api/share`（列出）與 `DELETE /api/share/{token}`（撤銷）維持
+  `get_current_session`，不掛這道權限：管理員收回權限之後，使用者仍要能撤掉
+  自己先前建立的連結，不能被鎖在外面看不到、關不掉。
 
 bot 走的路徑上，身分一律由伺服器注入，模型在工具參數裡宣稱的一律不算數：
 

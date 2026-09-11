@@ -37,6 +37,7 @@ from ching_tech_os.services.permissions import check_knowledge_permission
 from ching_tech_os.services.user import get_user_preferences
 from ching_tech_os.services.knowledge import get_knowledge, KnowledgeNotFoundError
 from ching_tech_os.api.auth import get_current_session
+from ching_tech_os.services.permissions import require_app_permission
 from ching_tech_os.models.auth import SessionData
 
 # 需登入的 API
@@ -54,15 +55,17 @@ public_router = APIRouter(prefix="/api/public", tags=["public"])
 )
 async def create_link(
     data: ShareLinkCreate,
-    session: SessionData = Depends(get_current_session),
+    session: SessionData = Depends(require_app_permission("share-manager")),
 ) -> ShareLinkResponse:
     """建立公開分享連結
 
     只有資源擁有者或有編輯權限的人可以建立連結。
 
-    路由這層的檢查是歷史留下來的第一道；真正的資源存取檢查在
-    `services/share.py` 的 `check_resource_access()`（與 MCP 工具共用那一層），
-    已登入者也不能分享自己讀不到的資源（issue #205）。
+    先過 `share-manager` app 權限（預設關閉，issue #217：內部讀得到不等於
+    可以發到網路上，管理員逐人開放）；路由這層的資源型別檢查是歷史留下來的
+    第一道，真正的資源存取檢查在 `services/share.py` 的 `check_resource_access()`
+    （與 MCP 工具共用那一層），已登入且有權限者也不能分享自己讀不到的資源
+    （issue #205）。
     """
     actor = ShareActor.from_session(session)
 
