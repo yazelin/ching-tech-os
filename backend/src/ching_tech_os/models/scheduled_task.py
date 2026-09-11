@@ -33,12 +33,22 @@ class IntervalTriggerConfig(BaseModel):
 # ── Executor 設定 ─────────────────────────────────────────────
 
 
+class NotifyConfig(BaseModel):
+    """排程結果推播設定（放在 executor_config.notify，未設定就不推播）"""
+
+    platform: Literal["line", "telegram"] = Field(..., description="推播平台")
+    target_id: str | None = Field(None, description="Line user ID 或 Telegram chat_id")
+    is_group: bool = Field(False, description="是否為群組對話")
+    group_id: str | None = Field(None, description="群組 ID（群組對話時使用）")
+
+
 class AgentExecutorConfig(BaseModel):
     """Agent 執行設定"""
 
     agent_name: str = Field(..., description="對應 ai_agents.name")
     prompt: str = Field(..., description="要求 Agent 執行的指令")
     ctos_user_id: int | None = Field(None, description="執行身份")
+    notify: NotifyConfig | None = Field(None, description="執行結果推播目標")
 
 
 class SkillScriptExecutorConfig(BaseModel):
@@ -48,6 +58,7 @@ class SkillScriptExecutorConfig(BaseModel):
     script: str = Field(..., description="Script 名稱")
     input: str = Field("", description="JSON 格式的輸入資料")
     ctos_user_id: int | None = Field(None, description="執行身份")
+    notify: NotifyConfig | None = Field(None, description="執行結果推播目標")
 
 
 # ── 排程任務 ──────────────────────────────────────────────────
@@ -98,6 +109,7 @@ class ScheduledTask(ScheduledTaskBase):
     next_run_at: datetime | None = None
     last_run_success: bool | None = None
     last_run_error: str | None = None
+    consecutive_failures: int = Field(0, description="連續失敗次數（成功歸零）")
     created_at: datetime
     updated_at: datetime
 

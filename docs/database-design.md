@@ -28,7 +28,8 @@ backend/
 │       ├── 015_update_jfmskin_agents.py       # 杰膚美 Agent prompt/工具更新（資料變更）
 │       ├── 016_add_voice_auto_trigger.py      # bot_groups 新增語音自動觸發開關
 │       ├── 017_voice_module_independence.py   # users/bot_groups/ai_agents 新增 voice_settings
-│       └── 018_add_law_tables.py              # 律師事務所模組（law_parties/law_cases）
+│       ├── 018_add_law_tables.py              # 律師事務所模組（law_parties/law_cases）
+│       └── 027_add_scheduled_tasks_consecutive_failures.py  # 排程連續失敗計數
 ```
 
 ## 資料庫連線設定
@@ -222,13 +223,18 @@ CREATE TABLE scheduled_tasks (
     last_run_at TIMESTAMPTZ,                   -- 最後執行時間
     next_run_at TIMESTAMPTZ,                   -- 下次執行時間
     last_run_success BOOLEAN,                  -- 最後執行是否成功
-    last_run_error TEXT,                        -- 最後執行錯誤訊息
+    last_run_error TEXT,                        -- 最後執行錯誤訊息（截斷 1000 字）
+    consecutive_failures INTEGER NOT NULL DEFAULT 0,  -- 連續失敗次數（成功歸零，migration 027）
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX ix_scheduled_tasks_is_enabled ON scheduled_tasks(is_enabled);
 ```
+
+`executor_config` 可選帶 `notify`（`{platform, target_id, is_group, group_id}`），設了就在排程跑完
+把結果推回該 LINE / Telegram 對話；失敗訊息會帶 `consecutive_failures`。詳見 `docs/backend.md`
+的「排程任務」段落。
 
 ### law_parties 表
 

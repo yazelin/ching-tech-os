@@ -43,6 +43,7 @@ def _make_task_row(
         "next_run_at": None,
         "last_run_success": None,
         "last_run_error": None,
+        "consecutive_failures": 0,
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc),
     }
@@ -182,14 +183,16 @@ async def test_update_task_run_result(monkeypatch: pytest.MonkeyPatch) -> None:
     from ching_tech_os.services import task_scheduler
 
     conn = AsyncMock()
-    conn.execute = AsyncMock()
+    conn.fetchval = AsyncMock(return_value=0)
     monkeypatch.setattr(task_scheduler, "get_connection", lambda: _CM(conn))
 
-    await task_scheduler.update_task_run_result(uuid4(), success=True)
-    conn.execute.assert_awaited_once()
-    sql = conn.execute.call_args[0][0]
+    failures = await task_scheduler.update_task_run_result(uuid4(), success=True)
+    conn.fetchval.assert_awaited_once()
+    sql = conn.fetchval.call_args[0][0]
     assert "last_run_at" in sql
     assert "last_run_success" in sql
+    assert "consecutive_failures" in sql
+    assert failures == 0
 
 
 # ============================================================

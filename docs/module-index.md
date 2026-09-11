@@ -182,6 +182,11 @@ services/scheduler.py      ← APScheduler 任務定義
       ├─ cleanup_expired_share_links()    每小時
       ├─ cleanup_ai_images()              每日 04:30
       └─ cleanup_media_temp_folders()     每日 05:00
+
+services/task_scheduler.py ← 動態排程（DB 定義 + APScheduler 註冊 + 執行引擎）
+  ├─ _execute_agent_task()        Agent 模式，寫 ai_logs（context_type=scheduler）
+  ├─ _execute_skill_script_task() Skill Script 模式，寫 ai_logs（context_type=scheduler_script）
+  └─ _notify_result()             依 executor_config.notify 推回 LINE / Telegram
 ```
 
 ### 其他服務

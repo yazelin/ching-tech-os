@@ -134,23 +134,32 @@ async def toggle_scheduled_task(task_id: UUID, is_enabled: bool) -> dict | None:
 
 async def update_task_run_result(
     task_id: UUID, success: bool, error: str | None = None
-) -> None:
-    """更新排程執行結果"""
+) -> int:
+    """更新排程執行結果，回傳更新後的連續失敗次數
+
+    成功時 consecutive_failures 歸零，失敗時 +1。
+    """
     async with get_connection() as conn:
-        await conn.execute(
+        value = await conn.fetchval(
             """
             UPDATE scheduled_tasks
             SET last_run_at = $1,
                 last_run_success = $2,
                 last_run_error = $3,
+                consecutive_failures = CASE
+                    WHEN $2 THEN 0
+                    ELSE consecutive_failures + 1
+                END,
                 updated_at = $1
             WHERE id = $4
+            RETURNING consecutive_failures
             """,
             datetime.now(timezone.utc),
             success,
             error,
             task_id,
         )
+        return int(value) if value is not None else 0
 
 
 # ============================================================
@@ -246,25 +255,35 @@ async def execute_dynamic_task(task_id: UUID) -> None:
     # 排程建立者作為 ctos_user_id 的 fallback（繼承管理員權限）
     fallback_user_id = task.get("created_by")
 
+    notify = _notify_target(executor_config)
+
     try:
         if executor_type == "agent":
-            await _execute_agent_task(task["name"], executor_config, fallback_user_id)
+            result_text = await _execute_agent_task(
+                task["name"], executor_config, fallback_user_id
+            )
         elif executor_type == "skill_script":
-            await _execute_skill_script_task(task["name"], executor_config, fallback_user_id)
+            result_text = await _execute_skill_script_task(
+                task["name"], executor_config, fallback_user_id
+            )
         else:
             raise ValueError(f"未知的 executor_type: {executor_type}")
 
         await update_task_run_result(task_id, success=True)
         logger.info("動態排程執行成功: %s", task["name"])
+        await _notify_result(notify, task["name"], True, result_text)
 
     except Exception as e:
         error_msg = str(e)[:1000]
-        await update_task_run_result(task_id, success=False, error=error_msg)
+        failures = await update_task_run_result(task_id, success=False, error=error_msg)
         logger.error("動態排程執行失敗: %s - %s", task["name"], error_msg)
+        await _notify_result(notify, task["name"], False, error_msg, failures)
 
 
-async def _execute_agent_task(task_name: str, config: dict, fallback_user_id: int | None = None) -> None:
-    """執行 Agent 模式排程"""
+async def _execute_agent_task(
+    task_name: str, config: dict, fallback_user_id: int | None = None
+) -> str:
+    """執行 Agent 模式排程，回傳 Agent 的回應內容（供推播使用）"""
     import time
 
     from .ai_manager import create_log, get_agent_by_name
@@ -326,11 +345,22 @@ async def _execute_agent_task(task_name: str, config: dict, fallback_user_id: in
     if not response.success:
         raise RuntimeError(f"Agent 執行失敗: {response.error or response.message}")
 
+    return response.message or ""
 
-async def _execute_skill_script_task(task_name: str, config: dict, fallback_user_id: int | None = None) -> None:
-    """執行 Skill Script 模式排程（系統權限，跳過使用者權限檢查）"""
+
+async def _execute_skill_script_task(
+    task_name: str, config: dict, fallback_user_id: int | None = None
+) -> str:
+    """執行 Skill Script 模式排程（系統權限，跳過使用者權限檢查）
+
+    回傳 script 的輸出內容（供推播使用），並寫一筆 ai_logs 留痕。
+    """
+    import json
+
+    from ..models.ai import AiLogCreate
     from ..skills import get_skill_manager
     from ..skills.script_runner import ScriptRunner
+    from .ai_manager import create_log
 
     skill = config["skill"]
     script = config["script"]
@@ -362,10 +392,97 @@ async def _execute_skill_script_task(task_name: str, config: dict, fallback_user
     )
 
     # execute_path 回傳 dict: {success, output, error, duration_ms}
-    if not result.get("success", False):
-        raise RuntimeError(
-            f"Skill Script 執行失敗: {result.get('error', result.get('output', ''))}"
+    success = bool(result.get("success", False))
+    output = result.get("output") or ""
+    error = result.get("error") or None
+
+    # 記錄 AI Log（與 Agent 模式一致，失敗只 warning 不影響排程結果）
+    try:
+        log_data = AiLogCreate(
+            context_type="scheduler_script",
+            context_id=task_name,
+            input_prompt=f"{skill}/{script} {json.dumps(input_data, ensure_ascii=False)}",
+            raw_response=output,
+            parsed_response={
+                "source": "scheduler_script",
+                "task_name": task_name,
+                "skill": skill,
+                "script": script,
+            },
+            success=success,
+            error_message=error,
+            duration_ms=result.get("duration_ms"),
         )
+        await create_log(log_data)
+    except Exception as e:
+        logger.warning("排程 Script AI Log 記錄失敗: %s", e)
+
+    if not success:
+        raise RuntimeError(f"Skill Script 執行失敗: {error or output}")
+
+    return output
+
+
+# ============================================================
+# 執行結果推播
+# ============================================================
+
+# 推播訊息長度上限（LINE 單則上限 5000 字，留餘裕）
+_NOTIFY_MAX_LEN = 4000
+
+
+def _notify_target(config: dict | None) -> dict | None:
+    """從 executor_config 取出推播設定
+
+    格式：``notify: {platform, target_id, is_group, group_id}``。
+    沒設定（或缺平台 / 缺目標）就回傳 None，維持不推播的既有行為。
+    """
+    notify = (config or {}).get("notify")
+    if not isinstance(notify, dict):
+        return None
+    if not notify.get("platform"):
+        return None
+    if not (notify.get("target_id") or notify.get("group_id")):
+        logger.warning("排程推播設定缺少 target_id / group_id，略過推播")
+        return None
+    return notify
+
+
+def _format_notify_message(
+    task_name: str, success: bool, body: str | None, failures: int
+) -> str:
+    """組裝推播訊息（成功與失敗分開）"""
+    if success:
+        text = f"【排程】{task_name} 完成\n{body or ''}"
+    else:
+        text = f"【排程失敗】{task_name}（連續第 {failures} 次）\n{body or ''}"
+    return text[:_NOTIFY_MAX_LEN]
+
+
+async def _notify_result(
+    notify: dict | None,
+    task_name: str,
+    success: bool,
+    body: str | None,
+    failures: int = 0,
+) -> None:
+    """把排程結果推回指定對話（推播失敗只 warning，不影響排程結果）"""
+    if not notify:
+        return
+
+    message = _format_notify_message(task_name, success, body, failures)
+    try:
+        from . import proactive_push_service
+
+        await proactive_push_service.notify_job_complete(
+            platform=notify["platform"],
+            platform_user_id=notify.get("target_id") or "",
+            is_group=bool(notify.get("is_group")),
+            group_id=notify.get("group_id"),
+            message=message,
+        )
+    except Exception as e:
+        logger.warning("排程結果推播失敗（%s）: %s", task_name, e)
 
 
 async def _execute_dynamic_task_wrapper(task_id: UUID) -> None:
