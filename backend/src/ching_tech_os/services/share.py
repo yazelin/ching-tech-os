@@ -3,6 +3,7 @@
 import secrets
 import string
 import bcrypt
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -21,6 +22,9 @@ from .knowledge import get_knowledge, KnowledgeNotFoundError
 
 # 密碼錯誤最大嘗試次數
 MAX_PASSWORD_ATTEMPTS = 5
+
+# 讀不到的資源不能分享（issue #205）
+SHARE_ACCESS_DENIED_MESSAGE = "您沒有讀取此資源的權限，無法建立分享連結"
 
 
 from .errors import ServiceError
@@ -99,6 +103,15 @@ class ResourceNotFoundError(ShareError):
         super().__init__(message)
         self.code = "NOT_FOUND"
         self.status_code = 404
+
+
+class ShareAccessDenied(ShareError):
+    """沒有權限把這個資源變成公開連結（issue #205）"""
+
+    def __init__(self, message: str = SHARE_ACCESS_DENIED_MESSAGE):
+        super().__init__(message)
+        self.code = "PERMISSION_DENIED"
+        self.status_code = 403
 
 
 def generate_token(length: int = 6) -> str:
@@ -232,6 +245,174 @@ def validate_nas_file_path(
     return full_path
 
 
+# ============================================================
+# 建立連結前的資源存取檢查（issue #205）
+# ============================================================
+
+
+@dataclass(frozen=True)
+class ShareActor:
+    """要建立分享連結的人。
+
+    REST 用 `from_session()`（session 已經有 username／role），MCP 用
+    `from_ctos_user_id()`（身分由 `resolve_ctos_user_id()` 從伺服器注入的環境變數
+    取得，模型帶什麼都不算數）。兩條路徑共用 `check_resource_access()`。
+
+    `username`／`role`／`preferences`／`source_permissions` 沒給的話會在真的要用到
+    時才查（content 類型的連結完全不需要查）。
+    """
+
+    user_id: int | None = None
+    username: str | None = None
+    role: str | None = None
+    preferences: dict | None = None
+    source_permissions: dict[str, bool] | None = None
+    is_bound: bool = False
+
+    @classmethod
+    def from_session(cls, session) -> "ShareActor":
+        """從網頁 session 建立（已登入＝已綁定）。"""
+        return cls(
+            user_id=getattr(session, "user_id", None),
+            username=getattr(session, "username", None),
+            role=getattr(session, "role", None) or "user",
+            is_bound=True,
+        )
+
+    @classmethod
+    def from_ctos_user_id(
+        cls,
+        ctos_user_id: int | None,
+        source_permissions: dict[str, bool] | None = None,
+    ) -> "ShareActor":
+        """從 MCP 工具的 `ctos_user_id` 建立；None＝未綁定。"""
+        if ctos_user_id is None:
+            return cls(source_permissions=source_permissions)
+        return cls(
+            user_id=ctos_user_id,
+            source_permissions=source_permissions,
+            is_bound=True,
+        )
+
+
+async def _resolve_source_permissions(ctos_user_id: int | None) -> dict[str, bool]:
+    """取得使用者可存取的 shared 子來源（與 `read_document`／`send_nas_file` 同一條路）。"""
+    from .path_manager import path_manager
+    from .shared_source_permissions import get_allowed_shared_mounts_for_user
+
+    mounts = await get_allowed_shared_mounts_for_user(
+        path_manager.get_shared_mounts(),
+        ctos_user_id,
+    )
+    return {name: True for name in mounts}
+
+
+async def _resolve_actor(actor: ShareActor) -> ShareActor | None:
+    """補齊 username／role／preferences；帳號已不存在時回 None（等同未綁定）。"""
+    if actor.username is not None and actor.role is not None and actor.preferences is not None:
+        return actor
+
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            "SELECT username, role, preferences FROM users WHERE id = $1",
+            actor.user_id,
+        )
+    if row is None:
+        return None
+
+    from .user import _parse_preferences
+
+    return replace(
+        actor,
+        username=actor.username or row["username"],
+        role=actor.role or (row["role"] or "user"),
+        preferences=_parse_preferences(row["preferences"]),
+    )
+
+
+async def check_resource_access(
+    resource_type: str,
+    resource_id: str,
+    actor: ShareActor | None = None,
+) -> None:
+    """建立分享連結前的資源存取檢查（REST 與 MCP 共用這一層）。
+
+    `get_resource_title()` 只驗「資源存在」，所以原本任何呼叫者都能把別人的知識
+    條目或讀不到的 NAS 檔案變成公開連結（issue #205）。這裡做的是真正的存取檢查，
+    而且刻意走與「讀」完全相同的路：
+
+    - `knowledge`：與 `knowledge_tools.get_knowledge_item` 的條目層級同一條路——
+      已綁定走 `check_knowledge_permission_async(..., action="read")`
+      （personal 只有 owner、project 要成員、global 依權限），
+      未綁定只放行 `scope=global` 且 `is_public`。
+    - `nas_file`：與 `read_document`／`send_nas_file` 同一條路——
+      `validate_nas_file_path(..., source_permissions=...)`，未綁定一律拒絕。
+    - `content`：內容由呼叫端自己提供，沒有「別人的資源」可洩漏，不檢查。
+
+    Raises:
+        ResourceNotFoundError: 資源不存在
+        ShareAccessDenied: 讀不到就不能分享
+    """
+    if resource_type == "content":
+        return
+
+    actor = actor if actor is not None else ShareActor()
+
+    if resource_type == "knowledge":
+        try:
+            item = get_knowledge(resource_id)
+        except KnowledgeNotFoundError:
+            raise ResourceNotFoundError(f"資源 knowledge/{resource_id} 不存在")
+
+        if not actor.is_bound:
+            # 未綁定：與未綁定讀取知識庫的範圍一致，只有公開的全域條目
+            if item.scope == "global" and getattr(item, "is_public", False):
+                return
+            raise ShareAccessDenied(SHARE_ACCESS_DENIED_MESSAGE)
+
+        resolved = await _resolve_actor(actor)
+        if resolved is None:
+            # 帳號已不存在＝等同未綁定
+            raise ShareAccessDenied(SHARE_ACCESS_DENIED_MESSAGE)
+
+        from .permissions import check_knowledge_permission_async
+
+        allowed = await check_knowledge_permission_async(
+            resolved.role or "user",
+            resolved.username,
+            resolved.preferences,
+            item.owner,
+            item.scope,
+            "read",
+            user_id=resolved.user_id,
+            project_id=getattr(item, "project_id", None),
+        )
+        if not allowed:
+            raise ShareAccessDenied(
+                f"您沒有讀取 {resource_id} 的權限，無法建立分享連結"
+            )
+        return
+
+    if resource_type == "nas_file":
+        if not actor.is_bound:
+            raise ShareAccessDenied(SHARE_ACCESS_DENIED_MESSAGE)
+
+        source_permissions = actor.source_permissions
+        if source_permissions is None:
+            source_permissions = await _resolve_source_permissions(actor.user_id)
+
+        try:
+            validate_nas_file_path(resource_id, source_permissions=source_permissions)
+        except NasFileNotFoundError as e:
+            raise ResourceNotFoundError(str(e))
+        except NasFileAccessDenied as e:
+            raise ShareAccessDenied(str(e))
+        return
+
+    # project／project_attachment：新前端的專案分享不走這支，公開端也不支援這些類型
+    raise ShareAccessDenied(f"不支援分享的資源類型：{resource_type}")
+
+
 async def get_resource_title(resource_type: str, resource_id: str, filename: str | None = None) -> str:
     """取得資源標題"""
     from uuid import UUID as UUIDType
@@ -259,12 +440,15 @@ async def get_resource_title(resource_type: str, resource_id: str, filename: str
 async def create_share_link(
     data: ShareLinkCreate,
     created_by: str,
+    actor: ShareActor | None = None,
 ) -> ShareLinkResponse:
     """建立分享連結
 
     Args:
         data: 分享連結資料
         created_by: 建立者用戶名
+        actor: 建立者身分，用來做資源存取檢查（issue #205）。
+            不給＝當成未綁定處理（最嚴格的那一檔），不是略過檢查。
     """
     # content 類型驗證
     if data.resource_type == "content":
@@ -272,6 +456,8 @@ async def create_share_link(
             raise ShareError("content 類型必須提供 content 參數")
         resource_title = data.filename or "分享內容"
     else:
+        # 存取檢查：讀不到的資源不能變成公開連結
+        await check_resource_access(data.resource_type, data.resource_id, actor)
         # 驗證資源存在
         resource_title = await get_resource_title(data.resource_type, data.resource_id)
 

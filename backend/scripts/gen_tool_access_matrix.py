@@ -54,13 +54,16 @@ _DOC_HEADER = """# MCP 工具存取矩陣
 | #201 | 未綁定者可查專案／往來對象／物料／NAS 檔案（app 預設開放） | 已修（PR #206，`APPS_REQUIRE_BOUND_USER`） |
 | #207 | 未綁定者可用 `add_note`／`add_note_with_attachments` 寫進全域知識庫 | 已修（工具內部自檢 `TOOLS_REQUIRE_BOUND_USER`） |
 | #204 | 記憶工具直接吃模型帶的 `line_group_id`／`line_user_id`，可冒充別的群組／別人 | 已修（`resolve_bot_identity`，伺服器注入優先） |
-| #205 | 分享工具（`create_share_link`／`share_knowledge_attachment`）的範圍 | 未處理，另一支 PR |
+| #205 | 分享工具（`create_share_link`／`share_knowledge_attachment`）可把任何知識條目／NAS 檔案變成公開連結 | 已修（`share-manager` 進 `APPS_REQUIRE_BOUND_USER` ＋ `share.check_resource_access()`） |
 
-三道關卡各擋不同的東西，缺一不可：
+四道關卡各擋不同的東西，缺一不可：
 
 1. **app 權限**（`check_mcp_tool_permission`）：擋「這個人有沒有這個功能」。
 2. **條目層級**（知識庫的 `_check_item_access`、記憶的擁有者條件）：擋「這一筆是不是你的」。
 3. **工具內部自檢**（`require_bound_user`）：擋「憑空建立新資料」——沒有既有條目可比對的寫入。
+4. **資源存取檢查**（`share.check_resource_access`）：擋「把讀不到的東西送出去」——
+   建立公開連結前，knowledge 走 `check_knowledge_permission_async(..., action="read")`、
+   nas_file 走帶 `source_permissions` 的 `validate_nas_file_path()`，與讀取工具同一條路。
 
 ## 欄位說明
 
@@ -201,7 +204,7 @@ def _render_gaps(rows: list[dict]) -> list[str]:
         f"{names(unchecked)}。"
         "這些工具連 `check_mcp_tool_permission()` 都沒呼叫，"
         "`TOOL_APP_MAPPING` 的對應只是裝飾，未綁定者只要模型肯呼叫就跑得動。"
-        "#205 處理分享那兩支，其餘尚未有 issue。"
+        "目前尚未有對應 issue。"
     )
     lines.append("")
     lines.append(

@@ -3,7 +3,13 @@
 包含：create_share_link, share_knowledge_attachment
 """
 
-from .server import mcp, logger, ensure_db_connection, to_taipei_time
+from .server import (
+    mcp,
+    logger,
+    ensure_db_connection,
+    to_taipei_time,
+    check_mcp_tool_permission,
+)
 from ...database import get_connection
 
 
@@ -12,6 +18,7 @@ async def create_share_link(
     resource_type: str,
     resource_id: str,
     expires_in: str | None = "24h",
+    ctos_user_id: int | None = None,
 ) -> str:
     """
     建立公開分享連結，讓沒有帳號的人也能查看知識庫或下載檔案
@@ -22,13 +29,19 @@ async def create_share_link(
             - nas_file: NAS 檔案（路徑）
         resource_id: 資源 ID（如 kb-001 或 NAS 檔案路徑）
         expires_in: 有效期限，可選 1h、24h、7d、null（永久），預設 24h
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
 
     注意：專案分享功能已遷移至 ERPNext，請直接在 ERPNext 系統操作。
     """
     await ensure_db_connection()
 
+    # 權限檢查（share-manager；未綁定一律拒絕，issue #205）
+    allowed, error_msg = await check_mcp_tool_permission("create_share_link", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
+    from .. import share as share_service
     from ..share import (
-        create_share_link as _create_share_link,
         ShareError,
         ResourceNotFoundError,
     )
@@ -52,8 +65,13 @@ async def create_share_link(
             resource_id=resource_id,
             expires_in=expires_in,
         )
-        # 使用 system 作為建立者（Line Bot 代理建立）
-        result = await _create_share_link(data, "linebot")
+        # 使用 system 作為建立者（Line Bot 代理建立）；
+        # 身分另外帶進去做資源存取檢查（讀不到的東西不能分享）
+        result = await share_service.create_share_link(
+            data,
+            "linebot",
+            actor=share_service.ShareActor.from_ctos_user_id(ctos_user_id),
+        )
 
         # 轉換為台北時區顯示
         if result.expires_at:
@@ -83,6 +101,7 @@ async def share_knowledge_attachment(
     kb_id: str,
     attachment_idx: int,
     expires_in: str | None = "24h",
+    ctos_user_id: int | None = None,
 ) -> str:
     """
     分享知識庫附件（適用於 .md2ppt 或 .md2doc 檔案）
@@ -96,18 +115,24 @@ async def share_knowledge_attachment(
         kb_id: 知識庫 ID（如 kb-001）
         attachment_idx: 附件索引（從 0 開始，依照知識庫中的附件順序）
         expires_in: 有效期限，可選 1h、24h、7d、null（永久），預設 24h
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
 
     Returns:
         分享連結資訊，包含密碼
     """
     await ensure_db_connection()
 
+    # 權限檢查（share-manager；未綁定一律拒絕，issue #205）
+    allowed, error_msg = await check_mcp_tool_permission(
+        "share_knowledge_attachment", ctos_user_id
+    )
+    if not allowed:
+        return f"❌ {error_msg}"
+
     from pathlib import Path
     from ..knowledge import get_knowledge, get_nas_attachment, KnowledgeNotFoundError, KnowledgeError
-    from ..share import (
-        create_share_link as _create_share_link,
-        ShareError,
-    )
+    from .. import share as share_service
+    from ..share import ShareError
     from ...models.share import ShareLinkCreate
     from ..path_manager import path_manager, StorageZone
 
@@ -116,7 +141,12 @@ async def share_knowledge_attachment(
     if expires_in not in valid_expires:
         return f"錯誤：有效期限必須是 1h、24h、7d 或 null（永久），收到：{expires_in}"
 
+    actor = share_service.ShareActor.from_ctos_user_id(ctos_user_id)
+
     try:
+        # 資源存取檢查：讀不到這篇知識就不能把它的附件變成公開連結
+        await share_service.check_resource_access("knowledge", kb_id, actor)
+
         # 取得知識庫
         knowledge = get_knowledge(kb_id)
 
@@ -158,7 +188,7 @@ async def share_knowledge_attachment(
             filename=filename,
             expires_in=expires_in,
         )
-        result = await _create_share_link(data, "linebot")
+        result = await share_service.create_share_link(data, "linebot", actor=actor)
 
         # 根據檔案類型產生前端 URL
         from ...config import settings

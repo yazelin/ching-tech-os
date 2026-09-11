@@ -57,6 +57,16 @@ def _to_source_permissions(shared_mounts: dict[str, str]) -> dict[str, bool]:
     return {name: True for name in shared_mounts}
 
 
+def _share_actor(
+    ctos_user_id: int | None,
+    source_permissions: dict[str, bool] | None = None,
+):
+    """建立分享連結時要帶的身分（issue #205：讀不到的資源不能分享）。"""
+    from ..share import ShareActor
+
+    return ShareActor.from_ctos_user_id(ctos_user_id, source_permissions)
+
+
 def _format_file_size(size_bytes: int) -> str:
     """格式化檔案大小為人類可讀的字串"""
     if size_bytes >= 1024 * 1024:
@@ -627,7 +637,9 @@ async def send_nas_file(
             resource_id=file_path,
             expires_in="24h",
         )
-        result = await _create_share_link(data, "linebot")
+        result = await _create_share_link(
+            data, "linebot", actor=_share_actor(ctos_user_id, source_permissions)
+        )
     except Exception as e:
         return f"建立分享連結失敗：{e}"
 
@@ -799,7 +811,9 @@ async def prepare_file_message(
                 resource_id=kb_id,
                 expires_in="24h",
             )
-            result = await _create_share_link(data, "linebot")
+            result = await _create_share_link(
+                data, "linebot", actor=_share_actor(ctos_user_id)
+            )
         except Exception as e:
             return f"建立分享連結失敗：{e}"
 
@@ -841,7 +855,9 @@ async def prepare_file_message(
                 resource_id=file_path,
                 expires_in="24h",
             )
-            result = await _create_share_link(data, "linebot")
+            result = await _create_share_link(
+                data, "linebot", actor=_share_actor(ctos_user_id, source_permissions)
+            )
         except Exception as e:
             return f"建立分享連結失敗：{e}"
 
