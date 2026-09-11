@@ -42,6 +42,7 @@ jobs:
           uv run pytest \
             --ignore=tests/test_his \
             --cov=src/ching_tech_os \
+            --cov=../scripts \
             --cov-report=term-missing:skip-covered \
             --cov-report=xml \
             --cov-report=html \
