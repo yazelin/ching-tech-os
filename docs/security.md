@@ -376,6 +376,37 @@ session 的權限快取沒帶到某個 `app_id` 時，`require_app_permission` �
 
 ---
 
+## Bot 對外開放、未綁定者的工具範圍
+
+LINE／Telegram Bot 是對外開放的入口：任何人加好友或把 bot 拉進群組就能對話，
+`ctos_user_id is None`（沒有綁定 CTOS 帳號）是常態，不是例外。這套權限設計原本
+假設呼叫者是已綁定的自己人，未綁定者因此一路走得進來——issue #201、#204、#205、
+#207 都是同一個根因的不同出口。
+
+**逐支工具的實際範圍看 [MCP 工具存取矩陣](mcp-tool-access-matrix.md)**
+（由 `backend/scripts/gen_tool_access_matrix.py` 從程式內省產生，測試會比對逐字相同）。
+
+三道關卡各擋不同的東西：
+
+| 關卡 | 實作 | 擋什麼 |
+|------|------|--------|
+| app 權限 | `check_mcp_tool_permission()`＋`APPS_REQUIRE_BOUND_USER` | 這個人有沒有這個功能；專案／往來／物料／NAS 檔案未綁定一律拒絕（#201） |
+| 條目層級 | 知識庫 `_check_item_access()`、記憶的擁有者條件 | 這一筆是不是你的；未綁定只讀得到 `scope=global` 且 `is_public` |
+| 工具內部自檢 | `require_bound_user()`＋`TOOLS_REQUIRE_BOUND_USER` | 憑空建立新資料的寫入（`add_note`、`add_note_with_attachments`，#207） |
+
+身分一律由伺服器注入，模型在工具參數裡宣稱的一律不算數：
+
+| 環境變數 | 內容 | 注入處 | 讀取處 |
+|----------|------|--------|--------|
+| `CTOS_USER_ID` | 綁定的 CTOS 使用者 ID | `claude_agent.py`／`codex_agent.py` | `resolve_ctos_user_id()` |
+| `CTOS_BOT_GROUP_ID`（＋沿用的 `CTOS_GROUP_ID`） | `bot_groups.id` | `build_bot_mcp_env()`，由 `linebot_ai.py`／`bot_telegram/handler.py`／`bot/identity_router.py` 呼叫 | `resolve_bot_identity()` |
+| `CTOS_BOT_USER_ID` | `bot_users.platform_user_id` | 同上 | `resolve_bot_identity()` |
+
+網頁端 `execute_tool()` 沒有 MCP 子行程、沒有這些環境變數，工具參數才會被採用；
+那條路已經過 session 認證。
+
+---
+
 ## 安全注意事項
 
 ### Session 密碼處理

@@ -301,6 +301,7 @@ ctos kb search "關鍵字"
 | [docs/linebot.md](docs/linebot.md) | Line Bot 整合設計 |
 | [docs/telegram-bot.md](docs/telegram-bot.md) | Telegram Bot 整合設計 |
 | [docs/mcp-server.md](docs/mcp-server.md) | MCP Server（AI 工具） |
+| [docs/mcp-tool-access-matrix.md](docs/mcp-tool-access-matrix.md) | MCP 工具存取矩陣（未綁定者能碰到什麼，程式產生） |
 
 ### 部署與安全
 
