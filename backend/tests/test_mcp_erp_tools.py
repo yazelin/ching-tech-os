@@ -21,6 +21,8 @@ from ching_tech_os.services.mcp import erp_tools
 
 NOW = datetime.now(timezone.utc)
 PARTY_ID = uuid4()
+CONTACT_ID = uuid4()
+ADDRESS_ID = uuid4()
 ITEM_ID = uuid4()
 PO_ID = uuid4()
 AUDIT_ID = uuid4()
@@ -133,6 +135,15 @@ async def test_find_party_returns_candidates(monkeypatch) -> None:
     result = await erp_tools.find_party("鴻佰", role="supplier")
     assert result["count"] == 1
     assert result["candidates"][0]["id"] == str(PARTY_ID)
+
+
+@pytest.mark.asyncio
+async def test_find_party_role_both_passthrough(monkeypatch) -> None:
+    """F4：role='both' 要原封不動傳給 erp_core.find_parties"""
+    find = AsyncMock(return_value=[])
+    monkeypatch.setattr(erp_core, "find_parties", find)
+    await erp_tools.find_party("鴻佰", role="both")
+    assert find.await_args.kwargs["role"] == "both"
 
 
 @pytest.mark.asyncio
@@ -324,6 +335,152 @@ async def test_add_party_address_validations(monkeypatch) -> None:
     )
     result = await erp_tools.add_party_address(
         party_id=str(PARTY_ID), address="桃園"
+    )
+    assert result["not_found"] is True
+
+
+@pytest.mark.asyncio
+async def test_update_party_contact_requires_fields() -> None:
+    result = await erp_tools.update_party_contact(
+        contact_id=str(CONTACT_ID), party_id=str(PARTY_ID)
+    )
+    assert result["ok"] is False
+
+
+@pytest.mark.asyncio
+async def test_update_party_contact(monkeypatch) -> None:
+    monkeypatch.setattr(
+        erp_tools.party_service,
+        "update_contact",
+        AsyncMock(
+            return_value={"id": CONTACT_ID, "party_id": PARTY_ID, "audit_id": AUDIT_ID}
+        ),
+    )
+    result = await erp_tools.update_party_contact(
+        contact_id=str(CONTACT_ID),
+        party_id=str(PARTY_ID),
+        fields={"notes": "改過"},
+    )
+    assert result["audit_id"] == str(AUDIT_ID)
+    assert result["contact_id"] == str(CONTACT_ID)
+
+
+@pytest.mark.asyncio
+async def test_update_party_contact_validates_fields(monkeypatch) -> None:
+    """F4：null 進 NOT NULL 欄位要回錯誤 dict，不能等資料庫爆"""
+    update = AsyncMock()
+    monkeypatch.setattr(erp_tools.party_service, "update_contact", update)
+
+    result = await erp_tools.update_party_contact(
+        contact_id=str(CONTACT_ID), party_id=str(PARTY_ID), fields={"name": None}
+    )
+
+    assert result["ok"] is False
+    assert "欄位不合法" in result["error"]
+    update.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_update_party_contact_not_found(monkeypatch) -> None:
+    monkeypatch.setattr(
+        erp_tools.party_service, "update_contact", AsyncMock(return_value=None)
+    )
+    result = await erp_tools.update_party_contact(
+        contact_id=str(CONTACT_ID), party_id=str(PARTY_ID), fields={"notes": "x"}
+    )
+    assert result["not_found"] is True
+
+
+@pytest.mark.asyncio
+async def test_delete_party_contact(monkeypatch) -> None:
+    monkeypatch.setattr(
+        erp_tools.party_service, "delete_contact", AsyncMock(return_value=AUDIT_ID)
+    )
+    result = await erp_tools.delete_party_contact(
+        contact_id=str(CONTACT_ID), party_id=str(PARTY_ID)
+    )
+    assert result["audit_id"] == str(AUDIT_ID)
+
+
+@pytest.mark.asyncio
+async def test_delete_party_contact_not_found(monkeypatch) -> None:
+    monkeypatch.setattr(
+        erp_tools.party_service, "delete_contact", AsyncMock(return_value=None)
+    )
+    result = await erp_tools.delete_party_contact(
+        contact_id=str(CONTACT_ID), party_id=str(PARTY_ID)
+    )
+    assert result["not_found"] is True
+
+
+@pytest.mark.asyncio
+async def test_update_party_address_requires_fields() -> None:
+    result = await erp_tools.update_party_address(
+        address_id=str(ADDRESS_ID), party_id=str(PARTY_ID)
+    )
+    assert result["ok"] is False
+
+
+@pytest.mark.asyncio
+async def test_update_party_address(monkeypatch) -> None:
+    monkeypatch.setattr(
+        erp_tools.party_service,
+        "update_address",
+        AsyncMock(
+            return_value={"id": ADDRESS_ID, "party_id": PARTY_ID, "audit_id": AUDIT_ID}
+        ),
+    )
+    result = await erp_tools.update_party_address(
+        address_id=str(ADDRESS_ID),
+        party_id=str(PARTY_ID),
+        fields={"city": "台北"},
+    )
+    assert result["audit_id"] == str(AUDIT_ID)
+    assert result["address_id"] == str(ADDRESS_ID)
+
+
+@pytest.mark.asyncio
+async def test_update_party_address_validates_fields(monkeypatch) -> None:
+    update = AsyncMock()
+    monkeypatch.setattr(erp_tools.party_service, "update_address", update)
+
+    result = await erp_tools.update_party_address(
+        address_id=str(ADDRESS_ID), party_id=str(PARTY_ID), fields={"address": None}
+    )
+
+    assert result["ok"] is False
+    update.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_update_party_address_not_found(monkeypatch) -> None:
+    monkeypatch.setattr(
+        erp_tools.party_service, "update_address", AsyncMock(return_value=None)
+    )
+    result = await erp_tools.update_party_address(
+        address_id=str(ADDRESS_ID), party_id=str(PARTY_ID), fields={"city": "台北"}
+    )
+    assert result["not_found"] is True
+
+
+@pytest.mark.asyncio
+async def test_delete_party_address(monkeypatch) -> None:
+    monkeypatch.setattr(
+        erp_tools.party_service, "delete_address", AsyncMock(return_value=AUDIT_ID)
+    )
+    result = await erp_tools.delete_party_address(
+        address_id=str(ADDRESS_ID), party_id=str(PARTY_ID)
+    )
+    assert result["audit_id"] == str(AUDIT_ID)
+
+
+@pytest.mark.asyncio
+async def test_delete_party_address_not_found(monkeypatch) -> None:
+    monkeypatch.setattr(
+        erp_tools.party_service, "delete_address", AsyncMock(return_value=None)
+    )
+    result = await erp_tools.delete_party_address(
+        address_id=str(ADDRESS_ID), party_id=str(PARTY_ID)
     )
     assert result["not_found"] is True
 
@@ -1028,6 +1185,10 @@ def test_every_erp_tool_is_in_tool_app_mapping() -> None:
         "update_party",
         "add_party_contact",
         "add_party_address",
+        "update_party_contact",
+        "delete_party_contact",
+        "update_party_address",
+        "delete_party_address",
         "merge_parties",
         "summarize_party",
         "extract_party_from_document",
@@ -1048,8 +1209,8 @@ def test_every_erp_tool_is_in_tool_app_mapping() -> None:
         "summarize_item",
         "extract_purchase_order_from_document",
     }
-    # 規格第三節的 23 支工具全部有對應 app
-    assert len(vendor_tools | inventory_tools) == 23
+    # 規格第三節的 23 支＋PR 4b 補件 4 支 = 27 支工具全部有對應 app
+    assert len(vendor_tools | inventory_tools) == 27
     for name in vendor_tools:
         assert TOOL_APP_MAPPING[name] == "vendor-management", name
     for name in inventory_tools:
@@ -1067,6 +1228,34 @@ _MINIMAL_CALLS: list[tuple[str, tuple, dict]] = [
     ("update_party", (), {"party_id": str(PARTY_ID), "fields": {"notes": "x"}}),
     ("add_party_contact", (), {"party_id": str(PARTY_ID), "name": "陳先生"}),
     ("add_party_address", (), {"party_id": str(PARTY_ID), "address": "桃園"}),
+    (
+        "update_party_contact",
+        (),
+        {
+            "contact_id": str(CONTACT_ID),
+            "party_id": str(PARTY_ID),
+            "fields": {"notes": "x"},
+        },
+    ),
+    (
+        "delete_party_contact",
+        (),
+        {"contact_id": str(CONTACT_ID), "party_id": str(PARTY_ID)},
+    ),
+    (
+        "update_party_address",
+        (),
+        {
+            "address_id": str(ADDRESS_ID),
+            "party_id": str(PARTY_ID),
+            "fields": {"city": "台北"},
+        },
+    ),
+    (
+        "delete_party_address",
+        (),
+        {"address_id": str(ADDRESS_ID), "party_id": str(PARTY_ID)},
+    ),
     ("merge_parties", (str(PARTY_ID), str(uuid4())), {}),
     ("summarize_party", (), {"party_id": str(PARTY_ID)}),
     ("extract_party_from_document", ("/tmp/a.jpg", "鴻佰"), {}),
@@ -1118,4 +1307,4 @@ async def test_all_tools_check_permission(
 
 def test_minimal_calls_cover_every_tool() -> None:
     """新增工具忘了補權限掃描會直接紅"""
-    assert len(_MINIMAL_CALLS) == 23
+    assert len(_MINIMAL_CALLS) == 27

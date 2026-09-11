@@ -20,7 +20,7 @@ from uuid import UUID
 from pydantic import ValidationError
 
 from .server import check_mcp_tool_permission, ensure_db_connection, logger, mcp
-from ...models.erp import ItemUpdate, PartyUpdate
+from ...models.erp import ItemUpdate, PartyAddressUpdate, PartyContactUpdate, PartyUpdate
 from ...services import erp as erp_core
 from ...services import erp_inventory as inventory_service
 from ...services import erp_parties as party_service
@@ -384,6 +384,144 @@ async def add_party_address(
         "party_id": str(row["party_id"]),
         "audit_id": str(row["audit_id"]),
     }
+
+
+@mcp.tool()
+async def update_party_contact(
+    contact_id: str,
+    party_id: str | None = None,
+    party_name: str | None = None,
+    fields: dict | None = None,
+    ctos_user_id: int | None = None,
+) -> dict:
+    """更新聯絡人
+
+    Args:
+        contact_id: 聯絡人 UUID（必填）
+        party_id / party_name: 指定往來對象（二擇一，用來確認聯絡人屬於哪一家）
+        fields: 要改的欄位，例如 `{"phone": "03-1234567", "is_primary": true}`
+            （`is_primary` 設 true 會把同一家其他聯絡人降級）
+        ctos_user_id: CTOS 用戶 ID
+    """
+    guard = await _guard("update_party_contact", ctos_user_id)
+    if guard:
+        return guard
+    if not fields:
+        return _error("沒有要更新的欄位")
+    try:
+        payload = _validated_fields(PartyContactUpdate, fields)
+        pid = await _party_id_from(party_id, party_name)
+        row = await party_service.update_contact(
+            pid, UUID(contact_id), payload, actor_user_id=ctos_user_id, via="mcp"
+        )
+    except Exception as e:
+        return _fail(e)
+    if row is None:
+        return {"ok": False, "not_found": True, "error": "找不到聯絡人"}
+    return {
+        "ok": True,
+        "contact_id": str(row["id"]),
+        "party_id": str(row["party_id"]),
+        "audit_id": str(row["audit_id"]),
+    }
+
+
+@mcp.tool()
+async def delete_party_contact(
+    contact_id: str,
+    party_id: str | None = None,
+    party_name: str | None = None,
+    ctos_user_id: int | None = None,
+) -> dict:
+    """刪除聯絡人（刪掉主要那筆不自動指派新主要）
+
+    Args:
+        contact_id: 聯絡人 UUID（必填）
+        party_id / party_name: 指定往來對象（二擇一）
+        ctos_user_id: CTOS 用戶 ID
+    """
+    guard = await _guard("delete_party_contact", ctos_user_id)
+    if guard:
+        return guard
+    try:
+        pid = await _party_id_from(party_id, party_name)
+        audit_id = await party_service.delete_contact(
+            pid, UUID(contact_id), actor_user_id=ctos_user_id, via="mcp"
+        )
+    except Exception as e:
+        return _fail(e)
+    if audit_id is None:
+        return {"ok": False, "not_found": True, "error": "找不到聯絡人"}
+    return {"ok": True, "contact_id": contact_id, "audit_id": str(audit_id)}
+
+
+@mcp.tool()
+async def update_party_address(
+    address_id: str,
+    party_id: str | None = None,
+    party_name: str | None = None,
+    fields: dict | None = None,
+    ctos_user_id: int | None = None,
+) -> dict:
+    """更新地址
+
+    Args:
+        address_id: 地址 UUID（必填）
+        party_id / party_name: 指定往來對象（二擇一，用來確認地址屬於哪一家）
+        fields: 要改的欄位，例如 `{"city": "台北市", "is_primary": true}`
+            （`is_primary` 設 true 會把同一家其他地址降級）
+        ctos_user_id: CTOS 用戶 ID
+    """
+    guard = await _guard("update_party_address", ctos_user_id)
+    if guard:
+        return guard
+    if not fields:
+        return _error("沒有要更新的欄位")
+    try:
+        payload = _validated_fields(PartyAddressUpdate, fields)
+        pid = await _party_id_from(party_id, party_name)
+        row = await party_service.update_address(
+            pid, UUID(address_id), payload, actor_user_id=ctos_user_id, via="mcp"
+        )
+    except Exception as e:
+        return _fail(e)
+    if row is None:
+        return {"ok": False, "not_found": True, "error": "找不到地址"}
+    return {
+        "ok": True,
+        "address_id": str(row["id"]),
+        "party_id": str(row["party_id"]),
+        "audit_id": str(row["audit_id"]),
+    }
+
+
+@mcp.tool()
+async def delete_party_address(
+    address_id: str,
+    party_id: str | None = None,
+    party_name: str | None = None,
+    ctos_user_id: int | None = None,
+) -> dict:
+    """刪除地址（刪掉主要那筆不自動指派新主要）
+
+    Args:
+        address_id: 地址 UUID（必填）
+        party_id / party_name: 指定往來對象（二擇一）
+        ctos_user_id: CTOS 用戶 ID
+    """
+    guard = await _guard("delete_party_address", ctos_user_id)
+    if guard:
+        return guard
+    try:
+        pid = await _party_id_from(party_id, party_name)
+        audit_id = await party_service.delete_address(
+            pid, UUID(address_id), actor_user_id=ctos_user_id, via="mcp"
+        )
+    except Exception as e:
+        return _fail(e)
+    if audit_id is None:
+        return {"ok": False, "not_found": True, "error": "找不到地址"}
+    return {"ok": True, "address_id": address_id, "audit_id": str(audit_id)}
 
 
 @mcp.tool()
