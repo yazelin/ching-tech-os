@@ -532,27 +532,34 @@ async def test_create_task_requires_title(monkeypatch) -> None:
 
 
 # 五支寫入工具與它們會呼叫到的 service 函式（成員檢查掃描用）
+# kwargs 一定要帶 ctos_user_id：不帶的話會先被「沒綁 CTOS 帳號」那道擋掉
+# （那條另外由 test_write_denied_when_user_unknown 測），成員邏輯就掃不到。
 _WRITE_CALLS: list[tuple[str, tuple, dict, str]] = [
-    ("create_task", (str(PROJECT_ID), "配線"), {}, "create_task"),
+    ("create_task", (str(PROJECT_ID), "配線"), {"ctos_user_id": 7}, "create_task"),
     (
         "update_task",
         (str(PROJECT_ID), str(TASK_ID), {"status": "done"}),
-        {},
+        {"ctos_user_id": 7},
         "update_task",
     ),
     (
         "create_milestone",
         (str(PROJECT_ID), "出機", "2026-11-01"),
-        {},
+        {"ctos_user_id": 7},
         "create_milestone",
     ),
     (
         "complete_milestone",
         (str(PROJECT_ID), str(MILESTONE_ID)),
-        {},
+        {"ctos_user_id": 7},
         "update_milestone",
     ),
-    ("add_project_member", (str(PROJECT_ID), "amin"), {}, "add_member"),
+    (
+        "add_project_member",
+        (str(PROJECT_ID), "amin"),
+        {"ctos_user_id": 7},
+        "add_member",
+    ),
 ]
 
 
@@ -561,7 +568,7 @@ _WRITE_CALLS: list[tuple[str, tuple, dict, str]] = [
 async def test_write_tools_denied_for_non_member(
     monkeypatch, tool_name, args, kwargs, service_fn
 ) -> None:
-    """非 admin 又不是成員：五支寫入工具都要擋在 service 之前"""
+    """有綁帳號、不是 admin、也不是成員：五支寫入工具都要擋在 service 之前"""
     _as_member(monkeypatch, False)
     _detail(monkeypatch)
     service = AsyncMock()
@@ -571,6 +578,9 @@ async def test_write_tools_denied_for_non_member(
 
     assert result == {"ok": False, "error": "只有專案成員能編輯"}
     service.assert_not_awaited()
+    # 真的走到成員那道（角色查過、成員也問過），不是被「沒綁帳號」擋掉
+    project_tools.get_user_role_and_permissions.assert_awaited_with(7)
+    project_tools.is_project_member.assert_awaited_with(7, str(PROJECT_ID))
 
 
 def test_write_calls_cover_every_write_tool() -> None:
