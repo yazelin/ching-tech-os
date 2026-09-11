@@ -74,6 +74,7 @@ BUILTIN_MODULES: dict[str, ModuleInfo] = {
         "id": "project-management",
         "source": "builtin",
         "routers": [{"module": ".api.project", "attr": "router"}],
+        "mcp_module": ".services.mcp.project_tools",
         "app_ids": ["project-management"],
         "app_manifest": [
             {

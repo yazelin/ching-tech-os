@@ -170,18 +170,25 @@ def test_migration_032_rewrite_reports_already_switched() -> None:
 
 
 def test_migration_032_new_sections_match_linebot_agents_verbatim() -> None:
-    """migration 的新段落要和 linebot_agents.py 的對應段落逐字相等
+    """migration 的新段落（再套上後續 migration）要和 linebot_agents.py 逐字相等
 
     兩份文字是分開維護的（migration 必須自足），這條擋的是只改一邊。
+    032 換上去的專案段落後來被 033 換成專案 MCP 工具，所以比對前先把 033
+    往前套一次——鏈接得起來才算數。
     """
+    from tests.test_project_bot_switch import _load_migration_033
+
     module = _load_migration_032()
+    later = _load_migration_033()
     prompts = {
         module.PERSONAL: linebot_agents.LINEBOT_PERSONAL_PROMPT,
         module.GROUP: linebot_agents.LINEBOT_GROUP_PROMPT,
     }
     for prompt_name, names in module.PROMPT_SECTIONS.items():
         for name in names:
-            new = module.SECTIONS[name][1]
+            new, _missing, _already = later.rewrite(
+                module.SECTIONS[name][1], list(later.SECTIONS)
+            )
             assert new in prompts[prompt_name], (
                 f"{name} 的新段落和 linebot_agents.py 的 {prompt_name} 對不起來"
             )
