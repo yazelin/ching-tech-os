@@ -5,6 +5,7 @@
 """
 
 import json
+import logging
 import time
 from datetime import datetime
 from typing import Any
@@ -25,6 +26,8 @@ from ..models.ai import (
 from .ai_provider import attach_routing_metadata
 from .ai_router import RoutingContext, call_ai
 from .claude_agent import compose_prompt_with_history
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================
@@ -864,14 +867,20 @@ async def call_agent(
         duration_ms=duration_ms,
         user_id=user_id,
     )
-    log = await create_log(log_data)
+    # 寫 log 失敗不該讓整個呼叫失敗（與其他七個呼叫端一致）
+    log_id = None
+    try:
+        log = await create_log(log_data)
+        log_id = log["id"]
+    except Exception as e:
+        logger.warning("Agent AI Log 記錄失敗: %s", e)
 
     return {
         "success": result.success,
         "response": result.message if result.success else None,
         "error": result.error if not result.success else None,
         "duration_ms": duration_ms,
-        "log_id": log["id"],
+        "log_id": log_id,
     }
 
 

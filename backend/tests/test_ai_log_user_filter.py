@@ -690,8 +690,24 @@ async def test_log_stats_endpoint_passes_user_id(monkeypatch: pytest.MonkeyPatch
     assert stats.await_args.kwargs["user_id"] == 0
 
 
+def _closure_app_ids(checker) -> list[str]:
+    """從 require_app_permission 回傳的 checker 取出它閉包裡的 app_id。
+
+    只比 __qualname__ 會放過「換成別的 app 權限」這種改動，所以要看字串本身。
+    """
+    code = getattr(checker, "__code__", None)
+    closure = getattr(checker, "__closure__", None)
+    if code is None or closure is None:
+        return []
+    return [
+        cell.cell_contents
+        for name, cell in zip(code.co_freevars, closure)
+        if name == "app_id"
+    ]
+
+
 def test_log_endpoints_keep_ai_log_permission() -> None:
-    """權限不變：兩個端點維持 require_app_permission("ai-log")。"""
+    """權限不變：三個 log 端點維持 require_app_permission("ai-log")。"""
     from fastapi.routing import APIRoute
 
     from ching_tech_os.api import ai_management
@@ -703,11 +719,21 @@ def test_log_endpoints_keep_ai_log_permission() -> None:
     }
     for path in ("/api/ai/logs", "/api/ai/logs/stats", "/api/ai/logs/{log_id}"):
         route = routes[path]
-        param = route.dependant.dependencies
-        assert any(
-            getattr(d.call, "__qualname__", "").startswith("require_app_permission")
-            for d in param
-        ), path
+        app_ids = [
+            app_id
+            for d in route.dependant.dependencies
+            if getattr(d.call, "__qualname__", "").startswith("require_app_permission")
+            for app_id in _closure_app_ids(d.call)
+        ]
+        assert app_ids == ["ai-log"], f"{path} 的 app 權限是 {app_ids}"
+
+
+def test_require_app_permission_closure_probe_actually_works() -> None:
+    """負控制：上面那支取值法真的取得到，換成別的 app id 會看得出來。"""
+    from ching_tech_os.services.permissions import require_app_permission
+
+    assert _closure_app_ids(require_app_permission("ai-log")) == ["ai-log"]
+    assert _closure_app_ids(require_app_permission("agent-settings")) == ["agent-settings"]
 
 
 def test_user_id_zero_semantics_documented() -> None:
@@ -717,3 +743,258 @@ def test_user_id_zero_semantics_documented() -> None:
     assert "0" in (ai_management.list_logs.__doc__ or "")
     assert "未記錄使用者" in (ai_management.list_logs.__doc__ or "")
     assert "未記錄使用者" in (ai_management.get_log_stats.__doc__ or "")
+
+
+# ============================================================
+# 6. 邊界與失敗路徑
+# ============================================================
+
+
+def _log_api_client(monkeypatch):
+    """只掛 ai_management router 的最小 app，權限用 admin session 蓋過去。"""
+    from datetime import timedelta
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from ching_tech_os.api import ai_management
+    from ching_tech_os.api.auth import get_current_session
+    from ching_tech_os.models.auth import SessionData
+
+    app = FastAPI()
+    app.include_router(ai_management.router)
+
+    async def _session():
+        now = _now()
+        return SessionData(
+            username="admin",
+            password="x",
+            nas_host="localhost",
+            user_id=1,
+            created_at=now,
+            expires_at=now + timedelta(hours=1),
+            role="admin",
+        )
+
+    app.dependency_overrides[get_current_session] = _session
+    return TestClient(app)
+
+
+def test_list_logs_rejects_negative_user_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    """user_id 是 ge=0：負數沒有語意，要被擋在 422，不能靜默當成沒帶。"""
+    from ching_tech_os.api import ai_management
+
+    get_logs = AsyncMock(return_value=([], 0))
+    monkeypatch.setattr(ai_management.ai_manager, "get_logs", get_logs)
+    client = _log_api_client(monkeypatch)
+
+    assert client.get("/api/ai/logs?user_id=-1").status_code == 422
+    get_logs.assert_not_awaited()
+
+    # 負控制：0 與正數都放行，證明 422 是 ge=0 擋的，不是路由本身壞掉
+    assert client.get("/api/ai/logs?user_id=0").status_code == 200
+    assert client.get("/api/ai/logs?user_id=1").status_code == 200
+
+
+def test_log_stats_rejects_negative_user_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    from ching_tech_os.api import ai_management
+
+    monkeypatch.setattr(
+        ai_management.ai_manager,
+        "get_log_stats",
+        AsyncMock(return_value={
+            "total_calls": 0,
+            "success_count": 0,
+            "failure_count": 0,
+            "success_rate": 0.0,
+            "avg_duration_ms": None,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+        }),
+    )
+    client = _log_api_client(monkeypatch)
+
+    assert client.get("/api/ai/logs/stats?user_id=-1").status_code == 422
+    assert client.get("/api/ai/logs/stats?user_id=0").status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_no_user_filter_leaves_sql_untouched(monkeypatch: pytest.MonkeyPatch) -> None:
+    """沒帶 user_id 就完全不該出現在 where 條件裡（count SQL 沒有 JOIN，最好驗）。"""
+    conn = AsyncMock()
+    conn.fetchrow = AsyncMock(return_value={"total": 0})
+    conn.fetch = AsyncMock(return_value=[])
+    monkeypatch.setattr(ai_manager, "get_connection", lambda: _CM(conn))
+
+    await ai_manager.get_logs(AiLogFilter(), page=1, page_size=10)
+    count_sql = conn.fetchrow.await_args.args[0]
+    assert "user_id" not in count_sql
+    assert "WHERE" not in count_sql
+    assert len(conn.fetchrow.await_args.args) == 1
+
+    # stats 同理
+    conn.fetchrow = AsyncMock(return_value={
+        "total_calls": 0,
+        "success_count": 0,
+        "failure_count": 0,
+        "avg_duration_ms": None,
+        "total_input_tokens": 0,
+        "total_output_tokens": 0,
+    })
+    await ai_manager.get_log_stats()
+    stats_sql = conn.fetchrow.await_args.args[0]
+    assert "user_id" not in stats_sql
+    # stats 的 SELECT 本來就有 FILTER (WHERE ...)，所以只驗 FROM 後面沒有接 where 子句
+    assert "FROM ai_logs\n" in stats_sql
+    assert stats_sql.split("FROM ai_logs", 1)[1].strip() == ""
+    assert len(conn.fetchrow.await_args.args) == 1
+
+
+@pytest.mark.asyncio
+async def test_call_agent_survives_create_log_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """寫 log 失敗不該讓 Agent 呼叫失敗：回 success=True、log_id=None。"""
+    agent_id = uuid4()
+    monkeypatch.setattr(
+        ai_manager,
+        "get_agent_by_name",
+        AsyncMock(return_value={
+            "id": agent_id,
+            "name": "agent",
+            "model": "claude-sonnet",
+            "is_active": True,
+            "tools": None,
+            "system_prompt": None,
+        }),
+    )
+    monkeypatch.setattr(ai_manager, "call_ai", AsyncMock(return_value=_ai_response()))
+    monkeypatch.setattr(
+        ai_manager, "create_log", AsyncMock(side_effect=RuntimeError("DB 掛了"))
+    )
+
+    result = await ai_manager.call_agent("agent", "hi", user_id=31)
+    assert result["success"] is True
+    assert result["response"] == "ok"
+    assert result["log_id"] is None
+
+
+def test_ai_test_endpoint_still_200_when_create_log_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """POST /api/ai/test：create_log 丟例外，端點仍要 200。"""
+    from ching_tech_os.api import ai_management
+    from ching_tech_os.services import ai_manager as svc
+
+    agent_id = uuid4()
+    monkeypatch.setattr(svc, "get_agent", AsyncMock(return_value={"id": agent_id, "name": "agent"}))
+    monkeypatch.setattr(
+        svc,
+        "get_agent_by_name",
+        AsyncMock(return_value={
+            "id": agent_id,
+            "name": "agent",
+            "model": "claude-sonnet",
+            "is_active": True,
+            "tools": None,
+            "system_prompt": None,
+        }),
+    )
+    monkeypatch.setattr(svc, "call_ai", AsyncMock(return_value=_ai_response()))
+    monkeypatch.setattr(svc, "create_log", AsyncMock(side_effect=RuntimeError("DB 掛了")))
+    monkeypatch.setattr(ai_management.ai_manager, "test_agent", svc.test_agent)
+
+    client = _log_api_client(monkeypatch)
+    resp = client.post("/api/ai/test", json={"agent_id": str(agent_id), "message": "hi"})
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["success"] is True and body["log_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_scheduler_retries_log_without_user_on_fk_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """executor_config.ctos_user_id 是管理員手填的，指到不存在的使用者會違反外鍵。
+
+    這時重試一次 user_id=None，log 還是留得下來；第二次再失敗就只 warning。
+    """
+    from ching_tech_os.services import task_scheduler
+
+    monkeypatch.setattr(
+        "ching_tech_os.services.ai_manager.get_agent_by_name",
+        AsyncMock(return_value={"id": uuid4(), "model": "sonnet", "tools": None, "system_prompt": None}),
+    )
+    monkeypatch.setattr(
+        "ching_tech_os.services.claude_agent.call_claude",
+        AsyncMock(return_value=SimpleNamespace(success=True, message="done", error=None)),
+    )
+
+    calls: list = []
+
+    async def _create_log(data):
+        calls.append(data)
+        if data.user_id is not None:
+            raise RuntimeError('violates foreign key constraint "fk_ai_logs_user_id"')
+        return {"id": uuid4()}
+
+    monkeypatch.setattr("ching_tech_os.services.ai_manager.create_log", _create_log)
+
+    out = await task_scheduler._execute_agent_task(
+        "每日盤點", {"agent_name": "bot", "prompt": "p", "ctos_user_id": 999999}, None
+    )
+
+    assert out == "done"  # 排程本身沒有被 log 拖垮
+    assert [c.user_id for c in calls] == [999999, None]
+    # 重試那筆除了 user_id 之外內容一樣
+    assert calls[1].input_prompt == calls[0].input_prompt
+    assert calls[1].context_id == calls[0].context_id
+
+
+@pytest.mark.asyncio
+async def test_scheduler_gives_up_after_one_retry(monkeypatch: pytest.MonkeyPatch) -> None:
+    """重試那次也失敗就放棄，只 warning，不再往下退讓，也不能炸掉排程。"""
+    from ching_tech_os.services import task_scheduler
+
+    monkeypatch.setattr(
+        "ching_tech_os.services.ai_manager.get_agent_by_name",
+        AsyncMock(return_value={"id": uuid4(), "model": "sonnet", "tools": None, "system_prompt": None}),
+    )
+    monkeypatch.setattr(
+        "ching_tech_os.services.claude_agent.call_claude",
+        AsyncMock(return_value=SimpleNamespace(success=True, message="done", error=None)),
+    )
+    create_log = AsyncMock(side_effect=RuntimeError("DB 掛了"))
+    monkeypatch.setattr("ching_tech_os.services.ai_manager.create_log", create_log)
+
+    out = await task_scheduler._execute_agent_task(
+        "每日盤點", {"agent_name": "bot", "prompt": "p", "ctos_user_id": 999999}, None
+    )
+
+    assert out == "done"
+    assert create_log.await_count == 2  # 原始一次 + 重試一次，不再更多
+
+
+@pytest.mark.asyncio
+async def test_scheduler_does_not_retry_when_user_id_already_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """負控制：本來就沒有 user_id 時不該多打一次。"""
+    from ching_tech_os.services import task_scheduler
+
+    monkeypatch.setattr(
+        "ching_tech_os.services.ai_manager.get_agent_by_name",
+        AsyncMock(return_value={"id": uuid4(), "model": "sonnet", "tools": None, "system_prompt": None}),
+    )
+    monkeypatch.setattr(
+        "ching_tech_os.services.claude_agent.call_claude",
+        AsyncMock(return_value=SimpleNamespace(success=True, message="done", error=None)),
+    )
+    create_log = AsyncMock(side_effect=RuntimeError("DB 掛了"))
+    monkeypatch.setattr("ching_tech_os.services.ai_manager.create_log", create_log)
+
+    out = await task_scheduler._execute_agent_task(
+        "每日盤點", {"agent_name": "bot", "prompt": "p"}, None
+    )
+
+    assert out == "done"
+    assert create_log.await_count == 1

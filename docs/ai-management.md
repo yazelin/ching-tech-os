@@ -473,4 +473,4 @@ cd backend && uv run alembic upgrade head
 | `011_add_active_agent_id.py` | bot_users/bot_groups 新增 active_agent_id 欄位 |
 | `012_add_restricted_agent_id.py` | bot_users/bot_groups 新增 restricted_agent_id 欄位 |
 | `017_voice_module_independence.py` | ai_agents 新增 voice_settings 欄位 |
-| `029_ai_logs_user_id.py` | ai_logs 新增 user_id 欄位與索引（依用戶篩選） |
+| `029_ai_logs_user_id.py` | ai_logs 新增 user_id 欄位、索引與外鍵 users(id) ON DELETE SET NULL（依用戶篩選） |
