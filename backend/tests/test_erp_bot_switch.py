@@ -81,6 +81,81 @@ def test_code_prompt_keeps_usage_rules() -> None:
 
 
 # ============================================================
+# 2. migration 032
+# ============================================================
+
+
+def _load_migration_032():
+    path = BACKEND_ROOT / "migrations" / "versions" / "032_switch_bot_prompt_to_erp_module.py"
+    assert path.is_file(), f"找不到 migration 032：{path}"
+    spec = importlib.util.spec_from_file_location("migration_032", path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_migration_032_revision_chain() -> None:
+    module = _load_migration_032()
+    assert module.revision == "032"
+    assert module.down_revision == "031"
+
+
+def test_migration_032_new_sections_have_no_erpnext() -> None:
+    module = _load_migration_032()
+    for name, (old, new) in module.SECTIONS.items():
+        for marker in ERPNEXT_MARKERS:
+            assert marker not in new, f"{name} 的新段落仍含 {marker}"
+        # 舊段落必須是 ERPNext 版本，downgrade 才換得回去
+        assert any(marker in old for marker in ERPNEXT_MARKERS), f"{name} 的舊段落不像 ERPNext 版本"
+
+
+def test_migration_032_new_sections_cover_tools() -> None:
+    module = _load_migration_032()
+    joined = "\n".join(new for _old, new in module.SECTIONS.values())
+    for tool in PARTY_TOOLS + INVENTORY_TOOLS:
+        assert tool in joined, f"migration 032 缺少工具 {tool}"
+    assert "os.ching-tech.com/projects" in joined
+
+
+def test_migration_032_old_sections_match_seed_data() -> None:
+    """舊段落要和 seed_data.sql 的 prompt 對得起來（正式庫原文的唯一本機依據）"""
+    module = _load_migration_032()
+    seed = (BACKEND_ROOT / "migrations" / "versions" / "seed_data.sql").read_text(encoding="utf-8")
+    # seed 是 SQL 字面值，單引號是加倍的
+    for name, (old, _new) in module.SECTIONS.items():
+        assert old.replace("'", "''") in seed, f"{name} 的舊段落在 seed_data.sql 找不到"
+
+
+def test_migration_032_rewrite_replaces_and_reports_missing() -> None:
+    module = _load_migration_032()
+    content = "前言\n" + module.SECTIONS["personal_party"][0] + "\n結尾"
+    rewritten, missing = module.rewrite(content, ["personal_party", "personal_inventory"])
+    assert module.SECTIONS["personal_party"][1] in rewritten
+    assert module.SECTIONS["personal_party"][0] not in rewritten
+    # 找不到的段落只回報、不炸
+    assert missing == ["personal_inventory"]
+
+
+def test_migration_032_rewrite_is_reversible() -> None:
+    module = _load_migration_032()
+    names = list(module.SECTIONS)
+    original = "\n".join(old for old, _new in module.SECTIONS.values())
+    upgraded, missing = module.rewrite(original, names)
+    assert missing == []
+    downgraded, missing_back = module.rewrite(upgraded, names, reverse=True)
+    assert missing_back == []
+    assert downgraded == original
+
+
+def test_migration_032_rewrite_never_raises_on_unknown_content() -> None:
+    module = _load_migration_032()
+    rewritten, missing = module.rewrite("完全無關的 prompt", list(module.SECTIONS))
+    assert rewritten == "完全無關的 prompt"
+    assert missing == list(module.SECTIONS)
+
+
+# ============================================================
 # 3. skills
 # ============================================================
 
