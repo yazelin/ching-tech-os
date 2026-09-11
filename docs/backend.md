@@ -201,7 +201,7 @@ GET 明細的 `audit_id` 是 `null`。
 
 | 方法 | 端點 | 說明 |
 |------|------|------|
-| GET | `/api/parties` | 清單。query：`q`（名稱／簡稱／別名／統編）、`role`（supplier／customer）、`page`、`page_size` |
+| GET | `/api/parties` | 清單。query：`q`（名稱／簡稱／別名／統編／聯絡人姓名或電話）、`role`（supplier／customer／both）、`page`、`page_size` |
 | POST | `/api/parties` | 建立；可一次帶 `contacts`、`addresses` |
 | POST | `/api/parties/merge` | 合併重複主檔。body `{keep_id, drop_id}`。宣告在 `/{party_id}` 之前 |
 | GET | `/api/parties/{id}` | 明細：主檔＋聯絡人＋地址＋近期採購單＋相關專案＋`knowledge_count` |
@@ -209,6 +209,10 @@ GET 明細的 `audit_id` 是 `null`。
 | DELETE | `/api/parties/{id}` | 軟刪除（寫 `deleted_at`），之後不進清單也不進模糊解析 |
 | POST | `/api/parties/{id}/contacts` | 新增聯絡人；`is_primary` 會把原本的主要聯絡人取消 |
 | POST | `/api/parties/{id}/addresses` | 新增地址 |
+| PUT | `/api/parties/{id}/contacts/{cid}` | 更新聯絡人；`is_primary=true` 會把同一家其他聯絡人降級；`cid` 不屬於該 party 回 404 |
+| DELETE | `/api/parties/{id}/contacts/{cid}` | 刪除聯絡人；刪掉主要那筆不自動指派新主要 |
+| PUT | `/api/parties/{id}/addresses/{aid}` | 更新地址；`is_primary=true` 會把同一家其他地址降級；`aid` 不屬於該 party 回 404 |
+| DELETE | `/api/parties/{id}/addresses/{aid}` | 刪除地址；刪掉主要那筆不自動指派新主要 |
 | GET | `/api/items` | 清單。query：`q`（料號／品名／規格／別名）、`item_group`、`page`、`page_size`。item 帶 `total_qty` |
 | POST | `/api/items` | 建立；料號重複回 400 |
 | GET | `/api/items/{id}` | 明細：主檔＋各倉餘額＋最近異動＋預設供應商 |
@@ -234,8 +238,10 @@ GET 明細的 `audit_id` 是 `null`。
 收貨全收改 `received`、部分改 `partial`。
 
 更新請求對資料表 NOT NULL 的欄位（`parties.name`／`aliases`／`is_supplier`／`is_customer`、
+`party_contacts.name`／`is_primary`、`party_addresses.address`／`is_primary`、
 `items.code`／`name`／`aliases`、`warehouses.code`／`name`、`purchase_orders.supplier_id`／`status`）
-明確送 `null` 會被擋在 422。清單的 `q` 會跳脫 `%` 與 `_` 後才進 `ILIKE`。
+明確送 `null` 會被擋在 422。清單的 `q` 會跳脫 `%` 與 `_` 後才進 `ILIKE`；`q` 同時比對聯絡人
+姓名（模糊）與電話／手機（等值，避免片段號碼誤中）。
 每筆寫入都在同一交易寫 `erp_audit`（`entity_type`、`action`、`diff`、`actor_user_id`、
 `via`＝`rest`／`mcp`、`agent_name`）。
 

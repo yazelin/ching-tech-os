@@ -305,12 +305,16 @@ result = await execute_tool("generate_md2doc", {
 
 | 工具名稱 | 說明 | 參數 |
 |----------|------|------|
-| `find_party` | 模糊找往來對象（名稱、簡稱、別名、聯絡人、電話、統編） | `query`（必填）, `role`, `ctos_user_id` |
+| `find_party` | 模糊找往來對象（名稱、簡稱、別名、聯絡人、電話、統編） | `query`（必填）, `role`（supplier／customer／both）, `ctos_user_id` |
 | `get_party` | 完整資料＋聯絡人＋地址＋近期採購單＋相關專案＋知識庫條目數 | `party_id` 或 `name`, `ctos_user_id` |
 | `create_party` | 建立往來對象 | `name`（必填）, `short_name`, `is_supplier`, `is_customer`, `tax_id`, `industry`, `payment_terms`, `aliases`, `notes`, `contacts`, `addresses`, `ctos_user_id` |
 | `update_party` | 更新主檔 | `party_id` 或 `name`, `fields`（必填）, `ctos_user_id` |
 | `add_party_contact` | 新增聯絡人 | `party_id` 或 `party_name`, `name`（必填）, `title`, `phone`, `mobile`, `email`, `is_primary`, `notes`, `ctos_user_id` |
 | `add_party_address` | 新增地址 | `party_id` 或 `party_name`, `address`（必填）, `label`, `city`, `is_primary`, `ctos_user_id` |
+| `update_party_contact` | 更新聯絡人；`is_primary=true` 會把同一家其他聯絡人降級 | `contact_id`（必填）, `party_id` 或 `party_name`, `fields`（必填）, `ctos_user_id` |
+| `delete_party_contact` | 刪除聯絡人；刪掉主要那筆不自動指派新主要 | `contact_id`（必填）, `party_id` 或 `party_name`, `ctos_user_id` |
+| `update_party_address` | 更新地址；`is_primary=true` 會把同一家其他地址降級 | `address_id`（必填）, `party_id` 或 `party_name`, `fields`（必填）, `ctos_user_id` |
+| `delete_party_address` | 刪除地址；刪掉主要那筆不自動指派新主要 | `address_id`（必填）, `party_id` 或 `party_name`, `ctos_user_id` |
 | `merge_parties` | 合併重複主檔（drop 的資料掛到 keep，名稱變別名） | `keep_id`（必填）, `drop_id`（必填）, `ctos_user_id` |
 | `summarize_party` | 聚合成一段上下文（不是模型生成） | `party_id` 或 `name`, `ctos_user_id` |
 | `extract_party_from_document` | 名片／文件欄位整理成草稿並比對重複主檔 | `file_path`（必填）, `name`（必填）, `short_name`, `tax_id`, `contact_name`, `contact_title`, `phone`, `mobile`, `email`, `address`, `is_supplier`, `is_customer`, `notes`, `ctos_user_id` |
@@ -339,8 +343,10 @@ result = await execute_tool("generate_md2doc", {
    收貨也一樣：同一張單同一物料有兩行時，`receive_purchase_order` 只給 `item` 會回行候選，
    要用 `lines: [{"line_id": ..., "qty": ...}]` 指定（`line_id` 就是
    `get_purchase_order` 回的行項 `id`）。
-   `update_party`／`update_item` 的 `fields` 會先過 `PartyUpdate`／`ItemUpdate` 驗證，
-   NOT NULL 欄位送 `null` 直接回 `{"ok": false, "error": "欄位不合法（…）"}`，不會變成資料庫例外。
+   `update_party`／`update_item`／`update_party_contact`／`update_party_address` 的
+   `fields` 會先過 `PartyUpdate`／`ItemUpdate`／`PartyContactUpdate`／`PartyAddressUpdate`
+   驗證，NOT NULL 欄位送 `null` 直接回 `{"ok": false, "error": "欄位不合法（…）"}`，
+   不會變成資料庫例外。
 3. **文件擷取不呼叫模型**：`extract_*_from_document` 只把 agent 讀出來的欄位整理成草稿、
    比對重複主檔，擷取由 agent 自己做（AI Log 才看得到過程）。
 
