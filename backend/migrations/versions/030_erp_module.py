@@ -343,6 +343,10 @@ def upgrade() -> None:
         sa.Column("sort_order", sa.Integer(), nullable=False, server_default="0"),
         _created_by(),
         *_timestamps(),
+        # 已收量不可能超過訂購量；service 也擋，這裡是最後一道（併發收貨時才看得到差別）
+        sa.CheckConstraint(
+            "received_qty <= qty", name="ck_purchase_order_lines_received_qty"
+        ),
     )
     op.create_index("idx_purchase_order_lines_po_id", "purchase_order_lines", ["po_id"])
 

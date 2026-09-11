@@ -1416,6 +1416,44 @@ def test_receive_plan_by_item_ok_when_single_line() -> None:
     assert plan == [(line["id"], item, Decimal("4"))]
 
 
+def test_receive_plan_decrements_remaining_for_repeated_line() -> None:
+    """同一行在同一個請求出現兩次：剩餘量要逐筆遞減，合計超收要擋"""
+    item = uuid4()
+    line = _po_line(item, "10", "6")  # 未收 4
+    with pytest.raises(erp_core.InvalidOperationError) as exc:
+        purchasing_service._receive_plan(
+            [line],
+            [{"line_id": line["id"], "qty": 3}, {"line_id": line["id"], "qty": 3}],
+            False,
+        )
+    assert "超過未收量" in str(exc.value)
+
+
+def test_receive_plan_allows_repeated_line_within_remaining() -> None:
+    """同一行兩次但合計沒超過未收量：兩筆都收，數量各自保留"""
+    item = uuid4()
+    line = _po_line(item, "10", "6")  # 未收 4
+    plan = purchasing_service._receive_plan(
+        [line],
+        [{"line_id": line["id"], "qty": 3}, {"line_id": line["id"], "qty": 1}],
+        False,
+    )
+    assert plan == [
+        (line["id"], item, Decimal("3")),
+        (line["id"], item, Decimal("1")),
+    ]
+
+
+def test_receive_plan_repeated_line_via_item_id() -> None:
+    """用 item_id 指定（單行物料）重複兩次，一樣會遞減"""
+    item = uuid4()
+    line = _po_line(item, "5")
+    with pytest.raises(erp_core.InvalidOperationError):
+        purchasing_service._receive_plan(
+            [line], [{"item_id": item, "qty": 4}, {"item_id": item, "qty": 4}], False
+        )
+
+
 def test_receive_plan_rejects_unknown_line_id() -> None:
     with pytest.raises(erp_core.InvalidOperationError):
         purchasing_service._receive_plan(
@@ -1554,6 +1592,65 @@ async def test_receive_all_two_lines_of_same_item(monkeypatch) -> None:
     assert len(result["movements"]) == 2
     updated_lines = [c[2][0] for c in conn.find("SET received_qty = received_qty + $2")]
     assert updated_lines == [first["id"], second["id"]]
+
+
+@pytest.mark.asyncio
+async def test_receive_same_line_twice_in_one_request(monkeypatch) -> None:
+    """合計沒超過未收量時，兩筆都寫，received_qty 各加一次"""
+    po_id, item_id, wh_id = uuid4(), uuid4(), uuid4()
+    line = _po_line(item_id, "10", "6")  # 未收 4
+    conn = _FakeConn(
+        fetchrow=[
+            _DictRecord({"id": po_id, "po_no": "PO-202609-001", "status": "partial"}),
+            _DictRecord({"id": uuid4()}),
+            _DictRecord({"id": uuid4(), "qty": Decimal("3")}),
+            _DictRecord({"id": uuid4()}),
+            _DictRecord({"id": uuid4(), "qty": Decimal("4")}),
+            _DictRecord({"total_qty": Decimal("10"), "received_qty": Decimal("10")}),
+        ],
+        fetchval=[1, uuid4()],
+        fetch=[[line]],
+    )
+    _patch(monkeypatch, purchasing_service, conn)
+
+    result = await purchasing_service.receive_purchase_order(
+        po_id,
+        lines=[
+            {"line_id": line["id"], "qty": Decimal("3")},
+            {"line_id": line["id"], "qty": Decimal("1")},
+        ],
+        warehouse_id=wh_id,
+    )
+
+    assert result["status"] == "received"
+    updates = conn.find("SET received_qty = received_qty + $2")
+    assert [c[2] for c in updates] == [
+        (line["id"], Decimal("3")),
+        (line["id"], Decimal("1")),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_receive_same_line_twice_over_remaining_is_rejected(monkeypatch) -> None:
+    po_id, item_id = uuid4(), uuid4()
+    line = _po_line(item_id, "10", "6")  # 未收 4
+    conn = _FakeConn(
+        fetchrow=[_DictRecord({"id": po_id, "po_no": "PO-1", "status": "partial"})],
+        fetch=[[line]],
+    )
+    _patch(monkeypatch, purchasing_service, conn)
+
+    with pytest.raises(erp_core.InvalidOperationError):
+        await purchasing_service.receive_purchase_order(
+            po_id,
+            lines=[
+                {"line_id": line["id"], "qty": Decimal("3")},
+                {"line_id": line["id"], "qty": Decimal("3")},
+            ],
+            warehouse_id=uuid4(),
+        )
+    # 擋在規劃階段，一筆異動都不該寫
+    assert not conn.find("INSERT INTO stock_movements")
 
 
 @pytest.mark.asyncio

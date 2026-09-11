@@ -445,8 +445,10 @@ def _receive_plan(
     `item_id`：該物料只出現在一行時視為指定那一行，出現多行就拋
     `AmbiguousError(candidates=行清單)`，要人或 agent 指定 `line_id`。
 
+    同一行在同一個請求裡出現多次是允許的，剩餘量會逐筆遞減，合計超過未收量才擋。
+
     Raises:
-        InvalidOperationError: 數量 ≤ 0、超收、行項不屬於這張單
+        InvalidOperationError: 數量 ≤ 0、超收（含同一行多筆合計超收）、行項不屬於這張單
         AmbiguousError: 只給 item_id 但該物料有多行
     """
     by_line = {
@@ -471,6 +473,9 @@ def _receive_plan(
             raise InvalidOperationError(
                 f"收貨數量超過未收量（未收 {remain}，要收 {qty}）"
             )
+        # 同一行在同一個請求裡出現兩次時，剩餘量要跟著遞減；
+        # 不然 {qty:3} 兩筆對剩 4 的行會各自過檢查、合起來收 6
+        by_line[line_id] = (item_id, remain - qty)
         plan.append((line_id, item_id, qty))
     return plan
 
