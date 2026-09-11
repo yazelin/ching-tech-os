@@ -252,6 +252,7 @@ def get_knowledge(kb_id: str) -> KnowledgeResponse:
 def search_knowledge(
     query: str | None = None,
     project: str | None = None,
+    project_id: str | None = None,
     kb_type: str | None = None,
     category: str | None = None,
     role: str | None = None,
@@ -265,7 +266,8 @@ def search_knowledge(
 
     Args:
         query: 關鍵字搜尋（使用 ripgrep）
-        project: 專案過濾
+        project: 專案過濾（tags 裡的專案名稱）
+        project_id: 專案 UUID 過濾（scope=project 的條目才有）
         kb_type: 類型過濾
         category: 分類過濾
         role: 角色過濾
@@ -389,8 +391,12 @@ def search_knowledge(
             if entry_scope == "personal" and entry_owner != current_username:
                 continue
 
-        # 專案過濾
+        # 專案過濾（tags 裡的專案名稱）
         if project and project not in entry.tags.projects:
+            continue
+
+        # 專案 UUID 過濾（scope=project 的條目才帶 project_id）
+        if project_id and getattr(entry, "project_id", None) != project_id:
             continue
 
         # 類型過濾

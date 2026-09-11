@@ -132,7 +132,8 @@ async def _get_knowledge_with_write_access(kb_id: str, session: SessionData) -> 
 )
 async def list_knowledge(
     q: str | None = Query(None, description="關鍵字搜尋"),
-    project: str | None = Query(None, description="專案過濾"),
+    project: str | None = Query(None, description="專案過濾（tags 裡的專案名稱）"),
+    project_id: str | None = Query(None, description="專案 UUID 過濾（配合 scope=project）"),
     type: str | None = Query(None, description="類型過濾"),
     category: str | None = Query(None, description="分類過濾"),
     role: str | None = Query(None, description="角色過濾"),
@@ -150,6 +151,7 @@ async def list_knowledge(
         return search_knowledge(
             query=q,
             project=project,
+            project_id=project_id,
             kb_type=type,
             category=category,
             role=role,
