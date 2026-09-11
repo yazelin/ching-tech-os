@@ -343,8 +343,23 @@ async def _execute_agent_task(
             duration_ms=duration_ms,
             input_tokens=getattr(response, "input_tokens", None),
             output_tokens=getattr(response, "output_tokens", None),
+            # 排程沒有互動使用者，記建立者（executor_config 明寫的優先）
+            user_id=ctos_user_id,
         )
-        await create_log(log_data)
+        try:
+            await create_log(log_data)
+        except Exception as e:
+            # executor_config.ctos_user_id 是管理員手填的 JSON，可能指到不存在的
+            # 使用者而違反 ai_logs.user_id 的外鍵。這種情況寧可留一筆沒有使用者的
+            # log，也不要整筆丟掉；重試一次就放棄，不無限退讓。
+            if log_data.user_id is None:
+                raise
+            logger.warning(
+                "排程 AI Log 記錄失敗（user_id=%s），改以 user_id=None 重試: %s",
+                log_data.user_id,
+                e,
+            )
+            await create_log(log_data.model_copy(update={"user_id": None}))
     except Exception as e:
         logger.warning("排程 AI Log 記錄失敗: %s", e)
 
@@ -417,6 +432,8 @@ async def _execute_skill_script_task(
             success=success,
             error_message=error,
             duration_ms=result.get("duration_ms"),
+            # 排程沒有互動使用者，記 scheduled_tasks.created_by
+            user_id=fallback_user_id,
         )
         await create_log(log_data)
     except Exception as e:

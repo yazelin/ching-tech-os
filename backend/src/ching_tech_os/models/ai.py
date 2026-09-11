@@ -235,6 +235,7 @@ class AiLogCreate(BaseModel):
     duration_ms: int | None = None
     input_tokens: int | None = None
     output_tokens: int | None = None
+    user_id: int | None = Field(None, description="發起這次呼叫的 CTOS 使用者 ID（取不到留 None）")
 
 
 class AiLogResponse(BaseModel):
@@ -257,6 +258,8 @@ class AiLogResponse(BaseModel):
     duration_ms: int | None
     input_tokens: int | None
     output_tokens: int | None
+    user_id: int | None = None  # 發起這次呼叫的 CTOS 使用者 ID
+    username: str | None = None  # LEFT JOIN users 取得
     created_at: datetime
 
 
@@ -275,6 +278,8 @@ class AiLogListItem(BaseModel):
     duration_ms: int | None
     input_tokens: int | None
     output_tokens: int | None
+    user_id: int | None = None  # 發起這次呼叫的 CTOS 使用者 ID
+    username: str | None = None  # LEFT JOIN users 取得
     created_at: datetime
 
 
@@ -295,6 +300,8 @@ class AiLogFilter(BaseModel):
     success: bool | None = None
     start_date: datetime | None = None
     end_date: datetime | None = None
+    # 指定使用者 ID；特殊值 0 代表「未記錄使用者」（user_id IS NULL）
+    user_id: int | None = None
 
 
 class AiLogStats(BaseModel):

@@ -215,6 +215,7 @@ async def _handle_debug(ctx: CommandContext) -> str | None:
             response=response,
             duration_ms=duration_ms,
             context_type_override="bot-debug",
+            user_id=ctx.ctos_user_id,
         )
     except Exception:
         logger.warning("記錄 /debug AI Log 失敗", exc_info=True)

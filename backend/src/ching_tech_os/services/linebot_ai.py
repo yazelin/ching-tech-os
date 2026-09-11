@@ -1043,6 +1043,8 @@ async def process_message_with_ai(
             duration_ms=duration_ms,
             tool_routing=tool_routing,
             actual_agent_name=agent_name,
+            # 已綁定 CTOS 帳號才有值（bot_users.user_id）
+            user_id=ctos_user_id,
         )
 
         # 檢查 nanobanana 是否有錯誤（overloaded/timeout）
@@ -1320,6 +1322,7 @@ async def log_linebot_ai_call(
     context_type_override: str | None = None,
     tool_routing: dict | None = None,
     actual_agent_name: str | None = None,
+    user_id: int | None = None,
 ) -> None:
     """
     記錄 Line Bot AI 調用到 AI Log
@@ -1337,6 +1340,7 @@ async def log_linebot_ai_call(
         duration_ms: 耗時（毫秒）
         tool_routing: 工具路由決策資訊（script-first / fallback）
         actual_agent_name: 實際使用的 Agent 名稱（如 jfmskin_edu），用於記錄正確的 agent_id
+        user_id: bot 使用者已綁定的 CTOS 帳號 ID（bot_users.user_id）；未綁定留 None
     """
     try:
         # 優先用實際使用的 Agent，否則依對話類型取得預設 Agent
@@ -1392,6 +1396,7 @@ async def log_linebot_ai_call(
             duration_ms=duration_ms,
             input_tokens=response.input_tokens,
             output_tokens=response.output_tokens,
+            user_id=user_id,
         )
 
         await ai_manager.create_log(log_data)

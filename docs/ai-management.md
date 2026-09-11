@@ -136,7 +136,15 @@ AI 調用記錄，使用月份分區。
 | duration_ms | INTEGER | 執行時間（毫秒） |
 | input_tokens | INTEGER | 輸入 tokens |
 | output_tokens | INTEGER | 輸出 tokens |
+| user_id | INTEGER | 發起這次呼叫的 CTOS 使用者（FK users.id，取不到留 NULL） |
 | created_at | TIMESTAMP | 建立時間 |
+
+`user_id` 由 migration 029 加入，`REFERENCES users(id) ON DELETE SET NULL`。外鍵建在
+分區父表上，既有分區與之後由 `create_ai_logs_partition()` 建的新分區都會繼承
+（新分區走 `CREATE TABLE … PARTITION OF`）。使用者被刪除時那些 log 的 `user_id` 變成
+NULL，所以**「使用者已刪除」等同「未記錄使用者」**，不會留下查不到名字的孤兒 ID。
+`GET /api/ai/logs` 與 `/stats` 的 `user_id` 參數用 **0 代表「未記錄使用者」**
+（`user_id IS NULL`）。
 
 #### context_type 值一覽
 
@@ -421,7 +429,8 @@ async def ensure_default_linebot_agents() -> None:
 
 - 檔案：`js/ai-log.js`, `css/ai-log.css`
 - 功能：
-  - 過濾器（Agent、context_type、成功/失敗、日期範圍）
+  - 過濾器（Agent、context_type、成功/失敗、日期範圍、使用者）
+  - 使用者過濾：選特定使用者送 `user_id=<id>`，選「未記錄使用者」送 `user_id=0`
   - context_type 過濾選項：Web 對話、Line 群組/個人、Telegram 群組/個人、系統、Script 執行、測試
   - 統計卡片（總次數、成功率、平均耗時）
   - Log 列表（分頁，可顯示 script 標籤和使用的工具）
@@ -464,3 +473,4 @@ cd backend && uv run alembic upgrade head
 | `011_add_active_agent_id.py` | bot_users/bot_groups 新增 active_agent_id 欄位 |
 | `012_add_restricted_agent_id.py` | bot_users/bot_groups 新增 restricted_agent_id 欄位 |
 | `017_voice_module_independence.py` | ai_agents 新增 voice_settings 欄位 |
+| `029_ai_logs_user_id.py` | ai_logs 新增 user_id 欄位、索引與外鍵 users(id) ON DELETE SET NULL（依用戶篩選） |
