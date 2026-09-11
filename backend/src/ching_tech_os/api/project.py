@@ -39,6 +39,23 @@ router = APIRouter(prefix="/api/projects", tags=["projects"])
 require_project_access = require_app_permission("project-management")
 
 
+def _reject_bad_reference(exc: Exception) -> HTTPException:
+    """把 service 的外鍵驗證例外翻成 HTTP 錯誤"""
+    if isinstance(exc, project_service.UserNotFoundError):
+        return HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="使用者不存在"
+        )
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST, detail="里程碑不屬於此專案"
+    )
+
+
+_REFERENCE_ERRORS = (
+    project_service.UserNotFoundError,
+    project_service.MilestoneNotInProjectError,
+)
+
+
 async def require_project_editor(
     project_id: UUID,
     session: SessionData = Depends(require_project_access),
@@ -91,10 +108,17 @@ async def create_project(
     _perm: SessionData = Depends(require_project_access),
 ) -> ProjectDetailResponse:
     """建立專案（管理員）；有指定負責人時自動加成員"""
-    row = await project_service.create_project(
-        body.model_dump(), created_by=session.user_id
-    )
+    try:
+        row = await project_service.create_project(
+            body.model_dump(), created_by=session.user_id
+        )
+    except _REFERENCE_ERRORS as e:
+        raise _reject_bad_reference(e)
     detail = await project_service.get_project_detail(row["id"])
+    if detail is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="專案不存在"
+        )
     return ProjectDetailResponse(**detail)
 
 
@@ -135,14 +159,21 @@ async def update_project(
     session: SessionData = Depends(require_project_editor),
 ) -> ProjectDetailResponse:
     """更新主檔；改 owner_id 時自動補成員"""
-    updated = await project_service.update_project(
-        project_id, body.model_dump(exclude_unset=True)
-    )
+    try:
+        updated = await project_service.update_project(
+            project_id, body.model_dump(exclude_unset=True)
+        )
+    except _REFERENCE_ERRORS as e:
+        raise _reject_bad_reference(e)
     if updated is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="專案不存在"
         )
     detail = await project_service.get_project_detail(project_id)
+    if detail is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="專案不存在"
+        )
     return ProjectDetailResponse(**detail)
 
 
@@ -279,7 +310,10 @@ async def create_task(
     session: SessionData = Depends(require_project_editor),
 ) -> TaskResponse:
     """建立任務"""
-    row = await project_service.create_task(project_id, body.model_dump())
+    try:
+        row = await project_service.create_task(project_id, body.model_dump())
+    except _REFERENCE_ERRORS as e:
+        raise _reject_bad_reference(e)
     return TaskResponse(**row)
 
 
@@ -295,9 +329,12 @@ async def update_task(
     session: SessionData = Depends(require_project_editor),
 ) -> TaskResponse:
     """更新任務"""
-    row = await project_service.update_task(
-        project_id, task_id, body.model_dump(exclude_unset=True)
-    )
+    try:
+        row = await project_service.update_task(
+            project_id, task_id, body.model_dump(exclude_unset=True)
+        )
+    except _REFERENCE_ERRORS as e:
+        raise _reject_bad_reference(e)
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="任務不存在"

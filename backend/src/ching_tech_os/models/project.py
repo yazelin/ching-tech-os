@@ -7,7 +7,7 @@
 from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Literal
 
 # 規格第一節定義的狀態集合
@@ -15,6 +15,13 @@ ProjectStatus = Literal["planning", "active", "on_hold", "completed", "cancelled
 MilestoneStatus = Literal["pending", "in_progress", "completed"]
 TaskStatus = Literal["todo", "doing", "done"]
 MemberRole = Literal["owner", "member"]
+
+
+def _not_null(value):
+    """更新請求裡明確送 null 到 NOT NULL 欄位：擋在 422，不要進到資料庫才爆"""
+    if value is None:
+        raise ValueError("此欄位不可為 null")
+    return value
 
 
 # ============================================================
@@ -48,6 +55,9 @@ class ProjectUpdate(BaseModel):
     start_date: date | None = None
     end_date: date | None = None
     description: str | None = None
+
+    # 資料表 NOT NULL 的欄位不接受明確送 null（沒送就是不動）
+    _reject_null = field_validator("name", "status", mode="before")(_not_null)
 
 
 class ProjectListItem(BaseModel):
@@ -124,6 +134,10 @@ class MilestoneUpdate(BaseModel):
     status: MilestoneStatus | None = None
     sort_order: int | None = None
 
+    _reject_null = field_validator(
+        "name", "due_date", "status", "sort_order", mode="before"
+    )(_not_null)
+
 
 class MilestoneResponse(MilestoneBase):
     """里程碑回應"""
@@ -168,6 +182,10 @@ class TaskUpdate(BaseModel):
     due_date: date | None = None
     sort_order: int | None = None
 
+    _reject_null = field_validator("title", "status", "sort_order", mode="before")(
+        _not_null
+    )
+
 
 class TaskResponse(TaskBase):
     """任務回應"""
@@ -208,6 +226,9 @@ class ProjectDetailResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     progress: int = 0
+    member_count: int = 0
+    # 逾期里程碑「數」；ProjectSummaryResponse 的同名欄位是清單，兩者不同
+    overdue_milestones: int = 0
     members: list[ProjectMemberResponse] = Field(default_factory=list)
     milestones: list[MilestoneResponse] = Field(default_factory=list)
     tasks: list[TaskResponse] = Field(default_factory=list)

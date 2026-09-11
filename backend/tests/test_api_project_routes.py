@@ -52,6 +52,8 @@ def _detail(**overrides) -> dict:
         "created_at": now,
         "updated_at": now,
         "progress": 50,
+        "member_count": 2,
+        "overdue_milestones": 1,
         "members": [],
         "milestones": [],
         "tasks": [],
@@ -195,15 +197,35 @@ async def test_editor_dependency_404_when_project_missing(
 
 @pytest.mark.asyncio
 async def test_no_app_permission_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
-    """沒有 project-management app 權限：讀寫都 403"""
+    """沒有 project-management app 權限：每一個端點都 403，admin 也一樣"""
     app = _make_app("admin", app_permission=False)
+    mid, tid = uuid4(), uuid4()
+    base = f"/api/projects/{PROJECT_ID}"
+
+    calls = [
+        ("get", "/api/projects", None),
+        ("post", "/api/projects", {"name": "x"}),
+        ("get", "/api/projects/summary", None),
+        ("get", base, None),
+        ("put", base, {"name": "x"}),
+        ("delete", base, None),
+        ("post", f"{base}/members", {"user_id": 1}),
+        ("delete", f"{base}/members/1", None),
+        ("post", f"{base}/milestones", {"name": "m", "due_date": "2026-09-01"}),
+        ("put", f"{base}/milestones/{mid}", {"status": "completed"}),
+        ("delete", f"{base}/milestones/{mid}", None),
+        ("post", f"{base}/tasks", {"title": "t"}),
+        ("put", f"{base}/tasks/{tid}", {"status": "done"}),
+        ("delete", f"{base}/tasks/{tid}", None),
+    ]
+    # 每個路由都要被這個測試碰到
+    assert len(calls) == len(project_api.router.routes)
 
     async with _client(app) as client:
-        assert (await client.get("/api/projects")).status_code == 403
-        assert (await client.get("/api/projects/summary")).status_code == 403
-        assert (await client.get(f"/api/projects/{PROJECT_ID}")).status_code == 403
-        resp = await client.put(f"/api/projects/{PROJECT_ID}", json={"name": "x"})
-        assert resp.status_code == 403
+        for method, url, payload in calls:
+            resp = await getattr(client, method)(url, **({"json": payload} if payload else {}))
+            assert resp.status_code == 403, f"{method.upper()} {url} → {resp.status_code}"
+            assert resp.json()["detail"] == "無「專案管理」功能權限"
 
 
 @pytest.mark.asyncio
@@ -658,3 +680,205 @@ async def test_milestone_and_task_endpoints_reject_non_member(
     assert ms.status_code == 403
     assert task.status_code == 403
     assert ms_del.status_code == 403
+
+
+# ============================================================
+# 壞掉的外鍵（F2）與明確送 null（F3）
+# ============================================================
+
+
+@pytest.mark.asyncio
+async def test_create_project_unknown_owner_is_404(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        project_api.project_service,
+        "create_project",
+        AsyncMock(side_effect=project_api.project_service.UserNotFoundError("999")),
+    )
+
+    async with _client(_make_app("admin")) as client:
+        resp = await client.post("/api/projects", json={"name": "x", "owner_id": 999})
+
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "使用者不存在"
+
+
+@pytest.mark.asyncio
+async def test_update_project_unknown_owner_is_404(
+    monkeypatch: pytest.MonkeyPatch, project_exists
+) -> None:
+    _set_member(monkeypatch, True)
+    monkeypatch.setattr(
+        project_api.project_service,
+        "update_project",
+        AsyncMock(side_effect=project_api.project_service.UserNotFoundError("999")),
+    )
+
+    async with _client(_make_app("user")) as client:
+        resp = await client.put(f"/api/projects/{PROJECT_ID}", json={"owner_id": 999})
+
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "使用者不存在"
+
+
+@pytest.mark.asyncio
+async def test_create_task_unknown_assignee_is_404(
+    monkeypatch: pytest.MonkeyPatch, project_exists
+) -> None:
+    _set_member(monkeypatch, True)
+    monkeypatch.setattr(
+        project_api.project_service,
+        "create_task",
+        AsyncMock(side_effect=project_api.project_service.UserNotFoundError("999")),
+    )
+
+    async with _client(_make_app("user")) as client:
+        resp = await client.post(
+            f"/api/projects/{PROJECT_ID}/tasks", json={"title": "t", "assignee_id": 999}
+        )
+
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "使用者不存在"
+
+
+@pytest.mark.asyncio
+async def test_task_with_foreign_milestone_is_400(
+    monkeypatch: pytest.MonkeyPatch, project_exists
+) -> None:
+    """里程碑不屬於這個專案：400，不是 404 也不是 500"""
+    _set_member(monkeypatch, True)
+    err = project_api.project_service.MilestoneNotInProjectError("x")
+    monkeypatch.setattr(
+        project_api.project_service, "create_task", AsyncMock(side_effect=err)
+    )
+    monkeypatch.setattr(
+        project_api.project_service, "update_task", AsyncMock(side_effect=err)
+    )
+    tid, mid = uuid4(), uuid4()
+
+    async with _client(_make_app("user")) as client:
+        created = await client.post(
+            f"/api/projects/{PROJECT_ID}/tasks",
+            json={"title": "t", "milestone_id": str(mid)},
+        )
+        updated = await client.put(
+            f"/api/projects/{PROJECT_ID}/tasks/{tid}", json={"milestone_id": str(mid)}
+        )
+
+    assert created.status_code == 400
+    assert created.json()["detail"] == "里程碑不屬於此專案"
+    assert updated.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_explicit_null_on_not_null_columns_is_422(
+    monkeypatch: pytest.MonkeyPatch, project_exists
+) -> None:
+    """資料表 NOT NULL 的欄位明確送 null → 422，不要進到資料庫才爆"""
+    _set_member(monkeypatch, True)
+    mid, tid = uuid4(), uuid4()
+    base = f"/api/projects/{PROJECT_ID}"
+
+    cases = [
+        ("put", base, {"name": None}),
+        ("put", base, {"status": None}),
+        ("put", f"{base}/milestones/{mid}", {"name": None}),
+        ("put", f"{base}/milestones/{mid}", {"due_date": None}),
+        ("put", f"{base}/milestones/{mid}", {"status": None}),
+        ("put", f"{base}/milestones/{mid}", {"sort_order": None}),
+        ("put", f"{base}/tasks/{tid}", {"title": None}),
+        ("put", f"{base}/tasks/{tid}", {"status": None}),
+        ("put", f"{base}/tasks/{tid}", {"sort_order": None}),
+    ]
+
+    async with _client(_make_app("user")) as client:
+        for method, url, payload in cases:
+            resp = await getattr(client, method)(url, json=payload)
+            assert resp.status_code == 422, f"{url} {payload} → {resp.status_code}"
+
+
+@pytest.mark.asyncio
+async def test_nullable_columns_still_accept_null(
+    monkeypatch: pytest.MonkeyPatch, project_exists
+) -> None:
+    """可為空的欄位送 null 要放行（清空負責人、清空到期日）"""
+    _set_member(monkeypatch, True)
+    update = AsyncMock(return_value={"id": PROJECT_ID})
+    monkeypatch.setattr(project_api.project_service, "update_project", update)
+    monkeypatch.setattr(
+        project_api.project_service,
+        "get_project_detail",
+        AsyncMock(return_value=_detail()),
+    )
+
+    async with _client(_make_app("user")) as client:
+        resp = await client.put(
+            f"/api/projects/{PROJECT_ID}",
+            json={"owner_id": None, "customer": None, "end_date": None},
+        )
+
+    assert resp.status_code == 200
+    assert update.await_args.args[1] == {
+        "owner_id": None,
+        "customer": None,
+        "end_date": None,
+    }
+
+
+# ============================================================
+# 明細取不到時的守衛（F8）
+# ============================================================
+
+
+@pytest.mark.asyncio
+async def test_create_project_missing_detail_is_404(monkeypatch: pytest.MonkeyPatch) -> None:
+    """建完馬上被別人刪掉：回 404，不要 `**None` 爆成 500"""
+    monkeypatch.setattr(
+        project_api.project_service,
+        "create_project",
+        AsyncMock(return_value={"id": PROJECT_ID}),
+    )
+    monkeypatch.setattr(
+        project_api.project_service, "get_project_detail", AsyncMock(return_value=None)
+    )
+
+    async with _client(_make_app("admin")) as client:
+        resp = await client.post("/api/projects", json={"name": "x"})
+
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_update_project_missing_detail_is_404(
+    monkeypatch: pytest.MonkeyPatch, project_exists
+) -> None:
+    _set_member(monkeypatch, True)
+    monkeypatch.setattr(
+        project_api.project_service,
+        "update_project",
+        AsyncMock(return_value={"id": PROJECT_ID}),
+    )
+    monkeypatch.setattr(
+        project_api.project_service, "get_project_detail", AsyncMock(return_value=None)
+    )
+
+    async with _client(_make_app("user")) as client:
+        resp = await client.put(f"/api/projects/{PROJECT_ID}", json={"name": "x"})
+
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_detail_exposes_counts(monkeypatch: pytest.MonkeyPatch) -> None:
+    """明細要帶 member_count 與 overdue_milestones（前端表頭用）"""
+    monkeypatch.setattr(
+        project_api.project_service,
+        "get_project_detail",
+        AsyncMock(return_value=_detail()),
+    )
+
+    async with _client(_make_app("user")) as client:
+        resp = await client.get(f"/api/projects/{PROJECT_ID}")
+
+    body = resp.json()
+    assert body["member_count"] == 2
+    assert body["overdue_milestones"] == 1

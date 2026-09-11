@@ -30,12 +30,19 @@ def calc_progress(done_count: int | None, task_count: int | None) -> int:
 def is_milestone_overdue(
     due_date: date | None,
     status: str | None,
+    project_status: str | None,
     today: date | None = None,
 ) -> bool:
-    """逾期 = due_date < 今天 且 status <> 'completed'"""
+    """逾期 = due_date < 今天 且 status <> 'completed' 且所屬專案 status = 'active'
+
+    專案 status 這個條件是規格第一節定的，清單的計數、明細的 is_overdue 與
+    /summary 三處必須一致：結案或取消的專案不該一直紅著。
+    """
     if due_date is None:
         return False
     if status == "completed":
+        return False
+    if project_status != "active":
         return False
     return due_date < (today or date.today())
 
@@ -43,6 +50,15 @@ def is_milestone_overdue(
 # ============================================================
 # 專案清單
 # ============================================================
+
+def like_pattern(q: str) -> str:
+    """把使用者輸入包成 ILIKE 樣式，並跳脫 %、_ 與跳脫字元本身
+
+    沒跳脫的話 q="50%" 會變成「任何東西」，q="a_b" 的底線會對到任一字元。
+    """
+    escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
 
 # 清單與明細共用的統計欄位：一句 SQL 把任務數、完成數、成員數、逾期里程碑數算完
 _PROJECT_STATS_SQL = """
@@ -61,6 +77,7 @@ _PROJECT_STATS_SQL = """
         WHERE m.project_id = p.id
           AND m.due_date < CURRENT_DATE
           AND m.status <> 'completed'
+          AND p.status = 'active'
     ), 0)::int AS overdue_milestones
 """
 
@@ -73,17 +90,18 @@ async def list_projects(
 ) -> dict[str, Any]:
     """專案清單（含進度、成員數、逾期里程碑數）"""
     offset = (max(page, 1) - 1) * page_size
-    where = """
+    pattern = like_pattern(q) if q else None
+    where = r"""
         WHERE ($1::text IS NULL OR p.status = $1)
           AND (
             $2::text IS NULL
-            OR p.name ILIKE '%' || $2 || '%'
-            OR COALESCE(p.customer, '') ILIKE '%' || $2 || '%'
+            OR p.name ILIKE $2 ESCAPE '\'
+            OR COALESCE(p.customer, '') ILIKE $2 ESCAPE '\'
           )
     """
     async with get_connection() as conn:
         total = await conn.fetchval(
-            f"SELECT count(*) FROM projects p {where}", status, q
+            f"SELECT count(*) FROM projects p {where}", status, pattern
         )
         rows = await conn.fetch(
             f"""
@@ -99,7 +117,7 @@ async def list_projects(
             LIMIT $3 OFFSET $4
             """,
             status,
-            q,
+            pattern,
             page_size,
             offset,
         )
@@ -192,11 +210,15 @@ async def get_project_detail(project_id: UUID) -> dict[str, Any] | None:
     detail["progress"] = calc_progress(
         detail.pop("done_count"), detail.pop("task_count")
     )
-    detail.pop("member_count", None)
-    detail.pop("overdue_milestones", None)
+    # member_count 與 overdue_milestones 留著（前端明細表頭要用），不要算了又丟掉
     detail["members"] = [dict(r) for r in member_rows]
     detail["milestones"] = [
-        {**dict(r), "is_overdue": is_milestone_overdue(r["due_date"], r["status"])}
+        {
+            **dict(r),
+            "is_overdue": is_milestone_overdue(
+                r["due_date"], r["status"], detail["status"]
+            ),
+        }
         for r in milestone_rows
     ]
     detail["tasks"] = [dict(r) for r in task_rows]
@@ -214,6 +236,47 @@ def count_project_knowledge(project_id: str) -> int:
     except Exception as e:  # pragma: no cover - 知識庫不可用時不擋專案明細
         logger.warning("計算專案知識條目數失敗: %s", e)
         return 0
+
+
+# ============================================================
+# 輸入驗證（外鍵先驗，不要讓 FK 例外變成 500）
+# ============================================================
+
+
+class UserNotFoundError(Exception):
+    """指定的使用者不存在（owner_id、assignee_id、成員）"""
+
+
+class MilestoneNotInProjectError(Exception):
+    """里程碑不屬於這個專案"""
+
+
+async def _ensure_user_exists(conn, user_id: int | None) -> None:
+    """user_id 為 None 表示清空，不用驗"""
+    if user_id is None:
+        return
+    found = await conn.fetchval("SELECT 1 FROM users WHERE id = $1", user_id)
+    if not found:
+        raise UserNotFoundError(str(user_id))
+
+
+async def _ensure_milestone_in_project(
+    conn, project_id: UUID, milestone_id: UUID | None
+) -> None:
+    """任務只能掛在同一個專案底下的里程碑"""
+    if milestone_id is None:
+        return
+    found = await conn.fetchval(
+        """
+        SELECT EXISTS (
+            SELECT 1 FROM milestones WHERE id = $1 AND project_id = $2
+        )
+        """,
+        milestone_id,
+        project_id,
+    )
+    if not found:
+        raise MilestoneNotInProjectError(str(milestone_id))
 
 
 # ============================================================
@@ -246,8 +309,13 @@ async def _sync_owner_member(conn, project_id: UUID, owner_id: int | None) -> No
 
 
 async def create_project(data: dict, created_by: int | None = None) -> dict[str, Any]:
-    """建立專案；有指定負責人時自動加成員"""
-    async with get_connection() as conn:
+    """建立專案；有指定負責人時自動加成員
+
+    Raises:
+        UserNotFoundError: owner_id 指到不存在的使用者
+    """
+    async with get_connection() as conn, conn.transaction():
+        await _ensure_user_exists(conn, data.get("owner_id"))
         row = await conn.fetchrow(
             """
             INSERT INTO projects
@@ -282,9 +350,15 @@ _PROJECT_UPDATE_FIELDS = (
 
 
 async def update_project(project_id: UUID, data: dict) -> dict[str, Any] | None:
-    """更新主檔（只更新有給的欄位）；改 owner_id 時同步成員"""
+    """更新主檔（只更新有給的欄位）；改 owner_id 時同步成員
+
+    Raises:
+        UserNotFoundError: owner_id 指到不存在的使用者
+    """
     fields = {k: v for k, v in data.items() if k in _PROJECT_UPDATE_FIELDS}
-    async with get_connection() as conn:
+    async with get_connection() as conn, conn.transaction():
+        if "owner_id" in fields:
+            await _ensure_user_exists(conn, fields["owner_id"])
         if fields:
             names = list(fields.keys())
             assignments = ", ".join(
@@ -313,7 +387,7 @@ async def update_project(project_id: UUID, data: dict) -> dict[str, Any] | None:
 
 async def delete_project(project_id: UUID) -> bool:
     """刪除專案；先把綁定的 bot_groups.project_id 設回 NULL"""
-    async with get_connection() as conn:
+    async with get_connection() as conn, conn.transaction():
         await conn.execute(
             "UPDATE bot_groups SET project_id = NULL WHERE project_id = $1",
             project_id,
@@ -328,8 +402,14 @@ async def delete_project(project_id: UUID) -> bool:
 
 
 async def add_member(project_id: UUID, user_id: int) -> dict[str, Any] | None:
-    """加入成員（已存在則沿用原本的 role）"""
-    async with get_connection() as conn:
+    """加入成員（已存在則沿用原本的 role）
+
+    Returns:
+        成員資料；使用者不存在時回 None
+    """
+    async with get_connection() as conn, conn.transaction():
+        if not await conn.fetchval("SELECT 1 FROM users WHERE id = $1", user_id):
+            return None
         await conn.execute(
             """
             INSERT INTO project_members (project_id, user_id, role)
@@ -358,7 +438,7 @@ async def remove_member(project_id: UUID, user_id: int) -> str:
     Returns:
         'removed'、'owner'（負責人不能移除）或 'not_found'
     """
-    async with get_connection() as conn:
+    async with get_connection() as conn, conn.transaction():
         role = await conn.fetchval(
             "SELECT role FROM project_members WHERE project_id = $1 AND user_id = $2",
             project_id,
@@ -383,16 +463,23 @@ async def remove_member(project_id: UUID, user_id: int) -> str:
 _MILESTONE_UPDATE_FIELDS = ("name", "due_date", "completed_at", "status", "sort_order")
 
 
-def _with_overdue(row) -> dict[str, Any]:
-    """補上 is_overdue"""
+def _with_overdue(row, project_status: str | None) -> dict[str, Any]:
+    """補上 is_overdue（逾期要看所屬專案是不是 active）"""
     data = dict(row)
-    data["is_overdue"] = is_milestone_overdue(data["due_date"], data["status"])
+    data["is_overdue"] = is_milestone_overdue(
+        data["due_date"], data["status"], project_status
+    )
     return data
+
+
+async def _project_status(conn, project_id: UUID) -> str | None:
+    """取專案狀態，判逾期用"""
+    return await conn.fetchval("SELECT status FROM projects WHERE id = $1", project_id)
 
 
 async def create_milestone(project_id: UUID, data: dict) -> dict[str, Any]:
     """建立里程碑"""
-    async with get_connection() as conn:
+    async with get_connection() as conn, conn.transaction():
         row = await conn.fetchrow(
             """
             INSERT INTO milestones
@@ -407,7 +494,8 @@ async def create_milestone(project_id: UUID, data: dict) -> dict[str, Any]:
             data.get("status") or "pending",
             data.get("sort_order") or 0,
         )
-    return _with_overdue(row)
+        project_status = await _project_status(conn, project_id)
+    return _with_overdue(row, project_status)
 
 
 async def update_milestone(
@@ -415,7 +503,7 @@ async def update_milestone(
 ) -> dict[str, Any] | None:
     """更新里程碑"""
     fields = {k: v for k, v in data.items() if k in _MILESTONE_UPDATE_FIELDS}
-    async with get_connection() as conn:
+    async with get_connection() as conn, conn.transaction():
         if not fields:
             row = await conn.fetchrow(
                 "SELECT * FROM milestones WHERE id = $1 AND project_id = $2",
@@ -438,7 +526,8 @@ async def update_milestone(
                 project_id,
                 *[fields[name] for name in names],
             )
-    return _with_overdue(row) if row else None
+        project_status = await _project_status(conn, project_id)
+    return _with_overdue(row, project_status) if row else None
 
 
 async def delete_milestone(project_id: UUID, milestone_id: UUID) -> bool:
@@ -468,8 +557,15 @@ _TASK_UPDATE_FIELDS = (
 
 
 async def create_task(project_id: UUID, data: dict) -> dict[str, Any]:
-    """建立任務"""
-    async with get_connection() as conn:
+    """建立任務
+
+    Raises:
+        UserNotFoundError: assignee_id 指到不存在的使用者
+        MilestoneNotInProjectError: milestone_id 不屬於這個專案
+    """
+    async with get_connection() as conn, conn.transaction():
+        await _ensure_user_exists(conn, data.get("assignee_id"))
+        await _ensure_milestone_in_project(conn, project_id, data.get("milestone_id"))
         row = await conn.fetchrow(
             """
             INSERT INTO tasks
@@ -493,9 +589,18 @@ async def create_task(project_id: UUID, data: dict) -> dict[str, Any]:
 async def update_task(
     project_id: UUID, task_id: UUID, data: dict
 ) -> dict[str, Any] | None:
-    """更新任務"""
+    """更新任務
+
+    Raises:
+        UserNotFoundError: assignee_id 指到不存在的使用者
+        MilestoneNotInProjectError: milestone_id 不屬於這個專案
+    """
     fields = {k: v for k, v in data.items() if k in _TASK_UPDATE_FIELDS}
-    async with get_connection() as conn:
+    async with get_connection() as conn, conn.transaction():
+        if "assignee_id" in fields:
+            await _ensure_user_exists(conn, fields["assignee_id"])
+        if "milestone_id" in fields:
+            await _ensure_milestone_in_project(conn, project_id, fields["milestone_id"])
         if not fields:
             row = await conn.fetchrow(
                 "SELECT * FROM tasks WHERE id = $1 AND project_id = $2",

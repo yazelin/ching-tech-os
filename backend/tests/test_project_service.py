@@ -6,7 +6,7 @@ DB 一律用 AsyncMock 假的 connection，驗 SQL 內容與呼叫序。
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
@@ -31,7 +31,18 @@ class _CM:
         return None
 
 
+class _Tx:
+    """模擬 conn.transaction() 的 async context manager"""
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_args):
+        return None
+
+
 def _patch_conn(monkeypatch: pytest.MonkeyPatch, conn) -> None:
+    conn.transaction = MagicMock(return_value=_Tx())
     monkeypatch.setattr(project_service, "get_connection", lambda: _CM(conn))
 
 
@@ -82,18 +93,30 @@ def test_calc_progress(done, total, expected) -> None:
 
 def test_is_milestone_overdue() -> None:
     today = date(2026, 9, 11)
+    overdue = project_service.is_milestone_overdue
 
-    # 到期日已過且未完成 → 逾期
-    assert project_service.is_milestone_overdue(date(2026, 9, 10), "pending", today)
-    assert project_service.is_milestone_overdue(date(2026, 9, 10), "in_progress", today)
+    # 到期日已過、未完成、專案還在進行中 → 逾期
+    assert overdue(date(2026, 9, 10), "pending", "active", today)
+    assert overdue(date(2026, 9, 10), "in_progress", "active", today)
     # 已完成不算逾期
-    assert not project_service.is_milestone_overdue(date(2026, 9, 10), "completed", today)
+    assert not overdue(date(2026, 9, 10), "completed", "active", today)
     # 今天到期不算逾期
-    assert not project_service.is_milestone_overdue(today, "pending", today)
+    assert not overdue(today, "pending", "active", today)
     # 未來
-    assert not project_service.is_milestone_overdue(date(2026, 9, 12), "pending", today)
+    assert not overdue(date(2026, 9, 12), "pending", "active", today)
     # 沒有到期日
-    assert not project_service.is_milestone_overdue(None, "pending", today)
+    assert not overdue(None, "pending", "active", today)
+
+
+@pytest.mark.parametrize(
+    "project_status", ["planning", "on_hold", "completed", "cancelled", None]
+)
+def test_is_milestone_overdue_only_for_active_projects(project_status) -> None:
+    """規格第一節：逾期還要所屬專案 status = 'active'，結案／取消的不該一直紅著"""
+    today = date(2026, 9, 11)
+    assert not project_service.is_milestone_overdue(
+        date(2026, 9, 10), "pending", project_status, today
+    )
 
 
 # ============================================================
@@ -118,9 +141,10 @@ async def test_list_projects_computes_progress(monkeypatch: pytest.MonkeyPatch) 
     # 進度靠 SQL 的 count(*) filter，不在 Python 迴圈裡數
     sql = conn.fetch.call_args[0][0]
     assert "count(*) FILTER (WHERE t.status = 'done')" in sql
-    # 逾期定義
+    # 逾期定義：到期日已過、未完成，且所屬專案還在進行中
     assert "m.due_date < CURRENT_DATE" in sql
     assert "m.status <> 'completed'" in sql
+    assert "p.status = 'active'" in sql
 
 
 @pytest.mark.asyncio
@@ -134,9 +158,37 @@ async def test_list_projects_filters_and_paging(monkeypatch: pytest.MonkeyPatch)
 
     args = conn.fetch.call_args[0]
     assert args[1] == "active"
-    assert args[2] == "甲"
+    assert args[2] == "%甲%"
     assert args[3] == 20      # limit
     assert args[4] == 40      # offset =（3-1）× 20
+
+
+@pytest.mark.parametrize(
+    "q, expected",
+    [
+        ("50%", "%50\\%%"),
+        ("a_b", "%a\\_b%"),
+        ("c\\d", "%c\\\\d%"),
+        ("甲", "%甲%"),
+    ],
+)
+def test_like_pattern_escapes_wildcards(q, expected) -> None:
+    """ILIKE 的 % 與 _ 要跳脫，否則搜尋「50%」等於搜尋全部"""
+    assert project_service.like_pattern(q) == expected
+
+
+@pytest.mark.asyncio
+async def test_list_projects_escapes_q(monkeypatch: pytest.MonkeyPatch) -> None:
+    conn = AsyncMock()
+    conn.fetchval = AsyncMock(return_value=0)
+    conn.fetch = AsyncMock(return_value=[])
+    _patch_conn(monkeypatch, conn)
+
+    await project_service.list_projects(q="50%")
+
+    # q="50%" 的樣式必須是 %50\%%（中間那個 % 被跳脫）
+    assert conn.fetch.call_args[0][2] == "%50\\%%"
+    assert "ESCAPE '\\'" in conn.fetch.call_args[0][0]
 
 
 # ============================================================
@@ -178,6 +230,9 @@ async def test_get_project_detail(monkeypatch: pytest.MonkeyPatch) -> None:
     detail = await project_service.get_project_detail(pid)
 
     assert detail["progress"] == 50
+    # 算出來的統計要留在明細裡（前端表頭要用），不能算了又丟掉
+    assert detail["member_count"] == 2
+    assert detail["overdue_milestones"] == 1
     assert detail["members"][0]["role"] == "owner"
     assert detail["milestones"][0]["is_overdue"] is True
     assert detail["bot_groups"][0]["group_name"] == "工地群"
@@ -335,6 +390,7 @@ async def test_delete_project_missing(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.mark.asyncio
 async def test_add_member(monkeypatch: pytest.MonkeyPatch) -> None:
     conn = AsyncMock()
+    conn.fetchval = AsyncMock(return_value=1)  # 使用者存在
     conn.fetchrow = AsyncMock(
         return_value=_DictRecord(
             {"user_id": 3, "username": "abc", "display_name": "阿貓", "role": "member"}
@@ -345,16 +401,20 @@ async def test_add_member(monkeypatch: pytest.MonkeyPatch) -> None:
     member = await project_service.add_member(uuid4(), 3)
 
     assert member["role"] == "member"
+    assert "SELECT 1 FROM users WHERE id = $1" in conn.fetchval.call_args[0][0]
     assert "ON CONFLICT (project_id, user_id) DO NOTHING" in conn.execute.call_args[0][0]
 
 
 @pytest.mark.asyncio
 async def test_add_member_unknown_user(monkeypatch: pytest.MonkeyPatch) -> None:
+    """使用者不存在時先擋下來，不要讓 FK 例外變成 500"""
     conn = AsyncMock()
-    conn.fetchrow = AsyncMock(return_value=None)
+    conn.fetchval = AsyncMock(return_value=None)  # users 查不到
     _patch_conn(monkeypatch, conn)
 
     assert await project_service.add_member(uuid4(), 999) is None
+    # 沒有真的去 INSERT
+    conn.execute.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -404,6 +464,7 @@ def _milestone_row(**overrides) -> _DictRecord:
 async def test_create_milestone(monkeypatch: pytest.MonkeyPatch) -> None:
     conn = AsyncMock()
     conn.fetchrow = AsyncMock(return_value=_milestone_row())
+    conn.fetchval = AsyncMock(return_value="active")
     _patch_conn(monkeypatch, conn)
 
     row = await project_service.create_milestone(
@@ -411,12 +472,30 @@ async def test_create_milestone(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     assert row["is_overdue"] is True
     assert "INSERT INTO milestones" in conn.fetchrow.call_args[0][0]
+    conn.transaction.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_create_milestone_on_cancelled_project_is_not_overdue(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """專案取消後，過期的里程碑不再算逾期"""
+    conn = AsyncMock()
+    conn.fetchrow = AsyncMock(return_value=_milestone_row())
+    conn.fetchval = AsyncMock(return_value="cancelled")
+    _patch_conn(monkeypatch, conn)
+
+    row = await project_service.create_milestone(
+        uuid4(), {"name": "交機", "due_date": date(2000, 1, 1)}
+    )
+    assert row["is_overdue"] is False
 
 
 @pytest.mark.asyncio
 async def test_update_milestone(monkeypatch: pytest.MonkeyPatch) -> None:
     conn = AsyncMock()
     conn.fetchrow = AsyncMock(return_value=_milestone_row(status="completed"))
+    conn.fetchval = AsyncMock(return_value="active")
     _patch_conn(monkeypatch, conn)
 
     row = await project_service.update_milestone(uuid4(), uuid4(), {"status": "completed"})
@@ -544,3 +623,136 @@ async def test_get_summary_sql(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "ORDER BY m.due_date ASC" in sql
     assert conn.fetch.call_args[0][1] == 20
     assert project_service.SUMMARY_OVERDUE_LIMIT == 20
+
+
+# ============================================================
+# 外鍵驗證（F2）與交易（F4）
+# ============================================================
+
+
+@pytest.mark.asyncio
+async def test_create_project_rejects_unknown_owner(monkeypatch: pytest.MonkeyPatch) -> None:
+    conn = AsyncMock()
+    conn.fetchval = AsyncMock(return_value=None)  # users 查不到
+    _patch_conn(monkeypatch, conn)
+
+    with pytest.raises(project_service.UserNotFoundError):
+        await project_service.create_project({"name": "新案", "owner_id": 999})
+
+    conn.fetchrow.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_update_project_rejects_unknown_owner(monkeypatch: pytest.MonkeyPatch) -> None:
+    conn = AsyncMock()
+    conn.fetchval = AsyncMock(return_value=None)
+    _patch_conn(monkeypatch, conn)
+
+    with pytest.raises(project_service.UserNotFoundError):
+        await project_service.update_project(uuid4(), {"owner_id": 999})
+
+
+@pytest.mark.asyncio
+async def test_update_project_allows_clearing_owner(monkeypatch: pytest.MonkeyPatch) -> None:
+    """owner_id 送 None 是清空負責人，不用驗使用者"""
+    conn = AsyncMock()
+    conn.fetchrow = AsyncMock(return_value=_project_row(owner_id=None))
+    _patch_conn(monkeypatch, conn)
+
+    await project_service.update_project(uuid4(), {"owner_id": None})
+
+    assert not any(
+        "FROM users" in c[0][0] for c in conn.fetchval.call_args_list
+    )
+
+
+@pytest.mark.asyncio
+async def test_create_task_rejects_unknown_assignee(monkeypatch: pytest.MonkeyPatch) -> None:
+    conn = AsyncMock()
+    conn.fetchval = AsyncMock(return_value=None)
+    _patch_conn(monkeypatch, conn)
+
+    with pytest.raises(project_service.UserNotFoundError):
+        await project_service.create_task(uuid4(), {"title": "A", "assignee_id": 999})
+
+
+@pytest.mark.asyncio
+async def test_create_task_rejects_foreign_milestone(monkeypatch: pytest.MonkeyPatch) -> None:
+    """里程碑不屬於這個專案就不准掛上去"""
+    conn = AsyncMock()
+    conn.fetchval = AsyncMock(return_value=False)  # EXISTS 回 false
+    _patch_conn(monkeypatch, conn)
+
+    with pytest.raises(project_service.MilestoneNotInProjectError):
+        await project_service.create_task(
+            uuid4(), {"title": "A", "milestone_id": uuid4()}
+        )
+
+    sql = conn.fetchval.call_args[0][0]
+    assert "SELECT EXISTS" in sql
+    assert "FROM milestones WHERE id = $1 AND project_id = $2" in sql
+    conn.fetchrow.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_update_task_rejects_foreign_milestone(monkeypatch: pytest.MonkeyPatch) -> None:
+    conn = AsyncMock()
+    conn.fetchval = AsyncMock(return_value=False)
+    _patch_conn(monkeypatch, conn)
+
+    with pytest.raises(project_service.MilestoneNotInProjectError):
+        await project_service.update_task(
+            uuid4(), uuid4(), {"milestone_id": uuid4()}
+        )
+
+
+@pytest.mark.asyncio
+async def test_update_task_rejects_unknown_assignee(monkeypatch: pytest.MonkeyPatch) -> None:
+    conn = AsyncMock()
+    conn.fetchval = AsyncMock(return_value=None)
+    _patch_conn(monkeypatch, conn)
+
+    with pytest.raises(project_service.UserNotFoundError):
+        await project_service.update_task(uuid4(), uuid4(), {"assignee_id": 999})
+
+
+@pytest.mark.asyncio
+async def test_task_allows_clearing_milestone_and_assignee(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """送 None 是清空關聯，不用驗"""
+    conn = AsyncMock()
+    conn.fetchrow = AsyncMock(return_value=_task_row())
+    _patch_conn(monkeypatch, conn)
+
+    await project_service.update_task(
+        uuid4(), uuid4(), {"milestone_id": None, "assignee_id": None}
+    )
+
+    conn.fetchval.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_mutations_run_in_transaction(monkeypatch: pytest.MonkeyPatch) -> None:
+    """多語句的寫入要包在交易裡，中途失敗不能留半套"""
+    pid = uuid4()
+
+    conn = AsyncMock()
+    conn.fetchval = AsyncMock(return_value=1)
+    conn.fetchrow = AsyncMock(return_value=_project_row(id=pid, owner_id=1))
+    _patch_conn(monkeypatch, conn)
+    await project_service.create_project({"name": "x", "owner_id": 1})
+    conn.transaction.assert_called_once()
+
+    conn = AsyncMock()
+    conn.fetchval = AsyncMock(return_value=1)
+    conn.fetchrow = AsyncMock(return_value=_project_row(id=pid, owner_id=1))
+    _patch_conn(monkeypatch, conn)
+    await project_service.update_project(pid, {"owner_id": 1})
+    conn.transaction.assert_called_once()
+
+    conn = AsyncMock()
+    conn.execute = AsyncMock(side_effect=["UPDATE 0", "DELETE 1"])
+    _patch_conn(monkeypatch, conn)
+    await project_service.delete_project(pid)
+    conn.transaction.assert_called_once()
