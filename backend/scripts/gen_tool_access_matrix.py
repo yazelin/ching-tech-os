@@ -35,6 +35,9 @@ IN_REPO_MODULE_PREFIX = "ching_tech_os.services.mcp."
 # 工具原始碼裡代表「有做工具層權限檢查」的呼叫
 _PERMISSION_CALL_MARKERS = ("check_mcp_tool_permission", "_guard(")
 
+# 工具原始碼裡代表「bot 身分由伺服器注入」的呼叫
+_BOT_IDENTITY_MARKERS = ("resolve_bot_identity(", "_connected_memory_scope(")
+
 _DOC_HEADER = """# MCP 工具存取矩陣
 
 > 本檔由 `backend/scripts/gen_tool_access_matrix.py` 從程式內省產生，**不要手改**。
@@ -69,8 +72,22 @@ _DOC_HEADER = """# MCP 工具存取矩陣
   的條目，對既有條目的寫入一律拒絕。`是（未檢查）` 表示這支工具連
   `check_mcp_tool_permission` 都沒呼叫，app 對應只是裝飾。
 - **寫入**：會建立／修改／刪除資料，或產生檔案、對外送出內容。
-- **身分來源**：`ctos_user_id` ＝ 伺服器用 `CTOS_USER_ID` 環境變數注入；
-  `bot 身分` ＝ 用 `CTOS_BOT_GROUP_ID`／`CTOS_BOT_USER_ID` 注入；`無` ＝ 工具不帶身分。
+- **身分來源**：`ctos_user_id` ＝ 伺服器用 `CTOS_USER_ID` 環境變數注入（`mcp.tool`
+  包裝層強制，模型帶什麼都會被覆蓋）；`bot 身分（注入）` ＝ 走 `resolve_bot_identity()`，
+  以 `CTOS_BOT_GROUP_ID`／`CTOS_BOT_USER_ID` 為準；`bot 身分（模型參數）` ＝ 工具收
+  `line_group_id`／`line_user_id` 但還沒接上注入，模型帶進來的值會被採用（殘留風險，
+  見下方「已知缺口」）；`無` ＝ 工具不帶身分。
+
+## 已知缺口（本次未修）
+
+- `bot 身分（模型參數）` 的工具（`add_note`／`add_note_with_attachments`／
+  `search_knowledge`／`send_nas_file`／`get_message_attachments`／`summarize_chat`）
+  仍以模型帶的 `line_group_id`／`line_user_id` 決定範圍。已綁定的使用者可以宣稱
+  別的群組，藉此把筆記寫進別的專案範圍或讀到別的群組的訊息。修法與 #204 相同
+  （接 `resolve_bot_identity()`），但不在這支 PR 的範圍。
+- `是（未檢查）` 的工具（分享、排程、語音、生圖、`download_web_image`、
+  `generate_*`）連 app 權限都沒檢查，未綁定者只要模型肯呼叫就跑得動。#205 處理
+  分享那兩支，其餘尚未有 issue。
 
 """
 
@@ -147,8 +164,14 @@ def _classify(name: str, tool) -> dict:
     identity = []
     if "ctos_user_id" in params:
         identity.append("`ctos_user_id`")
-    if "line_group_id" in params or "line_user_id" in params:
-        identity.append("bot 身分")
+    injects_bot_identity = any(
+        marker in source for marker in _BOT_IDENTITY_MARKERS
+    )
+    takes_bot_params = "line_group_id" in params or "line_user_id" in params
+    if injects_bot_identity:
+        identity.append("bot 身分（注入）")
+    elif takes_bot_params:
+        identity.append("bot 身分（模型參數）")
     identity_cell = " ＋ ".join(identity) if identity else "無"
 
     return {

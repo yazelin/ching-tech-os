@@ -32,8 +32,22 @@
   的條目，對既有條目的寫入一律拒絕。`是（未檢查）` 表示這支工具連
   `check_mcp_tool_permission` 都沒呼叫，app 對應只是裝飾。
 - **寫入**：會建立／修改／刪除資料，或產生檔案、對外送出內容。
-- **身分來源**：`ctos_user_id` ＝ 伺服器用 `CTOS_USER_ID` 環境變數注入；
-  `bot 身分` ＝ 用 `CTOS_BOT_GROUP_ID`／`CTOS_BOT_USER_ID` 注入；`無` ＝ 工具不帶身分。
+- **身分來源**：`ctos_user_id` ＝ 伺服器用 `CTOS_USER_ID` 環境變數注入（`mcp.tool`
+  包裝層強制，模型帶什麼都會被覆蓋）；`bot 身分（注入）` ＝ 走 `resolve_bot_identity()`，
+  以 `CTOS_BOT_GROUP_ID`／`CTOS_BOT_USER_ID` 為準；`bot 身分（模型參數）` ＝ 工具收
+  `line_group_id`／`line_user_id` 但還沒接上注入，模型帶進來的值會被採用（殘留風險，
+  見下方「已知缺口」）；`無` ＝ 工具不帶身分。
+
+## 已知缺口（本次未修）
+
+- `bot 身分（模型參數）` 的工具（`add_note`／`add_note_with_attachments`／
+  `search_knowledge`／`send_nas_file`／`get_message_attachments`／`summarize_chat`）
+  仍以模型帶的 `line_group_id`／`line_user_id` 決定範圍。已綁定的使用者可以宣稱
+  別的群組，藉此把筆記寫進別的專案範圍或讀到別的群組的訊息。修法與 #204 相同
+  （接 `resolve_bot_identity()`），但不在這支 PR 的範圍。
+- `是（未檢查）` 的工具（分享、排程、語音、生圖、`download_web_image`、
+  `generate_*`）連 app 權限都沒檢查，未綁定者只要模型肯呼叫就跑得動。#205 處理
+  分享那兩支，其餘尚未有 issue。
 
 共 74 支工具：未綁定可呼叫 27 支、寫入類 45 支。
 
@@ -68,31 +82,31 @@
 | `update_party_address` | `erp_tools` | `vendor-management`（廠商管理） | 否（需綁定） | 是 | `ctos_user_id` |
 | `update_party_contact` | `erp_tools` | `vendor-management`（廠商管理） | 否（需綁定） | 是 | `ctos_user_id` |
 | `add_attachments_to_knowledge` | `knowledge_tools` | `knowledge-base`（知識庫） | 是 | 是 | `ctos_user_id` |
-| `add_note` | `knowledge_tools` | `knowledge-base`（知識庫） | 否（工具自檢） | 是 | `ctos_user_id` ＋ bot 身分 |
-| `add_note_with_attachments` | `knowledge_tools` | `knowledge-base`（知識庫） | 否（工具自檢） | 是 | `ctos_user_id` ＋ bot 身分 |
+| `add_note` | `knowledge_tools` | `knowledge-base`（知識庫） | 否（工具自檢） | 是 | `ctos_user_id` ＋ bot 身分（模型參數） |
+| `add_note_with_attachments` | `knowledge_tools` | `knowledge-base`（知識庫） | 否（工具自檢） | 是 | `ctos_user_id` ＋ bot 身分（模型參數） |
 | `delete_knowledge_item` | `knowledge_tools` | `knowledge-base`（知識庫） | 是 | 是 | `ctos_user_id` |
 | `get_knowledge_attachments` | `knowledge_tools` | `knowledge-base`（知識庫） | 是 | 否 | `ctos_user_id` |
 | `get_knowledge_item` | `knowledge_tools` | `knowledge-base`（知識庫） | 是 | 否 | `ctos_user_id` |
 | `read_knowledge_attachment` | `knowledge_tools` | `knowledge-base`（知識庫） | 是 | 否 | `ctos_user_id` |
-| `search_knowledge` | `knowledge_tools` | `knowledge-base`（知識庫） | 是 | 否 | `ctos_user_id` ＋ bot 身分 |
+| `search_knowledge` | `knowledge_tools` | `knowledge-base`（知識庫） | 是 | 否 | `ctos_user_id` ＋ bot 身分（模型參數） |
 | `update_knowledge_attachment` | `knowledge_tools` | `knowledge-base`（知識庫） | 是 | 是 | `ctos_user_id` |
 | `update_knowledge_item` | `knowledge_tools` | `knowledge-base`（知識庫） | 是 | 是 | `ctos_user_id` |
 | `convert_pdf_to_images` | `media_tools` | `file-manager`（檔案管理） | 否（需綁定） | 是 | `ctos_user_id` |
 | `download_web_file` | `media_tools` | `file-manager`（檔案管理） | 否（需綁定） | 是 | `ctos_user_id` |
 | `download_web_image` | `media_tools` | —（無需權限） | 是（未檢查） | 是 | `ctos_user_id` |
-| `add_memory` | `memory_tools` | `memory-manager`（記憶管理） | 是（未檢查） | 是 | bot 身分 |
-| `delete_memory` | `memory_tools` | `memory-manager`（記憶管理） | 是（未檢查） | 是 | 無 |
-| `get_memories` | `memory_tools` | `memory-manager`（記憶管理） | 是（未檢查） | 否 | bot 身分 |
-| `update_memory` | `memory_tools` | `memory-manager`（記憶管理） | 是（未檢查） | 是 | 無 |
-| `get_message_attachments` | `message_tools` | —（無需權限） | 是（未檢查） | 否 | bot 身分 |
-| `summarize_chat` | `message_tools` | —（無需權限） | 是（未檢查） | 否 | bot 身分 |
+| `add_memory` | `memory_tools` | `memory-manager`（記憶管理） | 是（未檢查） | 是 | bot 身分（注入） |
+| `delete_memory` | `memory_tools` | `memory-manager`（記憶管理） | 是（未檢查） | 是 | bot 身分（注入） |
+| `get_memories` | `memory_tools` | `memory-manager`（記憶管理） | 是（未檢查） | 否 | bot 身分（注入） |
+| `update_memory` | `memory_tools` | `memory-manager`（記憶管理） | 是（未檢查） | 是 | bot 身分（注入） |
+| `get_message_attachments` | `message_tools` | —（無需權限） | 是（未檢查） | 否 | bot 身分（模型參數） |
+| `summarize_chat` | `message_tools` | —（無需權限） | 是（未檢查） | 否 | bot 身分（模型參數） |
 | `archive_to_library` | `nas_tools` | `file-manager`（檔案管理） | 否（需綁定） | 是 | `ctos_user_id` |
 | `get_nas_file_info` | `nas_tools` | `file-manager`（檔案管理） | 否（需綁定） | 否 | `ctos_user_id` |
 | `list_library_folders` | `nas_tools` | `file-manager`（檔案管理） | 否（需綁定） | 否 | `ctos_user_id` |
 | `prepare_file_message` | `nas_tools` | `file-manager`（檔案管理） | 否（需綁定） | 是 | `ctos_user_id` |
 | `read_document` | `nas_tools` | `file-manager`（檔案管理） | 否（需綁定） | 否 | `ctos_user_id` |
 | `search_nas_files` | `nas_tools` | `file-manager`（檔案管理） | 否（需綁定） | 否 | `ctos_user_id` |
-| `send_nas_file` | `nas_tools` | `file-manager`（檔案管理） | 否（需綁定） | 是 | `ctos_user_id` ＋ bot 身分 |
+| `send_nas_file` | `nas_tools` | `file-manager`（檔案管理） | 否（需綁定） | 是 | `ctos_user_id` ＋ bot 身分（模型參數） |
 | `generate_md2doc` | `presentation_tools` | `md2doc`（文件生成） | 是（未檢查） | 是 | `ctos_user_id` |
 | `generate_md2ppt` | `presentation_tools` | `md2ppt`（簡報生成） | 是（未檢查） | 是 | `ctos_user_id` |
 | `generate_presentation` | `presentation_tools` | `md2ppt`（簡報生成） | 是（未檢查） | 是 | 無 |
