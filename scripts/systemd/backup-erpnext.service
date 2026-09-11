@@ -1,0 +1,11 @@
+# /etc/systemd/system/backup-erpnext.service
+# 安裝：sudo cp scripts/systemd/backup-erpnext.{service,timer} /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now backup-erpnext.timer
+[Unit]
+Description=ERPNext backup to NAS (bench backup + doctype JSON/CSV)
+After=mnt-nas-ctos.mount docker.service
+Requires=mnt-nas-ctos.mount
+
+[Service]
+Type=oneshot
+User=ct
+ExecStart=/home/ct/scripts/backup-erpnext-to-nas.sh

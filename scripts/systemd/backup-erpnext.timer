@@ -1,0 +1,10 @@
+# /etc/systemd/system/backup-erpnext.timer — 每天 03:30，錯過補跑（知識庫備份是 03:00，錯開）
+[Unit]
+Description=Daily ERPNext backup to NAS
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
