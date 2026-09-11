@@ -820,6 +820,18 @@ async def test_update_address_computes_diff_and_audits(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_update_address_without_fields_still_audits(monkeypatch) -> None:
+    before = _address_row()
+    conn = _FakeConn(fetchrow=[before], fetchval=[uuid4()])
+    _patch(monkeypatch, party_service, conn)
+
+    result = await party_service.update_address(before["party_id"], before["id"], {})
+    assert result["id"] == before["id"]
+    assert not conn.find("UPDATE party_addresses SET address")
+    assert conn.find("INSERT INTO erp_audit")
+
+
+@pytest.mark.asyncio
 async def test_update_address_is_primary_demotes_others(monkeypatch) -> None:
     before = _address_row(is_primary=False)
     after = _address_row(id=before["id"], party_id=before["party_id"], is_primary=True)

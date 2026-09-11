@@ -147,6 +147,19 @@ async def test_find_party_role_both_passthrough(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_find_party_invalid_role_is_rejected(monkeypatch) -> None:
+    """role 不合法直接回錯誤 dict，不再靜默傳給 service"""
+    find = AsyncMock()
+    monkeypatch.setattr(erp_core, "find_parties", find)
+    result = await erp_tools.find_party("鴻佰", role="vendor")
+    assert result == {
+        "ok": False,
+        "error": "role 不合法：vendor（只能是 supplier／customer／both）",
+    }
+    find.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_find_party_wraps_errors(monkeypatch) -> None:
     monkeypatch.setattr(
         erp_core, "find_parties", AsyncMock(side_effect=RuntimeError("db 壞了"))
@@ -414,6 +427,16 @@ async def test_delete_party_contact_not_found(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_delete_party_contact_without_party_is_not_found(monkeypatch) -> None:
+    """沒給 party_id／party_name：_party_id_from 拋 NotFoundError，走 _fail 路徑"""
+    delete = AsyncMock()
+    monkeypatch.setattr(erp_tools.party_service, "delete_contact", delete)
+    result = await erp_tools.delete_party_contact(contact_id=str(CONTACT_ID))
+    assert result["not_found"] is True
+    delete.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_update_party_address_requires_fields() -> None:
     result = await erp_tools.update_party_address(
         address_id=str(ADDRESS_ID), party_id=str(PARTY_ID)
@@ -483,6 +506,16 @@ async def test_delete_party_address_not_found(monkeypatch) -> None:
         address_id=str(ADDRESS_ID), party_id=str(PARTY_ID)
     )
     assert result["not_found"] is True
+
+
+@pytest.mark.asyncio
+async def test_delete_party_address_without_party_is_not_found(monkeypatch) -> None:
+    """沒給 party_id／party_name：_party_id_from 拋 NotFoundError，走 _fail 路徑"""
+    delete = AsyncMock()
+    monkeypatch.setattr(erp_tools.party_service, "delete_address", delete)
+    result = await erp_tools.delete_party_address(address_id=str(ADDRESS_ID))
+    assert result["not_found"] is True
+    delete.assert_not_awaited()
 
 
 @pytest.mark.asyncio

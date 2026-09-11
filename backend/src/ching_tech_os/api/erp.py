@@ -31,6 +31,7 @@ from ..models.erp import (
     PartyMergeRequest,
     PartyDetailResponse,
     PartyListResponse,
+    PartyRole,
     PartyUpdate,
     PurchaseOrderCancelRequest,
     PurchaseOrderCreate,
@@ -85,8 +86,10 @@ _ERP_ERRORS = (erp_core.ErpError,)
 
 @parties_router.get("", response_model=PartyListResponse, summary="往來對象清單")
 async def list_parties(
-    q: str | None = Query(None, description="名稱／簡稱／別名／統編模糊搜尋"),
-    role: str | None = Query(None, description="supplier 或 customer"),
+    q: str | None = Query(
+        None, description="名稱／簡稱／別名／統編／聯絡人姓名或電話模糊搜尋"
+    ),
+    role: PartyRole | None = Query(None, description="supplier／customer／both"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     session: SessionData = Depends(require_vendor_access),

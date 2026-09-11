@@ -51,6 +51,11 @@ def _error(message: str) -> dict:
     return {"ok": False, "error": message}
 
 
+# find_party／list_parties 共用的角色枚舉（REST 端由 PartyRole 這個 Literal 鎖住，
+# MCP 這邊沒有 pydantic 幫忙擋，手動比對）
+_PARTY_ROLES = {"supplier", "customer", "both"}
+
+
 def _fail(exc: Exception) -> dict:
     """把 service 的例外翻成工具回傳，不往外丟（agent 拿到的是資料不是 traceback）"""
     if isinstance(exc, erp_core.AmbiguousError):
@@ -145,12 +150,14 @@ async def find_party(
 
     Args:
         query: 名稱、簡稱、別名、聯絡人姓名、電話或統編
-        role: supplier 或 customer，不給就兩種都找
+        role: supplier／customer／both，不給就三種都找
         ctos_user_id: CTOS 用戶 ID（稽核用，伺服器會自動帶）
     """
     guard = await _guard("find_party", ctos_user_id)
     if guard:
         return guard
+    if role is not None and role not in _PARTY_ROLES:
+        return _error(f"role 不合法：{role}（只能是 supplier／customer／both）")
     try:
         candidates = await erp_core.find_parties(query, role=role)
     except Exception as e:

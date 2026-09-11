@@ -309,6 +309,29 @@ async def test_list_parties(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_list_parties_role_both(monkeypatch) -> None:
+    monkeypatch.setattr(
+        erp_api.party_service,
+        "list_parties",
+        AsyncMock(return_value={"items": [], "total": 0}),
+    )
+    async with _client(_make_app()) as client:
+        resp = await client.get("/api/parties?role=both")
+    assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_list_parties_invalid_role_is_422(monkeypatch) -> None:
+    """role 不再靜默回空清單，無效值直接 422"""
+    list_parties = AsyncMock()
+    monkeypatch.setattr(erp_api.party_service, "list_parties", list_parties)
+    async with _client(_make_app()) as client:
+        resp = await client.get("/api/parties?role=vendor")
+    assert resp.status_code == 422
+    list_parties.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_create_party(monkeypatch) -> None:
     monkeypatch.setattr(
         erp_api.party_service,
