@@ -12,6 +12,7 @@ from ching_tech_os.models.share import (
     PasswordRequiredResponse,
 )
 from ching_tech_os.services.share import (
+    ShareActor,
     create_share_link,
     list_my_links,
     list_all_links,
@@ -26,6 +27,7 @@ from ching_tech_os.services.share import (
     PasswordRequiredError,
     PasswordIncorrectError,
     ResourceNotFoundError,
+    ShareAccessDenied,
     NasFileNotFoundError,
     NasFileAccessDenied,
 )
@@ -57,7 +59,13 @@ async def create_link(
     """建立公開分享連結
 
     只有資源擁有者或有編輯權限的人可以建立連結。
+
+    路由這層的檢查是歷史留下來的第一道；真正的資源存取檢查在
+    `services/share.py` 的 `check_resource_access()`（與 MCP 工具共用那一層），
+    已登入者也不能分享自己讀不到的資源（issue #205）。
     """
+    actor = ShareActor.from_session(session)
+
     if data.resource_type == "content":
         # content 類型：直接儲存內容，不需要資源權限檢查
         if not data.content:
@@ -103,10 +111,15 @@ async def create_link(
     # 後續可以加入專案權限檢查
 
     try:
-        return await create_share_link(data, session.username)
+        return await create_share_link(data, session.username, actor=actor)
     except ResourceNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except ShareAccessDenied as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
             detail=str(e),
         )
     except ShareError as e:

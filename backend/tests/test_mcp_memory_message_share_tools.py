@@ -225,18 +225,51 @@ async def test_message_tools(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "m.bot_group_id IS NULL" in query
 
 
+class _UserConnCtx:
+    """最小 async context manager，回一個「已綁定一般使用者」的 users 列。"""
+
+    def __init__(self, conn):
+        self.conn = conn
+
+    async def __aenter__(self):
+        return self.conn
+
+    async def __aexit__(self, *_args):
+        return False
+
+
+@pytest.fixture
+def _bound_share_user(monkeypatch: pytest.MonkeyPatch):
+    """分享工具現在要 `share-manager` 權限（issue #205）：這裡當成已綁定的一般使用者。
+
+    資源存取檢查本身在 `tests/test_mcp_share_guard.py` 驗，這一檔只驗工具的流程分支。
+    """
+    from ching_tech_os.services.mcp import server as mcp_server
+    import ching_tech_os.services.share as share_module
+
+    monkeypatch.delenv("CTOS_USER_ID", raising=False)
+    monkeypatch.setattr(mcp_server, "ensure_db_connection", AsyncMock())
+    conn = SimpleNamespace(
+        fetchrow=AsyncMock(return_value={"role": "user", "preferences": {}})
+    )
+    monkeypatch.setattr(mcp_server, "get_connection", lambda: _UserConnCtx(conn))
+    monkeypatch.setattr(share_module, "check_resource_access", AsyncMock(return_value=None))
+
+
 @pytest.mark.asyncio
-async def test_create_share_link(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_create_share_link(
+    monkeypatch: pytest.MonkeyPatch, _bound_share_user
+) -> None:
     monkeypatch.setattr(share_tools, "ensure_db_connection", AsyncMock())
     import ching_tech_os.services.share as share_module
 
-    moved = await share_tools.create_share_link("project", "P-1")
+    moved = await share_tools.create_share_link("project", "P-1", ctos_user_id=1)
     assert "os.ching-tech.com/projects" in moved
 
-    invalid_type = await share_tools.create_share_link("bad", "X")
+    invalid_type = await share_tools.create_share_link("bad", "X", ctos_user_id=1)
     assert "資源類型必須是" in invalid_type
 
-    invalid_expire = await share_tools.create_share_link("knowledge", "kb-1", expires_in="3h")
+    invalid_expire = await share_tools.create_share_link("knowledge", "kb-1", expires_in="3h", ctos_user_id=1)
     assert "有效期限必須是" in invalid_expire
 
     monkeypatch.setattr(
@@ -250,7 +283,7 @@ async def test_create_share_link(monkeypatch: pytest.MonkeyPatch) -> None:
             )
         ),
     )
-    ok = await share_tools.create_share_link("knowledge", "kb-1", expires_in="24h")
+    ok = await share_tools.create_share_link("knowledge", "kb-1", expires_in="24h", ctos_user_id=1)
     assert "分享連結已建立" in ok
     assert "https://example.com/s/1" in ok
     assert "有效至" in ok
@@ -266,7 +299,7 @@ async def test_create_share_link(monkeypatch: pytest.MonkeyPatch) -> None:
             )
         ),
     )
-    permanent = await share_tools.create_share_link("knowledge", "kb-2", expires_in=None)
+    permanent = await share_tools.create_share_link("knowledge", "kb-2", expires_in=None, ctos_user_id=1)
     assert "永久有效" in permanent
 
     monkeypatch.setattr(
@@ -274,7 +307,7 @@ async def test_create_share_link(monkeypatch: pytest.MonkeyPatch) -> None:
         "create_share_link",
         AsyncMock(side_effect=share_module.ResourceNotFoundError("missing")),
     )
-    missing = await share_tools.create_share_link("knowledge", "kb-404")
+    missing = await share_tools.create_share_link("knowledge", "kb-404", ctos_user_id=1)
     assert "找不到資源" in missing
 
     monkeypatch.setattr(
@@ -282,7 +315,7 @@ async def test_create_share_link(monkeypatch: pytest.MonkeyPatch) -> None:
         "create_share_link",
         AsyncMock(side_effect=share_module.ShareError("share failed")),
     )
-    share_err = await share_tools.create_share_link("knowledge", "kb-err")
+    share_err = await share_tools.create_share_link("knowledge", "kb-err", ctos_user_id=1)
     assert "錯誤：" in share_err
 
     monkeypatch.setattr(
@@ -290,12 +323,14 @@ async def test_create_share_link(monkeypatch: pytest.MonkeyPatch) -> None:
         "create_share_link",
         AsyncMock(side_effect=RuntimeError("boom")),
     )
-    unknown = await share_tools.create_share_link("knowledge", "kb-err2")
+    unknown = await share_tools.create_share_link("knowledge", "kb-err2", ctos_user_id=1)
     assert "發生錯誤" in unknown
 
 
 @pytest.mark.asyncio
-async def test_share_knowledge_attachment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+async def test_share_knowledge_attachment(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, _bound_share_user
+) -> None:
     monkeypatch.setattr(share_tools, "ensure_db_connection", AsyncMock())
     import ching_tech_os.services.knowledge as knowledge_module
     import ching_tech_os.services.path_manager as path_manager_module
@@ -303,7 +338,7 @@ async def test_share_knowledge_attachment(monkeypatch: pytest.MonkeyPatch, tmp_p
     from ching_tech_os.config import settings
     nas_tools_module = importlib.import_module("ching_tech_os.services.mcp.nas_tools")
 
-    invalid_expire = await share_tools.share_knowledge_attachment("kb-1", 0, expires_in="3h")
+    invalid_expire = await share_tools.share_knowledge_attachment("kb-1", 0, expires_in="3h", ctos_user_id=1)
     assert "有效期限必須是" in invalid_expire
 
     monkeypatch.setattr(
@@ -311,7 +346,7 @@ async def test_share_knowledge_attachment(monkeypatch: pytest.MonkeyPatch, tmp_p
         "get_knowledge",
         lambda _kb_id: SimpleNamespace(attachments=[]),
     )
-    out_of_range = await share_tools.share_knowledge_attachment("kb-1", 1)
+    out_of_range = await share_tools.share_knowledge_attachment("kb-1", 1, ctos_user_id=1)
     assert "超出範圍" in out_of_range
 
     monkeypatch.setattr(
@@ -321,7 +356,7 @@ async def test_share_knowledge_attachment(monkeypatch: pytest.MonkeyPatch, tmp_p
             attachments=[SimpleNamespace(path="local://knowledge/assets/images/a.txt")]
         ),
     )
-    unsupported_ext = await share_tools.share_knowledge_attachment("kb-1", 0)
+    unsupported_ext = await share_tools.share_knowledge_attachment("kb-1", 0, ctos_user_id=1)
     assert "僅支援 .md2ppt 或 .md2doc" in unsupported_ext
 
     monkeypatch.setattr(
@@ -336,7 +371,7 @@ async def test_share_knowledge_attachment(monkeypatch: pytest.MonkeyPatch, tmp_p
         "parse",
         lambda _path: SimpleNamespace(zone=path_manager_module.StorageZone.NAS, path="demo.md2ppt"),
     )
-    unsupported_path = await share_tools.share_knowledge_attachment("kb-1", 0)
+    unsupported_path = await share_tools.share_knowledge_attachment("kb-1", 0, ctos_user_id=1)
     assert "不支援的附件路徑格式" in unsupported_path
 
     monkeypatch.setattr(
@@ -360,7 +395,7 @@ async def test_share_knowledge_attachment(monkeypatch: pytest.MonkeyPatch, tmp_p
         ),
     )
     monkeypatch.setattr(settings, "md2ppt_url", "https://md2ppt.example")
-    success_ppt = await share_tools.share_knowledge_attachment("kb-1", 0)
+    success_ppt = await share_tools.share_knowledge_attachment("kb-1", 0, ctos_user_id=1)
     assert "MD2PPT" in success_ppt
     assert "https://md2ppt.example/?shareToken=token-1" in success_ppt
     assert "1234" in success_ppt
@@ -396,7 +431,7 @@ async def test_share_knowledge_attachment(monkeypatch: pytest.MonkeyPatch, tmp_p
             )
         ),
     )
-    success_doc = await share_tools.share_knowledge_attachment("kb-1", 0)
+    success_doc = await share_tools.share_knowledge_attachment("kb-1", 0, ctos_user_id=1)
     assert "MD2DOC" in success_doc
     assert "https://md2doc.example/?shareToken=token-2" in success_doc
     assert "有效至" in success_doc
@@ -406,7 +441,7 @@ async def test_share_knowledge_attachment(monkeypatch: pytest.MonkeyPatch, tmp_p
         "get_knowledge",
         lambda _kb_id: (_ for _ in ()).throw(knowledge_module.KnowledgeNotFoundError("missing")),
     )
-    not_found = await share_tools.share_knowledge_attachment("kb-1", 0)
+    not_found = await share_tools.share_knowledge_attachment("kb-1", 0, ctos_user_id=1)
     assert "錯誤：" in not_found
 
     monkeypatch.setattr(
@@ -414,7 +449,7 @@ async def test_share_knowledge_attachment(monkeypatch: pytest.MonkeyPatch, tmp_p
         "get_knowledge",
         lambda _kb_id: (_ for _ in ()).throw(knowledge_module.KnowledgeError("bad")),
     )
-    kb_error = await share_tools.share_knowledge_attachment("kb-1", 0)
+    kb_error = await share_tools.share_knowledge_attachment("kb-1", 0, ctos_user_id=1)
     assert "錯誤：" in kb_error
 
     monkeypatch.setattr(
@@ -438,5 +473,5 @@ async def test_share_knowledge_attachment(monkeypatch: pytest.MonkeyPatch, tmp_p
         "create_share_link",
         AsyncMock(side_effect=share_module.ShareError("share failed")),
     )
-    share_error = await share_tools.share_knowledge_attachment("kb-1", 0)
+    share_error = await share_tools.share_knowledge_attachment("kb-1", 0, ctos_user_id=1)
     assert "錯誤：" in share_error

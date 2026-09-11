@@ -446,13 +446,19 @@ async def test_create_share_link_edge_branches(monkeypatch: pytest.MonkeyPatch) 
         )
 
     # 非 content 類型 + 自訂密碼：呼叫 get_resource_title 並回傳 has_password
+    # （issue #205 之後要帶身分；存取檢查本身在 test_mcp_share_guard.py 驗）
     conn.fetchval = AsyncMock(return_value=None)
     conn.fetchrow = AsyncMock(return_value=_row(resource_type="nas_file", resource_id="/f.txt"))
     monkeypatch.setattr(share, "get_resource_title", AsyncMock(return_value="f.txt"))
+    monkeypatch.setattr(share, "check_resource_access", AsyncMock(return_value=None))
 
     link = await share.create_share_link(
         ShareLinkCreate(resource_type="nas_file", resource_id="/f.txt", password="5678"),
         created_by="admin",
+        actor=share.ShareActor(
+            user_id=1, username="admin", role="admin", preferences={},
+            source_permissions={}, is_bound=True,
+        ),
     )
     assert link.resource_title == "f.txt"
     assert link.has_password is True
