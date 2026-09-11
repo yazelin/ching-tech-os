@@ -84,14 +84,17 @@ async def run_skill_script(
         return json.dumps({"success": False, "error": f"Skill not found: {skill}"}, ensure_ascii=False)
 
     # 權限檢查：驗證使用者有此 skill 的 requires_app 權限
-    if skill_obj.requires_app:
+    # requires_app 可以是單一 app 或清單，清單的語意是「有其中任一就放行」
+    from ...skills import has_required_app, required_apps
+
+    needed = required_apps(skill_obj.requires_app)
+    if needed:
         from ..permissions import get_effective_app_permissions, get_user_app_permissions
         from ..user import get_user_role_and_permissions
 
-        required_app = skill_obj.requires_app
         if ctos_user_id is None:
             # 未綁定帳號時沿用系統預設 app 權限
-            allowed = get_effective_app_permissions().get(required_app, False)
+            allowed = has_required_app(needed, get_effective_app_permissions())
         else:
             # 管理員對所有 requires_app（包含 "admin"）都放行
             user_info = await get_user_role_and_permissions(ctos_user_id)
@@ -99,12 +102,12 @@ async def run_skill_script(
                 allowed = True
             else:
                 user_apps = await get_user_app_permissions(ctos_user_id)
-                allowed = user_apps.get(required_app, False)
+                allowed = has_required_app(needed, user_apps)
 
         if not allowed:
             return json.dumps({
                 "success": False,
-                "error": f"無權限使用 skill '{skill}'（需要 {required_app} 權限）",
+                "error": f"無權限使用 skill '{skill}'（需要 {' 或 '.join(needed)} 權限）",
             }, ensure_ascii=False)
 
     # 驗證 skill 有 scripts

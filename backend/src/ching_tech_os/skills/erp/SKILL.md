@@ -12,7 +12,7 @@ allowed-tools: find_party get_party create_party update_party add_party_contact
   extract_purchase_order_from_document
 metadata:
   ctos:
-    requires_app: vendor-management
+    requires_app: [vendor-management, inventory-management]
     mcp_servers: ching-tech-os
 ---
 

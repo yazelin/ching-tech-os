@@ -243,7 +243,10 @@ metadata:
 
 **重要欄位**：
 - `allowed-tools`：空格分隔的 MCP 工具名稱，控制此 Skill 可以使用哪些工具
-- `metadata.ctos.requires_app`：如果設定，使用者需要有對應的 App 權限才能使用此 Skill
+- `metadata.ctos.requires_app`：如果設定，使用者需要有對應的 App 權限才能使用此 Skill。
+  可以寫單一 app id，也可以寫 YAML 清單（如 `[vendor-management, inventory-management]`），
+  清單的語意是「有其中**任一**權限就放行」——給一個 skill 同時服務兩個 App 用。
+  這只影響 skill 說明與 script 執行的門檻，MCP 工具本身仍逐支檢查權限。
 - `metadata.ctos.mcp_servers`：此 Skill 需要哪些外部 MCP Server（空格分隔）
 
 ### Skill 與 MCP 工具的關係
