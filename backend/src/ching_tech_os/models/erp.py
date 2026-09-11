@@ -10,7 +10,7 @@ from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 # 規格第二節定義的集合
 PurchaseOrderStatus = Literal["draft", "ordered", "partial", "received", "cancelled"]
@@ -438,7 +438,14 @@ class StockMutationResponse(BaseModel):
 
 
 class PurchaseOrderLineCreate(BaseModel):
-    """採購單行項（建立用）"""
+    """採購單行項（建立用）
+
+    `extra="forbid"`：`received_qty` 只給匯入腳本用（service 吃得下，但那是
+    「歷史單據的已收量」，不是 REST 的開單欄位）。REST 送進來要 422，
+    不能靜默吞掉讓人以為有寫進去。
+    """
+
+    model_config = ConfigDict(extra="forbid")
 
     item_id: UUID
     qty: Decimal
@@ -462,7 +469,13 @@ class PurchaseOrderLineResponse(BaseModel):
 
 
 class PurchaseOrderCreate(BaseModel):
-    """建立採購單請求"""
+    """建立採購單請求
+
+    `extra="forbid"`：`po_no` 由 service 在同一交易內產生，只有匯入腳本可以指定。
+    REST 送 `po_no` 要 422，不能讓呼叫端以為自己指定得了單號。
+    """
+
+    model_config = ConfigDict(extra="forbid")
 
     supplier_id: UUID
     lines: list[PurchaseOrderLineCreate] = Field(min_length=1)

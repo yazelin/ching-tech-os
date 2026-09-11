@@ -180,8 +180,13 @@ async def create_purchase_order(
 ) -> dict[str, Any]:
     """建立採購單（單號同交易產生），回傳明細＋audit_id
 
+    `data["po_no"]` 有給就沿用（ERPNext 匯入要保留原單號），沒給才自動產生。
+    行項的 `received_qty` 同理：匯入歷史單據時直接把已收量帶進來，不另外產生
+    庫存異動（那些庫存已經在 Bin 的初始餘額裡了）。
+
     Raises:
-        InvalidOperationError: 沒有行項、供應商不存在、行項的物料不存在
+        InvalidOperationError: 沒有行項、供應商不存在、行項的物料不存在、
+            指定的單號已存在、已收量超過訂購量
     """
     lines = data.get("lines") or []
     if not lines:
@@ -202,7 +207,13 @@ async def create_purchase_order(
                 raise InvalidOperationError("專案不存在")
 
         order_date = data.get("order_date") or date.today()
-        po_no = await next_po_no(conn, order_date)
+        po_no = (data.get("po_no") or "").strip() or None
+        if po_no is None:
+            po_no = await next_po_no(conn, order_date)
+        elif await conn.fetchval(
+            "SELECT 1 FROM purchase_orders WHERE po_no = $1", po_no
+        ):
+            raise InvalidOperationError(f"採購單號已存在：{po_no}")
         row = await conn.fetchrow(
             """
             INSERT INTO purchase_orders
@@ -228,20 +239,27 @@ async def create_purchase_order(
             )
             if item is None:
                 raise InvalidOperationError(f"物料不存在或已刪除：{line['item_id']}")
-            if Decimal(line["qty"]) <= 0:
+            qty = Decimal(str(line["qty"]))
+            if qty <= 0:
                 raise InvalidOperationError("行項數量必須大於 0")
+            received_qty = Decimal(str(line.get("received_qty") or 0))
+            if received_qty < 0 or received_qty > qty:
+                raise InvalidOperationError(
+                    f"已收量 {received_qty} 不能小於 0 或超過訂購量 {qty}"
+                )
             await conn.execute(
                 """
                 INSERT INTO purchase_order_lines
-                    (po_id, item_id, description, qty, unit_price, sort_order,
-                     created_by)
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    (po_id, item_id, description, qty, unit_price, received_qty,
+                     sort_order, created_by)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                 """,
                 row["id"],
                 line["item_id"],
                 line.get("description"),
                 line["qty"],
                 line.get("unit_price"),
+                received_qty,
                 index,
                 actor_user_id,
             )

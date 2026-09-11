@@ -243,7 +243,7 @@ GET 明細的 `audit_id` 是 `null`。
 明確送 `null` 會被擋在 422。清單的 `q` 會跳脫 `%` 與 `_` 後才進 `ILIKE`；`q` 同時比對聯絡人
 姓名（模糊）與電話／手機（等值，避免片段號碼誤中）。
 每筆寫入都在同一交易寫 `erp_audit`（`entity_type`、`action`、`diff`、`actor_user_id`、
-`via`＝`rest`／`mcp`、`agent_name`）。
+`via`＝`rest`／`mcp`／`import`（`scripts/erpnext_import.py` 用）、`agent_name`）。
 
 ### AI 對話
 

@@ -1520,6 +1520,84 @@ async def test_create_purchase_order_generates_po_no(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_create_purchase_order_keeps_given_po_no_and_received_qty(
+    monkeypatch,
+) -> None:
+    """ERPNext 匯入要保留原單號，已收量直接帶進行項（不另外產生庫存異動）"""
+    audit_id = uuid4()
+    po_row = _DictRecord(
+        {"id": uuid4(), "po_no": "PUR-ORD-TEST-00001", "status": "partial"}
+    )
+    conn = _FakeConn(
+        fetchrow=[
+            _DictRecord({"id": uuid4(), "name": "測試供應商"}),
+            po_row,
+            _DictRecord({"id": uuid4(), "code": "TEST-A1"}),
+        ],
+        # 單號沒撞到、audit id
+        fetchval=[None, audit_id],
+    )
+    _patch(monkeypatch, purchasing_service, conn)
+
+    result = await purchasing_service.create_purchase_order(
+        {
+            "po_no": "PUR-ORD-TEST-00001",
+            "supplier_id": uuid4(),
+            "status": "partial",
+            "order_date": date(2026, 1, 9),
+            "lines": [
+                {"item_id": uuid4(), "qty": Decimal("4"), "received_qty": Decimal("1")}
+            ],
+        }
+    )
+
+    assert result["po_no"] == "PUR-ORD-TEST-00001"
+    # 沒去產生新單號
+    assert not conn.find("pg_advisory_xact_lock")
+    insert = conn.find("INSERT INTO purchase_order_lines")[0]
+    assert insert[2][5] == Decimal("1")
+
+
+@pytest.mark.asyncio
+async def test_create_purchase_order_rejects_duplicate_po_no(monkeypatch) -> None:
+    conn = _FakeConn(
+        fetchrow=[_DictRecord({"id": uuid4(), "name": "測試供應商"})],
+        fetchval=[1],
+    )
+    _patch(monkeypatch, purchasing_service, conn)
+
+    with pytest.raises(erp_core.InvalidOperationError):
+        await purchasing_service.create_purchase_order(
+            {
+                "po_no": "PUR-ORD-TEST-00001",
+                "supplier_id": uuid4(),
+                "lines": [{"item_id": uuid4(), "qty": 1}],
+            }
+        )
+
+
+@pytest.mark.asyncio
+async def test_create_purchase_order_rejects_received_qty_over_qty(monkeypatch) -> None:
+    conn = _FakeConn(
+        fetchrow=[
+            _DictRecord({"id": uuid4(), "name": "測試供應商"}),
+            _DictRecord({"id": uuid4(), "po_no": "PO-202609-001"}),
+            _DictRecord({"id": uuid4(), "code": "TEST-A1"}),
+        ],
+        fetchval=[0],
+    )
+    _patch(monkeypatch, purchasing_service, conn)
+
+    with pytest.raises(erp_core.InvalidOperationError):
+        await purchasing_service.create_purchase_order(
+            {
+                "supplier_id": uuid4(),
+                "lines": [{"item_id": uuid4(), "qty": 2, "received_qty": 5}],
+            }
+        )
+
+
+@pytest.mark.asyncio
 async def test_list_purchase_orders_filters(monkeypatch) -> None:
     conn = _FakeConn(fetchval=[1], fetch=[[_DictRecord({"po_no": "PO-202609-001"})]])
     _patch(monkeypatch, purchasing_service, conn)
