@@ -502,42 +502,11 @@ app.mount("/data/projects/attachments", StaticFiles(directory=PROJECT_ATTACHMENT
 
 @sio.event
 async def connect(sid, environ, auth=None):
-    """客戶端連線（必須帶有效 token）
+    """客戶端連線（必須帶有效 token，邏輯在 services/socket_auth.authenticate_connect）"""
+    from .services.socket_auth import authenticate_connect
 
-    token 只從 client 的 `auth.token` 取（query string 會留在 nginx log 與
-    瀏覽器歷史紀錄，不接受）。驗不過一律拒絕連線；通過則把身分存進 sio
-    session，供各事件使用。
-    """
-    from .api.auth import _resolve_session
-    from .services.socket_auth import extract_token
-
-    token = extract_token(auth)
-    if not token:
-        raise socketio.exceptions.ConnectionRefusedError("unauthorized")
-
-    try:
-        session = await _resolve_session(token)
-    except Exception as e:
-        logger = logging.getLogger(__name__)
-        logger.warning("Socket.IO 連線解析 token 失敗（sid=%s）: %s", sid, e)
-        raise socketio.exceptions.ConnectionRefusedError("unauthorized")
-
-    if session is None:
-        raise socketio.exceptions.ConnectionRefusedError("unauthorized")
-
-    await sio.save_session(
-        sid,
-        {
-            "user_id": session.user_id,
-            "username": session.username,
-            "role": session.role,
-            "app_permissions": session.app_permissions or {},
-            "read_only": session.read_only,
-            # 高風險事件會拿它重新解析一次，確認 token 還有效
-            "token": token,
-        },
-    )
-    print(f"Client connected: {sid} (user={session.username})")
+    identity = await authenticate_connect(sio, sid, auth)
+    print(f"Client connected: {sid} (user={identity['username']})")
 
 
 @sio.event

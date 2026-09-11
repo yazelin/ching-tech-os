@@ -10,6 +10,8 @@
 import logging
 from typing import Any
 
+from socketio.exceptions import ConnectionRefusedError as SioConnectionRefused
+
 logger = logging.getLogger(__name__)
 
 
@@ -29,6 +31,43 @@ def extract_token(auth: Any) -> str | None:
         if isinstance(token, str) and token.strip():
             return token.strip()
     return None
+
+
+async def authenticate_connect(sio: Any, sid: str, auth: Any) -> dict:
+    """Socket.IO connect：驗 token，通過就把身分存進 sio session
+
+    token 只從 client 的 `auth.token` 取（query string 會留在 nginx log 與
+    瀏覽器歷史紀錄，不接受）。驗不過一律 raise ConnectionRefusedError；
+    通過則回存進 session 的身分 dict。
+
+    放在 service 而不是 main.py，是讓測試不必 import main（main 一載入就掛靜態目錄）。
+    """
+    from ..api.auth import _resolve_session
+
+    token = extract_token(auth)
+    if not token:
+        raise SioConnectionRefused("unauthorized")
+
+    try:
+        session = await _resolve_session(token)
+    except Exception as e:
+        logger.warning("Socket.IO 連線解析 token 失敗（sid=%s）: %s", sid, e)
+        raise SioConnectionRefused("unauthorized")
+
+    if session is None:
+        raise SioConnectionRefused("unauthorized")
+
+    identity = {
+        "user_id": session.user_id,
+        "username": session.username,
+        "role": session.role,
+        "app_permissions": session.app_permissions or {},
+        "read_only": session.read_only,
+        # 高風險事件會拿它重新解析一次，確認 token 還有效
+        "token": token,
+    }
+    await sio.save_session(sid, identity)
+    return identity
 
 
 async def get_socket_identity(sio: Any, sid: str) -> dict | None:

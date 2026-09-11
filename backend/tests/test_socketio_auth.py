@@ -23,7 +23,6 @@ import pytest
 from socketio.exceptions import ConnectionRefusedError as SioConnectionRefused
 
 import ching_tech_os.api.auth as auth_api
-import ching_tech_os.main as main_module
 from ching_tech_os.api import ai as ai_api
 from ching_tech_os.api import message_events, terminal as terminal_api
 from ching_tech_os.models.auth import SessionData
@@ -151,34 +150,18 @@ async def test_revalidate_returns_none_when_resolve_fails(
 
 
 # ============================================================
-# main.connect
+# socket_auth.authenticate_connect（main.connect 只轉呼叫它）
 # ============================================================
 
 
 @pytest.mark.asyncio
 async def test_connect_without_token_refused(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_sio = _FakeSio()
-    monkeypatch.setattr(main_module, "sio", fake_sio)
     resolve = AsyncMock(return_value=_session_data())
     monkeypatch.setattr(auth_api, "_resolve_session", resolve)
 
     with pytest.raises(SioConnectionRefused):
-        await main_module.connect("sid-1", {"QUERY_STRING": ""}, None)
-
-    resolve.assert_not_awaited()
-    fake_sio.save_session.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_connect_query_string_token_refused(monkeypatch: pytest.MonkeyPatch) -> None:
-    """F7：query string 帶 token 不再被接受"""
-    fake_sio = _FakeSio()
-    monkeypatch.setattr(main_module, "sio", fake_sio)
-    resolve = AsyncMock(return_value=_session_data())
-    monkeypatch.setattr(auth_api, "_resolve_session", resolve)
-
-    with pytest.raises(SioConnectionRefused):
-        await main_module.connect("sid-1", {"QUERY_STRING": "EIO=4&token=from-query"}, None)
+        await socket_auth.authenticate_connect(fake_sio, "sid-1", None)
 
     resolve.assert_not_awaited()
     fake_sio.save_session.assert_not_awaited()
@@ -187,11 +170,10 @@ async def test_connect_query_string_token_refused(monkeypatch: pytest.MonkeyPatc
 @pytest.mark.asyncio
 async def test_connect_invalid_token_refused(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_sio = _FakeSio()
-    monkeypatch.setattr(main_module, "sio", fake_sio)
     monkeypatch.setattr(auth_api, "_resolve_session", AsyncMock(return_value=None))
 
     with pytest.raises(SioConnectionRefused):
-        await main_module.connect("sid-1", {"QUERY_STRING": ""}, {"token": "bad"})
+        await socket_auth.authenticate_connect(fake_sio, "sid-1", {"token": "bad"})
 
     fake_sio.save_session.assert_not_awaited()
 
@@ -200,13 +182,12 @@ async def test_connect_invalid_token_refused(monkeypatch: pytest.MonkeyPatch) ->
 async def test_connect_resolve_error_refused(monkeypatch: pytest.MonkeyPatch) -> None:
     """F6：_resolve_session 拋例外要拒絕連線，不是讓 500 冒出去"""
     fake_sio = _FakeSio()
-    monkeypatch.setattr(main_module, "sio", fake_sio)
     monkeypatch.setattr(
         auth_api, "_resolve_session", AsyncMock(side_effect=RuntimeError("db down"))
     )
 
     with pytest.raises(SioConnectionRefused):
-        await main_module.connect("sid-1", {"QUERY_STRING": ""}, {"token": "whatever"})
+        await socket_auth.authenticate_connect(fake_sio, "sid-1", {"token": "whatever"})
 
     fake_sio.save_session.assert_not_awaited()
 
@@ -214,11 +195,10 @@ async def test_connect_resolve_error_refused(monkeypatch: pytest.MonkeyPatch) ->
 @pytest.mark.asyncio
 async def test_connect_valid_token_saves_session(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_sio = _FakeSio()
-    monkeypatch.setattr(main_module, "sio", fake_sio)
     session = _session_data(role="admin", app_permissions={"terminal": True}, read_only=True)
     monkeypatch.setattr(auth_api, "_resolve_session", AsyncMock(return_value=session))
 
-    await main_module.connect("sid-1", {"QUERY_STRING": ""}, {"token": "good"})
+    await socket_auth.authenticate_connect(fake_sio, "sid-1", {"token": "good"})
 
     fake_sio.save_session.assert_awaited_once()
     sid, stored = fake_sio.save_session.await_args.args
