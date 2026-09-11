@@ -37,26 +37,29 @@ def register_events(sio: socketio.AsyncServer) -> None:
     async def handle_create(sid: str, data: dict) -> dict:
         """建立新的終端機 session（身分以連線時的 token 為準）"""
         # 進入時重新解析一次 token：連線後才登出或撤銷的 token 不能再開終端機
-        session = await revalidate_socket_session(sio, sid)
-        if session is None:
+        # （命名為 auth_session，與下面的終端機 session 區分）
+        auth_session = await revalidate_socket_session(sio, sid)
+        if auth_session is None:
             await disconnect_socket(sio, sid)
             return {'success': False, 'error': '連線未授權，請重新登入'}
 
-        if session.read_only:
+        if auth_session.read_only:
             return {'success': False, 'error': '此 API token 為唯讀，無法開啟終端機'}
 
-        permissions = {"apps": session.app_permissions} if session.app_permissions else None
-        if not has_app_permission(session.role, permissions, 'terminal'):
+        permissions = (
+            {"apps": auth_session.app_permissions} if auth_session.app_permissions else None
+        )
+        if not has_app_permission(auth_session.role, permissions, 'terminal'):
             return {'success': False, 'error': '無「終端機」功能權限'}
 
-        if session.user_id is None:
+        if auth_session.user_id is None:
             return {'success': False, 'error': '連線未授權，請重新登入'}
 
         try:
             cols = data.get('cols', 80)
             rows = data.get('rows', 24)
             # 忽略 client 送來的 user_id，一律用連線身分
-            user_id = session.user_id
+            user_id = auth_session.user_id
 
             session = await terminal_service.create_session(
                 websocket_sid=sid,

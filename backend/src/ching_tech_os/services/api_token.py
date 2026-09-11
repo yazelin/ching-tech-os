@@ -191,13 +191,24 @@ async def verify_api_token(token: str) -> SessionData | None:
             )
 
     # 取使用者當下實際的 app 權限，再以 scopes 取交集
-    from .permissions import get_user_app_permissions
+    from .permissions import get_effective_app_permissions, get_user_app_permissions
 
     user_perms = await get_user_app_permissions(row["user_id"])
     scopes = _parse_scopes(row["scopes"])
     if scopes:
-        app_permissions = {app: user_perms.get(app, False) for app in scopes}
+        # 補滿整張表：require_app_permission 對權限表沒帶到的 app_id 會回退到預設值，
+        # 只列 scopes 的稀疏表會讓 scopes 以外、預設開放的 app 反而通過，失去限縮效果。
+        scope_set = set(scopes)
+        app_permissions = {
+            app: (app in scope_set and bool(user_perms.get(app, False)))
+            for app in get_effective_app_permissions()
+        }
+        # scopes 可能點名不在有效 app 清單裡的 id（例如已停用模組），維持原本的交集語意
+        for app in scope_set:
+            if app not in app_permissions:
+                app_permissions[app] = bool(user_perms.get(app, False))
     else:
+        # 沒設 scopes 代表不限縮：沿用使用者當下的完整權限表
         app_permissions = user_perms
 
     return SessionData(

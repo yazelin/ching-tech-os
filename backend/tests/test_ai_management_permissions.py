@@ -152,7 +152,15 @@ async def test_update_agent_user_other_app_permission_denied(
 async def test_checker_falls_back_to_default_for_missing_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """非空 dict 缺 key 時要回退到預設值，預設開放的 app 就該放行"""
+    """非空 dict 缺 key 時要回退到預設值，預設開放的 app 就該放行
+
+    這是 web session 的情境：session 的權限快取是登入當下的一份快照，
+    可能沒帶到後來新增的 app_id，回退到預設值才與 has_app_permission() 一致。
+
+    PAT 不靠這條回退：services/api_token.py 的 verify_api_token() 會把有 scopes 的
+    token 權限表補滿（scopes 以外一律 False），見
+    tests/test_api_token.py::test_scoped_pat_denied_on_out_of_scope_app。
+    """
     monkeypatch.setattr(ai_management_api.ai_manager, "get_agents", AsyncMock(return_value=[]))
     # knowledge-base 預設開放；session 的權限快取只帶了別的 app
     from ching_tech_os.services.permissions import require_app_permission

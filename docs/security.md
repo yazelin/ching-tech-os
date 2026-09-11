@@ -342,6 +342,9 @@ session 過期或 PAT 被撤銷的連線，會收到錯誤事件並被 `disconne
 唯讀 PAT（`read_only`）不能跑 AI 對話、壓縮對話與開終端機，與 REST 的
 `require_app_permission` 對非 GET 方法的處理一致。
 
+raw token 為了這道重新驗證，存在 python-socketio 的記憶體 session 裡（`sio.save_session`），
+不寫入資料庫，連線斷掉就跟著消失。
+
 取不到連線身分時（例如連線已消失），事件回錯誤或直接略過，不會往下執行。
 
 > 部署後舊桌面前端要重新整理頁面，才會載到會帶 token 的新版 `socket-client.js`。
