@@ -6,6 +6,8 @@
 
 - AI Log 三個端點（`/api/ai/logs`、`/api/ai/logs/stats`、`/api/ai/logs/{id}`）補上
   `require_app_permission("ai-log")`，`ai-log` 預設權限改為關閉，需管理員逐人開放。
+- 排程執行結果可推回 LINE / Telegram：`executor_config.notify` 設定推播目標，失敗訊息帶連續失敗次數
+  （`scheduled_tasks.consecutive_failures`，migration 027）。Skill Script 模式也開始寫 `ai_logs`。
 
 ## 近期重點（2026-02）
 
@@ -303,6 +305,58 @@ uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8088 --reload
 | POST | `/api/skills/hub/install` | 安裝 Hub Skill |
 | GET | `/api/skills/{name}/frontend/{file_path}` | 提供 Skill 前端靜態資源（含路徑防護） |
 | GET | `/api/skills/{name}/files/{file_path}` | 讀取 Skill 檔案 |
+
+### 排程任務
+
+| 方法 | 端點 | 說明 |
+|------|------|------|
+| GET | `/api/scheduler/tasks` | 列出排程（動態 + 靜態），`include_static` 控制是否含系統排程 |
+| POST | `/api/scheduler/tasks` | 建立動態排程 |
+| GET | `/api/scheduler/tasks/{task_id}` | 取得單一排程 |
+| PUT | `/api/scheduler/tasks/{task_id}` | 更新排程 |
+| DELETE | `/api/scheduler/tasks/{task_id}` | 刪除排程 |
+| PATCH | `/api/scheduler/tasks/{task_id}/toggle` | 啟用 / 停用 |
+| POST | `/api/scheduler/tasks/{task_id}/run` | 手動觸發立即執行一次 |
+
+> 排程管理端點皆需管理員權限。
+
+#### 執行結果推播（executor_config.notify）
+
+排程跑完之後預設只寫 `ai_logs`。要把結果推回原本的 LINE / Telegram 對話，在 `executor_config`
+加一段 `notify`，Agent 與 Skill Script 兩種 `executor_type` 都適用：
+
+```jsonc
+{
+  "agent_name": "system-scheduler",
+  "prompt": "整理今天的庫存異動",
+  "notify": {
+    "platform": "telegram",   // "line" 或 "telegram"
+    "target_id": "123456789", // Line user ID 或 Telegram chat_id
+    "is_group": false,        // 群組對話填 true
+    "group_id": null          // 群組對話填群組 ID
+  }
+}
+```
+
+- 沒有 `notify`、缺 `platform`、或 `target_id` 與 `group_id` 都空，就維持不推播。
+- 推播走 `proactive_push_service.notify_job_complete()`，仍受 `bot_settings.proactive_push_enabled`
+  平台開關管制（LINE 預設關、Telegram 預設開）。
+- 成功訊息：`【排程】{排程名稱} 完成\n{結果內容}`；失敗訊息：`【排程失敗】{排程名稱}（連續第 N 次）\n{錯誤}`。
+  訊息截斷到 4000 字（LINE 單則上限 5000 字）。
+- 推播失敗只寫 warning，不影響排程執行結果，也不影響 `ai_logs` 寫入。
+- `platform` 不是 `line` / `telegram`，或 `target_id` 與 `group_id` 都空，會寫一則帶排程名稱的
+  warning 後略過推播。
+
+> **目前只能透過 API 或資料庫設定；從舊桌面的排程 UI 編輯該排程會清掉 notify 設定。**
+> 舊桌面的 `frontend/js/task-scheduler.js` 存檔時是用表單欄位重新組一份 `executor_config`
+> 送 PUT，而 PUT 會整包覆寫該 JSONB 欄位，表單上沒有的 `notify` 就這樣被靜默丟掉。
+> 設過 `notify` 的排程，請改用 `PUT /api/scheduler/tasks/{task_id}`（帶完整 `executor_config`）
+> 或直接改資料庫。
+
+#### 連續失敗計數
+
+`scheduled_tasks.consecutive_failures`（migration 027）由 `update_task_run_result()` 一併更新：
+成功歸零、失敗 +1，並用 `RETURNING` 取回更新後的值給失敗訊息用。`last_run_error` 維持截斷 1000 字。
 
 ### 公開配置
 
