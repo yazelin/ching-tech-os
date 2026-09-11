@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import inspect
 from datetime import datetime, timedelta
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
@@ -13,7 +15,7 @@ from fastapi.testclient import TestClient
 from starlette.requests import Request
 
 from ching_tech_os.api import ai_management, ai_router
-from ching_tech_os.models.ai import ChatCreate, ChatUpdate
+from ching_tech_os.models.ai import ChatCreate, ChatMessage, ChatUpdate
 from ching_tech_os.models.auth import SessionData
 from ching_tech_os.services import ai_chat
 
@@ -354,3 +356,46 @@ async def test_ai_management_routes(monkeypatch: pytest.MonkeyPatch) -> None:
     assert client.post("/api/ai/prompts", json={"name": "dup", "content": "c"}).status_code == 400
     monkeypatch.setattr(ai_management.ai_manager, "create_agent", AsyncMock(side_effect=Exception("duplicate key")))
     assert client.post("/api/ai/agents", json={"name": "dup", "model": "claude-sonnet"}).status_code == 400
+
+
+def test_chat_message_tool_calls_field() -> None:
+    """PR 3b：ChatMessage 加 tool_calls，舊格式訊息（沒有這個 key）讀取不炸"""
+    # 舊格式訊息：沒有 tool_calls key → 預設 None
+    old_message = ChatMessage(role="assistant", content="舊回覆", timestamp=1)
+    assert old_message.tool_calls is None
+
+    old_dict = {"role": "user", "content": "舊使用者訊息", "timestamp": 1}
+    assert ChatMessage(**old_dict).tool_calls is None
+
+    # 新格式訊息：帶 tool_calls，形狀與 AI Log parsed_response.tool_calls 一致
+    new_dict = {
+        "role": "assistant",
+        "content": "新回覆",
+        "timestamp": 2,
+        "tool_calls": [
+            {"id": "tc1", "name": "search_knowledge", "input": {"query": "x"}, "output": "ok"}
+        ],
+    }
+    new_message = ChatMessage(**new_dict)
+    assert new_message.tool_calls == new_dict["tool_calls"]
+
+
+def test_prompt_name_default_matches_seeded_agent() -> None:
+    """PR 3b：ChatCreate.prompt_name 預設值要與實際存在的 agent 名稱一致
+
+    api/ai.py 沒有 prompt_name 時的退回值是行為，不是字面：
+    見 test_api_ai_events.py::test_ai_chat_event_prompt_name_fallback
+    （直接驅動 ai_chat_event，斷言 get_agent_system_prompt／get_agent_config
+    實際收到 "web-chat-default"，不靠 inspect.getsource 抓原始碼字串）。
+    """
+    assert ChatCreate().prompt_name == "web-chat-default"
+
+    # 服務層 create_chat 的預設參數也要對齊，避免直接呼叫時退回不存在的 agent 名稱
+    assert inspect.signature(ai_chat.create_chat).parameters["prompt_name"].default == "web-chat-default"
+
+    # 實際存在於 seed 的 agent 名稱（backend/migrations/versions/seed_data.sql）
+    seed_path = (
+        Path(__file__).resolve().parents[1] / "migrations" / "versions" / "seed_data.sql"
+    )
+    seed_sql = seed_path.read_text(encoding="utf-8")
+    assert "'web-chat-default'" in seed_sql

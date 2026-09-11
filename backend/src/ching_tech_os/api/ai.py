@@ -153,6 +153,18 @@ def register_events(sio: AsyncServer):
         )
 
         if response.success:
+            # 將 tool_calls 轉換為可序列化的格式（與 AI Log parsed_response.tool_calls 同形狀）
+            # ai_response payload、持久化訊息、AI Log 共用同一份，維持三處形狀一致
+            tool_calls_list = [
+                {
+                    "id": tc.id,
+                    "name": tc.name,
+                    "input": tc.input,
+                    "output": tc.output,
+                }
+                for tc in response.tool_calls
+            ]
+
             # 更新 DB 中的 messages
             new_messages = history.copy()
 
@@ -165,12 +177,13 @@ def register_events(sio: AsyncServer):
                 }
             )
 
-            # 加入 AI 回應
+            # 加入 AI 回應（有工具呼叫才帶 tool_calls，沒有則為 None）
             new_messages.append(
                 {
                     "role": "assistant",
                     "content": response.message,
                     "timestamp": int(time.time()),
+                    "tool_calls": tool_calls_list or None,
                 }
             )
 
@@ -181,12 +194,15 @@ def register_events(sio: AsyncServer):
                 auto_title = message[:20] + ("..." if len(message) > 20 else "")
                 await ai_chat.update_chat_title(chat_id, auto_title)
 
-            # 發送回應
+            # 發送回應（toolCalls / toolTimings 為新前端「工具時間軸」用；
+            # 舊桌面 frontend/js/ai-assistant.js 只讀 message，多的欄位不影響）
             await sio.emit(
                 "ai_response",
                 {
                     "chatId": chat_id_str,
                     "message": response.message,
+                    "toolCalls": tool_calls_list,
+                    "toolTimings": response.tool_timings or [],
                 },
                 to=sid,
             )
@@ -194,20 +210,9 @@ def register_events(sio: AsyncServer):
             # 記錄到 AI Log（含工具調用詳情）
             if agent_id:
                 try:
-                    # 將 tool_calls 轉換為可序列化的格式
                     parsed_response = None
-                    if response.tool_calls:
-                        parsed_response = {
-                            "tool_calls": [
-                                {
-                                    "id": tc.id,
-                                    "name": tc.name,
-                                    "input": tc.input,
-                                    "output": tc.output,
-                                }
-                                for tc in response.tool_calls
-                            ]
-                        }
+                    if tool_calls_list:
+                        parsed_response = {"tool_calls": tool_calls_list}
                     # 附加 provider/route 資訊（model 欄位維持記 requested role）
                     parsed_response = attach_routing_metadata(parsed_response, response)
 

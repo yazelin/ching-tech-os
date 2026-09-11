@@ -21,6 +21,10 @@ class ChatMessage(BaseModel):
     content: str = Field(..., description="訊息內容")
     timestamp: int = Field(..., description="Unix timestamp")
     is_summary: bool = Field(default=False, description="是否為壓縮摘要")
+    tool_calls: list[dict] | None = Field(
+        default=None,
+        description="工具呼叫紀錄（與 AI Log parsed_response.tool_calls 同形狀），舊訊息沒有則為 None",
+    )
 
 
 class ChatCreate(BaseModel):
@@ -28,7 +32,7 @@ class ChatCreate(BaseModel):
 
     title: str = Field(default="新對話", max_length=100)
     model: str = Field(default="claude-sonnet", max_length=50)
-    prompt_name: str = Field(default="default", max_length=50)
+    prompt_name: str = Field(default="web-chat-default", max_length=50)
 
 
 class ChatUpdate(BaseModel):

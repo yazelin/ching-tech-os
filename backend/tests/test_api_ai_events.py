@@ -63,6 +63,7 @@ def _response(
     message: str = "",
     error: str | None = None,
     tool_calls: list | None = None,
+    tool_timings: list | None = None,
     input_tokens: int = 1,
     output_tokens: int = 2,
 ):
@@ -72,6 +73,7 @@ def _response(
         message=message,
         error=error,
         tool_calls=tool_calls or [],
+        tool_timings=tool_timings or [],
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         provider="claude",
@@ -93,6 +95,51 @@ async def test_ai_chat_event_validation_and_not_found(monkeypatch: pytest.Monkey
 
     events = [call.args[0] for call in sio.emit.await_args_list]
     assert events == ["ai_error", "ai_error", "ai_error"]
+
+
+@pytest.mark.asyncio
+async def test_ai_chat_event_prompt_name_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    """chat dict 沒有 prompt_name 時，ai_chat_event 要退回 'web-chat-default'
+
+    行為測試：不看原始碼字面（inspect.getsource 太脆，字串一改就假綠），
+    直接驅動 ai_chat_event，斷言 get_agent_system_prompt／get_agent_config
+    實際收到的 agent_name 引數是 'web-chat-default'。
+    """
+    sio = _FakeSio()
+    ai_api.register_events(sio)
+    _stub_resolve_session(monkeypatch)
+
+    chat_id = uuid4()
+
+    monkeypatch.setattr(
+        ai_api.ai_chat,
+        "get_chat",
+        AsyncMock(
+            return_value={
+                "id": chat_id,
+                "user_id": 1,
+                "title": "新對話",
+                # 沒有 "prompt_name" key（模擬舊資料或未指定）
+                "messages": [],
+            }
+        ),
+    )
+    get_system_prompt = AsyncMock(return_value="sys")
+    get_agent_config = AsyncMock(return_value=None)
+    monkeypatch.setattr(ai_api.ai_chat, "get_agent_system_prompt", get_system_prompt)
+    monkeypatch.setattr(ai_api.ai_chat, "get_agent_config", get_agent_config)
+    monkeypatch.setattr(ai_api, "call_ai", AsyncMock(return_value=_response(success=True, message="ok")))
+    monkeypatch.setattr(ai_api.ai_chat, "update_chat_messages", AsyncMock())
+    monkeypatch.setattr(ai_api.ai_chat, "update_chat_title", AsyncMock())
+    monkeypatch.setattr(ai_api, "log_message", AsyncMock())
+
+    await sio.handlers["ai_chat_event"](
+        "sid-1",
+        {"chatId": str(chat_id), "message": "hi", "model": "claude-sonnet"},
+    )
+
+    get_system_prompt.assert_awaited_once_with("web-chat-default")
+    get_agent_config.assert_awaited_once_with("web-chat-default")
 
 
 @pytest.mark.asyncio
@@ -129,8 +176,14 @@ async def test_ai_chat_event_success(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(ai_api.ai_chat, "update_chat_title", update_title)
 
     tool_call = ToolCall(id="tc1", name="search_knowledge", input={"query": "x"}, output="ok")
+    tool_timings = [{"name": "search_knowledge", "duration_ms": 42}]
     call_ai_mock = AsyncMock(
-        return_value=_response(success=True, message="AI 回覆", tool_calls=[tool_call])
+        return_value=_response(
+            success=True,
+            message="AI 回覆",
+            tool_calls=[tool_call],
+            tool_timings=tool_timings,
+        )
     )
     monkeypatch.setattr(ai_api, "call_ai", call_ai_mock)
 
@@ -161,6 +214,82 @@ async def test_ai_chat_event_success(monkeypatch: pytest.MonkeyPatch) -> None:
     log_data = create_log.await_args.args[0]
     assert log_data.parsed_response["routing"]["provider"] == "claude"
     assert log_data.parsed_response["tool_calls"][0]["name"] == "search_knowledge"
+
+    # PR 3b：ai_response payload 帶 toolCalls / toolTimings（camelCase，與 chatId 一致）
+    response_call = next(
+        call for call in sio.emit.await_args_list if call.args[0] == "ai_response"
+    )
+    payload = response_call.args[1]
+    assert payload["chatId"] == str(chat_id)
+    assert payload["message"] == "AI 回覆"
+    assert payload["toolCalls"] == [
+        {"id": "tc1", "name": "search_knowledge", "input": {"query": "x"}, "output": "ok"}
+    ]
+    assert payload["toolTimings"] == tool_timings
+
+    # 持久化的 assistant 訊息也帶 tool_calls（與 AI Log parsed_response.tool_calls 同形狀）
+    saved_messages = update_messages.await_args.args[1]
+    assistant_message = saved_messages[-1]
+    assert assistant_message["role"] == "assistant"
+    assert assistant_message["tool_calls"] == [
+        {"id": "tc1", "name": "search_knowledge", "input": {"query": "x"}, "output": "ok"}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_ai_chat_event_success_without_tool_calls(monkeypatch: pytest.MonkeyPatch) -> None:
+    """沒有工具呼叫時：toolCalls 是空陣列，持久化訊息的 tool_calls 是 None（負控制）"""
+    sio = _FakeSio()
+    ai_api.register_events(sio)
+    _stub_resolve_session(monkeypatch)
+
+    chat_id = uuid4()
+    agent_id = uuid4()
+
+    monkeypatch.setattr(
+        ai_api.ai_chat,
+        "get_chat",
+        AsyncMock(
+            return_value={
+                "id": chat_id,
+                "user_id": 1,
+                "title": "新對話",
+                "prompt_name": "agent-a",
+                "messages": [],
+            }
+        ),
+    )
+    monkeypatch.setattr(ai_api.ai_chat, "get_agent_system_prompt", AsyncMock(return_value="sys"))
+    monkeypatch.setattr(
+        ai_api.ai_chat,
+        "get_agent_config",
+        AsyncMock(return_value={"id": agent_id, "tools": []}),
+    )
+    update_messages = AsyncMock()
+    update_title = AsyncMock()
+    monkeypatch.setattr(ai_api.ai_chat, "update_chat_messages", update_messages)
+    monkeypatch.setattr(ai_api.ai_chat, "update_chat_title", update_title)
+
+    call_ai_mock = AsyncMock(return_value=_response(success=True, message="沒有用工具的回覆"))
+    monkeypatch.setattr(ai_api, "call_ai", call_ai_mock)
+    monkeypatch.setattr(ai_api.ai_manager, "create_log", AsyncMock())
+    monkeypatch.setattr(ai_api, "log_message", AsyncMock())
+
+    await sio.handlers["ai_chat_event"](
+        "sid-1",
+        {"chatId": str(chat_id), "message": "普通問題", "model": "claude-sonnet"},
+    )
+
+    response_call = next(
+        call for call in sio.emit.await_args_list if call.args[0] == "ai_response"
+    )
+    payload = response_call.args[1]
+    assert payload["toolCalls"] == []
+    assert payload["toolTimings"] == []
+
+    saved_messages = update_messages.await_args.args[1]
+    assistant_message = saved_messages[-1]
+    assert assistant_message["tool_calls"] is None
 
 
 @pytest.mark.asyncio
