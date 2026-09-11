@@ -70,6 +70,19 @@ BUILTIN_MODULES: dict[str, ModuleInfo] = {
             }
         ],
     },
+    "project-management": {
+        "id": "project-management",
+        "source": "builtin",
+        "routers": [{"module": ".api.project", "attr": "router"}],
+        "app_ids": ["project-management"],
+        "app_manifest": [
+            {
+                "id": "project-management",
+                "name": "專案管理",
+                "icon": "mdi-clipboard-text",
+            }
+        ],
+    },
     "file-manager": {
         "id": "file-manager",
         "source": "builtin",
