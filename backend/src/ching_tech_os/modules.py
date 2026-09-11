@@ -83,6 +83,25 @@ BUILTIN_MODULES: dict[str, ModuleInfo] = {
             }
         ],
     },
+    "erp": {
+        "id": "erp",
+        "source": "builtin",
+        "routers": [{"module": ".api.erp", "attr": "router"}],
+        "mcp_module": ".services.mcp.erp_tools",
+        "app_ids": ["vendor-management", "inventory-management"],
+        "app_manifest": [
+            {
+                "id": "vendor-management",
+                "name": "廠商管理",
+                "icon": "mdi-handshake",
+            },
+            {
+                "id": "inventory-management",
+                "name": "物料管理",
+                "icon": "mdi-package-variant",
+            },
+        ],
+    },
     "file-manager": {
         "id": "file-manager",
         "source": "builtin",
