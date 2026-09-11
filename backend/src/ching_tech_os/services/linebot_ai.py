@@ -985,12 +985,15 @@ async def process_message_with_ai(
         # 注意：此 timeout 是整體 Claude CLI 的執行時間，包含所有工具呼叫
         # 當 nanobanana MCP 完全失敗時（timeout/錯誤），會觸發 FLUX fallback
         # Gemini 模型間的 fallback（Pro → Flash）由 nanobanana MCP 內部自動處理
-        # 注入語音設定所需的 context（group_id, agent_id）
-        voice_mcp_env: dict[str, str] = {}
-        if line_group_id:
-            voice_mcp_env["CTOS_GROUP_ID"] = str(line_group_id)
-        if agent and agent.get("id"):
-            voice_mcp_env["CTOS_AGENT_ID"] = str(agent["id"])
+        # 注入連線身分與語音設定 context（記憶工具與語音設定都靠這個，
+        # 模型自己在工具參數裡帶的 id 一律不算數，見 issue #204）
+        from .mcp import build_bot_mcp_env
+
+        voice_mcp_env = build_bot_mcp_env(
+            line_group_id=line_group_id,
+            line_user_id=line_user_id,
+            agent_id=(agent or {}).get("id"),
+        )
 
         # 8.3：Line/Telegram 走 provider-neutral call_ai；routing context 用
         # caller 端事實（對話類型 + Agent 名稱），canary 由設定控制，預設仍為 Claude

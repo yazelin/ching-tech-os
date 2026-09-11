@@ -17,6 +17,14 @@ MCP Server 提供一組 AI 工具，可供：
 - Extends 模組（如 `law`）也可透過 `contributes.yaml` 的 `mcp_tools` 欄位提供 in-process MCP 工具。
 - Skills 路由策略預設為 `script-first`：優先執行 `run_skill_script`，必要時才走 MCP fallback。
 
+## 權限與身分
+
+每支工具的 app 權限、未綁定 CTOS 帳號時可否呼叫、是否寫入、身分從哪裡來，
+看 [MCP 工具存取矩陣](mcp-tool-access-matrix.md)（由
+`backend/scripts/gen_tool_access_matrix.py` 從程式內省產生，測試比對逐字相同；
+改了工具或 registry 記得重跑）。背景與三道關卡見
+[security.md](security.md#bot-對外開放未綁定者的工具範圍)。
+
 ## 設定
 
 ### Claude Code CLI

@@ -572,6 +572,11 @@ async def test_process_message_with_ai_success_push_fallback_and_quote_text(monk
     # AI Log 記綁定的 CTOS 帳號（bot_users.user_id）
     assert linebot_ai.log_linebot_ai_call.await_args.kwargs["user_id"] == 123
 
+    # #204：連線身分注入 MCP 子行程（記憶工具靠這個，不靠模型自己帶 id）
+    env = linebot_ai.call_ai.await_args.kwargs["extra_mcp_env"]
+    assert env["CTOS_BOT_USER_ID"] == "U1"
+    assert env["CTOS_BOT_GROUP_ID"] == env["CTOS_GROUP_ID"]
+
 
 @pytest.mark.asyncio
 async def test_process_message_with_ai_start_research_appends_job_id(monkeypatch: pytest.MonkeyPatch) -> None:

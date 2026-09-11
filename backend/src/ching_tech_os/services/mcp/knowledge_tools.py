@@ -10,6 +10,7 @@ from .server import (
     logger,
     ensure_db_connection,
     check_mcp_tool_permission,
+    require_bound_user,
     _LIST_ALL_KNOWLEDGE_QUERIES,
 )
 from ...database import get_connection
@@ -706,6 +707,13 @@ async def add_note(
     if not allowed:
         return f"❌ {error_msg}"
 
+    # 未綁定 CTOS 帳號一律不得寫入知識庫（issue #207）：
+    # 這支工具憑空建立條目，沒有既有條目可以做條目層級檢查，
+    # 也不做「強制寫成 personal」的折衷——未綁定者沒有 personal 可歸屬。
+    bound_err = require_bound_user("add_note", ctos_user_id)
+    if bound_err:
+        return f"❌ {bound_err}"
+
     from ...models.knowledge import KnowledgeCreate, KnowledgeTags, KnowledgeSource
     from .. import knowledge as kb_service
 
@@ -787,6 +795,13 @@ async def add_note_with_attachments(
     allowed, error_msg = await check_mcp_tool_permission("add_note_with_attachments", ctos_user_id)
     if not allowed:
         return f"❌ {error_msg}"
+
+    # 未綁定 CTOS 帳號一律不得寫入知識庫（issue #207）：
+    # 這支工具憑空建立條目，沒有既有條目可以做條目層級檢查，
+    # 也不做「強制寫成 personal」的折衷——未綁定者沒有 personal 可歸屬。
+    bound_err = require_bound_user("add_note_with_attachments", ctos_user_id)
+    if bound_err:
+        return f"❌ {bound_err}"
 
     from ...models.knowledge import KnowledgeCreate, KnowledgeTags, KnowledgeSource
     from .. import knowledge as kb_service

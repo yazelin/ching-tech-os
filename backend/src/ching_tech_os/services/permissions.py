@@ -160,6 +160,110 @@ BOUND_USER_REQUIRED_MESSAGE = (
     "在 Bot 管理頁面點擊「綁定帳號」產生驗證碼，並將驗證碼傳送給我完成綁定"
 )
 
+# ============================================================
+# 工具層級的未綁定自檢（issue #207）
+# ============================================================
+
+# 這些工具所屬的 app 沒有整包擋（knowledge-base 的讀取端靠條目層級控管，
+# 只放行 scope=global 且 is_public 的條目），但工具本身會「憑空建立」條目，
+# 沒有既有條目可以做條目層級檢查，因此在工具內部自檢 `ctos_user_id is None`
+# 一律拒絕（不做強制 personal 的折衷——未綁定者根本沒有 personal 可歸屬）。
+#
+# 實作入口：`services/mcp/server.py` 的 `require_bound_user()`；
+# 這份 registry 同時是 `docs/mcp-tool-access-matrix.md` 的來源，
+# 改了工具卻忘了改 registry，矩陣測試會紅。
+TOOLS_REQUIRE_BOUND_USER: set[str] = {
+    "add_note",
+    "add_note_with_attachments",
+}
+
+# ============================================================
+# 寫入型工具（存取矩陣用）
+# ============================================================
+
+# 「寫入」＝會建立／修改／刪除資料，或產生檔案、對外送出內容。
+# 這份 registry 是 `docs/mcp-tool-access-matrix.md` 的來源；
+# 新增工具卻沒分類，矩陣測試（動詞啟發式的負控制）會紅。
+WRITE_TOOLS: frozenset[str] = frozenset({
+    # 知識庫
+    "add_note",
+    "add_note_with_attachments",
+    "add_attachments_to_knowledge",
+    "update_knowledge_item",
+    "update_knowledge_attachment",
+    "delete_knowledge_item",
+    # 記憶
+    "add_memory",
+    "update_memory",
+    "delete_memory",
+    # 往來對象
+    "create_party",
+    "update_party",
+    "add_party_contact",
+    "update_party_contact",
+    "delete_party_contact",
+    "add_party_address",
+    "update_party_address",
+    "delete_party_address",
+    "merge_parties",
+    # 物料、庫存與採購
+    "create_item",
+    "update_item",
+    "adjust_stock",
+    "transfer_stock",
+    "create_purchase_order",
+    "receive_purchase_order",
+    "cancel_purchase_order",
+    # 專案
+    "create_task",
+    "update_task",
+    "create_milestone",
+    "complete_milestone",
+    "add_project_member",
+    # NAS 檔案（送出＝對外揭露內部檔案）
+    "archive_to_library",
+    "send_nas_file",
+    "prepare_file_message",
+    # 媒體／下載（會在 NAS 產生檔案）
+    "convert_pdf_to_images",
+    "download_web_image",
+    "download_web_file",
+    # 文件生成與列印
+    "generate_presentation",
+    "generate_md2ppt",
+    "generate_md2doc",
+    "prepare_print_file",
+    # 排程
+    "manage_scheduled_task",
+    # 分享（建立對外連結）
+    "create_share_link",
+    "share_knowledge_attachment",
+    # 語音與生圖（會產生檔案）
+    "text_to_speech",
+    "codex_image_tool",
+})
+
+# 工具名稱開頭是這些動詞就一定是寫入型；矩陣測試用它當漂移的負控制
+WRITE_TOOL_NAME_PREFIXES: tuple[str, ...] = (
+    "add_",
+    "create_",
+    "update_",
+    "delete_",
+    "adjust_",
+    "transfer_",
+    "receive_",
+    "cancel_",
+    "merge_",
+    "archive_",
+    "complete_",
+    "generate_",
+    "prepare_",
+    "send_",
+    "download_",
+    "manage_",
+    "convert_",
+)
+
 # 知識庫預設權限
 DEFAULT_KNOWLEDGE_PERMISSIONS: dict[str, bool] = {
     "global_write": False,      # 預設關閉，需管理員開放

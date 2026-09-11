@@ -10,6 +10,7 @@ import sys
 # 匯入共用元件
 from .server import (  # noqa: F401
     mcp,
+    build_bot_mcp_env,
     get_mcp_tools,
     get_mcp_tool_names,
     execute_tool,
@@ -173,6 +174,7 @@ except Exception as e:
 
 __all__ = [
     "mcp",
+    "build_bot_mcp_env",
     "get_mcp_tools",
     "get_mcp_tool_names",
     "execute_tool",

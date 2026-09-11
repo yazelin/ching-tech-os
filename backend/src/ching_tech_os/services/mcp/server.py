@@ -93,7 +93,9 @@ def resolve_ctos_user_id(ctos_user_id: int | None) -> int | None:
     使用者綁定的 ctos_user_id 放進 CTOS_USER_ID 環境變數。這是伺服器驗過的
     身分，模型在工具參數裡打什麼都不能覆蓋（防冒充）。
 
-    環境變數不存在時（例如網頁端 execute_tool 直接呼叫），才採用參數。
+    環境變數不存在時才採用參數。實際上就是網頁聊天：`api/ai.py` 呼叫 `call_ai()`
+    沒有帶 ctos_user_id 也沒有帶 extra_mcp_env（見 docs/mcp-tool-access-matrix.md
+    的已知缺口）。`execute_tool()` 目前只有 MCP server 內部的 skill fallback 在用。
     """
     env_val = os.environ.get("CTOS_USER_ID")
     if env_val:
@@ -102,6 +104,111 @@ def resolve_ctos_user_id(ctos_user_id: int | None) -> int | None:
         except ValueError:
             pass
     return ctos_user_id
+
+
+def require_bound_user(tool_name: str, ctos_user_id: int | None) -> str | None:
+    """工具層級的未綁定自檢（issue #207）。
+
+    `check_mcp_tool_permission` 擋的是「app 權限」，`_check_item_access` 擋的是
+    「既有條目」。`add_note` 這類「憑空建立條目」的工具兩者都套不上——未綁定者
+    沒有帳號可歸屬，卻能把內容寫進全域知識庫。名單放在
+    `permissions.TOOLS_REQUIRE_BOUND_USER`，同時是存取矩陣的來源。
+
+    Args:
+        tool_name: 工具名稱（不含 mcp__ching-tech-os__ 前綴）
+        ctos_user_id: CTOS 用戶 ID（會先走 resolve_ctos_user_id 認伺服器身分）
+
+    Returns:
+        None 表示放行；否則回傳要給使用者的錯誤訊息
+    """
+    from ..permissions import BOUND_USER_REQUIRED_MESSAGE, TOOLS_REQUIRE_BOUND_USER
+
+    if tool_name not in TOOLS_REQUIRE_BOUND_USER:
+        return None
+    if resolve_ctos_user_id(ctos_user_id) is not None:
+        return None
+    return BOUND_USER_REQUIRED_MESSAGE
+
+
+def resolve_bot_identity(
+    line_group_id: str | None,
+    line_user_id: str | None,
+) -> tuple[str | None, str | None]:
+    """解析 bot 對話身分：伺服器注入優先，模型參數只在沒有注入時採用（issue #204）。
+
+    與 `resolve_ctos_user_id` 同一套想法：bot 走 MCP 子行程時，呼叫端把這次
+    對話的身分放進環境變數（`CTOS_BOT_GROUP_ID`／`CTOS_BOT_USER_ID`，群組沿用
+    既有的 `CTOS_GROUP_ID`），模型在工具參數裡宣稱別人的 id 一律無效。
+
+    模型「挑哪一種記憶」（群組 vs 個人）的意圖會保留，被換掉的只有 id 的值：
+    - 模型只帶 group → 用注入的群組 id（沒有注入的群組 id 就退回個人身分）
+    - 模型只帶 user → 用注入的個人 id
+    - 兩個都帶或都沒帶 → 兩個都用注入值（工具本身是群組優先）
+
+    環境變數都不存在時才採用參數——目前實際上就是網頁聊天（`api/ai.py` 呼叫
+    `call_ai()` 沒有帶 `extra_mcp_env`），那條路的身分仍由模型參數決定，
+    缺口記在 `docs/mcp-tool-access-matrix.md`。
+
+    Args:
+        line_group_id: 模型帶進來的群組 UUID（bot_groups.id）
+        line_user_id: 模型帶進來的平台使用者 ID（bot_users.platform_user_id）
+
+    Returns:
+        (line_group_id, line_user_id)：實際要用的身分
+    """
+    env_group = os.environ.get("CTOS_BOT_GROUP_ID") or os.environ.get("CTOS_GROUP_ID")
+    env_user = os.environ.get("CTOS_BOT_USER_ID")
+
+    if not env_group and not env_user:
+        return line_group_id, line_user_id
+
+    if line_group_id and not line_user_id:
+        resolved_group, resolved_user = env_group, None
+    elif line_user_id and not line_group_id:
+        resolved_group, resolved_user = None, env_user
+    else:
+        resolved_group, resolved_user = env_group, env_user
+
+    # 模型指定的種類在這次連線不存在（例如個人對話卻要寫群組記憶）：退回連線身分
+    if not resolved_group and not resolved_user:
+        resolved_group, resolved_user = env_group, env_user
+
+    if (line_group_id and line_group_id != resolved_group) or (
+        line_user_id and line_user_id != resolved_user
+    ):
+        logger.warning("[memory] 模型帶入的 id 與連線身分不符，已改用連線身分")
+
+    return resolved_group, resolved_user
+
+
+def build_bot_mcp_env(
+    line_group_id=None,
+    line_user_id=None,
+    agent_id=None,
+) -> dict[str, str]:
+    """組 bot 對話要注入 MCP 子行程的身分環境變數（issue #204）。
+
+    寫入端（`linebot_ai.py`／`bot_telegram/handler.py`／`bot/identity_router.py`）
+    與讀取端（`resolve_bot_identity`）共用這一個函式，變數名稱只有這裡定義一次。
+
+    Args:
+        line_group_id: 群組的內部 UUID（bot_groups.id；個人對話為 None）
+        line_user_id: 平台使用者 ID（bot_users.platform_user_id）
+        agent_id: 這次對話使用的 Agent ID（語音設定用）
+
+    Returns:
+        要附加到 ching-tech-os MCP server 的環境變數
+    """
+    env: dict[str, str] = {}
+    if line_group_id:
+        env["CTOS_BOT_GROUP_ID"] = str(line_group_id)
+        # 語音設定（voice_tools）已經在用的名字，沿用同一個值避免兩套名字打架
+        env["CTOS_GROUP_ID"] = str(line_group_id)
+    if line_user_id:
+        env["CTOS_BOT_USER_ID"] = str(line_user_id)
+    if agent_id:
+        env["CTOS_AGENT_ID"] = str(agent_id)
+    return env
 
 
 def resolve_agent_allowed_shared_sources() -> list[str] | None:
