@@ -166,6 +166,42 @@ DEFAULT_APP_PERMISSIONS: dict[str, bool] = {
     "settings": True,
 }
 
+# ============================================================
+# 未綁定 CTOS 帳號的使用者強制擋下的 app（issue #201）
+# ============================================================
+
+# 這些 app 的 MCP 工具（讀與寫）會回員工姓名、往來對象聯絡方式，或 NAS／圖書館
+# 內部檔案內容，即使 DEFAULT_APP_PERMISSIONS 預設開放，未綁定 CTOS 帳號的
+# LINE／Telegram 使用者（`ctos_user_id is None`）與帳號已不存在的使用者
+# （`ctos_user_id` 查無此人）一律拒絕，不做「只讀公開欄位」的折衷。
+#
+# 查證結論（見 mcp-unbound-guard/report.md 第 3 點）：
+# - project-management／vendor-management／inventory-management：`get_project`／
+#   `find_party`／`get_stock` 等工具回員工成員清單、外部聯絡人姓名電話 email、
+#   採購資料。
+# - file-manager：`search_nas_files`／`read_document` 等工具搜尋並讀出 NAS
+#   共用區（projects／circuits／library）的實際檔案內容，屬內部檔案外流。
+# - knowledge-base 不在此集合：`search_knowledge` 等工具已在條目層級只放行
+#   `scope=global` 且 `is_public` 的公司整理文件，維持現狀。
+# - memory-manager：`memory_tools.py` 的工具完全不呼叫
+#   `check_mcp_tool_permission`（直接吃 `line_group_id`／`line_user_id`），加進
+#   這個集合不會有任何效果，需要另外的程式改動，不在本次修復範圍內。
+APPS_REQUIRE_BOUND_USER: set[str] = {
+    "project-management",
+    "vendor-management",
+    "inventory-management",
+    "file-manager",
+}
+
+# 未綁定／帳號不存在時，若工具屬於 APPS_REQUIRE_BOUND_USER，一律回這則訊息。
+# 綁定流程對照 `services/bot/identity_router.py` 的 BINDING_PROMPT_LINE／
+# BINDING_PROMPT_TELEGRAM：登入 CTOS 系統 → Bot 管理頁面 → 點擊「綁定帳號」
+# 產生驗證碼 → 把驗證碼傳給我完成綁定（沒有「輸入『綁定』」這個指令）。
+BOUND_USER_REQUIRED_MESSAGE = (
+    "此功能需要先綁定 CTOS 帳號，請登入 CTOS 系統，"
+    "在 Bot 管理頁面點擊「綁定帳號」產生驗證碼，並將驗證碼傳送給我完成綁定"
+)
+
 # 知識庫預設權限
 DEFAULT_KNOWLEDGE_PERMISSIONS: dict[str, bool] = {
     "global_write": False,      # 預設關閉，需管理員開放

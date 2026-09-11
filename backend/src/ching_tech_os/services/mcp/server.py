@@ -175,6 +175,8 @@ async def check_mcp_tool_permission(
     from ..permissions import (
         check_tool_permission,
         TOOL_APP_MAPPING,
+        APPS_REQUIRE_BOUND_USER,
+        BOUND_USER_REQUIRED_MESSAGE,
         get_app_display_names,
         get_effective_app_permissions,
         is_tool_deprecated,
@@ -194,6 +196,9 @@ async def check_mcp_tool_permission(
 
     # 未關聯帳號的使用者，使用預設權限
     if ctos_user_id is None:
+        # 這幾個 app 不管預設權限，未綁定一律拒絕（issue #201）
+        if required_app in APPS_REQUIRE_BOUND_USER:
+            return (False, BOUND_USER_REQUIRED_MESSAGE)
         # 檢查預設權限是否允許
         if effective_defaults.get(required_app, False):
             return (True, "")
@@ -209,7 +214,10 @@ async def check_mcp_tool_permission(
         )
 
     if not row:
-        # 使用者不存在，使用預設權限
+        # 使用者不存在（等同未綁定），這幾個 app 一律拒絕（issue #201）
+        if required_app in APPS_REQUIRE_BOUND_USER:
+            return (False, BOUND_USER_REQUIRED_MESSAGE)
+        # 其餘 app 使用預設權限
         if effective_defaults.get(required_app, False):
             return (True, "")
         app_name = app_display_names.get(required_app, required_app)

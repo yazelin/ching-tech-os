@@ -488,9 +488,39 @@ result = await execute_tool("add_note", {
 
 ### 錯誤訊息
 
-- 未關聯 CTOS 帳號：使用預設權限判斷
+- 未關聯 CTOS 帳號：`APPS_REQUIRE_BOUND_USER` 內的 app 一律拒絕；其餘 app 用 `DEFAULT_APP_PERMISSIONS` 判斷
 - 工具已停用：回傳停用訊息
 - 權限不足：回傳需要的功能權限名稱
+
+### 未綁定使用者的工具範圍（issue #201）
+
+LINE／Telegram 使用者在完成綁定前（`ctos_user_id is None`），或 `ctos_user_id`
+查無帳號（帳號已刪除），`check_mcp_tool_permission()` 不再單純看
+`DEFAULT_APP_PERMISSIONS`——`services/permissions.py` 的 `APPS_REQUIRE_BOUND_USER`
+會先擋下這幾個 app 的**全部**工具（讀與寫都擋，不做「只讀公開欄位」的折衷）：
+
+| App | 工具範例 | 未綁定會回什麼 |
+|---|---|---|
+| `project-management` | `get_project`、`list_tasks` | 員工成員清單、任務負責人姓名 |
+| `vendor-management` | `find_party`、`get_party` | 外部聯絡人姓名、電話、email |
+| `inventory-management` | `get_stock`、`list_purchase_orders` | 庫存與採購資料 |
+| `file-manager` | `search_nas_files`、`read_document` | NAS 共用區（projects／circuits／library）實際檔案內容 |
+
+被擋時一律回 `permissions.BOUND_USER_REQUIRED_MESSAGE`，內容對齊
+`services/bot/identity_router.py` 的實際綁定流程（登入 CTOS 系統 → Bot 管理頁面
+→ 點擊「綁定帳號」產生驗證碼 → 把驗證碼傳給機器人完成綁定）。
+
+不在這個集合裡、未綁定仍會放行的：
+
+- **`knowledge-base`**（`search_knowledge` 等）：在條目層級（`knowledge_tools._check_item_access`）
+  只放行 `scope=global` 且 `is_public` 的公司整理文件，個人／專案知識查不到，維持現狀。
+- **`memory-manager`**（`memory_tools.py`）：這幾支工具目前完全不呼叫
+  `check_mcp_tool_permission()`，直接吃呼叫端帶入的 `line_group_id`／
+  `line_user_id`，綁定狀態不影響行為；把 `memory-manager` 加進
+  `APPS_REQUIRE_BOUND_USER` 不會有效果，需要另外替 `memory_tools.py` 補
+  guard，不在本次修復範圍內。
+- **`message_tools.py`／`share_tools.py`**（`summarize_chat`、`create_share_link` 等）：
+  `TOOL_APP_MAPPING` 本來就沒有對應 app（基礎功能），行為不分綁定與否，也不在本次範圍內。
 
 ## 新增工具
 
