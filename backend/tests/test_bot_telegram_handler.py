@@ -546,6 +546,9 @@ async def test_handle_text_with_ai_success(monkeypatch: pytest.MonkeyPatch) -> N
     routing_context = captured_call_ai_kwargs["routing_context"]
     assert routing_context.context_type in {"telegram-group", "telegram-personal"}
 
+    # AI Log 記綁定的 CTOS 帳號（bot_users.user_id）
+    assert handler.log_linebot_ai_call.await_args.kwargs["user_id"] == 1
+
 
 @pytest.mark.asyncio
 async def test_handle_text_with_ai_failure_paths(monkeypatch: pytest.MonkeyPatch) -> None:

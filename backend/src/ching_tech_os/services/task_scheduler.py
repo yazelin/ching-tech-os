@@ -343,6 +343,8 @@ async def _execute_agent_task(
             duration_ms=duration_ms,
             input_tokens=getattr(response, "input_tokens", None),
             output_tokens=getattr(response, "output_tokens", None),
+            # 排程沒有互動使用者，記建立者（executor_config 明寫的優先）
+            user_id=ctos_user_id,
         )
         await create_log(log_data)
     except Exception as e:
@@ -417,6 +419,8 @@ async def _execute_skill_script_task(
             success=success,
             error_message=error,
             duration_ms=result.get("duration_ms"),
+            # 排程沒有互動使用者，記 scheduled_tasks.created_by
+            user_id=fallback_user_id,
         )
         await create_log(log_data)
     except Exception as e:

@@ -1058,6 +1058,8 @@ async def _handle_text_with_ai(
                 duration_ms=duration_ms,
                 context_type_override=context_type,
                 tool_routing=tool_routing,
+                # 已綁定 CTOS 帳號才有值（bot_users.user_id）
+                user_id=ctos_user_id,
             )
         except Exception as e:
             logger.error(f"記錄 AI Log 失敗: {e}", exc_info=True)

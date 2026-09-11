@@ -569,6 +569,9 @@ async def test_process_message_with_ai_success_push_fallback_and_quote_text(monk
     assert "mcp__ching-tech-os__create_share_link" not in tools_arg
     assert "mcp__erpnext__list_documents" in tools_arg
 
+    # AI Log 記綁定的 CTOS 帳號（bot_users.user_id）
+    assert linebot_ai.log_linebot_ai_call.await_args.kwargs["user_id"] == 123
+
 
 @pytest.mark.asyncio
 async def test_process_message_with_ai_start_research_appends_job_id(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -256,3 +256,379 @@ async def test_get_log_stats_user_id_zero_means_null(monkeypatch: pytest.MonkeyP
     call = conn.fetchrow.await_args
     assert "user_id IS NULL" in call.args[0]
     assert len(call.args) == 1
+
+
+# ============================================================
+# 4. 每個呼叫端帶入的 user_id 來源
+# ============================================================
+
+
+class _FakeSio:
+    """Socket.IO 假 server：連線身分由 connect 存進 session。"""
+
+    def __init__(self) -> None:
+        self.handlers: dict = {}
+        self.emit = AsyncMock()
+        self.disconnect = AsyncMock()
+
+    def event(self, fn):
+        self.handlers[fn.__name__] = fn
+        return fn
+
+    async def get_session(self, _sid):
+        return {"user_id": 77, "role": "user", "app_permissions": {}, "token": "tok"}
+
+
+def _stub_socket_session(monkeypatch, user_id: int = 77):
+    """web-chat 兩個事件進入時都會重新解析一次 token，身分以它為準。"""
+    import ching_tech_os.api.auth as auth_api
+    from ching_tech_os.models.auth import SessionData
+
+    now = _now()
+    session = SessionData(
+        username="tester",
+        password="x",
+        nas_host="localhost",
+        user_id=user_id,
+        created_at=now,
+        expires_at=now,
+        role="user",
+        app_permissions={},
+        read_only=False,
+    )
+    monkeypatch.setattr(auth_api, "_resolve_session", AsyncMock(return_value=session))
+    return session
+
+
+def _ai_response(success: bool = True, message: str = "ok", error: str | None = None):
+    from ching_tech_os.services.ai_provider import AIResponse
+
+    return AIResponse(
+        success=success,
+        message=message,
+        error=error,
+        tool_calls=[],
+        input_tokens=1,
+        output_tokens=2,
+        provider="claude",
+        actual_model="claude-sonnet",
+    )
+
+
+def _patch_web_chat(monkeypatch, ai_api, *, chat_id, success: bool = True):
+    monkeypatch.setattr(
+        ai_api.ai_chat,
+        "get_chat",
+        AsyncMock(return_value={
+            "id": chat_id,
+            "user_id": 77,
+            "title": "對話",
+            "prompt_name": "agent-a",
+            "messages": [],
+        }),
+    )
+    monkeypatch.setattr(ai_api.ai_chat, "get_agent_system_prompt", AsyncMock(return_value="sys"))
+    monkeypatch.setattr(
+        ai_api.ai_chat,
+        "get_agent_config",
+        AsyncMock(return_value={"id": uuid4(), "tools": None}),
+    )
+    monkeypatch.setattr(ai_api.ai_chat, "update_chat_messages", AsyncMock())
+    monkeypatch.setattr(ai_api.ai_chat, "update_chat_title", AsyncMock())
+    monkeypatch.setattr(
+        ai_api,
+        "call_ai",
+        AsyncMock(return_value=_ai_response(success=success, error=None if success else "忙碌")),
+    )
+    monkeypatch.setattr(ai_api, "log_message", AsyncMock())
+    create_log = AsyncMock()
+    monkeypatch.setattr(ai_api.ai_manager, "create_log", create_log)
+    return create_log
+
+
+@pytest.mark.parametrize("success", [True, False])
+@pytest.mark.asyncio
+async def test_web_chat_log_uses_socket_identity(
+    monkeypatch: pytest.MonkeyPatch, success: bool
+) -> None:
+    """api/ai.py web-chat：user_id 來自 Socket.IO 連線身分（#186 後重新解析的 session）。"""
+    from ching_tech_os.api import ai as ai_api
+
+    sio = _FakeSio()
+    ai_api.register_events(sio)
+    _stub_socket_session(monkeypatch, user_id=77)
+    chat_id = uuid4()
+    create_log = _patch_web_chat(monkeypatch, ai_api, chat_id=chat_id, success=success)
+
+    await sio.handlers["ai_chat_event"](
+        "sid-1", {"chatId": str(chat_id), "message": "嗨", "model": "claude-sonnet"}
+    )
+
+    create_log.assert_awaited_once()
+    assert create_log.await_args.args[0].user_id == 77
+
+
+@pytest.mark.asyncio
+async def test_compress_chat_log_uses_socket_identity(monkeypatch: pytest.MonkeyPatch) -> None:
+    """api/ai.py compress：user_id 同樣來自連線身分。"""
+    from ching_tech_os.api import ai as ai_api
+
+    sio = _FakeSio()
+    ai_api.register_events(sio)
+    _stub_socket_session(monkeypatch, user_id=77)
+    chat_id = uuid4()
+
+    messages = [{"role": "user", "content": f"m{i}", "timestamp": i} for i in range(14)]
+    monkeypatch.setattr(
+        ai_api.ai_chat,
+        "get_chat",
+        AsyncMock(return_value={"id": chat_id, "user_id": 77, "messages": messages}),
+    )
+    monkeypatch.setattr(ai_api.ai_chat, "update_chat_messages", AsyncMock())
+    monkeypatch.setattr(
+        ai_api.ai_manager, "get_prompt_by_name", AsyncMock(return_value={"id": uuid4()})
+    )
+    monkeypatch.setattr(
+        ai_api, "summarize_messages", AsyncMock(return_value=_ai_response(message="摘要"))
+    )
+    create_log = AsyncMock()
+    monkeypatch.setattr(ai_api.ai_manager, "create_log", create_log)
+
+    await sio.handlers["compress_chat"]("sid-1", {"chatId": str(chat_id)})
+
+    create_log.assert_awaited_once()
+    assert create_log.await_args.args[0].user_id == 77
+
+
+@pytest.mark.asyncio
+async def test_call_agent_and_test_agent_carry_user_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    """agent test：user_id 由 router 從呼叫者 session 傳下來。"""
+    agent_id = uuid4()
+    monkeypatch.setattr(
+        ai_manager,
+        "get_agent_by_name",
+        AsyncMock(return_value={
+            "id": agent_id,
+            "name": "agent",
+            "model": "claude-sonnet",
+            "is_active": True,
+            "tools": None,
+            "system_prompt": None,
+        }),
+    )
+    monkeypatch.setattr(
+        ai_manager, "get_agent", AsyncMock(return_value={"id": agent_id, "name": "agent"})
+    )
+    monkeypatch.setattr(ai_manager, "call_ai", AsyncMock(return_value=_ai_response()))
+    create_log = AsyncMock(return_value={"id": uuid4()})
+    monkeypatch.setattr(ai_manager, "create_log", create_log)
+
+    await ai_manager.call_agent("agent", "hi", user_id=31)
+    assert create_log.await_args.args[0].user_id == 31
+
+    create_log.reset_mock()
+    await ai_manager.test_agent(agent_id, "hi", user_id=31)
+    assert create_log.await_args.args[0].user_id == 31
+
+    # 沒帶就是 None，不猜
+    create_log.reset_mock()
+    await ai_manager.call_agent("agent", "hi")
+    assert create_log.await_args.args[0].user_id is None
+
+
+@pytest.mark.asyncio
+async def test_ai_test_endpoint_passes_session_user_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    """POST /api/ai/test 把呼叫者 session 的 user_id 交給 test_agent。"""
+    from ching_tech_os.api import ai_management
+    from ching_tech_os.models.ai import AiTestRequest
+
+    test_agent = AsyncMock(return_value={"success": True, "log_id": uuid4()})
+    monkeypatch.setattr(ai_management.ai_manager, "test_agent", test_agent)
+
+    agent_id = uuid4()
+    session = SimpleNamespace(user_id=88, username="tester")
+    await ai_management.test_agent(AiTestRequest(agent_id=agent_id, message="hi"), session)
+
+    assert test_agent.await_args.kwargs["user_id"] == 88
+
+
+@pytest.mark.asyncio
+async def test_scheduler_agent_task_log_uses_created_by(monkeypatch: pytest.MonkeyPatch) -> None:
+    """scheduler agent 模式：user_id = executor_config.ctos_user_id，沒有就用 created_by。"""
+    from ching_tech_os.services import task_scheduler
+
+    monkeypatch.setattr(
+        "ching_tech_os.services.ai_manager.get_agent_by_name",
+        AsyncMock(return_value={"id": uuid4(), "model": "sonnet", "tools": None, "system_prompt": None}),
+    )
+    monkeypatch.setattr(
+        "ching_tech_os.services.claude_agent.call_claude",
+        AsyncMock(return_value=SimpleNamespace(success=True, message="done", error=None)),
+    )
+    create_log = AsyncMock()
+    monkeypatch.setattr("ching_tech_os.services.ai_manager.create_log", create_log)
+
+    await task_scheduler._execute_agent_task("每日盤點", {"agent_name": "bot", "prompt": "p"}, 12)
+    assert create_log.await_args.args[0].user_id == 12
+
+    create_log.reset_mock()
+    await task_scheduler._execute_agent_task(
+        "每日盤點", {"agent_name": "bot", "prompt": "p", "ctos_user_id": 34}, 12
+    )
+    assert create_log.await_args.args[0].user_id == 34
+
+
+@pytest.mark.asyncio
+async def test_scheduler_script_task_log_uses_created_by(monkeypatch: pytest.MonkeyPatch) -> None:
+    """scheduler skill_script 模式：user_id = scheduled_tasks.created_by。"""
+    from pathlib import Path
+
+    from ching_tech_os.services import task_scheduler
+
+    class _SM:
+        async def get_skill(self, _n):
+            return SimpleNamespace(name="s")
+
+        async def has_scripts(self, _n):
+            return True
+
+        async def get_script_path(self, _s, _c):
+            return Path("/tmp/fake.py")
+
+        async def get_skill_dir(self, _n):
+            return Path("/tmp/s")
+
+        def get_skill_env_overrides(self, _s):
+            return {}
+
+    class _Runner:
+        def __init__(self, _d):
+            pass
+
+        async def execute_path(self, *_a, **_k):
+            return {"success": True, "output": "ok", "error": None, "duration_ms": 3}
+
+    monkeypatch.setattr("ching_tech_os.skills.get_skill_manager", lambda: _SM())
+    monkeypatch.setattr("ching_tech_os.skills.script_runner.ScriptRunner", _Runner)
+    create_log = AsyncMock()
+    monkeypatch.setattr("ching_tech_os.services.ai_manager.create_log", create_log)
+
+    await task_scheduler._execute_skill_script_task(
+        "每日報表", {"skill": "s", "script": "r", "input": "{}"}, 12
+    )
+    assert create_log.await_args.args[0].user_id == 12
+
+
+@pytest.mark.asyncio
+async def test_log_linebot_ai_call_passes_user_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    """linebot／telegram：已綁定 CTOS 帳號用 bot_users.user_id，未綁定留 None。"""
+    from ching_tech_os.services import linebot_ai
+
+    monkeypatch.setattr(linebot_ai.ai_manager, "get_agent_by_name", AsyncMock(return_value=None))
+    create_log = AsyncMock()
+    monkeypatch.setattr(linebot_ai.ai_manager, "create_log", create_log)
+
+    common = dict(
+        message_uuid=None,
+        line_group_id=None,
+        is_group=False,
+        input_prompt="p",
+        history=None,
+        system_prompt="sys",
+        allowed_tools=None,
+        model="m",
+        response=_ai_response(),
+        duration_ms=1,
+    )
+
+    await linebot_ai.log_linebot_ai_call(**common, user_id=123)
+    assert create_log.await_args.args[0].user_id == 123
+
+    create_log.reset_mock()
+    await linebot_ai.log_linebot_ai_call(**common)
+    assert create_log.await_args.args[0].user_id is None
+
+
+@pytest.mark.asyncio
+async def test_bot_debug_command_log_uses_ctx_user(monkeypatch: pytest.MonkeyPatch) -> None:
+    """/debug 指令：user_id 來自 CommandContext.ctos_user_id。"""
+    from ching_tech_os.services.bot import command_handlers
+    from ching_tech_os.services.bot.commands import CommandContext
+
+    monkeypatch.setattr(
+        "ching_tech_os.services.ai_manager.get_agent_by_name",
+        AsyncMock(return_value={"system_prompt": {"content": "sys"}, "tools": ["run_skill_script"]}),
+    )
+    monkeypatch.setattr(
+        "ching_tech_os.services.claude_agent.call_claude",
+        AsyncMock(return_value=_ai_response(message="診斷完成")),
+    )
+    monkeypatch.setattr(
+        "ching_tech_os.services.bot.ai.parse_ai_response",
+        lambda text: (text, [], []),
+    )
+    log_call = AsyncMock()
+    monkeypatch.setattr("ching_tech_os.services.linebot_ai.log_linebot_ai_call", log_call)
+
+    ctx = CommandContext(
+        platform_type="line",
+        platform_user_id="U1",
+        bot_user_id=str(uuid4()),
+        ctos_user_id=55,
+        is_admin=True,
+        is_group=False,
+        group_id=None,
+        reply_token=None,
+        raw_args="狀態如何",
+    )
+    await command_handlers._handle_debug(ctx)
+
+    assert log_call.await_args.kwargs["user_id"] == 55
+
+
+@pytest.mark.asyncio
+async def test_skill_script_log_uses_ctos_user_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    """skill script：user_id 用 framework 注入的 ctos_user_id，LLM 偽造不了。"""
+    from pathlib import Path
+
+    from ching_tech_os.services.mcp import skill_script_tools
+
+    class _SM:
+        async def get_skill(self, _n):
+            return SimpleNamespace(name="s", requires_app=None)
+
+        async def has_scripts(self, _n):
+            return True
+
+        async def get_script_path(self, _s, _c):
+            return Path("/tmp/fake.py")
+
+        async def get_skill_dir(self, _n):
+            return Path("/tmp/s")
+
+        def get_skill_env_overrides(self, _s):
+            return {}
+
+        async def get_script_fallback_map(self, _n):
+            return {}
+
+    class _Runner:
+        def __init__(self, _d):
+            pass
+
+        async def execute_path(self, *_a, **_k):
+            return {"success": True, "output": "{}", "error": "", "duration_ms": 3}
+
+    async def _noop():
+        return None
+
+    monkeypatch.setattr(skill_script_tools, "ensure_db_connection", _noop)
+    monkeypatch.setattr("ching_tech_os.skills.get_skill_manager", lambda: _SM())
+    monkeypatch.setattr("ching_tech_os.skills.script_runner.ScriptRunner", _Runner)
+    create_log = AsyncMock()
+    monkeypatch.setattr("ching_tech_os.services.ai_manager.create_log", create_log)
+
+    await skill_script_tools.run_skill_script(
+        skill="s", script="r", input="{}", ctos_user_id=66
+    )
+    assert create_log.await_args.args[0].user_id == 66

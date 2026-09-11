@@ -769,6 +769,7 @@ async def call_agent(
     context_type: str | None = None,
     context_id: str | None = None,
     history: list[dict] | None = None,
+    user_id: int | None = None,
 ) -> dict:
     """透過 Agent 調用 AI
 
@@ -780,6 +781,7 @@ async def call_agent(
         context_type: 調用情境類型
         context_id: 調用情境 ID
         history: 對話歷史
+        user_id: 發起這次呼叫的 CTOS 使用者 ID（取不到留 None，不要猜）
 
     Returns:
         {
@@ -860,6 +862,7 @@ async def call_agent(
         success=result.success,
         error_message=result.error if not result.success else None,
         duration_ms=duration_ms,
+        user_id=user_id,
     )
     log = await create_log(log_data)
 
@@ -872,8 +875,11 @@ async def call_agent(
     }
 
 
-async def test_agent(agent_id: UUID, message: str) -> dict:
+async def test_agent(agent_id: UUID, message: str, user_id: int | None = None) -> dict:
     """測試 Agent
+
+    Args:
+        user_id: 發起測試的 CTOS 使用者 ID（由 router 從 session 傳下來）
 
     Returns:
         {
@@ -901,6 +907,7 @@ async def test_agent(agent_id: UUID, message: str) -> dict:
         message=message,
         context_type="test",
         context_id=str(agent_id),
+        user_id=user_id,
     )
 
 

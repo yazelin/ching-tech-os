@@ -224,6 +224,8 @@ def register_events(sio: AsyncServer):
                         duration_ms=duration_ms,
                         input_tokens=response.input_tokens,
                         output_tokens=response.output_tokens,
+                        # 連線身分（#186 進入時重新解析過的 session）
+                        user_id=user_id,
                     )
                     await ai_manager.create_log(log_data)
                 except Exception as e:
@@ -260,6 +262,8 @@ def register_events(sio: AsyncServer):
                         duration_ms=duration_ms,
                         input_tokens=response.input_tokens,
                         output_tokens=response.output_tokens,
+                        # 連線身分（#186 進入時重新解析過的 session）
+                        user_id=user_id,
                     )
                     await ai_manager.create_log(log_data)
                 except Exception as e:
@@ -411,6 +415,8 @@ def register_events(sio: AsyncServer):
                 duration_ms=duration_ms,
                 input_tokens=response.input_tokens,
                 output_tokens=response.output_tokens,
+                # 連線身分（#186 進入時重新解析過的 session）
+                user_id=user_id,
             )
             await ai_manager.create_log(log_data)
         except Exception as e:

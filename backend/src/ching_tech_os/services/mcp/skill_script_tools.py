@@ -213,6 +213,8 @@ async def run_skill_script(
             context_id=None,
             input_tokens=0,
             output_tokens=0,
+            # framework 注入的呼叫者身分（LLM 偽造不了），未綁定時為 None
+            user_id=ctos_user_id,
         )
         await create_log(log_data)
     except Exception:

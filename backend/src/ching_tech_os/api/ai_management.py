@@ -302,5 +302,7 @@ async def test_agent(
 
     使用指定的 Agent 處理測試訊息，並記錄到 ai_logs。
     """
-    result = await ai_manager.test_agent(data.agent_id, data.message)
+    result = await ai_manager.test_agent(
+        data.agent_id, data.message, user_id=session.user_id
+    )
     return result
