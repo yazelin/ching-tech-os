@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -191,6 +192,60 @@ async def test_bound_user_link_then_visible_in_list_my_links_and_revocable(
     conn.fetchrow = AsyncMock(return_value={"created_by": "bob"})
     with pytest.raises(share.ShareError):
         await share.revoke_link("tok-bob", username="someone-else", is_admin=False)
+
+
+@pytest.mark.asyncio
+async def test_create_share_link_knowledge_resolves_actor_only_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Fix round 1：resource_type="knowledge" 且 actor 已綁定時，
+    `create_share_link()` 解析出的 actor 要被 `check_resource_access()`
+    的 knowledge 分支直接重用（`_resolve_actor()` 三個欄位都齊了就不再查
+    users 表），不能查兩次。之前所有測試都只走 content 類型，沒蓋到這條路徑
+    ——knowledge／nas_file 才會真的呼叫 `check_resource_access()`。
+    """
+    conn = AsyncMock()
+    conn.fetchval = AsyncMock(return_value=None)  # token 唯一性檢查：一次就過
+    conn.fetchrow = AsyncMock(
+        side_effect=[
+            {"username": "carol", "role": "user", "preferences": {}},  # 唯一一次查 users
+            _row(
+                created_by="carol",
+                resource_type="knowledge",
+                resource_id="kb-001",
+                token="tok-carol",
+            ),  # INSERT ... RETURNING
+        ]
+    )
+    monkeypatch.setattr(share, "get_connection", lambda: _CM(conn))
+    monkeypatch.setattr(share.settings, "public_url", "https://example.com")
+    monkeypatch.setattr(
+        share,
+        "get_knowledge",
+        lambda _kb_id: SimpleNamespace(
+            id="kb-001",
+            title="測試知識",
+            scope="global",
+            is_public=True,
+            owner=None,
+            project_id=None,
+        ),
+    )
+
+    link = await share.create_share_link(
+        ShareLinkCreate(resource_type="knowledge", resource_id="kb-001"),
+        created_by="linebot",
+        actor=share.ShareActor.from_ctos_user_id(3),
+    )
+
+    assert link.token == "tok-carol"
+    # created_by 一樣要被覆寫成解析出的使用者名稱
+    insert_call = conn.fetchrow.await_args_list[-1]
+    assert insert_call.args[4] == "carol"
+    # 關鍵斷言：只查一次 users。修 fix round 1 之前，create_share_link() 解析一次、
+    # check_resource_access() 的 knowledge 分支又用原始（未補齊）actor 再解析一次，
+    # 會是 3 次 fetchrow（查 users x2 + INSERT x1）而不是 2 次。
+    assert conn.fetchrow.await_count == 2
 
 
 @pytest.mark.asyncio
