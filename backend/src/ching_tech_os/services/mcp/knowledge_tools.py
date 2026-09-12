@@ -428,7 +428,11 @@ async def add_attachments_to_knowledge(
             if descriptions and i < len(descriptions) and descriptions[i]:
                 try:
                     new_index = current_attachment_count + success_count - 1
-                    kb_service.update_attachment_description(kb_id, new_index, descriptions[i])
+                    kb_service.update_attachment(
+                        kb_id=kb_id,
+                        attachment_idx=new_index,
+                        description=descriptions[i],
+                    )
                     added_descriptions.append(descriptions[i])
                 except Exception as e:
                     logger.warning(f"設定描述失敗 {descriptions[i]}: {e}")
