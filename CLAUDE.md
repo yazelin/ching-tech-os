@@ -382,3 +382,7 @@ gh pr view 24 --json title,body,state,url,reviews,comments
 
 ## 授權
 - MIT License
+
+## 真實客戶／廠商資料不得進 repo（2026-09-12 起）
+
+這個 repo 是**公開**的。任何真實客戶、供應商、聯絡人的名稱、電話、email、地址、統編、料號、單號，都不得出現在規格、測試資料、fixture、seed、docstring、註解、文件、issue／PR 文字或 commit 訊息裡；範例一律用杜撰名（甲一、乙二、丙丁科技這類）。真實資料只能留在本機 scratchpad 或 NAS，不進版控。動到資料相關程式碼時，用 ERPNext 備份的名稱清單反向掃描一次再 commit（腳本見 `docs/decision-2026-09-real-names-in-history.md`）。2026-09-12 有兩個真實客戶名進了公開歷史，處理成本很高——不要再靠人自己想到這條規則。
