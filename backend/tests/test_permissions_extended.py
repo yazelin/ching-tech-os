@@ -72,8 +72,15 @@ def test_mcp_tool_permission_paths() -> None:
     # admin 全放行
     assert permissions.get_mcp_tools_for_user("admin", None, all_tools) == all_tools
 
-    # user 依 app 權限過濾（share_link 不需權限）
-    perms = {"apps": {"knowledge-base": True, "file-manager": False}}
+    # user 依 app 權限過濾；`share-manager`（issue #217 起預設關閉）這裡明確給 True，
+    # 才驗得到「有給權限就放行」，不是巧合碰到舊的預設開放。
+    perms = {
+        "apps": {
+            "knowledge-base": True,
+            "file-manager": False,
+            "share-manager": True,
+        }
+    }
     filtered = permissions.get_mcp_tools_for_user("user", perms, all_tools)
     assert "mcp__ching-tech-os__search_knowledge" in filtered
     assert "mcp__ching-tech-os__search_nas_files" not in filtered

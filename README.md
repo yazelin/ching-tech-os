@@ -78,6 +78,13 @@ ChingTech OS 是擎添工業內部使用的整合式工作平台，以 Web 技�
   是把防護移到後端。這是既有的客戶端防護缺口，不是新功能。
 - **三種登入方式**：登入分 auto（預設，行為同舊版）、NAS 帳號（SMB 驗證，自動建帳號）、平台帳號（管理員建立、只驗密碼）三種方式。平台帳號可綁定 NAS 帳號與 LINE。`users.nas_username` 為綁定欄位。
 - **CORS_EXTRA_ORIGINS**：給獨立部署的新前端（os.ching-tech.com）用。
+- **分享管理（`share-manager`）改預設關閉**：`POST /api/share`（建立分享連結）原本只要登入即可，
+  未套用 app 權限檢查；`share-manager` 也一直預設開放，等於任何已登入使用者都能把公司整理過的
+  global 知識條目或專案文件變成不需要帳號就打得開的公開連結（issue #217：「內部讀得到」不該等於
+  「可以發到網路上」）。修法是把 `share-manager` 預設改關閉、由管理員逐人開放，並讓建立端點套上
+  `require_app_permission("share-manager")`（與 MCP 工具的 `create_share_link` 同一道判斷）。
+  列出／撤銷自己的連結維持只要登入即可，權限被收回也能撤掉已建立的連結。詳見
+  [docs/security.md](docs/security.md) 的「App 功能權限」與「公開分享連結」節。
 
 ### 2026-03
 

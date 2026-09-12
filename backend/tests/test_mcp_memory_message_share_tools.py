@@ -240,7 +240,8 @@ class _UserConnCtx:
 
 @pytest.fixture
 def _bound_share_user(monkeypatch: pytest.MonkeyPatch):
-    """分享工具現在要 `share-manager` 權限（issue #205）：這裡當成已綁定的一般使用者。
+    """分享工具現在要 `share-manager` 權限（issue #205；issue #217 之後預設關閉，
+    這裡明確覆寫成開放）：這裡當成已綁定且被管理員開放 `share-manager` 的一般使用者。
 
     資源存取檢查本身在 `tests/test_mcp_share_guard.py` 驗，這一檔只驗工具的流程分支。
     """
@@ -250,7 +251,12 @@ def _bound_share_user(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.delenv("CTOS_USER_ID", raising=False)
     monkeypatch.setattr(mcp_server, "ensure_db_connection", AsyncMock())
     conn = SimpleNamespace(
-        fetchrow=AsyncMock(return_value={"role": "user", "preferences": {}})
+        fetchrow=AsyncMock(
+            return_value={
+                "role": "user",
+                "preferences": {"permissions": {"apps": {"share-manager": True}}},
+            }
+        )
     )
     monkeypatch.setattr(mcp_server, "get_connection", lambda: _UserConnCtx(conn))
     monkeypatch.setattr(share_module, "check_resource_access", AsyncMock(return_value=None))
