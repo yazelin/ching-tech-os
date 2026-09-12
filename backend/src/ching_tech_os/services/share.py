@@ -446,10 +446,27 @@ async def create_share_link(
 
     Args:
         data: 分享連結資料
-        created_by: 建立者用戶名
+        created_by: 建立者用戶名。actor 能解析出實際使用者名稱時會被覆蓋
+            （見下方 #218），這裡的值只在對不到帳號時當退回值用。
         actor: 建立者身分，用來做資源存取檢查（issue #205）。
             不給＝當成未綁定處理（最嚴格的那一檔），不是略過檢查。
     """
+    # #218：actor 帶 user_id（如已綁定的 Line bot 使用者）時，created_by 記
+    # 實際使用者名稱，與 REST 端點 `session.username` 的格式一致；
+    # 帳號查不到（已刪除等）或未綁定，才退回呼叫端傳入的 created_by
+    # （目前 MCP 的 create_share_link 工具傳 "linebot"）。
+    if actor is not None and actor.user_id is not None:
+        resolved_actor = await _resolve_actor(actor)
+        if resolved_actor is not None:
+            # 重複使用解析結果：actor 換成已補齊 username/role/preferences 的版本，
+            # 下面 check_resource_access() 的 knowledge 分支會再呼叫一次
+            # _resolve_actor()，三個欄位都有值時它會直接回傳、不再查一次 users
+            # 表（帳號查不到的情況維持原 actor，讓 check_resource_access 走它
+            # 原本的「等同未綁定」判斷，不改變退回行為）。
+            actor = resolved_actor
+            if resolved_actor.username:
+                created_by = resolved_actor.username
+
     # content 類型驗證
     if data.resource_type == "content":
         if not data.content:
