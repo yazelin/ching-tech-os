@@ -3,7 +3,10 @@
 import os
 from pathlib import Path
 from datetime import datetime
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+
+from ching_tech_os.models.auth import SessionData
+from ching_tech_os.services.permissions import require_app_permission
 
 router = APIRouter(tags=["nvr"])
 
@@ -11,8 +14,13 @@ RECORDINGS_DIR = Path("/tmp/consultation-recordings")
 
 
 @router.get("/recording-status")
-async def get_recording_status():
-    """取得各頻道的錄製狀態。"""
+async def get_recording_status(
+    session: SessionData = Depends(require_app_permission("nvr-viewer")),
+):
+    """取得各頻道的錄製狀態。
+
+    需要「監控畫面」（nvr-viewer）App 權限。
+    """
     try:
         # 動態 import consultation_monitor 取得狀態
         import sys

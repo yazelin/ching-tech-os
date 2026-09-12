@@ -363,6 +363,7 @@ App 權限定義在 `services/permissions.py` 的 `DEFAULT_APP_PERMISSIONS`，
 | `agent-settings` | 關閉 | `POST` / `PUT` / `DELETE /api/ai/agents*`、`POST /api/ai/test` |
 | `terminal` | 關閉 | Socket.IO `terminal:create` |
 | `share-manager` | 關閉（issue #217） | `POST /api/share`（建立分享連結） |
+| `nvr-viewer` | 開啟 | `GET /api/nvr/recording-status`、`GET /api/nvr/snapshot/{channel}`（`extends/nvr`，issue #261） |
 
 `prompt-editor` 與 `agent-settings` 預設關閉、由管理員逐人開放：`ai_prompts` 與 `ai_agents`
 是全域表，一個人改 system prompt 或工具白名單就影響所有人。**GET 不受影響**，
@@ -379,6 +380,11 @@ AI 助手選 agent、AI Log 篩選、排程 UI 都要讀。
 
 session 的權限快取沒帶到某個 `app_id` 時，`require_app_permission` 會回退到
 `get_effective_app_permissions()` 的預設值，與 `has_app_permission()` 一致。
+
+`extends/nvr` 的兩支端點原本連登入都不用（issue #261），已補上 `nvr-viewer` 權限閘。
+`/api/nvr/snapshot/{channel}` 是給 `<img src>` 用的、帶不了 header，所以用
+`require_app_permission("nvr-viewer", allow_query_token=True)`——token 可以走 `?token=`，
+但權限判斷與 header 版完全同一條路，不是後門。
 
 `prompt-editor` 與 `agent-settings` 原本只在舊桌面前端擋 `openApp` 點擊，後端沒有對應檢查；
 新前端沒有那道客戶端防護，缺口因此浮上檯面，修法是把防護移到後端。這是既有的客戶端防護缺口，不是新功能。

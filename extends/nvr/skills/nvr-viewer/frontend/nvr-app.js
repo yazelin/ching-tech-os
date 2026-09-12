@@ -22,9 +22,15 @@ window.NVRViewerApp = (function () {
     return '';
   }
 
+  function getToken() {
+    return (typeof LoginModule !== 'undefined' && LoginModule.getToken && LoginModule.getToken())
+      || localStorage.getItem('chingtech_token')
+      || '';
+  }
+
   function fetchRecordingStatus() {
     var headers = {};
-    var token = (typeof LoginModule !== 'undefined' && LoginModule.getToken && LoginModule.getToken()) || localStorage.getItem('chingtech_token');
+    var token = getToken();
     if (token) headers['Authorization'] = 'Bearer ' + token;
 
     fetch(API_BASE + '/api/nvr/recording-status', { headers: headers })
@@ -57,7 +63,11 @@ window.NVRViewerApp = (function () {
   }
 
   function getSnapshotUrl(channel) {
-    return API_BASE + '/api/nvr/snapshot/' + channel + '?t=' + Date.now();
+    // <img src> 無法帶 Authorization header，後端允許 token 走 query parameter
+    var url = API_BASE + '/api/nvr/snapshot/' + channel + '?t=' + Date.now();
+    var token = getToken();
+    if (token) url += '&token=' + encodeURIComponent(token);
+    return url;
   }
 
   function icon(name) {
