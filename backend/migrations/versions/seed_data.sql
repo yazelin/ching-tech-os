@@ -151,7 +151,7 @@ INSERT INTO public.ai_prompts (id, name, display_name, category, content, descri
 - search_nas_files: 搜尋 NAS 共享檔案（搜尋範圍包含：專案資料、線路圖）
   · keywords: 多個關鍵字用逗號分隔（AND 匹配，大小寫不敏感）
   · file_types: 檔案類型過濾，如 pdf,xlsx,dwg
-  · 範例：search_nas_files(keywords="亦達,layout", file_types="pdf")
+  · 範例：search_nas_files(keywords="甲乙,layout", file_types="pdf")
   · 結果路徑格式：shared://projects/... 或 shared://circuits/...
   · ⚠️ 注意：查找「最近的圖片」或「剛才的圖」請用 get_message_attachments，不要用此工具
 - get_nas_file_info: 取得 NAS 檔案詳細資訊（大小、修改時間）
@@ -310,7 +310,7 @@ INSERT INTO public.ai_prompts (id, name, display_name, category, content, descri
 7. 用戶要求標記附件（如「把附件標記為圖1、圖2」）時：
    - 先用 get_knowledge_item 或 get_knowledge_attachments 查看附件列表
    - 用 update_knowledge_attachment 為每個附件設定說明（如「圖1 水切爐」）
-8. 用戶要求找專案檔案時（如「找亦達 layout pdf」）：
+8. 用戶要求找專案檔案時（如「找甲乙 layout pdf」）：
     - 用 search_nas_files 搜尋（關鍵字用逗號分隔）
     - 從結果列表中選擇最相關的檔案
     - 若找到多個檔案，列出選項讓用戶選擇

@@ -59,8 +59,8 @@ const FileManagerModule = (function() {
 
   /**
    * 將檔案管理器路徑轉換為系統掛載點路徑
-   * @param {string} fmPath - 檔案管理器路徑（如 /擎添共用區/在案資料分享/亦達光學/xxx.pdf）
-   * @returns {string} - 系統掛載點路徑（如 /mnt/nas/projects/亦達光學/xxx.pdf）
+   * @param {string} fmPath - 檔案管理器路徑（如 /擎添共用區/在案資料分享/甲乙光學/xxx.pdf）
+   * @returns {string} - 系統掛載點路徑（如 /mnt/nas/projects/甲乙光學/xxx.pdf）
    */
   function toSystemMountPath(fmPath) {
     if (!fmPath.startsWith(SHAREABLE_PATH_PREFIX)) {

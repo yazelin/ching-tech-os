@@ -33,7 +33,7 @@ SHARED_SEARCH_SOURCES = {
 ```
 
 搜尋結果路徑格式改為帶來源名稱：
-- `shared://projects/亦達光學/Layout/xxx.pdf`
+- `shared://projects/甲乙光學/Layout/xxx.pdf`
 - `shared://circuits/線路圖A/xxx.dwg`
 
 ### 未來權限擴充點
@@ -62,5 +62,5 @@ self._shared_mounts = {
 ```
 
 ## 向後相容
-- 現有 `shared://亦達光學/...` 格式（無 `projects/` 前綴）須繼續支援
+- 現有 `shared://甲乙光學/...` 格式（無 `projects/` 前綴）須繼續支援
 - 判斷邏輯：如果 `shared://` 後的第一段不是已知來源名稱，則 fallback 到 `projects`

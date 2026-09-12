@@ -64,7 +64,7 @@ def test_clean_serializes_uuid_decimal_and_datetime() -> None:
 
 def test_fail_maps_ambiguous_to_need_confirmation() -> None:
     err = erp_core.AmbiguousError(
-        "往來對象", "鴻佰", [{"id": PARTY_ID, "name": "鴻佰科技"}]
+        "往來對象", "丙丁", [{"id": PARTY_ID, "name": "丙丁科技"}]
     )
     result = erp_tools._fail(err)
     assert result["need_confirmation"] is True
@@ -113,7 +113,7 @@ async def test_tool_denied_without_app_permission(monkeypatch) -> None:
     find = AsyncMock()
     monkeypatch.setattr(erp_core, "find_parties", find)
 
-    result = await erp_tools.find_party("鴻佰", ctos_user_id=3)
+    result = await erp_tools.find_party("丙丁", ctos_user_id=3)
 
     assert result["ok"] is False
     assert "廠商管理" in result["error"]
@@ -130,9 +130,9 @@ async def test_find_party_returns_candidates(monkeypatch) -> None:
     monkeypatch.setattr(
         erp_core,
         "find_parties",
-        AsyncMock(return_value=[{"id": PARTY_ID, "name": "鴻佰科技"}]),
+        AsyncMock(return_value=[{"id": PARTY_ID, "name": "丙丁科技"}]),
     )
-    result = await erp_tools.find_party("鴻佰", role="supplier")
+    result = await erp_tools.find_party("丙丁", role="supplier")
     assert result["count"] == 1
     assert result["candidates"][0]["id"] == str(PARTY_ID)
 
@@ -142,7 +142,7 @@ async def test_find_party_role_both_passthrough(monkeypatch) -> None:
     """F4：role='both' 要原封不動傳給 erp_core.find_parties"""
     find = AsyncMock(return_value=[])
     monkeypatch.setattr(erp_core, "find_parties", find)
-    await erp_tools.find_party("鴻佰", role="both")
+    await erp_tools.find_party("丙丁", role="both")
     assert find.await_args.kwargs["role"] == "both"
 
 
@@ -151,7 +151,7 @@ async def test_find_party_invalid_role_is_rejected(monkeypatch) -> None:
     """role 不合法直接回錯誤 dict，不再靜默傳給 service"""
     find = AsyncMock()
     monkeypatch.setattr(erp_core, "find_parties", find)
-    result = await erp_tools.find_party("鴻佰", role="vendor")
+    result = await erp_tools.find_party("丙丁", role="vendor")
     assert result == {
         "ok": False,
         "error": "role 不合法：vendor（只能是 supplier／customer／both）",
@@ -164,7 +164,7 @@ async def test_find_party_wraps_errors(monkeypatch) -> None:
     monkeypatch.setattr(
         erp_core, "find_parties", AsyncMock(side_effect=RuntimeError("db 壞了"))
     )
-    assert (await erp_tools.find_party("鴻佰"))["ok"] is False
+    assert (await erp_tools.find_party("丙丁"))["ok"] is False
 
 
 @pytest.mark.asyncio
@@ -174,13 +174,13 @@ async def test_get_party_by_name_ambiguous_returns_candidates(monkeypatch) -> No
         "resolve_party",
         AsyncMock(
             side_effect=erp_core.AmbiguousError(
-                "往來對象", "鴻佰", [{"id": PARTY_ID, "name": "鴻佰科技"}]
+                "往來對象", "丙丁", [{"id": PARTY_ID, "name": "丙丁科技"}]
             )
         ),
     )
-    result = await erp_tools.get_party(name="鴻佰")
+    result = await erp_tools.get_party(name="丙丁")
     assert result["need_confirmation"] is True
-    assert result["query"] == "鴻佰"
+    assert result["query"] == "丙丁"
 
 
 @pytest.mark.asyncio
@@ -188,10 +188,10 @@ async def test_get_party_returns_detail(monkeypatch) -> None:
     monkeypatch.setattr(
         erp_tools.party_service,
         "get_party_detail",
-        AsyncMock(return_value={"id": PARTY_ID, "name": "鴻佰科技"}),
+        AsyncMock(return_value={"id": PARTY_ID, "name": "丙丁科技"}),
     )
     result = await erp_tools.get_party(party_id=str(PARTY_ID))
-    assert result["party"]["name"] == "鴻佰科技"
+    assert result["party"]["name"] == "丙丁科技"
 
 
 @pytest.mark.asyncio
@@ -205,12 +205,12 @@ async def test_get_party_not_found(monkeypatch) -> None:
 @pytest.mark.asyncio
 async def test_create_party_returns_audit_id(monkeypatch) -> None:
     create = AsyncMock(
-        return_value={"id": PARTY_ID, "name": "鴻佰科技", "audit_id": AUDIT_ID}
+        return_value={"id": PARTY_ID, "name": "丙丁科技", "audit_id": AUDIT_ID}
     )
     monkeypatch.setattr(erp_tools.party_service, "create_party", create)
 
     result = await erp_tools.create_party(
-        "鴻佰科技",
+        "丙丁科技",
         is_supplier=True,
         contacts=[{"name": "陳先生"}],
         ctos_user_id=5,
@@ -230,7 +230,7 @@ async def test_create_party_reports_service_error(monkeypatch) -> None:
         "create_party",
         AsyncMock(side_effect=erp_core.InvalidOperationError("壞了")),
     )
-    assert (await erp_tools.create_party("鴻佰"))["error"] == "壞了"
+    assert (await erp_tools.create_party("丙丁"))["error"] == "壞了"
 
 
 @pytest.mark.asyncio
@@ -243,7 +243,7 @@ async def test_update_party(monkeypatch) -> None:
     monkeypatch.setattr(
         erp_tools.party_service,
         "update_party",
-        AsyncMock(return_value={"id": PARTY_ID, "name": "鴻佰", "audit_id": AUDIT_ID}),
+        AsyncMock(return_value={"id": PARTY_ID, "name": "丙丁", "audit_id": AUDIT_ID}),
     )
     result = await erp_tools.update_party(
         party_id=str(PARTY_ID), fields={"payment_terms": "月結 60 天"}
@@ -269,7 +269,7 @@ async def test_update_party_validates_fields(monkeypatch) -> None:
 @pytest.mark.asyncio
 async def test_update_party_drops_unknown_fields(monkeypatch) -> None:
     update = AsyncMock(
-        return_value={"id": PARTY_ID, "name": "鴻佰", "audit_id": AUDIT_ID}
+        return_value={"id": PARTY_ID, "name": "丙丁", "audit_id": AUDIT_ID}
     )
     monkeypatch.setattr(erp_tools.party_service, "update_party", update)
 
@@ -526,14 +526,14 @@ async def test_merge_parties(monkeypatch) -> None:
         AsyncMock(
             return_value={
                 "id": PARTY_ID,
-                "name": "鴻佰科技",
-                "aliases": ["鴻佰工業"],
+                "name": "丙丁科技",
+                "aliases": ["丙丁工業"],
                 "audit_id": AUDIT_ID,
             }
         ),
     )
     result = await erp_tools.merge_parties(str(PARTY_ID), str(uuid4()))
-    assert result["aliases"] == ["鴻佰工業"]
+    assert result["aliases"] == ["丙丁工業"]
 
 
 @pytest.mark.asyncio
@@ -551,10 +551,10 @@ async def test_summarize_party(monkeypatch) -> None:
     monkeypatch.setattr(
         erp_tools.party_service,
         "summarize_party",
-        AsyncMock(return_value={"party_id": PARTY_ID, "summary": "【鴻佰】供應商"}),
+        AsyncMock(return_value={"party_id": PARTY_ID, "summary": "【丙丁】供應商"}),
     )
     result = await erp_tools.summarize_party(party_id=str(PARTY_ID))
-    assert result["summary"].startswith("【鴻佰】")
+    assert result["summary"].startswith("【丙丁】")
 
 
 @pytest.mark.asyncio
@@ -612,7 +612,7 @@ async def test_create_item_resolves_default_supplier(monkeypatch) -> None:
     monkeypatch.setattr(erp_tools.inventory_service, "create_item", create)
 
     result = await erp_tools.create_item(
-        "A1", "螺絲", default_supplier="鴻佰", purchase_price=5.5
+        "A1", "螺絲", default_supplier="丙丁", purchase_price=5.5
     )
 
     assert result["audit_id"] == str(AUDIT_ID)
@@ -798,7 +798,7 @@ async def test_create_purchase_order_resolves_names(monkeypatch) -> None:
     monkeypatch.setattr(erp_tools.purchasing_service, "create_purchase_order", create)
 
     result = await erp_tools.create_purchase_order(
-        "鴻佰", [{"item": "螺絲", "qty": 10, "unit_price": 5}]
+        "丙丁", [{"item": "螺絲", "qty": 10, "unit_price": 5}]
     )
 
     assert result["po_no"] == "PO-202609-001"
@@ -809,7 +809,7 @@ async def test_create_purchase_order_resolves_names(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_create_purchase_order_requires_lines() -> None:
-    assert (await erp_tools.create_purchase_order("鴻佰", []))["ok"] is False
+    assert (await erp_tools.create_purchase_order("丙丁", []))["ok"] is False
 
 
 @pytest.mark.asyncio
@@ -826,7 +826,7 @@ async def test_create_purchase_order_ambiguous_item(monkeypatch) -> None:
             )
         ),
     )
-    result = await erp_tools.create_purchase_order("鴻佰", [{"item": "螺絲", "qty": 1}])
+    result = await erp_tools.create_purchase_order("丙丁", [{"item": "螺絲", "qty": 1}])
     assert result["need_confirmation"] is True
     assert result["entity"] == "物料"
 
@@ -934,7 +934,7 @@ async def test_list_purchase_orders(monkeypatch) -> None:
         "list_purchase_orders",
         AsyncMock(return_value={"total": 1, "items": [{"po_no": "PO-202609-001"}]}),
     )
-    result = await erp_tools.list_purchase_orders(supplier="鴻佰", status="ordered")
+    result = await erp_tools.list_purchase_orders(supplier="丙丁", status="ordered")
     assert result["total"] == 1
 
 
@@ -1101,12 +1101,12 @@ async def test_cancel_purchase_order_missing_and_none(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_extract_party_from_document_builds_draft(monkeypatch) -> None:
-    match = AsyncMock(return_value=[{"id": PARTY_ID, "name": "鴻佰科技"}])
+    match = AsyncMock(return_value=[{"id": PARTY_ID, "name": "丙丁科技"}])
     monkeypatch.setattr(erp_tools.purchasing_service, "match_duplicate_parties", match)
 
     result = await erp_tools.extract_party_from_document(
         "/tmp/card.jpg",
-        name="鴻佰科技",
+        name="丙丁科技",
         tax_id="12345678",
         contact_name="陳先生",
         phone="03-1234567",
@@ -1149,7 +1149,7 @@ async def test_extract_purchase_order_marks_ready(monkeypatch) -> None:
     )
 
     result = await erp_tools.extract_purchase_order_from_document(
-        "/tmp/quote.pdf", "鴻佰", [{"item": "螺絲", "qty": 10}]
+        "/tmp/quote.pdf", "丙丁", [{"item": "螺絲", "qty": 10}]
     )
 
     assert result["ready_to_create"] is True
@@ -1162,7 +1162,7 @@ async def test_extract_purchase_order_reports_unresolved(monkeypatch) -> None:
         erp_core,
         "resolve_party",
         AsyncMock(
-            side_effect=erp_core.AmbiguousError("往來對象", "鴻佰", [{"id": PARTY_ID}])
+            side_effect=erp_core.AmbiguousError("往來對象", "丙丁", [{"id": PARTY_ID}])
         ),
     )
     monkeypatch.setattr(
@@ -1172,7 +1172,7 @@ async def test_extract_purchase_order_reports_unresolved(monkeypatch) -> None:
     )
 
     result = await erp_tools.extract_purchase_order_from_document(
-        "/tmp/quote.pdf", "鴻佰", [{"item": "螺絲", "qty": 10}]
+        "/tmp/quote.pdf", "丙丁", [{"item": "螺絲", "qty": 10}]
     )
 
     assert result["ready_to_create"] is False
@@ -1185,10 +1185,10 @@ async def test_extract_purchase_order_supplier_not_found(monkeypatch) -> None:
     monkeypatch.setattr(
         erp_core,
         "resolve_party",
-        AsyncMock(side_effect=erp_core.NotFoundError("往來對象", "鴻佰")),
+        AsyncMock(side_effect=erp_core.NotFoundError("往來對象", "丙丁")),
     )
     result = await erp_tools.extract_purchase_order_from_document(
-        "/tmp/q.pdf", "鴻佰", []
+        "/tmp/q.pdf", "丙丁", []
     )
     assert result["supplier"]["not_found"] is True
     assert result["ready_to_create"] is False
@@ -1255,9 +1255,9 @@ def test_every_erp_tool_is_in_tool_app_mapping() -> None:
 
 # 每支工具的最小呼叫參數（權限掃描用）
 _MINIMAL_CALLS: list[tuple[str, tuple, dict]] = [
-    ("find_party", ("鴻佰",), {}),
+    ("find_party", ("丙丁",), {}),
     ("get_party", (), {"party_id": str(PARTY_ID)}),
-    ("create_party", ("鴻佰",), {}),
+    ("create_party", ("丙丁",), {}),
     ("update_party", (), {"party_id": str(PARTY_ID), "fields": {"notes": "x"}}),
     ("add_party_contact", (), {"party_id": str(PARTY_ID), "name": "陳先生"}),
     ("add_party_address", (), {"party_id": str(PARTY_ID), "address": "桃園"}),
@@ -1291,7 +1291,7 @@ _MINIMAL_CALLS: list[tuple[str, tuple, dict]] = [
     ),
     ("merge_parties", (str(PARTY_ID), str(uuid4())), {}),
     ("summarize_party", (), {"party_id": str(PARTY_ID)}),
-    ("extract_party_from_document", ("/tmp/a.jpg", "鴻佰"), {}),
+    ("extract_party_from_document", ("/tmp/a.jpg", "丙丁"), {}),
     ("find_item", ("螺絲",), {}),
     ("get_item", (), {"item_id": str(ITEM_ID)}),
     ("create_item", ("A1", "螺絲"), {}),
@@ -1299,12 +1299,12 @@ _MINIMAL_CALLS: list[tuple[str, tuple, dict]] = [
     ("get_stock", (), {}),
     ("adjust_stock", ("螺絲", "主倉", 1), {}),
     ("transfer_stock", ("螺絲", "主倉", "副倉", 1), {}),
-    ("create_purchase_order", ("鴻佰", [{"item": "螺絲", "qty": 1}]), {}),
+    ("create_purchase_order", ("丙丁", [{"item": "螺絲", "qty": 1}]), {}),
     ("get_purchase_order", ("PO-202609-001",), {}),
     ("list_purchase_orders", (), {}),
     ("receive_purchase_order", ("PO-202609-001",), {}),
     ("cancel_purchase_order", ("PO-202609-001",), {}),
-    ("extract_purchase_order_from_document", ("/tmp/q.pdf", "鴻佰", []), {}),
+    ("extract_purchase_order_from_document", ("/tmp/q.pdf", "丙丁", []), {}),
     ("summarize_item", (), {"item_id": str(ITEM_ID)}),
 ]
 

@@ -24,7 +24,7 @@
 | `nas://projects/attachments/...` | `/mnt/nas/ctos/projects/attachments/` | ⚠️ 與共用區混淆 |
 | `groups/C123/images/...` | `/mnt/nas/ctos/linebot/files/groups/...` | 相對路徑，不知道根目錄 |
 | `../assets/images/...` | 知識庫本機目錄 | 相對路徑 |
-| `/亦達光學/layout.pdf` | `/mnt/nas/projects/亦達光學/` | 看起來像絕對路徑 |
+| `/甲乙光學/layout.pdf` | `/mnt/nas/projects/甲乙光學/` | 看起來像絕對路徑 |
 | `/tmp/linebot-files/...` | 系統暫存 | 系統路徑外露 |
 
 ---
@@ -50,7 +50,7 @@
 | `nas://projects/attachments/xxx/doc.xlsx` | `ctos://attachments/xxx/doc.xlsx` | 專案附件 |
 | `groups/C123/images/2026-01-05/abc.jpg` | `ctos://linebot/groups/C123/images/2026-01-05/abc.jpg` | Line Bot 檔案 |
 | `../assets/images/kb-001-demo.png` | `local://knowledge/images/kb-001-demo.png` | 本機小檔案 |
-| `/亦達光學/layout.pdf` | `shared://亦達光學/layout.pdf` | 公司共用區 |
+| `/甲乙光學/layout.pdf` | `shared://甲乙光學/layout.pdf` | 公司共用區 |
 | `/tmp/linebot-files/msg123.pdf` | `temp://linebot/msg123.pdf` | 暫存檔 |
 | `/tmp/.../nanobanana-output/abc.jpg` | `temp://ai-generated/abc.jpg` | AI 生成暫存 |
 
@@ -105,7 +105,7 @@ class PathManager:
     def to_filesystem(self, path: str) -> str:
         """轉換為實際檔案系統路徑"""
         # ctos://linebot/... → /mnt/nas/ctos/linebot/...
-        # shared://亦達光學/... → /mnt/nas/projects/亦達光學/...
+        # shared://甲乙光學/... → /mnt/nas/projects/甲乙光學/...
         pass
 
     def to_api(self, path: str) -> str:
@@ -120,7 +120,7 @@ class PathManager:
     def from_legacy(self, path: str) -> str:
         """從舊格式轉換"""
         # nas://projects/... → ctos://attachments/...
-        # /亦達光學/... → shared://亦達光學/...
+        # /甲乙光學/... → shared://甲乙光學/...
         pass
 ```
 
@@ -135,8 +135,8 @@ path_manager = PathManager()
 path_manager.parse("nas://knowledge/attachments/kb-001/file.pdf")
 # → ParsedPath(zone=CTOS, path="knowledge/kb-001/file.pdf")
 
-path_manager.parse("/亦達光學/layout.pdf")
-# → ParsedPath(zone=SHARED, path="亦達光學/layout.pdf")
+path_manager.parse("/甲乙光學/layout.pdf")
+# → ParsedPath(zone=SHARED, path="甲乙光學/layout.pdf")
 
 path_manager.parse("groups/C123/images/abc.jpg")
 # → ParsedPath(zone=CTOS, path="linebot/groups/C123/images/abc.jpg")

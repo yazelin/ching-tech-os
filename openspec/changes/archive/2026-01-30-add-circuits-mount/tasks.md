@@ -9,7 +9,7 @@
 ## 2. path_manager 支援 shared 子來源（核心）
 - [x] `services/path_manager.py`：新增 `_shared_mounts` 字典
 - [x] 解析 `shared://projects/...` 和 `shared://circuits/...` 到對應掛載點
-- [x] 舊格式 `shared://亦達光學/...` 向後相容（fallback 到 projects）
+- [x] 舊格式 `shared://甲乙光學/...` 向後相容（fallback 到 projects）
 - [x] `to_filesystem()` 透過 `_resolve_shared_path()` 處理子來源路徑
 - [x] 反向解析：本機路徑 `/mnt/nas/circuits/xxx` → `shared://circuits/xxx`
 

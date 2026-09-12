@@ -6,20 +6,20 @@
 MCP Server SHALL 提供 `search_nas_files` 工具讓 AI 助手搜尋 NAS 共享掛載點中的檔案。
 
 #### Scenario: 基本關鍵字搜尋
-- **GIVEN** AI 助手收到用戶查詢「找一下亦達 layout pdf」
-- **WHEN** 呼叫 `search_nas_files(keywords="亦達,layout", file_types="pdf")`
-- **THEN** 系統列出路徑包含「亦達」且包含「layout」的 PDF 檔案（大小寫不敏感）
+- **GIVEN** AI 助手收到用戶查詢「找一下甲乙 layout pdf」
+- **WHEN** 呼叫 `search_nas_files(keywords="甲乙,layout", file_types="pdf")`
+- **THEN** 系統列出路徑包含「甲乙」且包含「layout」的 PDF 檔案（大小寫不敏感）
 - **AND** 回傳檔案路徑列表（最多 100 筆）
 
 #### Scenario: 搜尋多種檔案類型
 - **GIVEN** AI 助手需要搜尋多種檔案
-- **WHEN** 呼叫 `search_nas_files(keywords="亦達", file_types="pdf,xlsx,dwg")`
+- **WHEN** 呼叫 `search_nas_files(keywords="甲乙", file_types="pdf,xlsx,dwg")`
 - **THEN** 系統列出符合任一檔案類型的檔案
 
 #### Scenario: 僅指定關鍵字
-- **GIVEN** AI 助手收到用戶查詢「給我亦達時程規劃」
-- **WHEN** 呼叫 `search_nas_files(keywords="亦達")`
-- **THEN** 系統列出路徑包含「亦達」的所有檔案
+- **GIVEN** AI 助手收到用戶查詢「給我甲乙時程規劃」
+- **WHEN** 呼叫 `search_nas_files(keywords="甲乙")`
+- **THEN** 系統列出路徑包含「甲乙」的所有檔案
 - **AND** AI 從列表中語意匹配「時程規劃」找到「時間估算.xlsx」
 
 #### Scenario: 大小寫不敏感匹配
@@ -61,7 +61,7 @@ MCP Server SHALL 提供 `get_nas_file_info` 工具讓 AI 助手取得特定檔�
 現有的 `create_share_link` MCP 工具 SHALL 擴充支援 `nas_file` resource_type，讓 AI 助手產生 NAS 檔案的暫時下載連結。
 
 #### Scenario: 透過現有工具產生檔案連結
-- **GIVEN** 用戶說「給我亦達layout圖」且 AI 已找到檔案
+- **GIVEN** 用戶說「給我甲乙layout圖」且 AI 已找到檔案
 - **WHEN** 呼叫 `create_share_link(resource_type="nas_file", resource_id="/mnt/nas/projects/.../xxx.pdf", expires_in="24h")`
 - **THEN** 系統產生暫時下載連結
 - **AND** 回傳連結 URL 和過期時間
@@ -90,7 +90,7 @@ MCP Server SHALL 提供 `get_nas_file_info` 工具讓 AI 助手取得特定檔�
 當 AI 找到單一檔案且大小合理時，Line Bot SHALL 根據檔案類型選擇最佳發送方式。
 
 #### Scenario: 直接發送小圖片
-- **GIVEN** 用戶說「給我亦達layout圖」且找到單一 PNG/JPG 檔案
+- **GIVEN** 用戶說「給我甲乙layout圖」且找到單一 PNG/JPG 檔案
 - **AND** 檔案大小 < 5MB
 - **WHEN** AI 決定直接發送
 - **THEN** 系統產生暫時公開連結
@@ -143,9 +143,9 @@ MCP Server SHALL 提供 `get_nas_file_info` 工具讓 AI 助手取得特定檔�
 - **THEN** 連結在指定時間後過期
 
 #### Scenario: 路徑對應規則
-- **GIVEN** 檔案管理器路徑為 `/擎添共用區/在案資料分享/亦達光學/xxx.pdf`
+- **GIVEN** 檔案管理器路徑為 `/擎添共用區/在案資料分享/甲乙光學/xxx.pdf`
 - **WHEN** 系統驗證可分享性
-- **THEN** 對應到系統掛載點 `/mnt/nas/projects/亦達光學/xxx.pdf`
+- **THEN** 對應到系統掛載點 `/mnt/nas/projects/甲乙光學/xxx.pdf`
 - **AND** 驗證檔案存在後允許產生連結
 
 ---

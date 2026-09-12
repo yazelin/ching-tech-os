@@ -100,9 +100,9 @@ NOW = datetime.now(timezone.utc)
 def _party_row(**overrides) -> _DictRecord:
     base = {
         "id": uuid4(),
-        "name": "鴻佰科技",
-        "short_name": "鴻佰",
-        "aliases": ["鴻佰工業"],
+        "name": "丙丁科技",
+        "short_name": "丙丁",
+        "aliases": ["丙丁工業"],
         "is_supplier": True,
         "is_customer": False,
         "tax_id": "12345678",
@@ -151,7 +151,7 @@ def _item_row(**overrides) -> _DictRecord:
         ("50%", r"%50\%%"),
         ("a_b", r"%a\_b%"),
         ("c\\d", r"%c\\d%"),
-        ("鴻佰", "%鴻佰%"),
+        ("丙丁", "%丙丁%"),
     ],
 )
 def test_like_pattern_escapes(raw, expected) -> None:
@@ -264,12 +264,12 @@ async def test_list_audit_tolerates_broken_json(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_resolve_party_single_candidate(monkeypatch) -> None:
-    row = _DictRecord({"id": uuid4(), "name": "鴻佰科技", "exact_hit": False})
+    row = _DictRecord({"id": uuid4(), "name": "丙丁科技", "exact_hit": False})
     conn = _FakeConn(fetch=[[row]])
     _patch(monkeypatch, erp_core, conn)
 
-    hit = await erp_core.resolve_party("鴻佰")
-    assert hit["name"] == "鴻佰科技"
+    hit = await erp_core.resolve_party("丙丁")
+    assert hit["name"] == "丙丁科技"
     # 軟刪除的不進解析
     assert "deleted_at IS NULL" in conn.calls[0][1]
 
@@ -277,14 +277,14 @@ async def test_resolve_party_single_candidate(monkeypatch) -> None:
 @pytest.mark.asyncio
 async def test_resolve_party_ambiguous(monkeypatch) -> None:
     rows = [
-        _DictRecord({"id": uuid4(), "name": "鴻佰科技", "exact_hit": False}),
-        _DictRecord({"id": uuid4(), "name": "鴻佰工業", "exact_hit": False}),
+        _DictRecord({"id": uuid4(), "name": "丙丁科技", "exact_hit": False}),
+        _DictRecord({"id": uuid4(), "name": "丙丁工業", "exact_hit": False}),
     ]
     conn = _FakeConn(fetch=[rows])
     _patch(monkeypatch, erp_core, conn)
 
     with pytest.raises(erp_core.AmbiguousError) as exc:
-        await erp_core.resolve_party("鴻佰")
+        await erp_core.resolve_party("丙丁")
     assert len(exc.value.candidates) == 2
     assert exc.value.entity == "往來對象"
 
@@ -292,12 +292,12 @@ async def test_resolve_party_ambiguous(monkeypatch) -> None:
 @pytest.mark.asyncio
 async def test_resolve_party_exact_hit_wins_over_fuzzy(monkeypatch) -> None:
     """一筆精確命中（統編／電話／同名／別名）時不算模糊"""
-    exact = _DictRecord({"id": uuid4(), "name": "鴻佰科技", "exact_hit": True})
-    fuzzy = _DictRecord({"id": uuid4(), "name": "鴻佰工業", "exact_hit": False})
+    exact = _DictRecord({"id": uuid4(), "name": "丙丁科技", "exact_hit": True})
+    fuzzy = _DictRecord({"id": uuid4(), "name": "丙丁工業", "exact_hit": False})
     conn = _FakeConn(fetch=[[exact, fuzzy]])
     _patch(monkeypatch, erp_core, conn)
 
-    assert (await erp_core.resolve_party("鴻佰"))["name"] == "鴻佰科技"
+    assert (await erp_core.resolve_party("丙丁"))["name"] == "丙丁科技"
 
 
 @pytest.mark.asyncio
@@ -336,10 +336,10 @@ async def test_find_parties_passes_role_threshold_and_limit(monkeypatch) -> None
     conn = _FakeConn(fetch=[[]])
     _patch(monkeypatch, erp_core, conn)
 
-    await erp_core.find_parties("鴻佰", role="supplier")
+    await erp_core.find_parties("丙丁", role="supplier")
     _method, sql, args = conn.calls[0]
     assert "similarity" in sql
-    assert args[0] == "鴻佰"
+    assert args[0] == "丙丁"
     assert args[2] == "supplier"
     assert args[3] == erp_core.SIMILARITY_THRESHOLD
     assert args[4] == erp_core.CANDIDATE_LIMIT
@@ -351,7 +351,7 @@ async def test_find_parties_role_both_in_sql(monkeypatch) -> None:
     conn = _FakeConn(fetch=[[]])
     _patch(monkeypatch, erp_core, conn)
 
-    await erp_core.find_parties("鴻佰", role="both")
+    await erp_core.find_parties("丙丁", role="both")
     _method, sql, args = conn.calls[0]
     assert "$3 = 'both' AND p.is_supplier AND p.is_customer" in sql
     assert args[2] == "both"
@@ -363,7 +363,7 @@ async def test_find_parties_reuses_given_connection(monkeypatch) -> None:
     conn = _FakeConn(fetch=[[]])
     _patch(monkeypatch, erp_core, AsyncMock())
 
-    await erp_core.find_parties("鴻佰", conn=conn)
+    await erp_core.find_parties("丙丁", conn=conn)
     assert conn.calls  # 用的是傳進去的 conn
 
 
@@ -423,12 +423,12 @@ async def test_list_parties_filters_soft_deleted(monkeypatch) -> None:
     conn = _FakeConn(fetchval=[2], fetch=[[_party_row()]])
     _patch(monkeypatch, party_service, conn)
 
-    result = await party_service.list_parties(q="鴻佰", role="supplier")
+    result = await party_service.list_parties(q="丙丁", role="supplier")
 
     assert result["total"] == 2
     count_sql = conn.calls[0][1]
     assert "p.deleted_at IS NULL" in count_sql
-    assert conn.calls[0][2] == ("supplier", "%鴻佰%", "鴻佰")
+    assert conn.calls[0][2] == ("supplier", "%丙丁%", "丙丁")
 
 
 @pytest.mark.asyncio
@@ -497,7 +497,7 @@ def test_count_party_knowledge_swallows_errors(monkeypatch) -> None:
         raise RuntimeError("index 壞了")
 
     monkeypatch.setattr(knowledge_module, "search_knowledge", _boom)
-    assert party_service.count_party_knowledge("鴻佰") == 0
+    assert party_service.count_party_knowledge("丙丁") == 0
 
 
 def test_count_party_knowledge_returns_total(monkeypatch) -> None:
@@ -508,7 +508,7 @@ def test_count_party_knowledge_returns_total(monkeypatch) -> None:
         "search_knowledge",
         lambda **_kwargs: MagicMock(total=5),
     )
-    assert party_service.count_party_knowledge("鴻佰") == 5
+    assert party_service.count_party_knowledge("丙丁") == 5
 
 
 @pytest.mark.asyncio
@@ -523,7 +523,7 @@ async def test_create_party_writes_children_and_audit(monkeypatch) -> None:
 
     result = await party_service.create_party(
         {
-            "name": "鴻佰科技",
+            "name": "丙丁科技",
             "contacts": [{"name": "陳先生", "is_primary": True}],
             "addresses": [{"address": "桃園", "is_primary": True}],
         },
@@ -588,7 +588,7 @@ async def test_update_party_missing(monkeypatch) -> None:
 async def test_delete_party_is_soft(monkeypatch) -> None:
     audit_id = uuid4()
     conn = _FakeConn(
-        fetchrow=[_DictRecord({"id": uuid4(), "name": "鴻佰"})], fetchval=[audit_id]
+        fetchrow=[_DictRecord({"id": uuid4(), "name": "丙丁"})], fetchval=[audit_id]
     )
     _patch(monkeypatch, party_service, conn)
 
@@ -877,9 +877,9 @@ async def test_delete_address_writes_audit(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_merge_parties_moves_children_and_soft_deletes(monkeypatch) -> None:
-    keep = _party_row(name="鴻佰科技", aliases=["鴻佰"])
-    drop = _party_row(name="鴻佰工業", short_name=None, aliases=["鴻佰工"], is_customer=True)
-    merged = _party_row(id=keep["id"], aliases=["鴻佰", "鴻佰工業", "鴻佰工"])
+    keep = _party_row(name="丙丁科技", aliases=["丙丁"])
+    drop = _party_row(name="丙丁工業", short_name=None, aliases=["丙丁工"], is_customer=True)
+    merged = _party_row(id=keep["id"], aliases=["丙丁", "丙丁工業", "丙丁工"])
     audit_id = uuid4()
     # 前兩個 fetchval 是「keep 這邊有沒有主要聯絡人／地址」
     conn = _FakeConn(fetchrow=[keep, drop, merged], fetchval=[None, None, audit_id])
@@ -953,16 +953,16 @@ async def test_merge_parties_rejects_missing(monkeypatch) -> None:
 
 
 def test_merge_aliases_dedupes_and_skips_keep_name() -> None:
-    keep = {"name": "鴻佰科技", "aliases": ["鴻佰"], "short_name": "鴻佰"}
-    drop = {"name": "鴻佰科技", "short_name": "鴻佰", "aliases": ["鴻佰工"]}
-    assert party_service._merge_aliases(keep, drop) == ["鴻佰", "鴻佰工"]
+    keep = {"name": "丙丁科技", "aliases": ["丙丁"], "short_name": "丙丁"}
+    drop = {"name": "丙丁科技", "short_name": "丙丁", "aliases": ["丙丁工"]}
+    assert party_service._merge_aliases(keep, drop) == ["丙丁", "丙丁工"]
 
 
 @pytest.mark.asyncio
 async def test_summarize_party(monkeypatch) -> None:
     detail = {
         "id": uuid4(),
-        "name": "鴻佰科技",
+        "name": "丙丁科技",
         "is_supplier": True,
         "is_customer": True,
         "tax_id": "12345678",
@@ -1354,7 +1354,7 @@ async def test_summarize_item(monkeypatch) -> None:
         "unit": "支",
         "total_qty": Decimal("100"),
         "balances": [{"warehouse_name": "主倉", "qty": Decimal("100")}],
-        "default_supplier_name": "鴻佰科技",
+        "default_supplier_name": "丙丁科技",
         "purchase_price": Decimal("5"),
         "movements": [{"reason": "receipt", "qty_delta": Decimal("10")}],
     }
@@ -1439,7 +1439,7 @@ async def test_create_purchase_order_rejects_unknown_supplier(monkeypatch) -> No
 @pytest.mark.asyncio
 async def test_create_purchase_order_rejects_unknown_project(monkeypatch) -> None:
     conn = _FakeConn(
-        fetchrow=[_DictRecord({"id": uuid4(), "name": "鴻佰"})], fetchval=[None]
+        fetchrow=[_DictRecord({"id": uuid4(), "name": "丙丁"})], fetchval=[None]
     )
     _patch(monkeypatch, purchasing_service, conn)
 
@@ -1457,7 +1457,7 @@ async def test_create_purchase_order_rejects_unknown_project(monkeypatch) -> Non
 async def test_create_purchase_order_rejects_unknown_item(monkeypatch) -> None:
     conn = _FakeConn(
         fetchrow=[
-            _DictRecord({"id": uuid4(), "name": "鴻佰"}),
+            _DictRecord({"id": uuid4(), "name": "丙丁"}),
             _DictRecord({"id": uuid4(), "po_no": "PO-202609-001"}),
             None,
         ],
@@ -1475,7 +1475,7 @@ async def test_create_purchase_order_rejects_unknown_item(monkeypatch) -> None:
 async def test_create_purchase_order_rejects_zero_qty(monkeypatch) -> None:
     conn = _FakeConn(
         fetchrow=[
-            _DictRecord({"id": uuid4(), "name": "鴻佰"}),
+            _DictRecord({"id": uuid4(), "name": "丙丁"}),
             _DictRecord({"id": uuid4(), "po_no": "PO-202609-001"}),
             _DictRecord({"id": uuid4(), "code": "CTOS-A1"}),
         ],
@@ -1497,7 +1497,7 @@ async def test_create_purchase_order_generates_po_no(monkeypatch) -> None:
     )
     conn = _FakeConn(
         fetchrow=[
-            _DictRecord({"id": uuid4(), "name": "鴻佰"}),
+            _DictRecord({"id": uuid4(), "name": "丙丁"}),
             po_row,
             _DictRecord({"id": uuid4(), "code": "CTOS-A1"}),
         ],
@@ -2087,14 +2087,14 @@ async def test_match_duplicate_parties_puts_tax_id_hit_first(monkeypatch) -> Non
     monkeypatch.setattr(
         erp_core,
         "find_parties",
-        AsyncMock(return_value=[{"id": fuzzy_id, "name": "鴻佰工業"}]),
+        AsyncMock(return_value=[{"id": fuzzy_id, "name": "丙丁工業"}]),
     )
     conn = _FakeConn(
-        fetch=[[_DictRecord({"id": tax_id_hit, "name": "鴻佰科技", "tax_id": "12345678"})]]
+        fetch=[[_DictRecord({"id": tax_id_hit, "name": "丙丁科技", "tax_id": "12345678"})]]
     )
     _patch(monkeypatch, purchasing_service, conn)
 
-    result = await purchasing_service.match_duplicate_parties("鴻佰", "12345678")
+    result = await purchasing_service.match_duplicate_parties("丙丁", "12345678")
     assert result[0]["id"] == tax_id_hit
     assert result[0]["exact_hit"] is True
 
@@ -2102,7 +2102,7 @@ async def test_match_duplicate_parties_puts_tax_id_hit_first(monkeypatch) -> Non
 @pytest.mark.asyncio
 async def test_match_duplicate_parties_without_tax_id(monkeypatch) -> None:
     monkeypatch.setattr(erp_core, "find_parties", AsyncMock(return_value=[]))
-    assert await purchasing_service.match_duplicate_parties("鴻佰") == []
+    assert await purchasing_service.match_duplicate_parties("丙丁") == []
 
 
 @pytest.mark.parametrize(

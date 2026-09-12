@@ -13,7 +13,7 @@
  * 範例：
  * - ctos://knowledge/kb-001/file.pdf
  * - ctos://linebot/groups/C123/images/2026-01-05/abc.jpg
- * - shared://亦達光學/layout.pdf
+ * - shared://甲乙光學/layout.pdf
  * - temp://linebot/msg123.pdf
  * - nas://home/photos/image.jpg（檔案管理器瀏覽的 NAS 共享）
  */

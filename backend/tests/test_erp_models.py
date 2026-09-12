@@ -114,7 +114,7 @@ def test_stock_reason_literal() -> None:
 
 
 def test_party_create_defaults() -> None:
-    body = models.PartyCreate(name="鴻佰科技")
+    body = models.PartyCreate(name="丙丁科技")
     assert body.aliases == []
     assert body.is_supplier is False
     assert body.contacts == [] and body.addresses == []
@@ -122,7 +122,7 @@ def test_party_create_defaults() -> None:
 
 def test_party_create_with_children() -> None:
     body = models.PartyCreate(
-        name="鴻佰科技",
+        name="丙丁科技",
         contacts=[{"name": "陳先生", "phone": "03-1234567", "is_primary": True}],
         addresses=[{"address": "桃園市中壢區"}],
     )
@@ -174,7 +174,7 @@ def test_party_merge_request() -> None:
 
 def test_party_detail_response_defaults() -> None:
     detail = models.PartyDetailResponse(
-        id=uuid4(), name="鴻佰科技", created_at=NOW, updated_at=NOW
+        id=uuid4(), name="丙丁科技", created_at=NOW, updated_at=NOW
     )
     assert detail.contacts == []
     assert detail.knowledge_count == 0
@@ -184,7 +184,7 @@ def test_party_detail_response_defaults() -> None:
 @pytest.mark.parametrize(
     "model, extra",
     [
-        (models.PartyDetailResponse, {"name": "鴻佰科技"}),
+        (models.PartyDetailResponse, {"name": "丙丁科技"}),
         (models.ItemDetailResponse, {"code": "A1", "name": "螺絲"}),
         (models.WarehouseResponse, {"code": "MAIN", "name": "主倉"}),
         (

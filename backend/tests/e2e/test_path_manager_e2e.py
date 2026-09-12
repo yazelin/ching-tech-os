@@ -50,11 +50,11 @@ def run_tests():
     test_cases = [
         # 新格式
         ("ctos://linebot/files/test.jpg", StorageZone.CTOS, "linebot/files/test.jpg"),
-        ("shared://亦達光學/doc.pdf", StorageZone.SHARED, "亦達光學/doc.pdf"),
+        ("shared://甲乙光學/doc.pdf", StorageZone.SHARED, "甲乙光學/doc.pdf"),
         ("temp://converted/page.png", StorageZone.TEMP, "converted/page.png"),
         # 舊格式
         ("nas://knowledge/attachments/kb-001/file.pdf", StorageZone.CTOS, "knowledge/kb-001/file.pdf"),
-        ("/mnt/nas/projects/亦達光學/test.pdf", StorageZone.SHARED, "亦達光學/test.pdf"),
+        ("/mnt/nas/projects/甲乙光學/test.pdf", StorageZone.SHARED, "甲乙光學/test.pdf"),
         ("/mnt/nas/ctos/linebot/test.jpg", StorageZone.CTOS, "linebot/test.jpg"),
         ("/tmp/ctos/converted/page.png", StorageZone.TEMP, "ctos/converted/page.png"),
         # Line Bot 相對路徑
@@ -88,7 +88,7 @@ def run_tests():
 
     fs_test_cases = [
         ("ctos://linebot/files/test.jpg", "/mnt/nas/ctos/linebot/files/test.jpg"),
-        ("shared://亦達光學/doc.pdf", "/mnt/nas/projects/亦達光學/doc.pdf"),
+        ("shared://甲乙光學/doc.pdf", "/mnt/nas/projects/甲乙光學/doc.pdf"),
         ("temp://converted/page.png", "/tmp/ctos/converted/page.png"),
     ]
 
@@ -116,7 +116,7 @@ def run_tests():
 
     api_test_cases = [
         ("ctos://linebot/files/test.jpg", "/api/files/ctos/linebot/files/test.jpg"),
-        ("shared://亦達光學/doc.pdf", "/api/files/shared/亦達光學/doc.pdf"),
+        ("shared://甲乙光學/doc.pdf", "/api/files/shared/甲乙光學/doc.pdf"),
         # 舊格式應轉換
         ("/mnt/nas/projects/test.pdf", "/api/files/shared/test.pdf"),
     ]
@@ -148,7 +148,7 @@ def run_tests():
         ("ctos://linebot/test.jpg", "ctos://linebot/test.jpg"),
         ("shared://test/doc.pdf", "shared://test/doc.pdf"),
         # 舊格式應轉換為新格式
-        ("/mnt/nas/projects/亦達光學/doc.pdf", "shared://亦達光學/doc.pdf"),
+        ("/mnt/nas/projects/甲乙光學/doc.pdf", "shared://甲乙光學/doc.pdf"),
         ("nas://knowledge/assets/img.jpg", "ctos://knowledge/assets/img.jpg"),
     ]
 
