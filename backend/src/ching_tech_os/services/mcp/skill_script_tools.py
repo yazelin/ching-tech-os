@@ -8,7 +8,7 @@ import logging
 import os
 from typing import Any
 
-from .server import mcp, ensure_db_connection
+from .server import mcp, ensure_db_connection, check_mcp_tool_permission, require_bound_user
 
 logger = logging.getLogger("mcp_server")
 
@@ -72,6 +72,17 @@ async def run_skill_script(
             except ValueError:
                 pass
     await ensure_db_connection()
+
+    # app 權限＋未綁定自檢（issue #210）：這支工具等同讓對話端跑伺服器上的程式，
+    # 對到 ai-assistant（預設開放給內部員工），未綁定者一律拒絕。
+    allowed, error_msg = await check_mcp_tool_permission("run_skill_script", ctos_user_id)
+    if not allowed:
+        return json.dumps({"success": False, "error": error_msg}, ensure_ascii=False)
+
+    bound_err = require_bound_user("run_skill_script", ctos_user_id)
+    if bound_err:
+        return json.dumps({"success": False, "error": bound_err}, ensure_ascii=False)
+
     from ...skills import get_skill_manager
     from ...config import settings
     from ...skills.script_runner import ScriptRunner

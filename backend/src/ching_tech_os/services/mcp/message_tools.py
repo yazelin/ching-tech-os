@@ -6,7 +6,13 @@
 from datetime import datetime, timedelta
 from uuid import UUID
 
-from .server import mcp, logger, ensure_db_connection, to_taipei_time
+from .server import (
+    mcp,
+    logger,
+    ensure_db_connection,
+    resolve_conversation_scope,
+    to_taipei_time,
+)
 from ...database import get_connection
 
 
@@ -15,6 +21,7 @@ async def summarize_chat(
     line_group_id: str,
     hours: int = 24,
     max_messages: int = 50,
+    ctos_user_id: int | None = None,
 ) -> str:
     """
     取得 Line 群組聊天記錄，供 AI 摘要使用
@@ -23,8 +30,19 @@ async def summarize_chat(
         line_group_id: Line 群組的內部 UUID
         hours: 取得最近幾小時的訊息，預設 24
         max_messages: 最大訊息數量，預設 50
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，沒有 bot 身分注入時用來驗證群組關聯）
     """
     await ensure_db_connection()
+
+    # 身分一律以連線為準；沒有注入（網頁聊天）就要驗證這個 CTOS 帳號
+    # 跟指定的群組有關聯，否則讀得到任何群組的對話（issue #209）。
+    line_group_id, _line_user_id, scope_error = await resolve_conversation_scope(
+        line_group_id, None, ctos_user_id
+    )
+    if scope_error:
+        return f"❌ {scope_error}"
+    if not line_group_id:
+        return "請提供 line_group_id"
 
     async with get_connection() as conn:
         # 計算時間範圍
@@ -77,6 +95,7 @@ async def get_message_attachments(
     days: int = 7,
     file_type: str | None = None,
     limit: int = 20,
+    ctos_user_id: int | None = None,
 ) -> str:
     """
     查詢對話中的附件（圖片、檔案等），用於將附件加入知識庫
@@ -87,8 +106,16 @@ async def get_message_attachments(
         days: 查詢最近幾天的附件，預設 7 天，可根據用戶描述調整
         file_type: 檔案類型過濾（image, file, video, audio），不填則查詢全部
         limit: 最大回傳數量，預設 20
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，沒有 bot 身分注入時用來驗證對話關聯）
     """
     await ensure_db_connection()
+
+    # 與 summarize_chat 同一條路：有注入就用注入身分，沒有注入要驗證關聯（issue #209）
+    line_group_id, line_user_id, scope_error = await resolve_conversation_scope(
+        line_group_id, line_user_id, ctos_user_id
+    )
+    if scope_error:
+        return f"❌ {scope_error}"
 
     if not line_user_id and not line_group_id:
         return "請提供 line_user_id 或 line_group_id"

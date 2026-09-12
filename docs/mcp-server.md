@@ -178,8 +178,8 @@ Schema 會自動從 type hints 和 docstring 生成。
 
 | 工具名稱 | 說明 | 參數 |
 |----------|------|------|
-| `summarize_chat` | 取得群組聊天記錄 | `line_group_id`（必填）, `hours`, `max_messages` |
-| `get_message_attachments` | 查詢對話中的附件 | `line_user_id`, `line_group_id`, `days`, `file_type`, `limit` |
+| `summarize_chat` | 取得群組聊天記錄（只讀得到連線身分的群組，見 issue #209） | `line_group_id`（必填）, `hours`, `max_messages`, `ctos_user_id`（伺服器注入） |
+| `get_message_attachments` | 查詢對話中的附件（同上，限連線身分的群組／個人對話） | `line_user_id`, `line_group_id`, `days`, `file_type`, `limit`, `ctos_user_id`（伺服器注入） |
 
 ### NAS 檔案（nas_tools.py）
 
@@ -216,10 +216,10 @@ Schema 會自動從 type hints 和 docstring 生成。
 
 | 工具名稱 | 說明 | 參數 |
 |----------|------|------|
-| `generate_presentation` | 生成 PowerPoint 簡報 | `topic`, `num_slides`, `theme`, `include_images`, `image_source`, `outline_json`, `design_json` |
-| `generate_md2ppt` | 產生 MD2PPT 格式簡報 | `markdown_content`（必填）, `ctos_user_id` |
-| `generate_md2doc` | 產生 MD2DOC 格式文件 | `markdown_content`（必填）, `ctos_user_id` |
-| `prepare_print_file` | 將虛擬路徑轉換為可列印的絕對路徑 | `file_path`（必填）, `ctos_user_id` |
+| `generate_presentation` | 生成 PowerPoint 簡報（需 `md2ppt` 權限，未綁定拒絕） | `topic`, `num_slides`, `theme`, `include_images`, `image_source`, `outline_json`, `design_json`, `ctos_user_id`（伺服器注入） |
+| `generate_md2ppt` | 產生 MD2PPT 格式簡報（需 `md2ppt` 權限，未綁定拒絕） | `markdown_content`（必填）, `ctos_user_id` |
+| `generate_md2doc` | 產生 MD2DOC 格式文件（需 `md2doc` 權限，未綁定拒絕） | `markdown_content`（必填）, `ctos_user_id` |
+| `prepare_print_file` | 將虛擬路徑轉換為可列印的絕對路徑（需 `printer` 權限，未綁定拒絕） | `file_path`（必填）, `ctos_user_id` |
 
 #### 基本用法（指定主題）
 
@@ -512,7 +512,10 @@ LINE／Telegram 使用者在完成綁定前（`ctos_user_id is None`），或 `c
 | `project-management` | `get_project`、`list_tasks` | 員工成員清單、任務負責人姓名 |
 | `vendor-management` | `find_party`、`get_party` | 外部聯絡人姓名、電話、email |
 | `inventory-management` | `get_stock`、`list_purchase_orders` | 庫存與採購資料 |
-| `file-manager` | `search_nas_files`、`read_document` | NAS 共用區（projects／circuits／library）實際檔案內容 |
+| `file-manager` | `search_nas_files`、`read_document`、`codex_image_tool` | NAS 共用區（projects／circuits／library）實際檔案內容 |
+| `share-manager` | `create_share_link`、`share_knowledge_attachment` | 不需帳號就打得開的公開連結（issue #205） |
+| `printer` | `prepare_print_file` | 把檔案推進公司印表機佇列（issue #210） |
+| `task-scheduler` | `manage_scheduled_task`、`list_scheduled_tasks` | 之後會自動執行的排程（issue #210） |
 
 被擋時一律回 `permissions.BOUND_USER_REQUIRED_MESSAGE`，內容對齊
 `services/bot/identity_router.py` 的實際綁定流程（登入 CTOS 系統 → Bot 管理頁面
@@ -522,13 +525,18 @@ LINE／Telegram 使用者在完成綁定前（`ctos_user_id is None`），或 `c
 
 - **`knowledge-base`**（`search_knowledge` 等）：在條目層級（`knowledge_tools._check_item_access`）
   只放行 `scope=global` 且 `is_public` 的公司整理文件，個人／專案知識查不到，維持現狀。
-- **`memory-manager`**（`memory_tools.py`）：這幾支工具目前完全不呼叫
-  `check_mcp_tool_permission()`，直接吃呼叫端帶入的 `line_group_id`／
-  `line_user_id`，綁定狀態不影響行為；把 `memory-manager` 加進
-  `APPS_REQUIRE_BOUND_USER` 不會有效果，需要另外替 `memory_tools.py` 補
-  guard，不在本次修復範圍內。
-- **`message_tools.py`／`share_tools.py`**（`summarize_chat`、`create_share_link` 等）：
-  `TOOL_APP_MAPPING` 本來就沒有對應 app（基礎功能），行為不分綁定與否，也不在本次範圍內。
+- **`memory-manager`**（`memory_tools.py`）：這幾支工具不呼叫
+  `check_mcp_tool_permission()`，但記憶範圍由伺服器注入的連線身分決定
+  （issue #204 的 `resolve_bot_identity()`），未綁定者只動得到自己這條對話的記憶。
+  登記在 `TOOLS_INTENTIONALLY_OPEN`（issue #210）。
+- **`message_tools.py`**（`summarize_chat`、`get_message_attachments`）：
+  `TOOL_APP_MAPPING` 沒有對應 app（基礎功能），但讀取範圍由
+  `resolve_conversation_scope()` 限死在連線身分的群組／個人對話（issue #209）；
+  沒有注入時要求 CTOS 身分並驗群組關聯。同樣登記在 `TOOLS_INTENTIONALLY_OPEN`。
+
+不做 app 權限檢查的工具**一律要登記在 `permissions.TOOLS_INTENTIONALLY_OPEN`**
+（工具名 → 一句理由，issue #210）。沒登記又沒檢查，矩陣測試會紅——
+「忘了決定」和「決定要開放」必須分得出來。
 
 ## 新增工具
 
@@ -536,7 +544,10 @@ LINE／Telegram 使用者在完成綁定前（`ctos_user_id is None`），或 `c
 2. Import `server.py` 的共用元件：`mcp`, `ensure_db_connection`, `check_mcp_tool_permission` 等
 3. 使用 type hints 定義參數類型，在 docstring 中描述工具和參數
 4. 如果建立新檔案，需在 `modules.py` 的對應模組中設定 `mcp_module` 路徑
-5. 如果需要權限控制，加入 `ctos_user_id` 參數並呼叫 `check_mcp_tool_permission()`
+5. 如果需要權限控制，加入 `ctos_user_id` 參數並呼叫 `check_mcp_tool_permission()`；
+   刻意不做權限檢查的，登記進 `permissions.TOOLS_INTENTIONALLY_OPEN` 並寫一句理由
+   （兩者都沒有，矩陣測試會紅）。收 `line_group_id`／`line_user_id` 的工具
+   一律先過 `resolve_bot_identity()`
 6. 更新 `linebot_agents.py` 中的 prompt（讓 Line Bot AI 知道新工具）
 7. 建立新的 migration 更新資料庫中的 prompt
 8. 執行 `alembic upgrade head` 套用變更

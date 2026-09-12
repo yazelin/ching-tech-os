@@ -390,7 +390,7 @@ session 的權限快取沒帶到某個 `app_id` 時，`require_app_permission` �
 LINE／Telegram Bot 是對外開放的入口：任何人加好友或把 bot 拉進群組就能對話，
 `ctos_user_id is None`（沒有綁定 CTOS 帳號）是常態，不是例外。這套權限設計原本
 假設呼叫者是已綁定的自己人，未綁定者因此一路走得進來——issue #201、#204、#205、
-#207 都是同一個根因的不同出口，四個都已修。
+#207、#209、#210 都是同一個根因的不同出口，都已修。
 
 **逐支工具的實際範圍看 [MCP 工具存取矩陣](mcp-tool-access-matrix.md)**
 （由 `backend/scripts/gen_tool_access_matrix.py` 從程式內省產生，測試會比對逐字相同）。
@@ -401,8 +401,51 @@ LINE／Telegram Bot 是對外開放的入口：任何人加好友或把 bot 拉�
 |------|------|--------|
 | app 權限 | `check_mcp_tool_permission()`＋`APPS_REQUIRE_BOUND_USER` | 這個人有沒有這個功能；專案／往來／物料／NAS 檔案／分享未綁定一律拒絕（#201、#205） |
 | 條目層級 | 知識庫 `_check_item_access()`、記憶的擁有者條件 | 這一筆是不是你的；未綁定只讀得到 `scope=global` 且 `is_public` |
-| 工具內部自檢 | `require_bound_user()`＋`TOOLS_REQUIRE_BOUND_USER` | 憑空建立新資料的寫入（`add_note`、`add_note_with_attachments`，#207） |
+| 工具內部自檢 | `require_bound_user()`＋`TOOLS_REQUIRE_BOUND_USER` | 憑空建立新資料的寫入（`add_note`、`add_note_with_attachments`，#207；文件生成三支與 `run_skill_script`，#210） |
 | 資源存取檢查 | `share.check_resource_access()` | 把讀不到的東西送出去（#205，見下節） |
+| 連線身分解析 | `resolve_bot_identity()`／`resolve_conversation_scope()` | 模型宣稱別的群組／別人（#204、#209，見下節） |
+
+### 身分注入補齊（#209）
+
+`resolve_bot_identity()`（#204）原本只套在記憶工具，其餘收
+`line_group_id`／`line_user_id` 的工具仍然是模型說了算。這些 id 不是裝飾：
+
+- `add_note`／`add_note_with_attachments`：id 決定知識庫的 scope 與專案歸屬。
+- `send_nas_file`：id 就是發送目標。
+- `summarize_chat`／`get_message_attachments`：id 就是讀取範圍。
+
+現在這些工具都先過 `resolve_bot_identity()`，有注入就以注入值為準。讀群組對話與
+附件的兩支再多一層 `resolve_conversation_scope()`：沒有注入（目前就是網頁聊天）
+時要求有伺服器認得的 `ctos_user_id`，而且指定的群組／個人身分必須與這個 CTOS 帳號
+有既有關聯（`bot_users.user_id` 綁定 ＋ `bot_messages` 在該群組留過訊息），
+否則拒絕——沒有這一層，已登入的網頁使用者可以讀到任何群組的對話與附件。
+
+殘留：`send_nas_file` 的 `telegram_chat_id` 不在 `build_bot_mcp_env()` 的注入範圍，
+仍由模型參數決定，且 Telegram 分支排在 LINE 之前。
+
+### 每一支工具都要有決定（#210）
+
+以前「沒呼叫 `check_mcp_tool_permission()`」和「刻意開放」長得一模一樣：工具沒登錄
+`TOOL_APP_MAPPING` 就等於不檢查，預設是開的。現在每一支不做 app 權限檢查的工具
+都必須登記在 `permissions.TOOLS_INTENTIONALLY_OPEN`（工具名 → 一句理由），
+矩陣會原樣列出理由，沒登記又沒檢查的工具矩陣測試會紅。
+
+這一輪的決定：
+
+- 送到外部或實體世界：`prepare_print_file` 的權限檢查本來寫成 `if ctos_user_id:`，
+  未綁定反而整個跳過；改成一律檢查，`printer` 進 `APPS_REQUIRE_BOUND_USER`
+  （預設權限維持 True，內部員工既有用法不變）。
+- 會持久化、之後自動執行：排程兩支對到 `task-scheduler`（模組提供、預設 False），
+  同樣進 `APPS_REQUIRE_BOUND_USER`。
+- `run_skill_script`：對到 `ai-assistant`，另加未綁定自檢——等同讓對話端跑
+  伺服器上的程式。
+- 文件生成三支：對到既有的 `md2ppt`／`md2doc`，另加未綁定自檢——都會在 NAS 的
+  `ai-generated` 目錄產檔，`generate_md2ppt`／`generate_md2doc` 還會建立
+  不需帳號就打得開的分享連結。
+- `codex_image_tool`：`reference_images` 會讀 NAS 根目錄底下的檔案並送到外部服務，
+  對到 `file-manager`（已在 `APPS_REQUIRE_BOUND_USER`）。
+- 登記為有意開放的九支（記憶四支、讀對話兩支、`download_web_image`、
+  `text_to_speech`、`browse_webpage`）逐支的理由見矩陣。
 
 ### 公開分享連結（#205）
 
@@ -492,7 +535,10 @@ bot 走的路徑上，身分一律由伺服器注入，模型在工具參數裡�
 記憶工具吃模型帶的 `line_group_id`／`line_user_id`、`update_memory`／`delete_memory`
 沒有擁有者範圍。進 socket 之前有 session 認證，所以不是匿名者能打的路，
 但同一個登入者可以指定別人的 id。這條缺口記在
-[存取矩陣的「已知缺口」](mcp-tool-access-matrix.md#已知缺口本次未修)，尚未修。
+[存取矩陣的「已知缺口」](mcp-tool-access-matrix.md#已知缺口)，尚未修。
+`summarize_chat`／`get_message_attachments` 已經不受它影響（#209 的
+`resolve_conversation_scope()` 在沒有注入時會要求 CTOS 身分並驗群組關聯），
+其餘工具仍然照舊。
 
 ---
 

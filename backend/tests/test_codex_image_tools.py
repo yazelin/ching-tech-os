@@ -26,6 +26,21 @@ def reference_files(tmp_path, monkeypatch):
     return a, b
 
 
+@pytest.fixture(autouse=True)
+def allow_tool_permission(monkeypatch):
+    """codex_image_tool 從 issue #210 起會先過 file-manager 權限。
+
+    這份檔案測的是 reference 圖片的路徑與位元組處理；權限那一關由
+    tests/test_mcp_identity_sweep.py::test_codex_image_tool_denies_unbound 負責。
+    """
+    from ching_tech_os.services.mcp import codex_image_tools
+
+    async def _allow(_tool_name, _ctos_user_id):
+        return True, ""
+
+    monkeypatch.setattr(codex_image_tools, "check_mcp_tool_permission", _allow)
+
+
 @pytest.fixture
 def codex_enabled(monkeypatch):
     from ching_tech_os.config import settings

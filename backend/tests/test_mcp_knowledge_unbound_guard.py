@@ -431,4 +431,9 @@ def test_tools_require_bound_user_registry() -> None:
     assert permissions_module.TOOLS_REQUIRE_BOUND_USER == {
         "add_note",
         "add_note_with_attachments",
+        # issue #210：會在 NAS 產檔／建立對外分享連結／跑伺服器上的程式
+        "generate_presentation",
+        "generate_md2ppt",
+        "generate_md2doc",
+        "run_skill_script",
     }

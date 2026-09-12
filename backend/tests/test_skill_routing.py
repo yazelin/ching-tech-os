@@ -18,8 +18,18 @@ async def _noop():
 
 
 def _mock_ensure_db(monkeypatch):
-    """Mock ensure_db_connection 避免 CI 無 DB 環境報錯。"""
+    """Mock ensure_db_connection 避免 CI 無 DB 環境報錯，並放行 app 權限。
+
+    `run_skill_script` 從 issue #210 起多一關 `check_mcp_tool_permission`
+    （對到 ai-assistant）。這份檔案測的是 skill 路由，所以把那一關放行；
+    未綁定自檢 `require_bound_user` 不受影響，仍然會擋。
+    """
     monkeypatch.setattr(skill_script_tools, "ensure_db_connection", _noop)
+
+    async def _allow(_tool_name, _ctos_user_id):
+        return True, ""
+
+    monkeypatch.setattr(skill_script_tools, "check_mcp_tool_permission", _allow)
 
 
 def _write_skill(path: Path, description: str) -> None:
@@ -255,6 +265,7 @@ async def test_run_skill_script_invalid_input_no_fallback(monkeypatch):
         skill="share-links",
         script="create_share_link",
         input='{"resource_type":"knowledge"}',
+        ctos_user_id=123,
     )
     payload = json.loads(raw)
     assert payload["success"] is False
@@ -265,8 +276,12 @@ async def test_run_skill_script_invalid_input_no_fallback(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_run_skill_script_allows_requires_app_without_user_id_when_default_enabled(monkeypatch):
-    """requires_app 的 skill 在預設權限開啟時，未綁定使用者也可執行。"""
+async def test_run_skill_script_denies_unbound_even_when_default_enabled(monkeypatch):
+    """issue #210：未綁定一律不得執行 skill script，即使 requires_app 預設開放。
+
+    `run_skill_script` 等同讓對話端跑伺服器上的程式，所以進了
+    `TOOLS_REQUIRE_BOUND_USER`——這條是上一版「預設開放就放行」的相反決定。
+    """
 
     skill_obj = SimpleNamespace(
         name="secure-skill",
@@ -326,6 +341,8 @@ async def test_run_skill_script_allows_requires_app_without_user_id_when_default
     )
     _mock_ensure_db(monkeypatch)
 
+    monkeypatch.delenv("CTOS_USER_ID", raising=False)
+
     raw = await skill_script_tools.run_skill_script(
         skill="secure-skill",
         script="read_secret",
@@ -333,13 +350,33 @@ async def test_run_skill_script_allows_requires_app_without_user_id_when_default
         ctos_user_id=None,
     )
     payload = json.loads(raw)
-    assert payload["success"] is True
-    assert payload["output"] == "ok"
+    assert payload["success"] is False
+    from ching_tech_os.services import permissions as permissions_module
+
+    assert payload["error"] == permissions_module.BOUND_USER_REQUIRED_MESSAGE
+
+    # 已綁定照舊跑得動
+    async def _admin_role(_uid):
+        return {"role": "admin"}
+
+    monkeypatch.setattr(
+        "ching_tech_os.services.user.get_user_role_and_permissions", _admin_role
+    )
+
+    raw_bound = await skill_script_tools.run_skill_script(
+        skill="secure-skill",
+        script="read_secret",
+        input="{}",
+        ctos_user_id=1,
+    )
+    payload_bound = json.loads(raw_bound)
+    assert payload_bound["success"] is True
+    assert payload_bound["output"] == "ok"
 
 
 @pytest.mark.asyncio
-async def test_run_skill_script_denies_when_default_requires_app_disabled(monkeypatch):
-    """requires_app 的 skill 若預設權限關閉，未綁定使用者應拒絕。"""
+async def test_run_skill_script_denies_when_requires_app_disabled(monkeypatch):
+    """requires_app 的 skill 若使用者沒有該 app 權限，一律拒絕。"""
 
     skill_obj = SimpleNamespace(
         name="secure-skill",
@@ -361,11 +398,26 @@ async def test_run_skill_script_denies_when_default_requires_app_disabled(monkey
     )
     _mock_ensure_db(monkeypatch)
 
+    async def _user_without_file_manager(_uid):
+        return {}
+
+    monkeypatch.setattr(
+        "ching_tech_os.services.permissions.get_user_app_permissions",
+        _user_without_file_manager,
+    )
+
+    async def _role(_uid):
+        return {"role": "user"}
+
+    monkeypatch.setattr(
+        "ching_tech_os.services.user.get_user_role_and_permissions", _role
+    )
+
     raw = await skill_script_tools.run_skill_script(
         skill="secure-skill",
         script="read_secret",
         input="{}",
-        ctos_user_id=None,
+        ctos_user_id=1,
     )
     payload = json.loads(raw)
     assert payload["success"] is False

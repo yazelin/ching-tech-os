@@ -75,6 +75,14 @@ def test_matrix_doc_explains_root_cause() -> None:
         assert issue in content
 
 
+def _matrix_rows() -> list[str]:
+    return [
+        line
+        for line in MATRIX_DOC.read_text(encoding="utf-8").splitlines()
+        if line.startswith("| `")
+    ]
+
+
 def test_matrix_doc_lists_generated_gaps() -> None:
     """已知缺口要由表格資料產生，不是手寫的一句話。"""
     content = MATRIX_DOC.read_text(encoding="utf-8")
@@ -85,13 +93,59 @@ def test_matrix_doc_lists_generated_gaps() -> None:
         for line in content.splitlines()
         if line.startswith("| `") and "是（未檢查）" in line
     ]
-    assert unchecked, "矩陣裡應該有沒做權限檢查的工具"
     for name in unchecked:
         assert f"`{name}`" in gaps, f"{name} 沒有出現在已知缺口"
 
-    # 未綁定可呼叫又會送印的代表案例，以及網頁聊天沒注入身分那條
-    assert "`prepare_print_file`" in gaps
+    # 還沒收掉的兩條：Telegram chat id 不在注入範圍、網頁聊天沒注入身分
+    assert "telegram_chat_id" in gaps
     assert "api/ai.py" in gaps
+
+
+def test_no_tool_is_unchecked_and_unregistered() -> None:
+    """issue #210：不呼叫 `check_mcp_tool_permission` 的工具一定要登記理由。
+
+    「忘了決定」和「決定要開放」必須分得出來——矩陣裡不該再有「是（未檢查）」。
+    """
+    unchecked = [line.split("`")[1] for line in _matrix_rows() if "是（未檢查）" in line]
+    assert unchecked == [], f"這些工具既沒權限檢查也沒登記理由：{unchecked}"
+
+
+def test_intentionally_open_registry_is_pinned() -> None:
+    """釘住「有意開放」的名單：改了 registry 這條就紅，逼人重新拿決定。"""
+    assert set(permissions_module.TOOLS_INTENTIONALLY_OPEN) == {
+        # 記憶四支：範圍由注入身分決定（issue #204）
+        "add_memory",
+        "get_memories",
+        "update_memory",
+        "delete_memory",
+        # 讀對話／附件兩支：注入身分限自己的群組（issue #209）
+        "summarize_chat",
+        "get_message_attachments",
+        # 純產出型三支
+        "download_web_image",
+        "text_to_speech",
+        "browse_webpage",
+    }
+    for name, reason in permissions_module.TOOLS_INTENTIONALLY_OPEN.items():
+        assert reason.strip(), f"{name} 沒有寫理由"
+
+
+def test_intentionally_open_tools_exist_and_show_reasons() -> None:
+    """registry 裡的名字要真的是工具，理由要逐字出現在矩陣裡。"""
+    tool_names = {line.split("`")[1] for line in _matrix_rows()}
+    content = MATRIX_DOC.read_text(encoding="utf-8")
+
+    for name, reason in permissions_module.TOOLS_INTENTIONALLY_OPEN.items():
+        assert name in tool_names, f"{name} 不是現存的工具"
+        assert reason in content, f"{name} 的理由沒有出現在矩陣裡"
+
+
+def test_intentionally_open_tools_do_not_also_require_bound_user() -> None:
+    """同一支不能又「登記開放」又「要求綁定」——那是兩個相反的決定。"""
+    overlap = set(permissions_module.TOOLS_INTENTIONALLY_OPEN) & (
+        permissions_module.TOOLS_REQUIRE_BOUND_USER
+    )
+    assert overlap == set(), f"這些工具的決定自相矛盾：{sorted(overlap)}"
 
 
 def test_write_tools_registry_covers_write_verbs() -> None:

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .server import mcp, logger
+from .server import mcp, logger, check_mcp_tool_permission
 from ..codex_image import (
     generate_image_with_codex,
     is_codex_image_available,
@@ -41,6 +41,7 @@ async def codex_image_tool(
     prompt: str,
     reference_images: list[str] | None = None,
     aspect_ratio: str = "1:1",
+    ctos_user_id: int | None = None,
 ) -> str:
     """生成或編輯圖片（一個 tool 三種模式）
 
@@ -64,11 +65,18 @@ async def codex_image_tool(
             每張 ≤ 10 MB（OOM 防護）。
         aspect_ratio: 1:1（預設）/ 4:3 / 3:4 / 16:9 / 9:16 / 21:9
             gpt-image-2 實際只支援 1024x1024、1536x1024、1024x1536 三種。
+        ctos_user_id: CTOS 用戶 ID（從對話識別取得，用於權限檢查）
 
     Returns:
         成功：`圖片已生成：ai-images/codex_xxxxxxxx.png`
         失敗：人類可讀錯誤字串
     """
+    # 權限檢查（issue #210）：reference_images 會讀 NAS 根目錄底下的檔案並把
+    # 內容送到外部服務，所以對到 file-manager（已在 APPS_REQUIRE_BOUND_USER）。
+    allowed, error_msg = await check_mcp_tool_permission("codex_image_tool", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
     if not is_codex_image_available():
         return "Codex 未設定 — 請改用 mcp__nanobanana__generate_image"
 

@@ -12,7 +12,15 @@ from datetime import datetime
 from pathlib import Path as FsPath
 from uuid import UUID
 
-from .server import mcp, logger, ensure_db_connection, check_mcp_tool_permission, to_taipei_time, TAIPEI_TZ
+from .server import (
+    mcp,
+    logger,
+    ensure_db_connection,
+    check_mcp_tool_permission,
+    resolve_bot_identity,
+    to_taipei_time,
+    TAIPEI_TZ,
+)
 from ...database import get_connection
 from ..shared_source_permissions import (
     SharedSourceAccessDeniedError,
@@ -608,6 +616,11 @@ async def send_nas_file(
     allowed, error_msg = await check_mcp_tool_permission("send_nas_file", ctos_user_id)
     if not allowed:
         return f"❌ {error_msg}"
+
+    # 發送目標一律以連線身分為準：模型換一個 line_group_id 就能把 NAS 檔案
+    # 推到別的群組（issue #209）。telegram_chat_id 不在注入範圍內，見
+    # docs/mcp-tool-access-matrix.md 的已知缺口。
+    line_group_id, line_user_id = resolve_bot_identity(line_group_id, line_user_id)
 
     from pathlib import Path
     from ..share import (

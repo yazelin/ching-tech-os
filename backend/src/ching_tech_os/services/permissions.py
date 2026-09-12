@@ -133,11 +133,23 @@ TOOL_APP_MAPPING: dict[str, str | None] = {
     "create_share_link": "share-manager",
     "share_knowledge_attachment": "share-manager",
 
+    # 排程工具（issue #210）：會持久化、之後自動執行，對到排程管理 app
+    "list_scheduled_tasks": "task-scheduler",
+    "manage_scheduled_task": "task-scheduler",
+
+    # Skill script 執行（issue #210）：等同讓對話端跑伺服器上的程式
+    "run_skill_script": "ai-assistant",
+
+    # 生圖工具（issue #210）：reference_images 會讀 NAS 根目錄底下的檔案並送到外部服務
+    "codex_image_tool": "file-manager",
+
     # 通用工具（不需要特定權限）
     "get_message_attachments": None,  # 基礎訊息功能
     "summarize_chat": None,           # 群組對話摘要
     "download_web_image": None,       # 下載網路圖片
     "download_web_file": "file-manager",  # 下載網路文件（歸檔用）
+    "text_to_speech": None,           # 語音回覆（基礎對話功能）
+    "browse_webpage": None,           # 讀公開網頁
 }
 
 # ============================================================
@@ -193,12 +205,20 @@ DEFAULT_APP_PERMISSIONS: dict[str, bool] = {
 #   可歸屬的身分，也就沒有「他讀得到什麼」可以比對，一律拒絕。已綁定者除了這道
 #   app 權限，還要通過 `services/share.py` 的 `check_resource_access()`：讀不到
 #   的資源不能分享。
+# - printer（issue #210）：`prepare_print_file` 會把檔案推進公司印表機佇列，
+#   是「送到實體世界」的動作。預設權限維持 True（內部員工既有用法），但未綁定者
+#   沒有可歸屬的身分，一律拒絕。
+# - task-scheduler（issue #210）：`manage_scheduled_task` 會持久化一條之後自動執行的
+#   任務（executor 可以是 agent 或 skill script），未綁定者不得留下會自己跑的東西。
+#   這個 app 由 `modules.py` 的 task-scheduler 模組提供，預設權限本來就是 False。
 APPS_REQUIRE_BOUND_USER: set[str] = {
     "project-management",
     "vendor-management",
     "inventory-management",
     "file-manager",
     "share-manager",
+    "printer",
+    "task-scheduler",
 }
 
 # 未綁定／帳號不存在時，若工具屬於 APPS_REQUIRE_BOUND_USER，一律回這則訊息。
@@ -222,9 +242,39 @@ BOUND_USER_REQUIRED_MESSAGE = (
 # 實作入口：`services/mcp/server.py` 的 `require_bound_user()`；
 # 這份 registry 同時是 `docs/mcp-tool-access-matrix.md` 的來源，
 # 改了工具卻忘了改 registry，矩陣測試會紅。
+#
+# issue #210 追加：文件生成三支會把檔案寫進 NAS 的 ai-generated 目錄，
+# `generate_md2ppt`／`generate_md2doc` 還會建立不需帳號就打得開的分享連結
+# （帶密碼、24 小時到期）。對到的 app（md2ppt／md2doc）預設開放給內部員工，
+# 所以不整包擋，改用工具層自檢要求已綁定。`run_skill_script` 則是讓對話端
+# 跑伺服器上的程式，同理。
 TOOLS_REQUIRE_BOUND_USER: set[str] = {
     "add_note",
     "add_note_with_attachments",
+    "generate_presentation",
+    "generate_md2ppt",
+    "generate_md2doc",
+    "run_skill_script",
+}
+
+
+# ============================================================
+# 有意對未綁定者開放的工具（issue #210）
+# ============================================================
+
+# 這些工具刻意不做 app 權限檢查，理由逐支寫在這裡，矩陣會原樣列出。
+# 規則：不在這份 registry、又沒呼叫 `check_mcp_tool_permission` 的工具，
+# 矩陣測試會紅——「忘了決定」和「決定要開放」必須分得出來。
+TOOLS_INTENTIONALLY_OPEN: dict[str, str] = {
+    "add_memory": "記憶是 bot 的基礎功能；範圍由伺服器注入的連線身分決定（issue #204），未綁定者只寫得到自己這條對話的記憶。",
+    "get_memories": "記憶是 bot 的基礎功能；只讀得到注入身分底下的記憶（issue #204）。",
+    "update_memory": "記憶是 bot 的基礎功能；SQL 帶注入身分的擁有者條件，改不到別人的記憶（issue #204）。",
+    "delete_memory": "記憶是 bot 的基礎功能；SQL 帶注入身分的擁有者條件，刪不到別人的記憶（issue #204）。",
+    "summarize_chat": "群組摘要是 bot 的基礎功能；身分注入後只讀得到自己這個群組，沒有注入時要有 CTOS 身分且與該群組有既有關聯（issue #209）。",
+    "get_message_attachments": "附件查詢是 bot 的基礎功能；與 summarize_chat 同一條身分解析，只讀得到注入身分的群組／個人對話（issue #209）。",
+    "download_web_image": "只把外部 URL 的圖片抓進 /tmp 暫存區回給同一條對話，不讀也不寫 NAS、知識庫或使用者資料。",
+    "text_to_speech": "語音回覆是基礎對話功能；語音設定用伺服器注入的 CTOS_USER_ID／CTOS_GROUP_ID 查，模型參數影響不到，輸出只有音檔。",
+    "browse_webpage": "只讀公開的 HTTPS 網頁並回傳文字，不碰內部資料。",
 }
 
 # ============================================================

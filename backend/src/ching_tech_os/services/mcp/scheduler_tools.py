@@ -6,7 +6,12 @@
 import json
 import logging
 
-from .server import ensure_db_connection, mcp, resolve_ctos_user_id
+from .server import (
+    check_mcp_tool_permission,
+    ensure_db_connection,
+    mcp,
+    resolve_ctos_user_id,
+)
 
 logger = logging.getLogger("mcp_server")
 
@@ -55,6 +60,14 @@ async def manage_scheduled_task(
                      skill_script 範例 {"skill": "my-skill", "script": "run.py"}
     """
     await ensure_db_connection()
+
+    # app 權限（issue #210）：排程會持久化、之後自動執行，對到 task-scheduler，
+    # 未綁定一律擋在這裡（APPS_REQUIRE_BOUND_USER）。管理員檢查在後面。
+    allowed, error_msg = await check_mcp_tool_permission(
+        "manage_scheduled_task", ctos_user_id
+    )
+    if not allowed:
+        return json.dumps({"success": False, "error": error_msg}, ensure_ascii=False)
 
     uid, err = await _check_admin(ctos_user_id)
     if err:
@@ -184,6 +197,13 @@ async def list_scheduled_tasks(
     include_static: 是否包含系統/模組靜態排程（預設 true）。
     """
     await ensure_db_connection()
+
+    # app 權限（issue #210）：同 manage_scheduled_task
+    allowed, error_msg = await check_mcp_tool_permission(
+        "list_scheduled_tasks", ctos_user_id
+    )
+    if not allowed:
+        return json.dumps({"success": False, "error": error_msg}, ensure_ascii=False)
 
     uid, err = await _check_admin(ctos_user_id)
     if err:
