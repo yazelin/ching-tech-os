@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -11,7 +12,21 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
+from ching_tech_os.api import auth as auth_api
 from ching_tech_os.api import skills as skills_api
+from ching_tech_os.models.auth import SessionData
+
+
+def _session() -> SessionData:
+    now = datetime.now()
+    return SessionData(
+        username="u1",
+        password="",
+        nas_host="h",
+        user_id=1,
+        created_at=now,
+        expires_at=now + timedelta(hours=1),
+    )
 
 
 class _FakeSkill:
@@ -99,6 +114,7 @@ def _build_app() -> FastAPI:
     app.include_router(skills_api.router)
     app.dependency_overrides[skills_api.require_admin] = lambda: SimpleNamespace(username="admin", role="admin", user_id=1)
     app.dependency_overrides[skills_api.get_current_session] = lambda: SimpleNamespace(username="user", role="user", user_id=2)
+    app.dependency_overrides[skills_api.get_session_from_token_or_query] = lambda: SimpleNamespace(username="user", role="user", user_id=2)
     app.state.clawhub_client = _FakeClient("clawhub")
     app.state.skillhub_client = _FakeClient("skillhub")
     return app
@@ -143,6 +159,50 @@ async def test_skills_route_basics(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
         assert (await client.post("/api/skills/reload")).status_code == 200
         assert (await client.delete("/api/skills/demo")).status_code == 200
         assert (await client.delete("/api/skills/demo")).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_skill_frontend_file_requires_login(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """走真實的 get_session_from_token_or_query（不覆寫 dependency）：
+    舊桌面用 <script src>/<link href> 載入 skill 前端資源，無法帶 header，
+    因此驗證 header 與 ?token= 兩種帶法都要能通過，沒 token／token 無效則 401。
+    """
+    app = FastAPI()
+    app.include_router(skills_api.router)
+    sm = _FakeSkillManager(tmp_path / "skills")
+    monkeypatch.setattr(skills_api, "get_skill_manager", lambda: sm)
+    monkeypatch.setattr(auth_api.session_manager, "get_session", AsyncMock(return_value=_session()))
+
+    frontend_dir = sm.skills_dir / "demo" / "frontend"
+    frontend_dir.mkdir(parents=True, exist_ok=True)
+    (frontend_dir / "main.js").write_text("console.log('demo');", encoding="utf-8")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # 無 token → 401
+        no_token = await client.get("/api/skills/demo/frontend/main.js")
+        assert no_token.status_code == 401
+
+        # Authorization header → 200
+        with_header = await client.get(
+            "/api/skills/demo/frontend/main.js",
+            headers={"Authorization": "Bearer good-token"},
+        )
+        assert with_header.status_code == 200
+
+        # ?token= query → 200
+        with_query = await client.get(
+            "/api/skills/demo/frontend/main.js", params={"token": "good-token"}
+        )
+        assert with_query.status_code == 200
+
+    # 負控制：token 存在但驗證不過（session 查無資料）仍是 401
+    monkeypatch.setattr(auth_api.session_manager, "get_session", AsyncMock(return_value=None))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get(
+            "/api/skills/demo/frontend/main.js",
+            headers={"Authorization": "Bearer bad-token"},
+        )
+        assert resp.status_code == 401
 
 
 @pytest.mark.asyncio

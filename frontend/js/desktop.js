@@ -59,6 +59,33 @@ const DesktopModule = (function() {
   }
 
   /**
+   * 取得目前登入 token（沿用 api-client.js 的 localStorage key）
+   * @returns {string|null}
+   */
+  function getAuthToken() {
+    try {
+      return localStorage.getItem('chingtech_token');
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /**
+   * 為 skill 貢獻的前端資源（/api/skills/ 開頭）附上 ?token=，
+   * 因為 <script src>／<link href> 無法帶 Authorization header。
+   * 內建的 ./js/*.js 不受影響。
+   * @param {string} src
+   * @returns {string}
+   */
+  function withSkillToken(src) {
+    if (typeof src !== 'string' || !src.startsWith('/api/skills/')) return src;
+    const token = getAuthToken();
+    if (!token) return src;
+    const sep = src.includes('?') ? '&' : '?';
+    return `${src}${sep}token=${encodeURIComponent(token)}`;
+  }
+
+  /**
    * 顯示 Loading Skeleton（在桌面區域中央）
    * @param {string} appId
    * @returns {HTMLElement} skeleton DOM 節點（供後續移除）
@@ -94,7 +121,7 @@ const DesktopModule = (function() {
    */
   function loadScript(src) {
     return new Promise((resolve, reject) => {
-      const finalSrc = withApiBase(src);
+      const finalSrc = withApiBase(withSkillToken(src));
       // 檢查是否已有相同 src 的 script 標籤（正規化 ./ 前綴）
       const normalizedSrc = finalSrc.replace(/^\.\//, '');
       if (document.querySelector(`script[src="${finalSrc}"]`) ||
@@ -113,7 +140,7 @@ const DesktopModule = (function() {
   }
 
   function loadCss(href) {
-    const finalHref = withApiBase(href);
+    const finalHref = withApiBase(withSkillToken(href));
     if (!finalHref || _loadedStyles.has(finalHref)) {
       return Promise.resolve();
     }
@@ -139,7 +166,10 @@ const DesktopModule = (function() {
 
   async function loadApplicationsFromApi() {
     try {
-      const response = await fetch('/api/config/apps');
+      const token = getAuthToken();
+      const response = await fetch('/api/config/apps', {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      });
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }

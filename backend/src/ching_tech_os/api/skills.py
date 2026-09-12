@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 HubSource = Literal["clawhub", "skillhub"]
 
 from ..models.auth import SessionData
-from .auth import require_admin, get_current_session
+from .auth import require_admin, get_current_session, get_session_from_token_or_query
 from ..skills import get_skill_manager, has_required_app, required_apps
 from ..services.clawhub_client import ClawHubClient, ClawHubError, get_clawhub_client_di, validate_slug
 from ..services.skillhub_client import (
@@ -574,8 +574,9 @@ async def run_skill_script(
 async def get_skill_frontend_file(
     name: str,
     file_path: str,
+    session: SessionData = Depends(get_session_from_token_or_query),
 ):
-    """提供 Skill frontend 靜態資源（JS/CSS）。"""
+    """提供 Skill frontend 靜態資源（JS/CSS）。需登入；`<script src>`／`<link href>` 無法帶 header，走 `?token=`。"""
     if file_path.startswith("/") or ".." in Path(file_path).parts:
         raise HTTPException(status_code=400, detail="Invalid file path")
 

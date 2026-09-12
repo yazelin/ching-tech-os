@@ -604,6 +604,11 @@ async def get_current_session(
     return session
 ```
 
+`GET /api/config/apps`（回傳已啟用模組與 skill 貢獻 app 的 manifest，含 loader 路徑）與
+`GET /api/skills/{name}/frontend/{file_path}`（skill 前端 JS/CSS）都需要登入。這兩支端點
+會被 `<script src>`／`<link href>` 這類無法帶 header 的請求呼叫，因此用
+`get_session_from_token_or_query`（header 優先，否則吃 `?token=`），沒 token 或 token 無效一律 401。
+
 ### CORS 設定
 
 開發環境允許所有來源，生產環境應限制：
