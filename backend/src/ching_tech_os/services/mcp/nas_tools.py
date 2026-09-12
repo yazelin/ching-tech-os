@@ -67,6 +67,22 @@ def _share_actor(
     return ShareActor.from_ctos_user_id(ctos_user_id, source_permissions)
 
 
+async def _require_share_manager_for_link(ctos_user_id: int | None) -> str | None:
+    """`send_nas_file`／`prepare_file_message` 只掛 `file-manager`，但兩支工具都會在
+    內部直接呼叫 `share_service.create_share_link()` 產生公開連結——這是繞過
+    `create_share_link` 工具本身 `share-manager` 權限檢查的後門（review 在
+    issue #217 的 PR 上提出）。
+
+    在真的建立連結那一步之前額外檢查一次；回傳 `None` 表示允許，否則回傳要顯示的
+    錯誤訊息（訊息刻意跟工具本身的「無法使用此工具」不同，講清楚是「產生分享連結」
+    這個動作被擋，不是整支工具被擋——這兩支工具的其他功能不受影響）。
+    """
+    allowed, _ = await check_mcp_tool_permission("create_share_link", ctos_user_id)
+    if allowed:
+        return None
+    return "需要「分享管理」功能權限才能產生分享連結"
+
+
 def _format_file_size(size_bytes: int) -> str:
     """格式化檔案大小為人類可讀的字串"""
     if size_bytes >= 1024 * 1024:
@@ -630,6 +646,13 @@ async def send_nas_file(
     # 圖片大小限制 10MB
     max_image_size = 10 * 1024 * 1024
 
+    # 產生分享連結前，額外檢查 share-manager 權限（issue #217：這支只掛
+    # file-manager，但接下來會直接建立公開連結，不能繞過 create_share_link
+    # 工具本身的權限檢查）
+    permission_error = await _require_share_manager_for_link(ctos_user_id)
+    if permission_error:
+        return f"❌ {permission_error}"
+
     # 產生分享連結
     try:
         data = ShareLinkCreate(
@@ -804,6 +827,13 @@ async def prepare_file_message(
         # 取得檔案資訊
         file_size = fs_path.stat().st_size
 
+        # 產生分享連結前，額外檢查 share-manager 權限（issue #217：這支只掛
+        # file-manager，但接下來會直接建立公開連結，不能繞過 create_share_link
+        # 工具本身的權限檢查）
+        permission_error = await _require_share_manager_for_link(ctos_user_id)
+        if permission_error:
+            return f"❌ {permission_error}"
+
         # 為知識文章建立分享連結
         try:
             data = ShareLinkCreate(
@@ -847,6 +877,13 @@ async def prepare_file_message(
         # 取得檔案資訊
         file_name = full_path.name
         file_size = full_path.stat().st_size
+
+        # 產生分享連結前，額外檢查 share-manager 權限（issue #217：這支只掛
+        # file-manager，但接下來會直接建立公開連結，不能繞過 create_share_link
+        # 工具本身的權限檢查）
+        permission_error = await _require_share_manager_for_link(ctos_user_id)
+        if permission_error:
+            return f"❌ {permission_error}"
 
         # 產生分享連結
         try:
