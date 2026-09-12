@@ -2,7 +2,7 @@
 -- 自動匯出
 
 -- 1. 預設租戶
-INSERT INTO public.tenants (id, code, name, status, plan, settings, storage_quota_mb, storage_used_mb, trial_ends_at, created_at, updated_at) VALUES ('00000000-0000-0000-0000-000000000000', 'default', '預設租戶', 'active', 'enterprise', '{"nas_auth_host": "192.168.11.50", "nas_auth_share": "home", "enable_nas_auth": true, "line_channel_id": null, "line_channel_secret": null, "line_channel_access_token": null}', 102400, 0, NULL, '2026-01-20 07:25:44.765170+00:00', '2026-01-23 03:42:29.846637+00:00');
+INSERT INTO public.tenants (id, code, name, status, plan, settings, storage_quota_mb, storage_used_mb, trial_ends_at, created_at, updated_at) VALUES ('fe530f72-f9f5-434c-ba0b-8bc2d6485ca3', 'default', '預設租戶', 'active', 'enterprise', '{"nas_auth_host": "192.168.11.50", "nas_auth_share": "home", "enable_nas_auth": true, "line_channel_id": null, "line_channel_secret": null, "line_channel_access_token": null}', 102400, 0, NULL, '2026-01-20 07:25:44.765170+00:00', '2026-01-23 03:42:29.846637+00:00');
 
 -- 2. AI Prompts
 INSERT INTO public.ai_prompts (id, name, display_name, category, content, description, variables, created_at, updated_at, tenant_id) VALUES ('11ccdb48-87cd-472d-81ec-ca6a59914cae', 'linebot-group', 'Line 群組助理 Prompt', 'linebot', '你是擎添工業的 AI 助理，在 Line 群組中協助回答問題。
@@ -85,7 +85,7 @@ INSERT INTO public.ai_prompts (id, name, display_name, category, content, descri
 - 禁止：### 標題、**粗體**、*斜體*、`程式碼`、- 列表
 - 只能使用純文字、emoji、全形標點符號
 - 列表用「・」或數字編號
-- 分隔用空行，不要用分隔線', 'Line Bot 群組對話使用，精簡版包含 MCP 工具說明 [需更新：專案/物料/廠商工具已遷移至 ERPNext]', NULL, '2026-01-20 10:37:38.149815+00:00', '2026-02-04 02:06:08.623931+00:00', '00000000-0000-0000-0000-000000000000');
+- 分隔用空行，不要用分隔線', 'Line Bot 群組對話使用，精簡版包含 MCP 工具說明 [需更新：專案/物料/廠商工具已遷移至 ERPNext]', NULL, '2026-01-20 10:37:38.149815+00:00', '2026-02-04 02:06:08.623931+00:00', 'fe530f72-f9f5-434c-ba0b-8bc2d6485ca3');
 INSERT INTO public.ai_prompts (id, name, display_name, category, content, description, variables, created_at, updated_at, tenant_id) VALUES ('6de3351b-ad98-4c5d-afaa-da0f928a58b2', 'linebot-personal', 'Line 個人助理 Prompt', 'linebot', '你是擎添工業的 AI 助理，透過 Line 與用戶進行個人對話。
 
 你可以使用以下工具：
@@ -344,7 +344,7 @@ INSERT INTO public.ai_prompts (id, name, display_name, category, content, descri
 - 禁止：### 標題、**粗體**、*斜體*、`程式碼`、[連結](url)、- 列表
 - 只能使用純文字、emoji、全形標點符號
 - 列表用「・」或數字編號
-- 分隔用空行，不要用分隔線', 'Line Bot 個人對話使用，包含完整 MCP 工具說明 [需更新：專案/物料/廠商工具已遷移至 ERPNext]', NULL, '2026-01-20 10:36:10.965467+00:00', '2026-02-04 02:06:08.617567+00:00', '00000000-0000-0000-0000-000000000000');
+- 分隔用空行，不要用分隔線', 'Line Bot 個人對話使用，包含完整 MCP 工具說明 [需更新：專案/物料/廠商工具已遷移至 ERPNext]', NULL, '2026-01-20 10:36:10.965467+00:00', '2026-02-04 02:06:08.617567+00:00', 'fe530f72-f9f5-434c-ba0b-8bc2d6485ca3');
 INSERT INTO public.ai_prompts (id, name, display_name, category, content, description, variables, created_at, updated_at, tenant_id) VALUES ('55f53d2f-d898-40fa-8c5a-fe2bebae7cd5', 'presentation-designer', '簡報設計師', 'internal', '你是專業的簡報視覺設計師。根據提供的內容、對象和場景，設計出最適合的簡報視覺規格。
 
 ## 你的任務
@@ -482,7 +482,7 @@ INSERT INTO public.ai_prompts (id, name, display_name, category, content, descri
 3. image_keyword 使用英文，用於搜尋配圖
 4. 第一頁必須是 type="title"
 5. 考慮實際閱讀環境調整字體大小
-6. 只輸出 JSON，不要任何解釋', '簡報視覺設計：根據內容、對象、場景輸出 design_json', NULL, '2026-01-22 15:31:50.560606+00:00', '2026-01-22 15:31:50.560606+00:00', '00000000-0000-0000-0000-000000000000');
+6. 只輸出 JSON，不要任何解釋', '簡報視覺設計：根據內容、對象、場景輸出 design_json', NULL, '2026-01-22 15:31:50.560606+00:00', '2026-01-22 15:31:50.560606+00:00', 'fe530f72-f9f5-434c-ba0b-8bc2d6485ca3');
 INSERT INTO public.ai_prompts (id, name, display_name, category, content, description, variables, created_at, updated_at, tenant_id) VALUES ('59b0bdaf-3953-4fa5-860e-2a14ccdd2f2c', 'summarizer', '對話摘要助手', 'internal', '你是對話摘要助手。請將以下對話歷史壓縮成結構化摘要，讓 AI 在後續對話中能快速理解上下文。
 
 ## 輸出格式
@@ -514,10 +514,10 @@ INSERT INTO public.ai_prompts (id, name, display_name, category, content, descri
 - 保持簡潔，但不要遺漏重要細節
 - 使用繁體中文
 - 摘要應該讓 AI 讀完後能無縫接續對話
-- 不要加入你自己的判斷或建議，只整理對話內容', '內部使用：對話壓縮摘要產生', NULL, '2026-01-20 06:54:51.655991+00:00', '2026-01-20 06:54:51.655991+00:00', '00000000-0000-0000-0000-000000000000');
-INSERT INTO public.ai_prompts (id, name, display_name, category, content, description, variables, created_at, updated_at, tenant_id) VALUES ('1effb046-db2b-46be-ac93-311e74f993c5', 'system-task', '系統任務', 'task', '你是系統內部任務處理程式。請根據指令執行任務，輸出結構化的結果。', '系統排程任務使用', NULL, '2026-01-20 06:54:51.655991+00:00', '2026-01-20 06:54:51.655991+00:00', '00000000-0000-0000-0000-000000000000');
-INSERT INTO public.ai_prompts (id, name, display_name, category, content, description, variables, created_at, updated_at, tenant_id) VALUES ('50d1a901-efcb-431d-a33a-2cc1d16cac1c', 'web-chat-code', '程式碼助手', 'system', '你是一個專業的程式設計助手。請用繁體中文回答問題，提供清晰的程式碼範例和解釋。回答要精確且有條理。', '程式碼相關問題使用的 system prompt', NULL, '2026-01-20 06:54:51.655991+00:00', '2026-01-20 06:54:51.655991+00:00', '00000000-0000-0000-0000-000000000000');
-INSERT INTO public.ai_prompts (id, name, display_name, category, content, description, variables, created_at, updated_at, tenant_id) VALUES ('c9c21e57-08e5-4ae7-bd9b-96f6690674b0', 'web-chat-default', '預設對話助手', 'system', '你是一個友善的 AI 助手。請用繁體中文回答問題，回答要簡潔明瞭。', '前端對話預設使用的 system prompt', NULL, '2026-01-20 06:54:51.655991+00:00', '2026-01-20 06:54:51.655991+00:00', '00000000-0000-0000-0000-000000000000');
+- 不要加入你自己的判斷或建議，只整理對話內容', '內部使用：對話壓縮摘要產生', NULL, '2026-01-20 06:54:51.655991+00:00', '2026-01-20 06:54:51.655991+00:00', 'fe530f72-f9f5-434c-ba0b-8bc2d6485ca3');
+INSERT INTO public.ai_prompts (id, name, display_name, category, content, description, variables, created_at, updated_at, tenant_id) VALUES ('1effb046-db2b-46be-ac93-311e74f993c5', 'system-task', '系統任務', 'task', '你是系統內部任務處理程式。請根據指令執行任務，輸出結構化的結果。', '系統排程任務使用', NULL, '2026-01-20 06:54:51.655991+00:00', '2026-01-20 06:54:51.655991+00:00', 'fe530f72-f9f5-434c-ba0b-8bc2d6485ca3');
+INSERT INTO public.ai_prompts (id, name, display_name, category, content, description, variables, created_at, updated_at, tenant_id) VALUES ('50d1a901-efcb-431d-a33a-2cc1d16cac1c', 'web-chat-code', '程式碼助手', 'system', '你是一個專業的程式設計助手。請用繁體中文回答問題，提供清晰的程式碼範例和解釋。回答要精確且有條理。', '程式碼相關問題使用的 system prompt', NULL, '2026-01-20 06:54:51.655991+00:00', '2026-01-20 06:54:51.655991+00:00', 'fe530f72-f9f5-434c-ba0b-8bc2d6485ca3');
+INSERT INTO public.ai_prompts (id, name, display_name, category, content, description, variables, created_at, updated_at, tenant_id) VALUES ('c9c21e57-08e5-4ae7-bd9b-96f6690674b0', 'web-chat-default', '預設對話助手', 'system', '你是一個友善的 AI 助手。請用繁體中文回答問題，回答要簡潔明瞭。', '前端對話預設使用的 system prompt', NULL, '2026-01-20 06:54:51.655991+00:00', '2026-01-20 06:54:51.655991+00:00', 'fe530f72-f9f5-434c-ba0b-8bc2d6485ca3');
 INSERT INTO public.ai_prompts (id, name, display_name, category, content, description, variables, created_at, updated_at, tenant_id) VALUES ('8ec1a6fb-1903-4414-9919-e38a34ca2f11', 'web-search', '網路搜尋助手', 'task', '你是一個網路搜尋助手。你的任務是：
 
 1. 根據使用者的查詢，使用 WebSearch 工具搜尋最新的相關資訊
@@ -541,15 +541,15 @@ INSERT INTO public.ai_prompts (id, name, display_name, category, content, descri
 - 優先呈現最新的資訊
 - 如果搜尋結果有矛盾，請指出不同來源的說法
 - 對於時效性資訊，請標註資料的日期
-- 使用繁體中文回應', '使用 WebSearch 工具搜尋網路資訊並總結回報', NULL, '2026-01-20 06:54:51.655991+00:00', '2026-01-20 06:54:51.655991+00:00', '00000000-0000-0000-0000-000000000000');
+- 使用繁體中文回應', '使用 WebSearch 工具搜尋網路資訊並總結回報', NULL, '2026-01-20 06:54:51.655991+00:00', '2026-01-20 06:54:51.655991+00:00', 'fe530f72-f9f5-434c-ba0b-8bc2d6485ca3');
 
 -- 3. AI Agents
-INSERT INTO public.ai_agents (id, name, display_name, description, model, system_prompt_id, is_active, settings, created_at, updated_at, tools, tenant_id) VALUES ('650ccce2-8c14-4061-868f-2d7c0d057551', 'linebot-group', 'Line 群組助理', 'Line Bot 群組對話 Agent', 'claude-haiku', '11ccdb48-87cd-472d-81ec-ca6a59914cae', true, NULL, '2026-01-20 10:37:38.153336+00:00', '2026-01-20 10:37:38.153336+00:00', '["WebSearch", "WebFetch"]', '00000000-0000-0000-0000-000000000000');
-INSERT INTO public.ai_agents (id, name, display_name, description, model, system_prompt_id, is_active, settings, created_at, updated_at, tools, tenant_id) VALUES ('acb8e5bd-287f-415a-a337-f8d981cb3a16', 'linebot-personal', 'Line 個人助理', 'Line Bot 個人對話 Agent', 'claude-sonnet', '6de3351b-ad98-4c5d-afaa-da0f928a58b2', true, NULL, '2026-01-20 10:37:38.140538+00:00', '2026-01-20 10:37:38.140538+00:00', '["WebSearch", "WebFetch"]', '00000000-0000-0000-0000-000000000000');
-INSERT INTO public.ai_agents (id, name, display_name, description, model, system_prompt_id, is_active, settings, created_at, updated_at, tools, tenant_id) VALUES ('2b58c0e6-6b4a-4ba5-a86f-bf85f16db8b1', 'presentation-designer', '簡報設計師', '根據內容、對象、場景設計簡報視覺規格，輸出 design_json', 'claude-sonnet', '55f53d2f-d898-40fa-8c5a-fe2bebae7cd5', true, NULL, '2026-01-22 15:31:50.560606+00:00', '2026-01-22 15:31:50.560606+00:00', '[]', '00000000-0000-0000-0000-000000000000');
-INSERT INTO public.ai_agents (id, name, display_name, description, model, system_prompt_id, is_active, settings, created_at, updated_at, tools, tenant_id) VALUES ('2407e36c-d216-4f72-811e-fa136c8e3d7b', 'system-scheduler', '系統排程', '系統排程任務 Agent', 'claude-haiku', '1effb046-db2b-46be-ac93-311e74f993c5', true, NULL, '2026-01-20 06:54:51.655991+00:00', '2026-01-20 06:54:51.655991+00:00', '[]', '00000000-0000-0000-0000-000000000000');
-INSERT INTO public.ai_agents (id, name, display_name, description, model, system_prompt_id, is_active, settings, created_at, updated_at, tools, tenant_id) VALUES ('a29cc6e3-d6cd-4ba6-a69f-bba61e0c853f', 'web-chat-code', '程式碼助手', '程式碼相關問題 Agent', 'claude-sonnet', '50d1a901-efcb-431d-a33a-2cc1d16cac1c', true, NULL, '2026-01-20 06:54:51.655991+00:00', '2026-01-20 06:54:51.655991+00:00', '[]', '00000000-0000-0000-0000-000000000000');
-INSERT INTO public.ai_agents (id, name, display_name, description, model, system_prompt_id, is_active, settings, created_at, updated_at, tools, tenant_id) VALUES ('2290593f-bc90-46ed-a316-bdd6cba2ddfc', 'web-chat-default', '預設對話', '前端對話預設 Agent', 'claude-sonnet', 'c9c21e57-08e5-4ae7-bd9b-96f6690674b0', true, NULL, '2026-01-20 06:54:51.655991+00:00', '2026-01-20 06:54:51.655991+00:00', '[]', '00000000-0000-0000-0000-000000000000');
-INSERT INTO public.ai_agents (id, name, display_name, description, model, system_prompt_id, is_active, settings, created_at, updated_at, tools, tenant_id) VALUES ('0c7a9b8f-b936-454d-a5aa-f1589a288338', 'web-search', '網路搜尋', NULL, 'claude-sonnet', '8ec1a6fb-1903-4414-9919-e38a34ca2f11', true, NULL, '2026-01-20 06:54:51.655991+00:00', '2026-01-20 06:54:51.655991+00:00', '["WebSearch"]', '00000000-0000-0000-0000-000000000000');
+INSERT INTO public.ai_agents (id, name, display_name, description, model, system_prompt_id, is_active, settings, created_at, updated_at, tools, tenant_id) VALUES ('650ccce2-8c14-4061-868f-2d7c0d057551', 'linebot-group', 'Line 群組助理', 'Line Bot 群組對話 Agent', 'claude-haiku', '11ccdb48-87cd-472d-81ec-ca6a59914cae', true, NULL, '2026-01-20 10:37:38.153336+00:00', '2026-01-20 10:37:38.153336+00:00', '["WebSearch", "WebFetch"]', 'fe530f72-f9f5-434c-ba0b-8bc2d6485ca3');
+INSERT INTO public.ai_agents (id, name, display_name, description, model, system_prompt_id, is_active, settings, created_at, updated_at, tools, tenant_id) VALUES ('acb8e5bd-287f-415a-a337-f8d981cb3a16', 'linebot-personal', 'Line 個人助理', 'Line Bot 個人對話 Agent', 'claude-sonnet', '6de3351b-ad98-4c5d-afaa-da0f928a58b2', true, NULL, '2026-01-20 10:37:38.140538+00:00', '2026-01-20 10:37:38.140538+00:00', '["WebSearch", "WebFetch"]', 'fe530f72-f9f5-434c-ba0b-8bc2d6485ca3');
+INSERT INTO public.ai_agents (id, name, display_name, description, model, system_prompt_id, is_active, settings, created_at, updated_at, tools, tenant_id) VALUES ('2b58c0e6-6b4a-4ba5-a86f-bf85f16db8b1', 'presentation-designer', '簡報設計師', '根據內容、對象、場景設計簡報視覺規格，輸出 design_json', 'claude-sonnet', '55f53d2f-d898-40fa-8c5a-fe2bebae7cd5', true, NULL, '2026-01-22 15:31:50.560606+00:00', '2026-01-22 15:31:50.560606+00:00', '[]', 'fe530f72-f9f5-434c-ba0b-8bc2d6485ca3');
+INSERT INTO public.ai_agents (id, name, display_name, description, model, system_prompt_id, is_active, settings, created_at, updated_at, tools, tenant_id) VALUES ('2407e36c-d216-4f72-811e-fa136c8e3d7b', 'system-scheduler', '系統排程', '系統排程任務 Agent', 'claude-haiku', '1effb046-db2b-46be-ac93-311e74f993c5', true, NULL, '2026-01-20 06:54:51.655991+00:00', '2026-01-20 06:54:51.655991+00:00', '[]', 'fe530f72-f9f5-434c-ba0b-8bc2d6485ca3');
+INSERT INTO public.ai_agents (id, name, display_name, description, model, system_prompt_id, is_active, settings, created_at, updated_at, tools, tenant_id) VALUES ('a29cc6e3-d6cd-4ba6-a69f-bba61e0c853f', 'web-chat-code', '程式碼助手', '程式碼相關問題 Agent', 'claude-sonnet', '50d1a901-efcb-431d-a33a-2cc1d16cac1c', true, NULL, '2026-01-20 06:54:51.655991+00:00', '2026-01-20 06:54:51.655991+00:00', '[]', 'fe530f72-f9f5-434c-ba0b-8bc2d6485ca3');
+INSERT INTO public.ai_agents (id, name, display_name, description, model, system_prompt_id, is_active, settings, created_at, updated_at, tools, tenant_id) VALUES ('2290593f-bc90-46ed-a316-bdd6cba2ddfc', 'web-chat-default', '預設對話', '前端對話預設 Agent', 'claude-sonnet', 'c9c21e57-08e5-4ae7-bd9b-96f6690674b0', true, NULL, '2026-01-20 06:54:51.655991+00:00', '2026-01-20 06:54:51.655991+00:00', '[]', 'fe530f72-f9f5-434c-ba0b-8bc2d6485ca3');
+INSERT INTO public.ai_agents (id, name, display_name, description, model, system_prompt_id, is_active, settings, created_at, updated_at, tools, tenant_id) VALUES ('0c7a9b8f-b936-454d-a5aa-f1589a288338', 'web-search', '網路搜尋', NULL, 'claude-sonnet', '8ec1a6fb-1903-4414-9919-e38a34ca2f11', true, NULL, '2026-01-20 06:54:51.655991+00:00', '2026-01-20 06:54:51.655991+00:00', '["WebSearch"]', 'fe530f72-f9f5-434c-ba0b-8bc2d6485ca3');
 
 -- 4. 預設平台管理員
