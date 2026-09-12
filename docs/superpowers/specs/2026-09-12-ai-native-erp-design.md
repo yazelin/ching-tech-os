@@ -77,7 +77,7 @@
 - `extract_party_from_document(file_path)`、`extract_purchase_order_from_document(file_path)`：bot 收到名片照片、詢價單／報價單 PDF 時，agent 先用既有的讀圖／`convert_pdf_to_images` 看內容，再呼叫這兩個工具把結構化欄位丟進來做「草稿」（回傳含候選重複主檔的比對結果），人確認後 agent 再呼叫 `create_*`。工具本身不呼叫模型，擷取由 agent 完成；這樣不多一條模型呼叫鏈，也讓 AI Log 看得到擷取過程。
 
 **摘要**
-- `summarize_party(party_id)`、`summarize_item(item_id)`：把關聯資料組成一段給 agent 的上下文（不是模型生成，是聚合），供 agent 回答「鴻佰最近有什麼往來」。
+- `summarize_party(party_id)`、`summarize_item(item_id)`：把關聯資料組成一段給 agent 的上下文（不是模型生成，是聚合），供 agent 回答「丙丁最近有什麼往來」。
 
 每個工具回傳都含 `audit_id`，agent 回覆可引用。
 

@@ -69,9 +69,9 @@ test('ctos:// 格式解析', () => {
 });
 
 test('shared:// 格式解析', () => {
-  const result = PathUtils.parse('shared://亦達光學/doc.pdf');
+  const result = PathUtils.parse('shared://甲乙光學/doc.pdf');
   assertEqual(result.zone, 'shared');
-  assertEqual(result.path, '亦達光學/doc.pdf');
+  assertEqual(result.path, '甲乙光學/doc.pdf');
 });
 
 test('temp:// 格式解析', () => {
@@ -209,8 +209,8 @@ test('ctos:// 轉換為 API URL', () => {
 });
 
 test('shared:// 轉換為 API URL', () => {
-  const result = PathUtils.toApiUrl('shared://亦達光學/doc.pdf');
-  assertEqual(result, '/api/files/shared/亦達光學/doc.pdf');
+  const result = PathUtils.toApiUrl('shared://甲乙光學/doc.pdf');
+  assertEqual(result, '/api/files/shared/甲乙光學/doc.pdf');
 });
 
 test('舊格式轉換為 API URL', () => {

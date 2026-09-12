@@ -71,7 +71,7 @@ def upgrade() -> None:
         _uuid_pk(),
         sa.Column("name", sa.Text(), nullable=False),
         sa.Column("short_name", sa.Text(), nullable=True),
-        # 模糊比對用的別名（「鴻佰」「鴻佰科技」），gin 索引
+        # 模糊比對用的別名（「丙丁」「丙丁科技」），gin 索引
         sa.Column(
             "aliases",
             ARRAY(sa.Text()),

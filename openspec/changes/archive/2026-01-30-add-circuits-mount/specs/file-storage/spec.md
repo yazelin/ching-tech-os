@@ -12,11 +12,11 @@ path_manager SHALL 支援 `shared://` 協議下的多個子來源對應到不同
 
 #### Scenario: 解析 projects 子來源路徑
 - **GIVEN** path_manager 設定了 projects 子來源
-- **WHEN** 解析 `shared://projects/亦達光學/layout.pdf`
-- **THEN** 對應到本機路徑 `/mnt/nas/projects/亦達光學/layout.pdf`
+- **WHEN** 解析 `shared://projects/甲乙光學/layout.pdf`
+- **THEN** 對應到本機路徑 `/mnt/nas/projects/甲乙光學/layout.pdf`
 
 #### Scenario: 向後相容舊格式
-- **GIVEN** 資料庫中存在舊格式 `shared://亦達光學/layout.pdf`（無子來源前綴）
+- **GIVEN** 資料庫中存在舊格式 `shared://甲乙光學/layout.pdf`（無子來源前綴）
 - **WHEN** 解析該路徑
-- **THEN** 第一段 `亦達光學` 不是已知子來源名稱
-- **AND** fallback 對應到 `/mnt/nas/projects/亦達光學/layout.pdf`
+- **THEN** 第一段 `甲乙光學` 不是已知子來源名稱
+- **AND** fallback 對應到 `/mnt/nas/projects/甲乙光學/layout.pdf`

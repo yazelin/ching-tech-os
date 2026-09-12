@@ -154,7 +154,7 @@ def convert_pdf_to_images(
 ```
 
 **工作流程**：
-1. 用戶：「把亦達專案的 layout.pdf 轉成圖片」
+1. 用戶：「把甲乙專案的 layout.pdf 轉成圖片」
 2. AI 呼叫 `get_project_attachments` 取得附件列表和路徑
 3. AI 使用路徑呼叫 `convert_pdf_to_images(pdf_path="nas://...")`
 4. 轉換完成後用 `prepare_file_message` 發送
@@ -168,7 +168,7 @@ def convert_pdf_to_images(
 **路徑轉換規則**：
 - `nas://linebot/files/...` → `/mnt/nas/ctos/linebot/files/...`
 - `nas://projects/attachments/...` → `/mnt/nas/ctos/projects/attachments/...`
-- 相對路徑（如 `亦達光學/xxx.pdf`）→ `/mnt/nas/projects/亦達光學/xxx.pdf`
+- 相對路徑（如 `甲乙光學/xxx.pdf`）→ `/mnt/nas/projects/甲乙光學/xxx.pdf`
 
 **安全檢查**：擴展為允許 `/mnt/nas/` 下的所有路徑（原本只允許 `/mnt/nas/projects/`）
 

@@ -22,7 +22,7 @@ metadata:
 - `input` 必須是 JSON 物件字串。
 
 【用法範例】
-- `run_skill_script(skill="file-manager", script="search_nas_files", input="{\"keywords\":\"亦達,layout\",\"file_types\":\"pdf\"}")`
+- `run_skill_script(skill="file-manager", script="search_nas_files", input="{\"keywords\":\"甲乙,layout\",\"file_types\":\"pdf\"}")`
 - `run_skill_script(skill="file-manager", script="get_nas_file_info", input="{\"file_path\":\"shared://projects/demo.pdf\"}")`
 - `run_skill_script(skill="file-manager", script="prepare_file_message", input="{\"file_path\":\"shared://projects/demo.pdf\"}")`
 - `run_skill_script(skill="file-manager", script="convert_pdf_to_images", input="{\"pdf_path\":\"ctos://knowledge/demo.pdf\",\"pages\":\"1-3\"}")`

@@ -126,11 +126,11 @@ async def get_project_attachments(
 
 ### 情境 1：用戶在 Line 發送圖片並要求加入專案
 ```
-用戶: [發送圖片] 把這張圖加到亦達專案的附件
+用戶: [發送圖片] 把這張圖加到甲乙專案的附件
 
 AI 流程:
 1. get_message_attachments(line_user_id=..., days=1) → 取得 NAS 路徑
-2. query_project(keyword="亦達") → 取得專案 ID
+2. query_project(keyword="甲乙") → 取得專案 ID
 3. add_project_attachment(project_id=..., nas_path=..., description="用戶上傳")
 ```
 

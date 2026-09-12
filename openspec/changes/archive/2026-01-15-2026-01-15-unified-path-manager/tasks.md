@@ -112,10 +112,10 @@
 | 輸入格式 | 預期 Zone | 預期路徑 |
 |---------|----------|---------|
 | `ctos://linebot/files/xxx.pdf` | CTOS | `linebot/files/xxx.pdf` |
-| `shared://亦達光學/doc.pdf` | SHARED | `亦達光學/doc.pdf` |
+| `shared://甲乙光學/doc.pdf` | SHARED | `甲乙光學/doc.pdf` |
 | `temp://abc123/page1.png` | TEMP | `abc123/page1.png` |
 | `local://knowledge/assets/x.jpg` | LOCAL | `knowledge/assets/x.jpg` |
-| `nas://亦達光學/xxx.pdf`（舊格式） | SHARED | `亦達光學/xxx.pdf` |
+| `nas://甲乙光學/xxx.pdf`（舊格式） | SHARED | `甲乙光學/xxx.pdf` |
 | `/mnt/nas/projects/xxx.pdf`（舊格式） | SHARED | `xxx.pdf` |
 | `/mnt/nas/ctos/xxx.pdf`（舊格式） | CTOS | `xxx.pdf` |
 | `/tmp/ctos/xxx.pdf`（舊格式） | TEMP | `xxx.pdf` |

@@ -101,7 +101,7 @@ class TestCheckPathTraversal:
         """正常路徑應通過"""
         # 不應拋出異常
         _check_path_traversal("path/to/file.txt")
-        _check_path_traversal("亦達光學/文件/report.pdf")
+        _check_path_traversal("甲乙光學/文件/report.pdf")
 
     def test_double_dot_blocked(self):
         """.. 應被阻擋"""
@@ -138,8 +138,8 @@ class TestGetFilePath:
 
     def test_shared_path(self):
         """SHARED zone 路徑計算"""
-        result = _get_file_path(StorageZone.SHARED, "亦達光學/doc.pdf")
-        assert str(result) == "/mnt/nas/projects/亦達光學/doc.pdf"
+        result = _get_file_path(StorageZone.SHARED, "甲乙光學/doc.pdf")
+        assert str(result) == "/mnt/nas/projects/甲乙光學/doc.pdf"
 
     def test_temp_path(self):
         """TEMP zone 路徑計算"""

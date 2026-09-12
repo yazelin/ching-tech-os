@@ -12,9 +12,9 @@
 範例：
 - ctos://knowledge/kb-001/file.pdf
 - ctos://linebot/groups/C123/images/2026-01-05/abc.jpg
-- shared://projects/亦達光學/layout.pdf
+- shared://projects/甲乙光學/layout.pdf
 - shared://circuits/線路圖A/xxx.dwg
-- shared://亦達光學/layout.pdf（舊格式，fallback 到 projects）
+- shared://甲乙光學/layout.pdf（舊格式，fallback 到 projects）
 - temp://linebot/msg123.pdf
 - local://knowledge/images/kb-001-demo.png
 - nas://home/photos/image.jpg （檔案管理器瀏覽的 NAS 共享）
@@ -279,9 +279,9 @@ class PathManager:
         """解析 shared zone 子來源路徑到實際檔案系統路徑
 
         支援格式：
-        - projects/亦達光學/layout.pdf → /mnt/nas/projects/亦達光學/layout.pdf
+        - projects/甲乙光學/layout.pdf → /mnt/nas/projects/甲乙光學/layout.pdf
         - circuits/線路圖A/xxx.dwg → /mnt/nas/circuits/線路圖A/xxx.dwg
-        - 亦達光學/layout.pdf → /mnt/nas/projects/亦達光學/layout.pdf（向後相容）
+        - 甲乙光學/layout.pdf → /mnt/nas/projects/甲乙光學/layout.pdf（向後相容）
         """
         # 檢查第一段是否為已知子來源
         first_segment = relative_path.split("/", 1)[0]

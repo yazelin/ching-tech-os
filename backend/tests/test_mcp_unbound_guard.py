@@ -179,7 +179,7 @@ async def test_get_project_unbound_denied_and_service_not_awaited(
         AsyncMock(side_effect=AssertionError("service 不該被呼叫")),
     )
 
-    result = await project_tools.get_project(name="亦達自動化", ctos_user_id=None)
+    result = await project_tools.get_project(name="甲乙自動化", ctos_user_id=None)
 
     assert result == {"ok": False, "error": permissions_module.BOUND_USER_REQUIRED_MESSAGE}
     project_tools._resolve_project.assert_not_awaited()
@@ -196,7 +196,7 @@ async def test_list_tasks_unbound_denied_and_service_not_awaited(
         AsyncMock(side_effect=AssertionError("service 不該被呼叫")),
     )
 
-    result = await project_tools.list_tasks(project="亦達自動化", ctos_user_id=None)
+    result = await project_tools.list_tasks(project="甲乙自動化", ctos_user_id=None)
 
     assert result == {"ok": False, "error": permissions_module.BOUND_USER_REQUIRED_MESSAGE}
     project_tools._resolve_project.assert_not_awaited()
@@ -213,7 +213,7 @@ async def test_find_party_unbound_denied_and_service_not_awaited(
         AsyncMock(side_effect=AssertionError("service 不該被呼叫")),
     )
 
-    result = await erp_tools.find_party(query="鴻佰", ctos_user_id=None)
+    result = await erp_tools.find_party(query="丙丁", ctos_user_id=None)
 
     assert result == {"ok": False, "error": permissions_module.BOUND_USER_REQUIRED_MESSAGE}
     erp_tools.erp_core.find_parties.assert_not_awaited()

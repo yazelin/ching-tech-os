@@ -459,7 +459,7 @@ result = await execute_tool("generate_md2doc", {
 ```bash
 # 確保 .mcp.json 已設定
 claude "幫我搜尋知識庫中關於水切爐的資料"
-claude "找一下亦達 layout 的 pdf"
+claude "找一下甲乙 layout 的 pdf"
 claude "畫一隻可愛的貓"  # AI 圖片生成（需設定 nanobanana）
 ```
 

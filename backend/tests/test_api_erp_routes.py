@@ -44,8 +44,8 @@ def _session(role: str = "user", user_id: int = 2) -> SessionData:
 def _party_detail(**overrides) -> dict:
     base = {
         "id": PARTY_ID,
-        "name": "鴻佰科技",
-        "short_name": "鴻佰",
+        "name": "丙丁科技",
+        "short_name": "丙丁",
         "aliases": [],
         "is_supplier": True,
         "is_customer": False,
@@ -98,7 +98,7 @@ def _po_detail(**overrides) -> dict:
         "id": PO_ID,
         "po_no": "PO-202609-001",
         "supplier_id": PARTY_ID,
-        "supplier_name": "鴻佰科技",
+        "supplier_name": "丙丁科技",
         "project_id": None,
         "project_name": None,
         "status": "ordered",
@@ -291,7 +291,7 @@ async def test_list_parties(monkeypatch) -> None:
                 "items": [
                     {
                         "id": PARTY_ID,
-                        "name": "鴻佰科技",
+                        "name": "丙丁科技",
                         "is_supplier": True,
                         "is_customer": False,
                         "created_at": NOW,
@@ -303,7 +303,7 @@ async def test_list_parties(monkeypatch) -> None:
         ),
     )
     async with _client(_make_app()) as client:
-        resp = await client.get("/api/parties?q=鴻佰&role=supplier")
+        resp = await client.get("/api/parties?q=丙丁&role=supplier")
     assert resp.status_code == 200
     assert resp.json()["total"] == 1
 
@@ -344,9 +344,9 @@ async def test_create_party(monkeypatch) -> None:
         AsyncMock(return_value=_party_detail()),
     )
     async with _client(_make_app()) as client:
-        resp = await client.post("/api/parties", json={"name": "鴻佰科技"})
+        resp = await client.post("/api/parties", json={"name": "丙丁科技"})
     assert resp.status_code == 201
-    assert resp.json()["name"] == "鴻佰科技"
+    assert resp.json()["name"] == "丙丁科技"
     # F2：寫入端點要把稽核 id 回給呼叫端
     assert resp.json()["audit_id"] == str(AUDIT_ID)
 
@@ -359,7 +359,7 @@ async def test_create_party_service_error(monkeypatch) -> None:
         AsyncMock(side_effect=erp_core.InvalidOperationError("壞了")),
     )
     async with _client(_make_app()) as client:
-        resp = await client.post("/api/parties", json={"name": "鴻佰"})
+        resp = await client.post("/api/parties", json={"name": "丙丁"})
     assert resp.status_code == 400
     assert resp.json()["detail"] == "壞了"
 

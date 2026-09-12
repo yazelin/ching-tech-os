@@ -32,8 +32,8 @@ USERS = [
 
 DETAIL = {
     "id": PROJECT_ID,
-    "name": "亦達自動化",
-    "customer": "亦達",
+    "name": "甲乙自動化",
+    "customer": "甲乙",
     "status": "active",
     "progress": 50,
     "member_count": 2,
@@ -141,13 +141,13 @@ def test_clean_serializes_uuid_and_dates() -> None:
 
 def test_fail_maps_ambiguous_to_need_confirmation() -> None:
     err = project_tools.AmbiguousError(
-        "專案", "亦達", [{"id": PROJECT_ID, "name": "亦達自動化"}]
+        "專案", "甲乙", [{"id": PROJECT_ID, "name": "甲乙自動化"}]
     )
     result = project_tools._fail(err)
     assert result["ok"] is False
     assert result["need_confirmation"] is True
     assert result["entity"] == "專案"
-    assert result["query"] == "亦達"
+    assert result["query"] == "甲乙"
     assert result["candidates"][0]["id"] == str(PROJECT_ID)
 
 
@@ -204,11 +204,11 @@ async def test_resolve_project_uuid_not_in_db_is_not_found(monkeypatch) -> None:
 @pytest.mark.asyncio
 async def test_resolve_project_by_name_uses_list_projects(monkeypatch) -> None:
     listed = AsyncMock(
-        return_value={"items": [{"id": PROJECT_ID, "name": "亦達自動化"}], "total": 1}
+        return_value={"items": [{"id": PROJECT_ID, "name": "甲乙自動化"}], "total": 1}
     )
     monkeypatch.setattr(project_service, "list_projects", listed)
-    assert await project_tools._resolve_project("亦達") == PROJECT_ID
-    assert listed.await_args.kwargs["q"] == "亦達"
+    assert await project_tools._resolve_project("甲乙") == PROJECT_ID
+    assert listed.await_args.kwargs["q"] == "甲乙"
 
 
 @pytest.mark.asyncio
@@ -219,14 +219,14 @@ async def test_resolve_project_prefers_exact_name(monkeypatch) -> None:
         AsyncMock(
             return_value={
                 "items": [
-                    {"id": OTHER_PROJECT_ID, "name": "亦達自動化二期"},
-                    {"id": PROJECT_ID, "name": "亦達自動化"},
+                    {"id": OTHER_PROJECT_ID, "name": "甲乙自動化二期"},
+                    {"id": PROJECT_ID, "name": "甲乙自動化"},
                 ],
                 "total": 2,
             }
         ),
     )
-    assert await project_tools._resolve_project("亦達自動化") == PROJECT_ID
+    assert await project_tools._resolve_project("甲乙自動化") == PROJECT_ID
 
 
 @pytest.mark.asyncio
@@ -237,15 +237,15 @@ async def test_resolve_project_ambiguous(monkeypatch) -> None:
         AsyncMock(
             return_value={
                 "items": [
-                    {"id": PROJECT_ID, "name": "亦達自動化", "status": "active"},
-                    {"id": OTHER_PROJECT_ID, "name": "亦達二期", "status": "active"},
+                    {"id": PROJECT_ID, "name": "甲乙自動化", "status": "active"},
+                    {"id": OTHER_PROJECT_ID, "name": "甲乙二期", "status": "active"},
                 ],
                 "total": 2,
             }
         ),
     )
     with pytest.raises(project_tools.AmbiguousError) as exc:
-        await project_tools._resolve_project("亦達")
+        await project_tools._resolve_project("甲乙")
     assert len(exc.value.candidates) == 2
 
 
@@ -273,15 +273,15 @@ async def test_resolve_project_not_more_when_page_covers_all(monkeypatch) -> Non
         AsyncMock(
             return_value={
                 "items": [
-                    {"id": PROJECT_ID, "name": "亦達自動化"},
-                    {"id": OTHER_PROJECT_ID, "name": "亦達二期"},
+                    {"id": PROJECT_ID, "name": "甲乙自動化"},
+                    {"id": OTHER_PROJECT_ID, "name": "甲乙二期"},
                 ],
                 "total": 2,
             }
         ),
     )
     with pytest.raises(project_tools.AmbiguousError) as exc:
-        await project_tools._resolve_project("亦達")
+        await project_tools._resolve_project("甲乙")
     assert exc.value.more is False
 
 
@@ -350,12 +350,12 @@ async def test_find_project_returns_candidates(monkeypatch) -> None:
         "list_projects",
         AsyncMock(
             return_value={
-                "items": [{"id": PROJECT_ID, "name": "亦達自動化", "status": "active"}],
+                "items": [{"id": PROJECT_ID, "name": "甲乙自動化", "status": "active"}],
                 "total": 1,
             }
         ),
     )
-    result = await project_tools.find_project("亦達", ctos_user_id=7)
+    result = await project_tools.find_project("甲乙", ctos_user_id=7)
     assert result["ok"] is True
     assert result["count"] == 1
     assert result["candidates"][0]["id"] == str(PROJECT_ID)
@@ -365,7 +365,7 @@ async def test_find_project_returns_candidates(monkeypatch) -> None:
 async def test_find_project_rejects_bad_status(monkeypatch) -> None:
     listed = AsyncMock()
     monkeypatch.setattr(project_service, "list_projects", listed)
-    result = await project_tools.find_project("亦達", status="ongoing", ctos_user_id=7)
+    result = await project_tools.find_project("甲乙", status="ongoing", ctos_user_id=7)
     assert result["ok"] is False
     assert "status" in result["error"]
     listed.assert_not_awaited()
@@ -389,14 +389,14 @@ async def test_get_project_by_name_ambiguous(monkeypatch) -> None:
         AsyncMock(
             return_value={
                 "items": [
-                    {"id": PROJECT_ID, "name": "亦達自動化"},
-                    {"id": OTHER_PROJECT_ID, "name": "亦達二期"},
+                    {"id": PROJECT_ID, "name": "甲乙自動化"},
+                    {"id": OTHER_PROJECT_ID, "name": "甲乙二期"},
                 ],
                 "total": 2,
             }
         ),
     )
-    result = await project_tools.get_project(name="亦達", ctos_user_id=7)
+    result = await project_tools.get_project(name="甲乙", ctos_user_id=7)
     assert result["need_confirmation"] is True
     assert len(result["candidates"]) == 2
 
@@ -426,7 +426,7 @@ async def test_list_overdue_milestones(monkeypatch) -> None:
                 "overdue_milestones": [
                     {
                         "project_id": PROJECT_ID,
-                        "project_name": "亦達自動化",
+                        "project_name": "甲乙自動化",
                         "milestone_id": MILESTONE_ID,
                         "name": "出機",
                         "due_date": date(2026, 9, 1),
@@ -895,7 +895,7 @@ def test_module_registry_loads_project_tools() -> None:
 
 
 _MINIMAL_CALLS: list[tuple[str, tuple, dict]] = [
-    ("find_project", ("亦達",), {}),
+    ("find_project", ("甲乙",), {}),
     ("get_project", (), {"project_id": str(PROJECT_ID)}),
     ("list_overdue_milestones", (), {}),
     ("list_tasks", (str(PROJECT_ID),), {}),
@@ -982,9 +982,9 @@ async def test_service_errors_become_return_values(monkeypatch) -> None:
     monkeypatch.setattr(
         project_service, "get_summary", AsyncMock(side_effect=RuntimeError("boom"))
     )
-    assert (await project_tools.find_project("亦達", ctos_user_id=7))["ok"] is False
+    assert (await project_tools.find_project("甲乙", ctos_user_id=7))["ok"] is False
     assert (await project_tools.list_overdue_milestones(ctos_user_id=7))["ok"] is False
-    assert (await project_tools.list_tasks("亦達", ctos_user_id=7))["ok"] is False
+    assert (await project_tools.list_tasks("甲乙", ctos_user_id=7))["ok"] is False
 
 
 @pytest.mark.asyncio
@@ -1020,7 +1020,7 @@ async def test_list_tasks_filters_by_display_name(monkeypatch) -> None:
     _detail(monkeypatch)
     result = await project_tools.list_tasks(str(PROJECT_ID), assignee="阿明", ctos_user_id=7)
     assert [t["title"] for t in result["tasks"]] == ["現場試車"]
-    assert result["project_name"] == "亦達自動化"
+    assert result["project_name"] == "甲乙自動化"
 
 
 @pytest.mark.asyncio

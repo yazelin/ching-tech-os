@@ -262,7 +262,7 @@ async def update_party(
     Args:
         party_id: 往來對象 UUID
         name: 沒有 id 時用名稱解析
-        fields: 要改的欄位，例如 `{"payment_terms": "月結 60 天", "aliases": ["鴻佰"]}`
+        fields: 要改的欄位，例如 `{"payment_terms": "月結 60 天", "aliases": ["丙丁"]}`
         ctos_user_id: CTOS 用戶 ID
     """
     guard = await _guard("update_party", ctos_user_id)
