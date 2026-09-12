@@ -4,9 +4,12 @@
 """
 
 import os
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import StreamingResponse
 import httpx
+
+from ching_tech_os.models.auth import SessionData
+from ching_tech_os.services.permissions import require_app_permission
 
 router = APIRouter(tags=["nvr"])
 
@@ -26,8 +29,17 @@ def _get_client() -> httpx.AsyncClient:
 
 
 @router.get("/snapshot/{channel}")
-async def get_snapshot(channel: int):
+async def get_snapshot(
+    channel: int,
+    session: SessionData = Depends(
+        require_app_permission("nvr-viewer", allow_query_token=True)
+    ),
+):
     """取得指定頻道的即時快照。
+
+    需要「監控畫面」（nvr-viewer）App 權限。
+    這支是給 <img src> 用的，無法帶 Authorization header，
+    所以 token 允許放在 query parameter（`?token=`）。
 
     Args:
         channel: 頻道號碼 (1-16)
