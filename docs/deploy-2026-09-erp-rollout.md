@@ -26,6 +26,18 @@ yazelin 會照著這份跑，他不會知道哪幾行是舊的。每次 cherry-p
 5. 第 5 節「會打斷誰」——特別是**有沒有動權限預設值**（動了就要重新登入）與 CLI／分頁是否要重整。
 6. 改完自己從頭讀一次第 5 節與第 6 節，找有沒有跟新內容矛盾的句子；同一份文件兩處講相反的話比沒寫還糟（2026-09-12 第 125 行「不需要重新登入」在 #219 之後就是錯的，已改）。
 
+## 硬規則：工作目錄、migration、重啟三件必須同一次做完（2026-09-12 起）
+
+**不准拆開執行**：不准「先 `git pull` 備料、之後再 migration、再重啟」。三件由同一個人、同一次登入、一口氣做完，中間不留任何「拉了但沒套」的狀態。2026-09-12 差點拆開（agent 先拉了工作樹，服務還是舊程序），以下是查證出來的三個原因，每一條單獨都足以禁止拆開：
+
+1. **啟動不檢查 schema 版本。** `backend/src/ching_tech_os/main.py` 沒有任何 alembic revision 比對，新程式碼配舊 schema 會靜默起來、health 回 200，要等到有人點往來對象或物料才炸；現場看起來是「昨天還好好的」，最難查。
+2. **systemd unit 的 `ExecStartPre` 會自動跑 `uv run alembic upgrade head`。** 所以工作樹一旦拉到含新 migration 的版本，任何非計畫的重啟（斷電、重開機、OOM、`Restart=on-failure` 觸發、有人手動 restart）都會在沒人看的時候把 migration 與新程式碼一起上線。「拉了不重啟」不是備料，是埋雷。
+3. **舊桌面靜態檔是活的。** `main.py` 用 `StaticFiles` 直接掛 `frontend/js|css|fonts|assets`，`index.html`／`login.html` 每次請求讀檔，`FRONTEND_DIR` 指向工作樹。`git pull` 的當下舊桌面就換成新版，不需要重啟；2026-09-12 就這樣讓 `desktop.js` 的 ERPNext 圖示在 ERP 模組上線前先消失。
+
+選項 A 那句「`alembic current` 仍是 029，不要 upgrade」只對選項 A 成立（那四支不動 schema）；選項 B 動了 030 起的 schema，不能照抄。
+
+對外驗證線上端點一律帶 `/ctos` 前綴（`https://ching-tech.ddns.net/ctos/api/...`）並看 content-type 是不是 `application/json`：不帶前綴會 301 到公司官網回 200 的 HTML，狀態碼是假的。
+
 ## 先看這段：這批裡有四支是安全修補，性質與其他不同
 
 其餘 PR（#192／#194／#196／#198／#202）是新功能，現在不部署只是「功能還沒上」，沒有人在等。下面三支是**關掉現在對外開著的洞**——LINE／Telegram bot 是公開的，任何人加了帳號就能問：
@@ -49,7 +61,7 @@ ssh ct@192.168.11.11
 cd ~/SDD/ching-tech-os && git log --oneline -1          # 應為 0b982f1
 git fetch origin && git checkout hotfix/unbound-guards   # f1aaafb
 cd backend && uv sync --extra voice
-uv run alembic current                                   # 仍是 029，不要 upgrade
+uv run alembic current                                   # 仍是 029，不要 upgrade（只對選項 A 成立，選項 B 不能照抄，見最上面的硬規則）
 sudo systemctl restart ching-tech-os
 for i in $(seq 1 20); do curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8088/api/health | grep -q 200 && break; sleep 3; done
 systemctl is-active ching-tech-os
@@ -71,6 +83,10 @@ systemctl is-active ching-tech-os
 就是下面第 1～7 節。安全修補三支已含在 main。
 
 ## 0. 現況（2026-09-12 查證）
+
+**2026-09-12 中午更新**：.11 的工作樹已被 agent 拉到 main `9166918`（含 #227–#233），`uv sync` 與前端 build 也跑了；服務仍是 2026-09-11 22:24 啟動的舊程序（`0b982f1`），alembic 029。這正是上面硬規則禁止的「拉了但沒套」狀態，雷已埋：任何重啟都會自動套 030–033 並上線新程式碼。處理方式二選一，由 yazelin 決定：立刻照 §3 做完 migration 與重啟；或先把工作樹退回 `0b982f1`（`git checkout 0b982f1`，靜態檔會跟著退回）等之後一次做完。以下原文是拉之前的狀態。
+
+
 
 | 項目 | .11 正式機 | main |
 |---|---|---|
