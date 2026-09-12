@@ -5,6 +5,7 @@ from datetime import datetime
 import asyncpg
 
 from ..database import get_connection
+from ..utils.jsonb import parse_json_dict
 
 
 async def upsert_user(username: str) -> int:
@@ -314,8 +315,6 @@ async def update_user_permissions(user_id: int, permissions: dict) -> dict:
     Returns:
         更新後的完整偏好設定
     """
-    import json
-
     async with get_connection() as conn:
         # 先取得現有偏好設定
         row = await conn.fetchrow(
@@ -350,7 +349,7 @@ async def update_user_permissions(user_id: int, permissions: dict) -> dict:
             RETURNING preferences
             """,
             user_id,
-            json.dumps(current_prefs),
+            current_prefs,  # database.py 已註冊 JSONB codec，直接傳 dict
         )
         if row and row["preferences"]:
             return _parse_preferences(row["preferences"])
@@ -390,23 +389,14 @@ def _parse_preferences(value) -> dict:
     """解析偏好設定值
 
     Args:
-        value: 可能是 dict、str 或 None
+        value: 可能是 dict、str（舊版雙重編碼的資料）、list（被 `||` 串壞的資料）或 None
 
     Returns:
-        偏好設定 dict
+        偏好設定 dict；沒設定過回預設值，壞掉的資料一律當成空的 `{}`
     """
-    import json
-
     if value is None:
         return {"theme": "dark"}
-    if isinstance(value, dict):
-        return value
-    if isinstance(value, str):
-        try:
-            return json.loads(value)
-        except json.JSONDecodeError:
-            return {"theme": "dark"}
-    return {"theme": "dark"}
+    return parse_json_dict(value)
 
 
 async def get_user_preferences(user_id: int) -> dict:
@@ -468,21 +458,23 @@ async def update_user_preferences(user_id: int, preferences: dict) -> dict:
         preferences: 要更新的偏好設定（會與現有設定合併）
 
     Returns:
-        更新後的完整偏好設定
+        更新後的完整偏好設定（合併後的真實值）
     """
-    import json
-
     async with get_connection() as conn:
-        # 使用 jsonb_concat (||) 合併現有與新的偏好設定
+        # 只有現有值真的是 JSON 物件才用 jsonb_concat (||) 合併；
+        # NULL 或舊版雙重編碼／被串成陣列的壞資料一律用新值直接覆蓋
         row = await conn.fetchrow(
             """
             UPDATE users
-            SET preferences = COALESCE(preferences, '{}'::jsonb) || $2::jsonb
+            SET preferences = CASE
+                WHEN jsonb_typeof(preferences) = 'object' THEN preferences || $2::jsonb
+                ELSE $2::jsonb
+            END
             WHERE id = $1
             RETURNING preferences
             """,
             user_id,
-            json.dumps(preferences),
+            preferences,  # database.py 已註冊 JSONB codec，直接傳 dict
         )
         if row and row["preferences"]:
             return _parse_preferences(row["preferences"])

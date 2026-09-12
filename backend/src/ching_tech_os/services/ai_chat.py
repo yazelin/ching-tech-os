@@ -223,8 +223,7 @@ async def update_chat_messages(
     chat_id: UUID, messages: list[dict], user_id: int | None = None
 ) -> dict | None:
     """更新對話訊息"""
-    messages_json = json.dumps(messages, ensure_ascii=False)
-
+    # database.py 已註冊 JSONB codec，直接傳 list（先 json.dumps 會被雙重編碼）
     async with get_connection() as conn:
         if user_id is not None:
             row = await conn.fetchrow(
@@ -234,7 +233,7 @@ async def update_chat_messages(
                 WHERE id = $2 AND user_id = $3
                 RETURNING id, user_id, title, model, prompt_name, messages, created_at, updated_at
                 """,
-                messages_json,
+                messages,
                 chat_id,
                 user_id,
             )
@@ -246,7 +245,7 @@ async def update_chat_messages(
                 WHERE id = $2
                 RETURNING id, user_id, title, model, prompt_name, messages, created_at, updated_at
                 """,
-                messages_json,
+                messages,
                 chat_id,
             )
         if row is None:

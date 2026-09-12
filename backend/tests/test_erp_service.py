@@ -6,6 +6,7 @@ DB 一律用假的 connection（記下每一句 SQL 與參數），驗 SQL 內�
 
 from __future__ import annotations
 
+import json
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
@@ -215,7 +216,8 @@ async def test_audit_writes_row_in_caller_transaction() -> None:
     assert "INSERT INTO erp_audit" in sql
     assert args[0] == "party"
     assert args[2] == "create"
-    assert '"name"' in args[3]  # diff 以 JSON 字串傳入
+    # diff 以 dict 傳入（codec 負責編碼；先 json.dumps 會被雙重編碼）
+    assert isinstance(args[3], dict) and "name" in args[3]
     assert args[4] == 7 and args[5] == "mcp" and args[6] == "linebot"
 
 
@@ -562,8 +564,9 @@ async def test_update_party_computes_diff(monkeypatch) -> None:
     update_sql = conn.calls[1][1]
     assert "payment_terms = $2" in update_sql
     assert "ignored" not in update_sql
-    diff_json = conn.find("INSERT INTO erp_audit")[0][2][3]
-    assert "月結 60 天" in diff_json
+    diff_value = conn.find("INSERT INTO erp_audit")[0][2][3]
+    assert isinstance(diff_value, dict)
+    assert diff_value["payment_terms"]["after"] == "月結 60 天"
 
 
 @pytest.mark.asyncio
@@ -733,8 +736,9 @@ async def test_update_contact_computes_diff_and_audits(monkeypatch) -> None:
     update_sql = conn.calls[1][1]
     assert "notes = $3" in update_sql
     assert "ignored" not in update_sql
-    diff_json = conn.find("INSERT INTO erp_audit")[0][2][3]
-    assert "新備註" in diff_json
+    diff_value = conn.find("INSERT INTO erp_audit")[0][2][3]
+    assert isinstance(diff_value, dict)
+    assert "新備註" in json.dumps(diff_value, ensure_ascii=False)
 
 
 @pytest.mark.asyncio
@@ -815,8 +819,9 @@ async def test_update_address_computes_diff_and_audits(monkeypatch) -> None:
         before["party_id"], before["id"], {"city": "台北"}
     )
     assert result["audit_id"] == audit_id
-    diff_json = conn.find("INSERT INTO erp_audit")[0][2][3]
-    assert "台北" in diff_json
+    diff_value = conn.find("INSERT INTO erp_audit")[0][2][3]
+    assert isinstance(diff_value, dict)
+    assert "台北" in json.dumps(diff_value, ensure_ascii=False)
 
 
 @pytest.mark.asyncio
@@ -1889,7 +1894,9 @@ async def test_receive_purchase_order_updates_lines_and_status(monkeypatch) -> N
     assert conn.find("SET received_qty = received_qty + $2")
     assert conn.find("INSERT INTO stock_movements")[0][2][3] == "receipt"
     # 稽核 diff 記 line_id（F1）
-    assert '"line_id"' in conn.find("INSERT INTO erp_audit")[0][2][3]
+    receipt_diff = conn.find("INSERT INTO erp_audit")[0][2][3]
+    assert isinstance(receipt_diff, dict)
+    assert "line_id" in receipt_diff["lines"][0]
 
 
 @pytest.mark.asyncio

@@ -171,7 +171,7 @@ async def audit(
         entity_type,
         entity_id,
         action,
-        json.dumps(_jsonable(diff or {}), ensure_ascii=False),
+        _jsonable(diff or {}),  # database.py 已註冊 JSONB codec，直接傳 dict
         actor_user_id,
         via,
         agent_name,

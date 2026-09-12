@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 from mcp.server.fastmcp import FastMCP
 
 from ...database import get_connection, init_db_pool
+from ...utils.jsonb import parse_json_dict
 
 # 訊息常數集中在 permissions.py（與 BOUND_USER_REQUIRED_MESSAGE 放一起），
 # 這裡 re-export 讓工具端沿用 `mcp_server.XXX` 的既有寫法。
@@ -443,7 +444,8 @@ async def check_mcp_tool_permission(
         return (False, f"需要「{app_name}」功能權限才能使用此工具")
 
     role = row["role"] or "user"
-    preferences = row["preferences"] or {}
+    # 舊資料的 preferences 可能是雙重編碼的字串或被串壞的陣列，一律轉成 dict
+    preferences = parse_json_dict(row["preferences"])
     permissions = {"apps": preferences.get("permissions", {}).get("apps", {})}
 
     # 使用 check_tool_permission 檢查
