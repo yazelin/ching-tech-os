@@ -138,7 +138,7 @@ localStorage.removeItem('session_token');
 
 | 變數 | 預設值 | 說明 |
 |------|--------|------|
-| `CHING_TECH_SESSION_TTL_HOURS` | 8 | Session 有效時間（小時） |
+| `SESSION_TTL_HOURS` | 8 | Session 有效時間（小時） |
 | `ENABLE_NAS_AUTH` | True | 是否啟用 NAS SMB 認證 |
 
 ---
