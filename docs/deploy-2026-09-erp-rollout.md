@@ -2,7 +2,19 @@
 
 給 yazelin 回來一眼決定用。整理日期 2026-09-12；**在他點頭前 .11 完全不動**。
 
-## 先看這段：這批裡有三支是安全修補，性質與其他不同
+## 這份清單的維護規則
+
+**最後更新：2026-09-12，hotfix/unbound-guards = `f1aaafb`（含 #206 #212 #216 #219），全套 1921 passed、覆蓋率 90.24%。**
+
+yazelin 會照著這份跑，他不會知道哪幾行是舊的。每次 cherry-pick 一支進 hotfix、或 main 多合併一支要部署的 PR，**同一支 docs PR 內**要更新：
+1. 這段的最後更新時間、hotfix commit、測試數與覆蓋率。
+2. 「先看這段」的安全修補表格（PR 號、狀態）與選項 A 的「實際生效」清單、指令裡的 commit hash。
+3. 第 1 節待部署 PR 表格。
+4. 第 4 節部署後驗證項（新修補要有對應的驗證句）。
+5. 第 5 節「會打斷誰」——特別是**有沒有動權限預設值**（動了就要重新登入）與 CLI／分頁是否要重整。
+6. 改完自己從頭讀一次第 5 節與第 6 節，找有沒有跟新內容矛盾的句子；同一份文件兩處講相反的話比沒寫還糟（2026-09-12 第 125 行「不需要重新登入」在 #219 之後就是錯的，已改）。
+
+## 先看這段：這批裡有四支是安全修補，性質與其他不同
 
 其餘 PR（#192／#194／#196／#198／#202）是新功能，現在不部署只是「功能還沒上」，沒有人在等。下面三支是**關掉現在對外開著的洞**——LINE／Telegram bot 是公開的，任何人加了帳號就能問：
 
@@ -10,19 +22,20 @@
 |---|---|
 | #206 | 沒綁 CTOS 帳號的陌生人透過 bot 用 `search_nas_files`／`read_document` **讀 NAS 上的檔案內容**（正式機現在就是這樣）。同一支也擋專案、往來對象、物料工具，但那些工具在正式機還沒部署，所以那部分現在還碰不到。 |
 | #212 | 陌生人用 `add_note` **匿名寫進擎添的全域知識庫**（沒有人掛名，事後追不到，agent 之後會把那些內容當公司資料用）；任何使用者（含已綁定的）只要 agent 帶別人的群組／使用者 id，就能**讀寫別人的記憶**（模型宣稱身分即可）。 |
-| #205 修法（進行中，PR 號待補） | 任何呼叫者能把讀不到的知識條目或 NAS 檔案**做成公開分享連結**。目前正式機沒有 agent 明列分享工具、沒有群組掛自訂 agent，所以現在打不到，但同一家族。 |
+| #216 | 任何呼叫者能把讀不到的知識條目或 NAS 檔案**做成公開分享連結**。目前正式機沒有 agent 明列分享工具、沒有群組掛自訂 agent，所以現在打不到，但同一家族。 |
+| #219 | 任何已登入的員工（不需是擁有者、不需管理員）能把公司**任何一則 global／project 知識條目或 NAS 檔案做成公開連結發到網際網路上**；舊桌面的分享按鈕走的 REST 端點只驗登入沒驗權限。連結發出去收不回、不知道誰看過。 |
 
 ### 選項 A：只部署安全修補（不動 ERP 那批）
 
-**查證結果**：#206 與 #212 都**不動 schema、沒有 migration**，只加權限檢查與環境變數注入。我從 .11 現在的 commit `0b982f1` 切了 `hotfix/unbound-guards` 分支（`40a0743`，已推到 origin），cherry-pick 這兩支，把測試裡指到此分支沒有的 ERP／專案工具的部分去掉，**全套 1863 passed、覆蓋率 90.19%**。不是理論上可分開，是跑過的。
+**查證結果**：#206、#212、#216、#219 都**不動 schema、沒有 migration**，只加權限檢查、環境變數注入、資源存取檢查與預設值。我從 .11 現在的 commit `0b982f1` 切了 `hotfix/unbound-guards` 分支（`f1aaafb`，已推到 origin），cherry-pick 這四支，把測試裡指到此分支沒有的 ERP／專案工具的部分去掉，**全套 1921 passed、覆蓋率 90.24%**。不是理論上可分開，是跑過的。
 
-在這條分支上實際生效的是：未綁定者不能用 NAS 檔案工具、不能 `add_note`、記憶工具改用伺服器注入的身分（LINE 與 Telegram 都接上）。專案／往來對象／物料那幾個 app 的擋法也在，但工具本身不在此分支，等於備而不用。
+在這條分支上實際生效的是：未綁定者不能用 NAS 檔案工具、不能 `add_note`、記憶工具改用伺服器注入的身分（LINE 與 Telegram 都接上）；分享連結要先通過資源存取檢查；`share-manager` 預設關閉，REST 建連結端點與 `send_nas_file`／`prepare_file_message` 間接建連結都要這個權限。專案／往來對象／物料那幾個 app 的擋法也在，但工具本身不在此分支，等於備而不用。
 
 指令（與一般部署相同，少了 migration 與前端 build）：
 ```bash
 ssh ct@192.168.11.11
 cd ~/SDD/ching-tech-os && git log --oneline -1          # 應為 0b982f1
-git fetch origin && git checkout hotfix/unbound-guards   # 40a0743
+git fetch origin && git checkout hotfix/unbound-guards   # f1aaafb
 cd backend && uv sync --extra voice
 uv run alembic current                                   # 仍是 029，不要 upgrade
 sudo systemctl restart ching-tech-os
@@ -34,10 +47,12 @@ systemctl is-active ching-tech-os
 2. 用**已綁定**帳號問同兩句 → 正常。
 3. `journalctl -u ching-tech-os --since "10 minutes ago" | grep -E "模型帶入的 id|已改用連線身分"` 看記憶工具有沒有覆寫紀錄（有就代表注入生效）。
 4. 舊桌面 AI 助手開一次能對話。
+5. 分享：已綁定但沒開 `share-manager` 的帳號（部署後**重新登入**）在舊桌面知識庫按「分享」→ 應顯示「無「分享管理」功能權限」；admin 或已開權限者可以建。
+6. 部署後**通知同事重新登入**：`share-manager` 預設改 False 只在重登後套用，登入中的 session 最多 8 小時仍能分享；要讓某人繼續分享，管理員到新前端使用者管理頁開 `share-manager` 後那個人也要重登。
 
 退路：`git checkout 0b982f1 && sudo systemctl restart ching-tech-os`，沒有 schema 要退。
 
-之後要上 ERP 全套時：`git checkout main && git pull --ff-only`，再走選項 B。hotfix 分支的 commit 不在 main 上（是 cherry-pick），切回 main 不會衝突。#205 的修法合併後我會 cherry-pick 進 `hotfix/unbound-guards` 並更新此段的 commit hash。
+之後要上 ERP 全套時：`git checkout main && git pull --ff-only`，再走選項 B。hotfix 分支的 commit 不在 main 上（是 cherry-pick），切回 main 不會衝突。（#216、#219 已 cherry-pick 進去，見最上面的維護規則段。）
 
 ### 選項 B：一次全套
 
@@ -65,6 +80,8 @@ systemctl is-active ching-tech-os
 | #202 | 專案模組 MCP 工具九支，bot prompt 專案段改工具指引 | bot 能代查專案、開任務、完成里程碑（成員才能寫） |
 | #206（**安全修補**） | 未綁定 CTOS 帳號的 bot 使用者不得使用專案、往來對象、物料庫存、檔案工具（issue #201，既有缺口） | LINE／Telegram 未綁定者問專案／廠商／NAS 檔案會得到「請先綁定」；已綁定者不變。**無 migration，建議與這批一起上，且不要晚於 #192／#202** |
 | #212（**安全修補**） | 未綁定者不得寫入知識庫（#207）、記憶工具改用伺服器注入身分（#204）、MCP 工具存取矩陣 | 未綁定的 LINE／Telegram 使用者 `add_note` 會得到「請先綁定」；記憶工具不再信模型帶入的群組／使用者 id；已綁定者不變。**無 migration** |
+| #216（**安全修補**） | 分享連結先通過資源存取檢查、兩支分享工具對到 `share-manager`、未綁定拒絕（#205） | bot 分享不到讀不到的東西 |
+| #219（**安全修補**） | `share-manager` 預設 False；REST 建連結與 `send_nas_file`／`prepare_file_message` 間接建連結都要此權限（#217） | 沒開權限的同事不能再建公開連結；**要重新登入才套用** |
 | #197 | ERPNext 匯入腳本 | 不影響服務；匯入是**另一次授權**（見第 6 節） |
 | #191／#193／#195／#190 | 規格與備份文件、備份腳本 | 無 |
 
@@ -122,7 +139,7 @@ journalctl -u ching-tech-os --since "5 minutes ago" --no-pager | grep -E "找不
 - **CLI 使用者**：`ctos` CLI 要升到 0.2.0（`uv tool install ./cli` 重裝）；舊版的 `erp` 子命令打 `/api/erp` 在 extends/erpnext 停用前仍可用，停用後 404。
 - **bot 使用者**：不需重登；但 032 之後 bot 對廠商／物料問題會改用新工具，匯入前新表是空的，會回「找不到」——所以**部署與匯入要接著做**，中間不要隔太久。
 - **舊桌面開著的分頁**：這批沒改 socket 流程，不需重新整理；ERPNext 圖示要重新整理才消失。
-- **不需要重新登入**（沒動權限預設值）。
+- **需要重新登入**：#219 把 `share-manager` 預設改成 False，已登入 session 帶著登入時的權限快照，最多 8 小時 TTL 內仍能分享；管理員新開的權限同樣要重登才生效；PAT 每次請求重算，不受影響。舊桌面的「分享管理」圖示重登後才會依權限消失。
 - 不會打斷：專案頁、知識庫、AI Log。
 
 ## 6. 退路
