@@ -96,8 +96,33 @@ def _isolated(monkeypatch: pytest.MonkeyPatch):
 
 @pytest.fixture
 def _bound_user(monkeypatch: pytest.MonkeyPatch):
-    """已綁定的一般使用者（users 查得到）。"""
+    """已綁定的一般使用者（users 查得到），preferences 空＝沒有任何 app 覆寫。
+
+    issue #217 之後 `share-manager` 預設關閉，這個 fixture 因此不再暗中
+    帶有 `share-manager` 權限——只用於直接呼叫 `share_service.check_resource_access()`
+    的測試（資源存取層，不經過 `check_mcp_tool_permission`）。要走 MCP 工具入口
+    （`share_tools.create_share_link`／`share_knowledge_attachment`）並驗資源存取層，
+    改用 `_bound_user_with_share_permission`。
+    """
     conn = SimpleNamespace(fetchrow=AsyncMock(return_value=_user_row()))
+    monkeypatch.setattr(share_service, "get_connection", lambda: _ConnCtx(conn))
+    monkeypatch.setattr(mcp_server, "get_connection", lambda: _ConnCtx(conn))
+    monkeypatch.setattr(knowledge_tools, "get_connection", lambda: _ConnCtx(conn))
+    return conn
+
+
+@pytest.fixture
+def _bound_user_with_share_permission(monkeypatch: pytest.MonkeyPatch):
+    """已綁定且明確開了 `share-manager` 權限的一般使用者（issue #217：預設關閉後，
+    要測 MCP 工具入口之後的資源存取層，得先手動開權限，否則會在 app 權限這關就被擋下來，
+    根本走不到資源存取層。"""
+    conn = SimpleNamespace(
+        fetchrow=AsyncMock(
+            return_value=_user_row(
+                preferences={"permissions": {"apps": {"share-manager": True}}}
+            )
+        )
+    )
     monkeypatch.setattr(share_service, "get_connection", lambda: _ConnCtx(conn))
     monkeypatch.setattr(mcp_server, "get_connection", lambda: _ConnCtx(conn))
     monkeypatch.setattr(knowledge_tools, "get_connection", lambda: _ConnCtx(conn))
@@ -129,9 +154,15 @@ def test_share_manager_requires_bound_user() -> None:
     assert "share-manager" in permissions_module.APPS_REQUIRE_BOUND_USER
 
 
-def test_share_manager_default_permission_unchanged() -> None:
-    """預設值不動（交付第 1 點）：已綁定者預設有 share-manager。"""
-    assert permissions_module.DEFAULT_APP_PERMISSIONS["share-manager"] is True
+def test_share_manager_default_permission_now_false() -> None:
+    """issue #217 收緊：`share-manager` 預設關閉，管理員逐人開放。
+
+    #205 只擋了「讀不到不能分享」，但 `check_knowledge_permission_async`
+    對 scope=global 一律放行讀取、scope=project 不看成員，加上 `share-manager`
+    當時預設開放，等於「內部讀得到」＝「可以發到網路上」。這裡把預設關閉，
+    詳見 `services/permissions.py` 的 `DEFAULT_APP_PERMISSIONS` 註解。
+    """
+    assert permissions_module.DEFAULT_APP_PERMISSIONS["share-manager"] is False
 
 
 # ============================================================
@@ -281,7 +312,7 @@ async def test_check_resource_access_knowledge_missing_is_not_found(
 
 @pytest.mark.asyncio
 async def test_create_share_link_tool_denies_personal_item_of_others(
-    monkeypatch: pytest.MonkeyPatch, _bound_user, _no_link_created
+    monkeypatch: pytest.MonkeyPatch, _bound_user_with_share_permission, _no_link_created
 ) -> None:
     monkeypatch.setattr(
         share_service, "get_knowledge", lambda kb_id: _item(scope="personal", owner="other")
@@ -298,7 +329,7 @@ async def test_create_share_link_tool_denies_personal_item_of_others(
 
 @pytest.mark.asyncio
 async def test_create_share_link_tool_creates_link_when_readable(
-    monkeypatch: pytest.MonkeyPatch, _bound_user
+    monkeypatch: pytest.MonkeyPatch, _bound_user_with_share_permission
 ) -> None:
     """對照組：有權限且讀得到就照常建立。"""
     monkeypatch.setattr(share_service, "get_knowledge", lambda kb_id: _item())
@@ -369,7 +400,7 @@ async def test_check_resource_access_nas_file_denied(
 
 @pytest.mark.asyncio
 async def test_create_share_link_tool_denies_nas_file_without_permission(
-    monkeypatch: pytest.MonkeyPatch, _bound_user, _no_link_created
+    monkeypatch: pytest.MonkeyPatch, _bound_user_with_share_permission, _no_link_created
 ) -> None:
     def _validate(file_path, source_permissions=None):
         raise share_service.NasFileAccessDenied("權限不足：無法存取此 shared 來源")
@@ -400,7 +431,7 @@ async def test_check_resource_access_nas_file_denied_for_unbound() -> None:
 
 @pytest.mark.asyncio
 async def test_share_knowledge_attachment_denies_unreadable_item(
-    monkeypatch: pytest.MonkeyPatch, _bound_user
+    monkeypatch: pytest.MonkeyPatch, _bound_user_with_share_permission
 ) -> None:
     from ching_tech_os.services import knowledge as kb_service
 
@@ -483,7 +514,10 @@ def _rest_app(session: SessionData):
     return app
 
 
-def _session(role="user", username="yaze", user_id=1):
+def _session(role="user", username="yaze", user_id=1, app_permissions=None):
+    """預設不帶 `app_permissions`＝沿用 session 快取沒帶到時的預設值
+    （issue #217 之後 `share-manager` 預設關閉）。要測有權限的情境，
+    傳 `app_permissions={"share-manager": True}`。"""
     now = datetime.now(timezone.utc)
     return SessionData(
         username=username,
@@ -493,13 +527,18 @@ def _session(role="user", username="yaze", user_id=1):
         created_at=now,
         expires_at=now + timedelta(hours=1),
         role=role,
+        app_permissions=app_permissions or {},
     )
 
 
 def test_rest_create_link_denies_knowledge_user_cannot_read(
     monkeypatch: pytest.MonkeyPatch, _bound_user
 ) -> None:
-    """就算路由的舊檢查放行，service 那層也要擋下讀不到的條目。"""
+    """就算路由的舊檢查放行，service 那層也要擋下讀不到的條目。
+
+    session 帶 `share-manager` 權限，確保 403 是資源存取層擋下來的，
+    不是 app 權限層（那個另有 `test_rest_create_link_denies_plain_user_without_permission` 驗）。
+    """
     import ching_tech_os.api.share as share_api
 
     monkeypatch.setattr(
@@ -518,7 +557,7 @@ def test_rest_create_link_denies_knowledge_user_cannot_read(
         AsyncMock(side_effect=AssertionError("不該走到建立連結")),
     )
 
-    client = TestClient(_rest_app(_session()))
+    client = TestClient(_rest_app(_session(app_permissions={"share-manager": True})))
     resp = client.post("/api/share", json={"resource_type": "knowledge", "resource_id": "kb-001"})
 
     assert resp.status_code == 403
@@ -527,7 +566,10 @@ def test_rest_create_link_denies_knowledge_user_cannot_read(
 def test_rest_create_link_denies_nas_file_without_source_permission(
     monkeypatch: pytest.MonkeyPatch, _bound_user
 ) -> None:
-    """路由那層的舊檢查沒帶 `source_permissions`（放行），service 那層要擋下來。"""
+    """路由那層的舊檢查沒帶 `source_permissions`（放行），service 那層要擋下來。
+
+    session 帶 `share-manager` 權限，確保 403 是資源存取層擋下來的。
+    """
     import ching_tech_os.api.share as share_api
 
     def _legacy_validate(file_path, source_permissions=None):
@@ -544,7 +586,7 @@ def test_rest_create_link_denies_nas_file_without_source_permission(
         AsyncMock(side_effect=AssertionError("不該走到建立連結")),
     )
 
-    client = TestClient(_rest_app(_session()))
+    client = TestClient(_rest_app(_session(app_permissions={"share-manager": True})))
     resp = client.post(
         "/api/share", json={"resource_type": "nas_file", "resource_id": "shared://projects/x.pdf"}
     )
@@ -555,7 +597,7 @@ def test_rest_create_link_denies_nas_file_without_source_permission(
 def test_rest_create_link_allows_readable_knowledge(
     monkeypatch: pytest.MonkeyPatch, _bound_user
 ) -> None:
-    """對照組：讀得到就照常建立（201）。"""
+    """對照組：有 `share-manager` 權限且讀得到就照常建立（201）。"""
     import ching_tech_os.api.share as share_api
     from ching_tech_os.models.share import ShareLinkResponse
 
@@ -579,7 +621,7 @@ def test_rest_create_link_allows_readable_knowledge(
         ),
     )
 
-    client = TestClient(_rest_app(_session()))
+    client = TestClient(_rest_app(_session(app_permissions={"share-manager": True})))
     resp = client.post("/api/share", json={"resource_type": "knowledge", "resource_id": "kb-001"})
 
     assert resp.status_code == 201

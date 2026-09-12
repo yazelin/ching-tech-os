@@ -29,7 +29,7 @@ def _create_test_app(session=None):
     return app
 
 
-def _mock_session(role="user", username="testuser", user_id=1):
+def _mock_session(role="user", username="testuser", user_id=1, app_permissions=None):
     from datetime import timedelta
 
     now = datetime.now(timezone.utc)
@@ -41,7 +41,17 @@ def _mock_session(role="user", username="testuser", user_id=1):
         created_at=now,
         expires_at=now + timedelta(hours=1),
         role=role,
+        app_permissions=app_permissions or {},
     )
+
+
+def _mock_session_with_share_permission(**kwargs):
+    """建立分享連結（`POST /api/share`）issue #217 之後要 `share-manager` app 權限
+    （預設關閉）；本檔的 `TestCreateLink` 是測資源型別／service 層分支，不是測這道
+    app 權限本身（那個在 `tests/test_share_manager_default_permission.py`），
+    所以這裡先開權限，才走得到要測的分支。"""
+    kwargs.setdefault("app_permissions", {"share-manager": True})
+    return _mock_session(**kwargs)
 
 
 def _link_response(**kwargs):
@@ -70,14 +80,14 @@ def _link_response(**kwargs):
 class TestCreateLink:
     def test_content_without_content(self):
         """content 類型缺少 content 參數 -> 400"""
-        app = _create_test_app(_mock_session())
+        app = _create_test_app(_mock_session_with_share_permission())
         client = TestClient(app)
         resp = client.post("/api/share", json={"resource_type": "content"})
         assert resp.status_code == 400
 
     def test_content_success(self):
         """content 類型建立成功 -> 201"""
-        app = _create_test_app(_mock_session())
+        app = _create_test_app(_mock_session_with_share_permission())
 
         with patch(
             "ching_tech_os.api.share.create_share_link",
@@ -94,7 +104,7 @@ class TestCreateLink:
 
     def test_knowledge_no_permission(self):
         """知識庫類型無分享權限 -> 403"""
-        app = _create_test_app(_mock_session())
+        app = _create_test_app(_mock_session_with_share_permission())
 
         knowledge = SimpleNamespace(owner="other", scope="private", title="KB")
         with (
@@ -120,7 +130,7 @@ class TestCreateLink:
         """知識庫不存在 -> 404"""
         from ching_tech_os.services.knowledge import KnowledgeNotFoundError
 
-        app = _create_test_app(_mock_session())
+        app = _create_test_app(_mock_session_with_share_permission())
 
         with patch(
             "ching_tech_os.api.share.get_knowledge",
@@ -135,7 +145,7 @@ class TestCreateLink:
 
     def test_knowledge_success(self):
         """知識庫類型有權限建立成功 -> 201"""
-        app = _create_test_app(_mock_session())
+        app = _create_test_app(_mock_session_with_share_permission())
 
         knowledge = SimpleNamespace(owner="testuser", scope="private", title="KB")
         with (
@@ -166,7 +176,7 @@ class TestCreateLink:
         """NAS 檔案不存在 -> 404"""
         from ching_tech_os.services.share import NasFileNotFoundError
 
-        app = _create_test_app(_mock_session())
+        app = _create_test_app(_mock_session_with_share_permission())
 
         with patch(
             "ching_tech_os.api.share.validate_nas_file_path",
@@ -183,7 +193,7 @@ class TestCreateLink:
         """NAS 檔案存取被拒 -> 403"""
         from ching_tech_os.services.share import NasFileAccessDenied
 
-        app = _create_test_app(_mock_session())
+        app = _create_test_app(_mock_session_with_share_permission())
 
         with patch(
             "ching_tech_os.api.share.validate_nas_file_path",
@@ -201,7 +211,7 @@ class TestCreateLink:
         test_file = tmp_path / "ok.txt"
         test_file.write_text("hi")
 
-        app = _create_test_app(_mock_session())
+        app = _create_test_app(_mock_session_with_share_permission())
 
         with (
             patch(
@@ -225,7 +235,7 @@ class TestCreateLink:
         """service 層回報資源不存在 -> 404"""
         from ching_tech_os.services.share import ResourceNotFoundError
 
-        app = _create_test_app(_mock_session())
+        app = _create_test_app(_mock_session_with_share_permission())
 
         with patch(
             "ching_tech_os.api.share.create_share_link",
@@ -243,7 +253,7 @@ class TestCreateLink:
         """service 層一般錯誤 -> 500"""
         from ching_tech_os.services.share import ShareError
 
-        app = _create_test_app(_mock_session())
+        app = _create_test_app(_mock_session_with_share_permission())
 
         with patch(
             "ching_tech_os.api.share.create_share_link",

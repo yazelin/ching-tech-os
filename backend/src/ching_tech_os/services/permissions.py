@@ -119,7 +119,7 @@ DEFAULT_APP_PERMISSIONS: dict[str, bool] = {
     "knowledge-base": True,
     "linebot": True,
     "memory-manager": True,
-    "share-manager": True,
+    "share-manager": False,  # 已綁定使用者可把任何 global／project 知識條目或 NAS 檔案發布成免帳號公開連結（issue #217），預設關閉，由管理員逐人開放
     "md2ppt": True,
     "md2doc": True,
     "printer": True,
