@@ -101,7 +101,9 @@ async def test_user_preferences_and_permissions(monkeypatch: pytest.MonkeyPatch)
     assert user_service._parse_preferences(None)["theme"] == "dark"
     assert user_service._parse_preferences({"x": 1})["x"] == 1
     assert user_service._parse_preferences('{"x":2}')["x"] == 2
-    assert user_service._parse_preferences("{bad}")["theme"] == "dark"
+    # 壞掉的資料（解不開的字串、被 || 串成的陣列）一律當成空的偏好設定
+    assert user_service._parse_preferences("{bad}") == {}
+    assert user_service._parse_preferences([{}, '{"theme": "light"}']) == {}
 
 
 @pytest.mark.asyncio

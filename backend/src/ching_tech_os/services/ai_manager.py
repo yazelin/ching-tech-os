@@ -12,6 +12,7 @@ from typing import Any
 from uuid import UUID
 
 from ..database import get_connection
+from ..utils.jsonb import parse_json_dict, parse_json_field
 from ..models.ai import (
     AiAgentCreate,
     AiAgentResponse,
@@ -75,7 +76,7 @@ async def get_prompt(prompt_id: UUID) -> dict | None:
             return None
         result = dict(row)
         if result.get("variables"):
-            result["variables"] = json.loads(result["variables"])
+            result["variables"] = parse_json_field(result["variables"])
         return result
 
 
@@ -95,13 +96,14 @@ async def get_prompt_by_name(name: str) -> dict | None:
             return None
         result = dict(row)
         if result.get("variables"):
-            result["variables"] = json.loads(result["variables"])
+            result["variables"] = parse_json_field(result["variables"])
         return result
 
 
 async def create_prompt(data: AiPromptCreate) -> dict:
     """建立 Prompt"""
-    variables_json = json.dumps(data.variables) if data.variables else None
+    # database.py 已註冊 JSONB codec，直接傳 dict（先 json.dumps 會被雙重編碼）
+    variables_value = data.variables if data.variables else None
 
     async with get_connection() as conn:
         row = await conn.fetchrow(
@@ -116,11 +118,11 @@ async def create_prompt(data: AiPromptCreate) -> dict:
             data.category,
             data.content,
             data.description,
-            variables_json,
+            variables_value,
         )
         result = dict(row)
         if result.get("variables"):
-            result["variables"] = json.loads(result["variables"])
+            result["variables"] = parse_json_field(result["variables"])
         return result
 
 
@@ -157,7 +159,7 @@ async def update_prompt(prompt_id: UUID, data: AiPromptUpdate) -> dict | None:
 
     if data.variables is not None:
         updates.append(f"variables = ${param_idx}::jsonb")
-        params.append(json.dumps(data.variables))
+        params.append(data.variables)  # codec 會處理編碼
         param_idx += 1
 
     if not updates:
@@ -181,7 +183,7 @@ async def update_prompt(prompt_id: UUID, data: AiPromptUpdate) -> dict | None:
             return None
         result = dict(row)
         if result.get("variables"):
-            result["variables"] = json.loads(result["variables"])
+            result["variables"] = parse_json_field(result["variables"])
         return result
 
 
@@ -288,7 +290,7 @@ async def get_agent(agent_id: UUID) -> dict | None:
                 "category": result["prompt_category"],
                 "content": result["prompt_content"],
                 "description": result["prompt_description"],
-                "variables": json.loads(prompt_vars) if prompt_vars else None,
+                "variables": parse_json_field(prompt_vars) if prompt_vars else None,
                 "created_at": result["prompt_created_at"],
                 "updated_at": result["prompt_updated_at"],
             }
@@ -340,7 +342,7 @@ async def get_agent_by_name(name: str) -> dict | None:
                 "category": result["prompt_category"],
                 "content": result["prompt_content"],
                 "description": result["prompt_description"],
-                "variables": json.loads(prompt_vars) if prompt_vars else None,
+                "variables": parse_json_field(prompt_vars) if prompt_vars else None,
                 "created_at": result["prompt_created_at"],
                 "updated_at": result["prompt_updated_at"],
             }
@@ -493,8 +495,9 @@ async def delete_agent(agent_id: UUID) -> bool:
 
 async def create_log(data: AiLogCreate) -> dict:
     """建立 AI Log"""
-    parsed_json = json.dumps(data.parsed_response) if data.parsed_response else None
-    allowed_tools_json = json.dumps(data.allowed_tools) if data.allowed_tools else None
+    # database.py 已註冊 json/jsonb codec，直接傳 dict/list（先 json.dumps 會被雙重編碼）
+    parsed_value = data.parsed_response if data.parsed_response else None
+    allowed_tools_value = data.allowed_tools if data.allowed_tools else None
 
     async with get_connection() as conn:
         row = await conn.fetchrow(
@@ -513,9 +516,9 @@ async def create_log(data: AiLogCreate) -> dict:
             data.context_id,
             data.input_prompt,
             data.system_prompt,
-            allowed_tools_json,
+            allowed_tools_value,
             data.raw_response,
-            parsed_json,
+            parsed_value,
             data.model,
             data.success,
             data.error_message,
@@ -526,9 +529,9 @@ async def create_log(data: AiLogCreate) -> dict:
         )
         result = dict(row)
         if result.get("parsed_response"):
-            result["parsed_response"] = json.loads(result["parsed_response"])
+            result["parsed_response"] = parse_json_field(result["parsed_response"])
         if result.get("allowed_tools"):
-            result["allowed_tools"] = json.loads(result["allowed_tools"]) if isinstance(result["allowed_tools"], str) else result["allowed_tools"]
+            result["allowed_tools"] = parse_json_field(result["allowed_tools"])
         return result
 
 
@@ -623,11 +626,11 @@ async def get_logs(
             item = dict(row)
             # 解析 allowed_tools
             if item.get("allowed_tools"):
-                item["allowed_tools"] = json.loads(item["allowed_tools"]) if isinstance(item["allowed_tools"], str) else item["allowed_tools"]
+                item["allowed_tools"] = parse_json_field(item["allowed_tools"])
             # 從 parsed_response 提取 used_tools（對 run_skill_script 加上 skill 資訊）
             if item.get("parsed_response"):
-                parsed = json.loads(item["parsed_response"]) if isinstance(item["parsed_response"], str) else item["parsed_response"]
-                tool_calls = parsed.get("tool_calls", []) if parsed else []
+                parsed = parse_json_dict(item["parsed_response"])
+                tool_calls = parsed.get("tool_calls") or []
                 used_tools_set = {}
                 for tc in tool_calls:
                     name = tc.get("name")
@@ -683,9 +686,9 @@ async def get_log(log_id: UUID) -> dict | None:
             return None
         result = dict(row)
         if result.get("parsed_response"):
-            result["parsed_response"] = json.loads(result["parsed_response"])
+            result["parsed_response"] = parse_json_field(result["parsed_response"])
         if result.get("allowed_tools"):
-            result["allowed_tools"] = json.loads(result["allowed_tools"]) if isinstance(result["allowed_tools"], str) else result["allowed_tools"]
+            result["allowed_tools"] = parse_json_field(result["allowed_tools"])
         return result
 
 

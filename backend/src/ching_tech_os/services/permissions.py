@@ -14,6 +14,7 @@ from typing import Any, Callable
 from fastapi import Depends, HTTPException, Request, status
 
 from ..database import get_connection
+from ..utils.jsonb import parse_json_dict
 
 logger = logging.getLogger(__name__)
 
@@ -570,7 +571,8 @@ async def get_user_app_permissions(user_id: int) -> dict[str, bool]:
         return effective_defaults.copy()
 
     role = row["role"] or "user"
-    preferences = row["preferences"] or {}
+    # 舊資料的 preferences 可能是雙重編碼的字串或被串壞的陣列，一律轉成 dict
+    preferences = parse_json_dict(row["preferences"])
     permissions = preferences.get("permissions", {})
 
     # 管理員擁有所有權限
@@ -609,7 +611,7 @@ def get_user_app_permissions_sync(
     # 一般使用者使用預設權限合併個人設定
     base_perms = effective_defaults.copy()
     if user_data:
-        preferences = user_data.get("preferences") or {}
+        preferences = parse_json_dict(user_data.get("preferences"))
         permissions = preferences.get("permissions", {})
         user_app_perms = permissions.get("apps", {})
         base_perms.update(user_app_perms)

@@ -399,20 +399,50 @@ sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('NOW(
 
 ## asyncpg 與 JSONB
 
-asyncpg 回傳的 JSONB 是字串，需要手動解析：
+`database.py` 在每條連線建立時註冊了 `json` / `jsonb` 的 codec（encoder 是
+`json.dumps`、decoder 是 `json.loads`），所以：
+
+**寫入端一律直接傳 Python dict / list，不可以自己先 `json.dumps`。**
 
 ```python
-import json
+# ✅ 正確：codec 負責編碼
+await conn.execute(
+    "UPDATE users SET preferences = $2::jsonb WHERE id = $1", user_id, {"theme": "light"}
+)
+
+# ❌ 錯誤：會被雙重編碼，欄位裡存進去的是一個 JSON 字串純量
+await conn.execute(
+    "UPDATE users SET preferences = $2::jsonb WHERE id = $1", user_id, json.dumps({"theme": "light"})
+)
+```
+
+雙重編碼之後 `jsonb_typeof` 會是 `string` 而不是 `object`，SQL 端的 `->`、`||`
+全部失效——`'{}'::jsonb || '"…"'::jsonb` 會串成陣列 `[{}, "…"]`，欄位就此壞掉
+（issue #240）。
+
+**讀取端**正常拿到的就是 dict / list；但資料庫裡可能還留著舊版雙重編碼寫進去的
+字串，所以讀取端用 `utils/jsonb.py` 的 `parse_json_field()` / `parse_json_dict()`
+一次處理兩種情況（`parse_json_dict()` 遇到不是物件的值一律回 `{}`）。
+
+```python
+from ..utils.jsonb import parse_json_field
 
 async def get_chat(chat_id: UUID) -> dict:
     async with get_connection() as conn:
-        row = await conn.fetchrow(
-            "SELECT * FROM ai_chats WHERE id = $1", chat_id
-        )
+        row = await conn.fetchrow("SELECT * FROM ai_chats WHERE id = $1", chat_id)
         if row:
             result = dict(row)
-            result["messages"] = json.loads(result["messages"])
+            result["messages"] = parse_json_field(result["messages"], [])
             return result
+```
+
+合併寫入（`||`）之前要先確認現有值真的是物件，壞掉的列直接用新值覆蓋：
+
+```sql
+SET preferences = CASE
+    WHEN jsonb_typeof(preferences) = 'object' THEN preferences || $2::jsonb
+    ELSE $2::jsonb
+END
 ```
 
 ## 開發流程

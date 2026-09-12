@@ -1,10 +1,10 @@
 """AI 對話 CRUD 服務"""
 
-import json
 import time
 from uuid import UUID
 
 from ..database import get_connection
+from ..utils.jsonb import parse_json_field
 
 
 # ============================================================
@@ -74,9 +74,9 @@ async def get_agent_config(agent_name: str) -> dict | None:
             return None
         result = dict(row)
         if result.get("settings"):
-            result["settings"] = json.loads(result["settings"])
+            result["settings"] = parse_json_field(result["settings"], {})
         if result.get("tools"):
-            result["tools"] = json.loads(result["tools"]) if isinstance(result["tools"], str) else result["tools"]
+            result["tools"] = parse_json_field(result["tools"], [])
         return result
 
 
@@ -121,7 +121,7 @@ async def create_chat(
         )
         result = dict(row)
         # Parse JSONB messages
-        result["messages"] = json.loads(result["messages"]) if isinstance(result["messages"], str) else result["messages"]
+        result["messages"] = parse_json_field(result["messages"], [])
         return result
 
 
@@ -151,7 +151,7 @@ async def get_chat(chat_id: UUID, user_id: int | None = None) -> dict | None:
             return None
         result = dict(row)
         # Parse JSONB messages
-        result["messages"] = json.loads(result["messages"]) if isinstance(result["messages"], str) else result["messages"]
+        result["messages"] = parse_json_field(result["messages"], [])
         return result
 
 
@@ -215,7 +215,7 @@ async def update_chat(
         if row is None:
             return None
         result = dict(row)
-        result["messages"] = json.loads(result["messages"]) if isinstance(result["messages"], str) else result["messages"]
+        result["messages"] = parse_json_field(result["messages"], [])
         return result
 
 
@@ -223,8 +223,7 @@ async def update_chat_messages(
     chat_id: UUID, messages: list[dict], user_id: int | None = None
 ) -> dict | None:
     """更新對話訊息"""
-    messages_json = json.dumps(messages, ensure_ascii=False)
-
+    # database.py 已註冊 JSONB codec，直接傳 list（先 json.dumps 會被雙重編碼）
     async with get_connection() as conn:
         if user_id is not None:
             row = await conn.fetchrow(
@@ -234,7 +233,7 @@ async def update_chat_messages(
                 WHERE id = $2 AND user_id = $3
                 RETURNING id, user_id, title, model, prompt_name, messages, created_at, updated_at
                 """,
-                messages_json,
+                messages,
                 chat_id,
                 user_id,
             )
@@ -246,13 +245,13 @@ async def update_chat_messages(
                 WHERE id = $2
                 RETURNING id, user_id, title, model, prompt_name, messages, created_at, updated_at
                 """,
-                messages_json,
+                messages,
                 chat_id,
             )
         if row is None:
             return None
         result = dict(row)
-        result["messages"] = json.loads(result["messages"]) if isinstance(result["messages"], str) else result["messages"]
+        result["messages"] = parse_json_field(result["messages"], [])
         return result
 
 
@@ -264,7 +263,10 @@ async def append_message(
     if chat is None:
         return None
 
+    # 舊資料可能被雙重編碼成字串／不是陣列，append 之前先確保是 list
     messages = chat["messages"]
+    if not isinstance(messages, list):
+        messages = []
     messages.append(
         {
             "role": role,

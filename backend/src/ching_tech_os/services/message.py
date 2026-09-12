@@ -1,6 +1,5 @@
 """訊息中心服務"""
 
-import json
 import math
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -15,6 +14,7 @@ from ..models.message import (
     MessageSeverity,
     MessageSource,
 )
+from ..utils.jsonb import parse_json_dict
 
 
 async def log_message(
@@ -62,7 +62,7 @@ async def log_message(
             source,
             title,
             content,
-            json.dumps(metadata) if metadata else None,
+            metadata if metadata else None,  # codec 會處理 JSONB 編碼
             user_id,
             category,
             session_id,
@@ -98,7 +98,7 @@ async def get_message(message_id: int) -> MessageResponse | None:
                 category=row["category"],
                 title=row["title"],
                 content=row["content"],
-                metadata=json.loads(row["metadata"]) if row["metadata"] else None,
+                metadata=parse_json_dict(row["metadata"]) if row["metadata"] else None,
                 user_id=row["user_id"],
                 session_id=row["session_id"],
                 is_read=row["is_read"],

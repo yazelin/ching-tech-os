@@ -185,16 +185,17 @@ async def save_voice_settings(
     user_id: int = Depends(_get_user_id),
 ):
     """儲存語音設定"""
-    settings_json = json.dumps({
+    # database.py 已註冊 json codec，直接傳 dict（先 json.dumps 會被雙重編碼）
+    settings_value = {
         "tts_engine": body.tts_engine,
         "tts_params": body.tts_params,
-    })
+    }
 
     async with get_connection() as conn:
         if body.scope == "user":
             await conn.execute(
                 "UPDATE users SET voice_settings = $1::json WHERE id = $2",
-                settings_json, user_id,
+                settings_value, user_id,
             )
         elif body.scope == "group" and body.scope_id:
             # 群組設定需要管理員權限（群組層級設定屬管理行為）
@@ -205,7 +206,7 @@ async def save_voice_settings(
                 raise HTTPException(status_code=403, detail="只有管理員可修改群組語音設定")
             await conn.execute(
                 "UPDATE bot_groups SET voice_settings = $1::json WHERE id = $2::uuid",
-                settings_json, body.scope_id,
+                settings_value, body.scope_id,
             )
         elif body.scope == "agent" and body.scope_id:
             # Agent 設定需要管理員權限
@@ -216,7 +217,7 @@ async def save_voice_settings(
                 raise HTTPException(status_code=403, detail="只有管理員可修改 Agent 語音設定")
             await conn.execute(
                 "UPDATE ai_agents SET voice_settings = $1::json WHERE id = $2::uuid",
-                settings_json, body.scope_id,
+                settings_value, body.scope_id,
             )
         else:
             raise HTTPException(status_code=400, detail="無效的 scope")
