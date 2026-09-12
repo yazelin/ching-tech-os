@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -153,12 +153,13 @@ async def test_attachments_tools(monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     )
     monkeypatch.setattr(kb_service, "get_knowledge", lambda _id: kb_item)
     monkeypatch.setattr(kb_service, "copy_linebot_attachment_to_knowledge", lambda *_a, **_k: None)
-    monkeypatch.setattr(kb_service, "update_attachment_description", lambda *_a, **_k: None, raising=False)
-    monkeypatch.setattr(
-        kb_service,
-        "update_attachment",
-        lambda **_kwargs: SimpleNamespace(path="local://knowledge/assets/images/kb-001-a.txt", description="new"),
+    update_attachment_mock = MagicMock(
+        return_value=SimpleNamespace(path="local://knowledge/assets/images/kb-001-a.txt", description="new"),
     )
+    monkeypatch.setattr(kb_service, "update_attachment", update_attachment_mock)
+    # #211 負控制：kb_service 上不存在 update_attachment_description，
+    # 確保這裡沒有殘留的相容性 mock 掩蓋掉呼叫不存在函式的 bug。
+    assert not hasattr(kb_service, "update_attachment_description")
 
     out = await knowledge_tools.get_knowledge_attachments("kb-001", ctos_user_id=1)
     assert "附件列表" in out
@@ -173,6 +174,14 @@ async def test_attachments_tools(monkeypatch: pytest.MonkeyPatch, tmp_path: Path
         ctos_user_id=1,
     )
     assert "新增 2 個附件" in out3
+    # #211：描述要真的透過現有的 update_attachment() 寫入，而不是呼叫不存在的
+    # update_attachment_description()（呼叫不存在的函式會被內層 try/except 吞掉，
+    # 只留 log warning，不會讓工具回傳失敗，所以要在這裡斷言呼叫真的發生）。
+    assert "已設定描述：d1, d2" in out3
+    # 呼叫次數 = update_knowledge_attachment（out2）1 次 + add_attachments_to_knowledge（out3）2 次
+    assert update_attachment_mock.call_count == 3
+    update_attachment_mock.assert_any_call(kb_id="kb-001", attachment_idx=2, description="d1")
+    update_attachment_mock.assert_any_call(kb_id="kb-001", attachment_idx=3, description="d2")
 
     # read attachment: text
     text_file = tmp_path / "a.txt"
