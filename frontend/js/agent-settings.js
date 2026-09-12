@@ -1104,12 +1104,17 @@ const AgentSettingsApp = (function() {
       const body = overlay.querySelector('.skill-edit-modal-body');
       const allowedTools = skill.allowed_tools || skill.tools || [];
       const mcpServers = skill.mcp_servers || [];
+      // requires_app 後端可接受單一字串或清單（見 skills/__init__.py 的 required_apps()），
+      // 編輯器一律用逗號分隔字串呈現／編輯，存回時再拆回陣列或單一字串
+      const requiresAppList = Array.isArray(skill.requires_app)
+        ? skill.requires_app
+        : (skill.requires_app ? [skill.requires_app] : []);
 
       body.innerHTML = `
         <div class="skill-edit-form" data-skill-name="${escapeHtml(skillName)}">
           <div class="agent-form-group" style="margin-bottom:16px;">
             <label class="agent-form-label">requires_app</label>
-            <input type="text" class="agent-form-input" name="requires_app" value="${escapeHtml(skill.requires_app || '')}" placeholder="留空為基礎">
+            <input type="text" class="agent-form-input" name="requires_app" value="${escapeHtml(requiresAppList.join(', '))}" placeholder="留空為基礎，多個 app 以逗號分隔">
           </div>
           <div class="agent-form-group" style="margin-bottom:16px;">
             <label class="agent-form-label">allowed_tools</label>
@@ -1152,7 +1157,15 @@ const AgentSettingsApp = (function() {
     if (!form) return;
 
     const skillName = form.dataset.skillName;
-    const requiresApp = form.querySelector('[name="requires_app"]').value || null;
+    // 逗號拆成清單：去除各項前後空白、丟掉空字串；0 項存 null、1 項存字串、
+    // 多項存陣列（後端 required_apps() 兩種格式都接受）
+    const requiresAppItems = form.querySelector('[name="requires_app"]').value
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
+    const requiresApp = requiresAppItems.length === 0
+      ? null
+      : (requiresAppItems.length === 1 ? requiresAppItems[0] : requiresAppItems);
 
     const getAllChips = (field) => {
       const container = form.querySelector(`.skill-chip-editor[data-field="${field}"] .skill-chips-editable`);
