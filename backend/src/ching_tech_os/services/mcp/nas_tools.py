@@ -17,7 +17,9 @@ from .server import (
     logger,
     ensure_db_connection,
     check_mcp_tool_permission,
+    has_bot_identity_injection,
     resolve_bot_identity,
+    resolve_bot_platform,
     to_taipei_time,
     TAIPEI_TZ,
 )
@@ -618,9 +620,20 @@ async def send_nas_file(
         return f"❌ {error_msg}"
 
     # 發送目標一律以連線身分為準：模型換一個 line_group_id 就能把 NAS 檔案
-    # 推到別的群組（issue #209）。telegram_chat_id 不在注入範圍內，見
-    # docs/mcp-tool-access-matrix.md 的已知缺口。
+    # 推到別的群組（issue #209）。
     line_group_id, line_user_id = resolve_bot_identity(line_group_id, line_user_id)
+
+    # telegram_chat_id 本身沒有被注入，但平台有（CTOS_BOT_PLATFORM）：
+    # 這條連線不是 Telegram 對話時，模型帶的 chat id 一律不算數，否則
+    # LINE 使用者可以叫 bot 把 NAS 檔案推到任意 Telegram 聊天室。
+    # Telegram 分支排在 LINE 之前，所以要在這裡就清掉。
+    if (
+        telegram_chat_id
+        and has_bot_identity_injection()
+        and resolve_bot_platform() != "telegram"
+    ):
+        logger.warning("[memory] 模型帶入的 id 與連線身分不符，已改用連線身分")
+        telegram_chat_id = None
 
     from pathlib import Path
     from ..share import (

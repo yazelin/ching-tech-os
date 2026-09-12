@@ -208,7 +208,7 @@ Schema 會自動從 type hints 和 docstring 生成。
 
 | 工具名稱 | 說明 | 參數 |
 |----------|------|------|
-| `download_web_image` | 下載網路圖片到 NAS | `url`（必填）, `ctos_user_id` |
+| `download_web_image` | 下載網路圖片到本機暫存區（`/tmp/bot-downloaded-images`，不寫 NAS），回傳訊息標記讓系統在回覆中顯示 | `url`（必填）, `ctos_user_id` |
 | `download_web_file` | 下載網路檔案到 NAS | `url`（必填）, `filename`, `ctos_user_id` |
 | `convert_pdf_to_images` | 將 PDF 轉為圖片 | `pdf_path`（必填）, `pages`（預設 "all"） |
 

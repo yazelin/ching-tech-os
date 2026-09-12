@@ -230,6 +230,19 @@ BOUND_USER_REQUIRED_MESSAGE = (
     "在 Bot 管理頁面點擊「綁定帳號」產生驗證碼，並將驗證碼傳送給我完成綁定"
 )
 
+# 讀群組對話／附件時沒有任何可用身分（issue #209）。
+# 注意：只有 bot 走的路徑（有 `CTOS_BOT_*` 注入）身分才是伺服器驗過的；
+# 網頁聊天沒有注入，`ctos_user_id` 本身就是模型帶進來的值，
+# 這則訊息擋得住「沒身分」，擋不住「宣稱別人的身分」——真正的解是 issue #231。
+BOT_IDENTITY_REQUIRED_MESSAGE = (
+    "無法確認你的身分，這個功能只能讀你自己參與的對話"
+)
+
+# 有 CTOS 身分，但跟指定的群組／個人對話沒有既有關聯（issue #209）。
+BOT_GROUP_SCOPE_DENIED_MESSAGE = (
+    "你沒有參與這個群組的對話，無法讀取它的訊息"
+)
+
 # ============================================================
 # 工具層級的未綁定自檢（issue #207）
 # ============================================================
@@ -270,11 +283,11 @@ TOOLS_INTENTIONALLY_OPEN: dict[str, str] = {
     "get_memories": "記憶是 bot 的基礎功能；只讀得到注入身分底下的記憶（issue #204）。",
     "update_memory": "記憶是 bot 的基礎功能；SQL 帶注入身分的擁有者條件，改不到別人的記憶（issue #204）。",
     "delete_memory": "記憶是 bot 的基礎功能；SQL 帶注入身分的擁有者條件，刪不到別人的記憶（issue #204）。",
-    "summarize_chat": "群組摘要是 bot 的基礎功能；身分注入後只讀得到自己這個群組，沒有注入時要有 CTOS 身分且與該群組有既有關聯（issue #209）。",
-    "get_message_attachments": "附件查詢是 bot 的基礎功能；與 summarize_chat 同一條身分解析，只讀得到注入身分的群組／個人對話（issue #209）。",
+    "summarize_chat": "群組摘要是 bot 的基礎功能；bot 路徑有身分注入，只讀得到自己這個群組。沒有注入（網頁聊天）時要求 `ctos_user_id` 並驗群組關聯，但那個值本身是模型帶的，只是提高門檻，真正的解是 issue #231（issue #209）。",
+    "get_message_attachments": "附件查詢是 bot 的基礎功能；與 summarize_chat 同一條身分解析，同樣只有 bot 路徑靠注入擋死（issue #209、#231）。",
     "download_web_image": "只把外部 URL 的圖片抓進 /tmp 暫存區回給同一條對話，不讀也不寫 NAS、知識庫或使用者資料。",
     "text_to_speech": "語音回覆是基礎對話功能；語音設定用伺服器注入的 CTOS_USER_ID／CTOS_GROUP_ID 查，模型參數影響不到，輸出只有音檔。",
-    "browse_webpage": "只讀公開的 HTTPS 網頁並回傳文字，不碰內部資料。",
+    "browse_webpage": "只讀公開的 HTTPS 網頁並回傳文字；`web_tools.check_public_http_target()` 會擋掉 loopback／私有／link-local／CGNAT／unique-local 位址、無點主機名稱與 .local／.internal／.lan 這類內網後綴，DNS 解析結果有任何一個非公開位址就拒絕，所以打不到內網。",
 }
 
 # ============================================================

@@ -993,6 +993,7 @@ async def process_message_with_ai(
             line_group_id=line_group_id,
             line_user_id=line_user_id,
             agent_id=(agent or {}).get("id"),
+            platform="line",
         )
 
         # 8.3：Line/Telegram 走 provider-neutral call_ai；routing context 用

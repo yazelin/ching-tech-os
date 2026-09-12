@@ -140,6 +140,54 @@ def test_intentionally_open_tools_exist_and_show_reasons() -> None:
         assert reason in content, f"{name} 的理由沒有出現在矩陣裡"
 
 
+def test_intentionally_open_tools_do_not_call_permission_check() -> None:
+    """負控制：登記開放的工具不能同時呼叫 `check_mcp_tool_permission`。
+
+    「登記開放」與「有做 app 權限檢查」是兩個相反的決定。兩者並存時矩陣會謊報
+    （標成「是（登記開放）」，但實際上權限那一關會擋），所以產生器的 `_classify()`
+    直接丟 ValueError，這裡確認現況沒有這種矛盾。
+    """
+    import inspect
+    import os
+    import sys
+
+    os.environ["ENABLED_MODULES"] = "*"
+    sys.path.insert(0, str(BACKEND_DIR / "src"))
+    sys.path.insert(0, str(BACKEND_DIR / "scripts"))
+    import gen_tool_access_matrix as generator
+
+    tools = generator._load_tools()
+    offenders = []
+    for name in permissions_module.TOOLS_INTENTIONALLY_OPEN:
+        tool = tools.get(name)
+        if tool is None:
+            continue
+        source = inspect.getsource(inspect.unwrap(tool.fn))
+        if any(marker in source for marker in generator._PERMISSION_CALL_MARKERS):
+            offenders.append(name)
+
+    assert offenders == [], f"這些工具同時登記開放又做了權限檢查：{offenders}"
+
+
+def test_classify_rejects_contradictory_decision(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """產生器遇到矛盾要爆掉，不是靜靜標成開放。"""
+    import sys
+
+    sys.path.insert(0, str(BACKEND_DIR / "src"))
+    sys.path.insert(0, str(BACKEND_DIR / "scripts"))
+    import gen_tool_access_matrix as generator
+
+    tools = generator._load_tools()
+    # search_knowledge 有呼叫 check_mcp_tool_permission，硬把它登記成開放
+    monkeypatch.setitem(
+        permissions_module.TOOLS_INTENTIONALLY_OPEN, "search_knowledge", "亂寫的理由"
+    )
+    with pytest.raises(ValueError, match="同時登記在 TOOLS_INTENTIONALLY_OPEN"):
+        generator._classify("search_knowledge", tools["search_knowledge"])
+
+
 def test_intentionally_open_tools_do_not_also_require_bound_user() -> None:
     """同一支不能又「登記開放」又「要求綁定」——那是兩個相反的決定。"""
     overlap = set(permissions_module.TOOLS_INTENTIONALLY_OPEN) & (

@@ -171,7 +171,7 @@ async def test_message_tools(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(message_tools, "get_connection", lambda: _ConnCtx(conn))
 
     # 這條測的是查詢與輸出格式；身分解析（issue #209）由
-    # tests/test_mcp_conversation_scope.py 負責，這裡放行原樣的參數。
+    # tests/test_mcp_identity_sweep.py 負責，這裡放行原樣的參數。
     async def _passthrough_scope(line_group_id, line_user_id, ctos_user_id=None):
         return line_group_id, line_user_id, None
 

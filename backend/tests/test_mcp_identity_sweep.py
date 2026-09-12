@@ -47,6 +47,7 @@ _IDENTITY_ENV = (
     "CTOS_BOT_GROUP_ID",
     "CTOS_BOT_USER_ID",
     "CTOS_GROUP_ID",
+    "CTOS_BOT_PLATFORM",
 )
 
 
@@ -67,9 +68,11 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch):
         monkeypatch.delenv(name, raising=False)
 
 
-def _inject_group(monkeypatch: pytest.MonkeyPatch) -> None:
+def _inject_group(monkeypatch: pytest.MonkeyPatch, platform: str = "line") -> None:
     for name, value in mcp_server.build_bot_mcp_env(
-        line_group_id=CONN_GROUP_ID, line_user_id=CONN_USER_ID
+        line_group_id=CONN_GROUP_ID,
+        line_user_id=CONN_USER_ID,
+        platform=platform,
     ).items():
         monkeypatch.setenv(name, value)
 
@@ -412,12 +415,136 @@ async def test_codex_image_tool_denies_unbound(monkeypatch: pytest.MonkeyPatch) 
     generate = AsyncMock()
     monkeypatch.setattr(codex_image_tools, "generate_image_with_codex", generate)
 
-    result = await codex_image_tool_call()
+    result = await codex_image_tools.codex_image_tool(prompt="一隻貓", ctos_user_id=None)
     assert result.startswith("❌")
     assert permissions_module.BOUND_USER_REQUIRED_MESSAGE in result
     available.assert_not_called()
     generate.assert_not_awaited()
 
 
-async def codex_image_tool_call() -> str:
-    return await codex_image_tools.codex_image_tool(prompt="一隻貓", ctos_user_id=None)
+# ============================================================
+# 6. send_nas_file 的 telegram_chat_id 不能跨平台（issue #210 review）
+# ============================================================
+
+
+@pytest.fixture
+def _send_nas_file_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    """把 send_nas_file 的外部相依全部擋掉，只留「送到哪裡」這件事。"""
+    import ching_tech_os.services.bot_line as line_module
+    import ching_tech_os.services.bot_telegram.adapter as tg_adapter
+    import ching_tech_os.services.share as share_module
+    from ching_tech_os.config import settings
+
+    monkeypatch.setattr(nas_tools, "ensure_db_connection", AsyncMock())
+    monkeypatch.setattr(
+        nas_tools, "check_mcp_tool_permission", AsyncMock(return_value=(True, ""))
+    )
+    monkeypatch.setattr(nas_tools, "_get_user_shared_mounts", AsyncMock(return_value={}))
+    monkeypatch.setattr(
+        nas_tools, "_require_share_manager_for_link", AsyncMock(return_value=None)
+    )
+
+    img = tmp_path / "a.jpg"
+    img.write_bytes(b"x" * 100)
+    monkeypatch.setattr(share_module, "validate_nas_file_path", lambda _p, **_k: img)
+    monkeypatch.setattr(
+        share_module,
+        "create_share_link",
+        AsyncMock(return_value=SimpleNamespace(full_url="https://example.test/s/abc")),
+    )
+
+    push_image = AsyncMock(return_value=("m1", None))
+    monkeypatch.setattr(line_module, "push_image", push_image)
+    monkeypatch.setattr(line_module, "push_text", AsyncMock(return_value=("m2", None)))
+
+    conn = SimpleNamespace(fetchrow=AsyncMock(return_value={"platform_group_id": "G1"}))
+    monkeypatch.setattr(nas_tools, "get_connection", lambda: _ConnCtx(conn))
+
+    telegram_sends: list[tuple] = []
+
+    class _TG:
+        def __init__(self, token):
+            self.token = token
+
+        async def send_image(self, chat_id, url):
+            telegram_sends.append((chat_id, url))
+
+        async def send_file(self, chat_id, url, name):
+            telegram_sends.append((chat_id, url, name))
+
+        async def send_text(self, chat_id, text):
+            telegram_sends.append((chat_id, text))
+
+    monkeypatch.setattr(tg_adapter, "TelegramBotAdapter", _TG)
+    monkeypatch.setattr(settings, "telegram_bot_token", "tok")
+
+    return SimpleNamespace(conn=conn, push_image=push_image, telegram_sends=telegram_sends)
+
+
+@pytest.mark.asyncio
+async def test_send_nas_file_ignores_telegram_chat_id_on_line_connection(
+    monkeypatch: pytest.MonkeyPatch, _send_nas_file_env
+) -> None:
+    """LINE 連線裡模型帶 telegram_chat_id：一律忽略，走 LINE 的注入群組。
+
+    沒有這一關，LINE 使用者可以叫 bot 把 NAS 檔案推到任意 Telegram 聊天室
+    （Telegram 分支排在 LINE 之前，會直接命中）。
+    """
+    _inject_group(monkeypatch, platform="line")
+
+    out = await nas_tools.send_nas_file(
+        "shared://projects/a.jpg", telegram_chat_id="999999", ctos_user_id=1
+    )
+
+    assert "已發送圖片" in out
+    assert _send_nas_file_env.telegram_sends == []
+    assert _send_nas_file_env.conn.fetchrow.call_args.args[1] == UUID(CONN_GROUP_ID)
+    _send_nas_file_env.push_image.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_send_nas_file_honours_telegram_chat_id_on_telegram_connection(
+    monkeypatch: pytest.MonkeyPatch, _send_nas_file_env
+) -> None:
+    """Telegram 連線裡 telegram_chat_id 照用（同平台，不是跨平台推送）。"""
+    _inject_group(monkeypatch, platform="telegram")
+
+    out = await nas_tools.send_nas_file(
+        "shared://projects/a.jpg", telegram_chat_id="999999", ctos_user_id=1
+    )
+
+    assert "已發送圖片" in out
+    assert _send_nas_file_env.telegram_sends
+    assert _send_nas_file_env.telegram_sends[0][0] == "999999"
+    _send_nas_file_env.push_image.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_send_nas_file_uses_telegram_chat_id_without_injection(
+    _send_nas_file_env,
+) -> None:
+    """沒有注入（網頁聊天）維持採用參數，行為不變。"""
+    out = await nas_tools.send_nas_file(
+        "shared://projects/a.jpg", telegram_chat_id="999999", ctos_user_id=1
+    )
+
+    assert "已發送圖片" in out
+    assert _send_nas_file_env.telegram_sends
+    assert _send_nas_file_env.telegram_sends[0][0] == "999999"
+
+
+def test_build_bot_mcp_env_carries_platform() -> None:
+    """平台是新注入的變數：呼叫端與 `resolve_bot_platform()` 共用同一份事實。"""
+    env = mcp_server.build_bot_mcp_env(
+        line_group_id=CONN_GROUP_ID, line_user_id=CONN_USER_ID, platform="telegram"
+    )
+    assert env["CTOS_BOT_PLATFORM"] == "telegram"
+    assert "CTOS_BOT_PLATFORM" not in mcp_server.build_bot_mcp_env(
+        line_group_id=CONN_GROUP_ID
+    )
+
+
+def test_resolve_bot_platform(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert mcp_server.resolve_bot_platform() is None
+    monkeypatch.setenv("CTOS_BOT_PLATFORM", "line")
+    assert mcp_server.resolve_bot_platform() == "line"

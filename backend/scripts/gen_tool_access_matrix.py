@@ -153,6 +153,14 @@ def _classify(name: str, tool) -> dict:
         else:
             app_cell = f"`{app_id}`（{app_display_names.get(app_id, app_id)}）"
 
+    if name in TOOLS_INTENTIONALLY_OPEN and checks_permission:
+        # 「登記開放」與「有做 app 權限檢查」是兩個相反的決定。靜靜標成開放，
+        # 矩陣就會謊報這支工具不受權限保護（或反過來），所以直接爆掉。
+        raise ValueError(
+            f"{name} 同時登記在 TOOLS_INTENTIONALLY_OPEN 又呼叫了權限檢查："
+            "兩者只能擇一，請從 registry 拿掉或移除工具裡的檢查"
+        )
+
     if name in TOOLS_REQUIRE_BOUND_USER:
         unbound = "否（工具自檢）"
     elif name in TOOLS_INTENTIONALLY_OPEN:
@@ -280,17 +288,22 @@ def _render_gaps(rows: list[dict]) -> list[str]:
     else:
         lines.append(
             "**bot 身分還是模型說了算的工具**：無（issue #209）。"
-            "收 `line_group_id`／`line_user_id` 的工具都先過 `resolve_bot_identity()`；"
-            "讀群組對話／附件的兩支再多一層 `resolve_conversation_scope()`——"
-            "有注入就只讀得到自己的群組，沒有注入（網頁聊天）要有 CTOS 身分"
-            "且與該群組有既有關聯才放行。"
+            "收 `line_group_id`／`line_user_id` 的工具都先過 `resolve_bot_identity()`，"
+            "**有注入時**（LINE／Telegram）模型帶的 id 一律被覆蓋。"
+            "讀群組對話／附件的兩支再多一層 `resolve_conversation_scope()`："
+            "沒有注入時要有 `ctos_user_id` 且與該群組有既有關聯才放行——"
+            "但沒有注入就表示連 `CTOS_USER_ID` 也沒注入，"
+            "那個 `ctos_user_id` 本身就是模型帶進來的值，"
+            "所以這一關擋得住「沒身分」，擋不住「宣稱別人的身分」，"
+            "真正的解是 issue #231（見下方「網頁聊天不注入身分」）。"
         )
     lines.append("")
     lines.append(
-        "**`send_nas_file` 的 `telegram_chat_id` 不在注入範圍**："
-        "`build_bot_mcp_env()` 只注入 `CTOS_BOT_GROUP_ID`／`CTOS_BOT_USER_ID`，"
-        "Telegram 的 chat id 仍由模型參數決定，且 Telegram 分支排在 LINE 之前。"
-        "要收掉得先讓呼叫端把 chat id 一起注入。"
+        "**`send_nas_file` 的 `telegram_chat_id` 不在注入範圍**（issue #232）："
+        "`build_bot_mcp_env()` 注入的是 `CTOS_BOT_GROUP_ID`／`CTOS_BOT_USER_ID`／"
+        "`CTOS_BOT_PLATFORM`，Telegram 的 chat id 本身仍由模型參數決定。"
+        "跨平台那一半已經擋掉（連線不是 Telegram 對話時模型帶的 chat id 一律忽略），"
+        "剩下的是 Telegram 對話裡模型仍可指定同平台的別的 chat id。"
     )
     lines.append("")
     lines.append(
@@ -301,8 +314,10 @@ def _render_gaps(rows: list[dict]) -> list[str]:
         "`update_memory`／`delete_memory` 沒有擁有者範圍。"
         "進 socket 之前有 session 認證，所以不是匿名者能打的路，"
         "但同一個登入者可以指定別人的 id。"
-        "`summarize_chat`／`get_message_attachments` 已經不受影響"
-        "（沒有注入就要求 CTOS 身分並驗群組關聯），其餘工具仍然照舊。"
+        "`summarize_chat`／`get_message_attachments` 在這條路上多擋了一層"
+        "（要求 `ctos_user_id` 並驗群組關聯），但那個 `ctos_user_id` 同樣是模型帶的，"
+        "所以只是提高了門檻，**不是修好了**；要真的修好得讓 `api/ai.py` 注入身分"
+        "（issue #231）。其餘工具仍然照舊。"
     )
     lines.append("")
     return lines

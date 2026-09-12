@@ -13,6 +13,13 @@ from mcp.server.fastmcp import FastMCP
 
 from ...database import get_connection, init_db_pool
 
+# 訊息常數集中在 permissions.py（與 BOUND_USER_REQUIRED_MESSAGE 放一起），
+# 這裡 re-export 讓工具端沿用 `mcp_server.XXX` 的既有寫法。
+from ..permissions import (  # noqa: F401
+    BOT_GROUP_SCOPE_DENIED_MESSAGE,
+    BOT_IDENTITY_REQUIRED_MESSAGE,
+)
+
 logger = logging.getLogger("mcp_server")
 
 # 台北時區 (UTC+8)
@@ -181,17 +188,6 @@ def resolve_bot_identity(
     return resolved_group, resolved_user
 
 
-# 沒有連線身分可用時，讀群組對話／附件一律拒絕（issue #209）。
-BOT_IDENTITY_REQUIRED_MESSAGE = (
-    "無法確認你的身分，這個功能只能讀你自己參與的對話"
-)
-
-# 有 CTOS 身分但跟指定的群組沒有關聯（issue #209）。
-BOT_GROUP_SCOPE_DENIED_MESSAGE = (
-    "你沒有參與這個群組的對話，無法讀取它的訊息"
-)
-
-
 def has_bot_identity_injection() -> bool:
     """這條 MCP 連線有沒有被注入 bot 對話身分。
 
@@ -288,6 +284,7 @@ def build_bot_mcp_env(
     line_group_id=None,
     line_user_id=None,
     agent_id=None,
+    platform=None,
 ) -> dict[str, str]:
     """組 bot 對話要注入 MCP 子行程的身分環境變數（issue #204）。
 
@@ -298,11 +295,15 @@ def build_bot_mcp_env(
         line_group_id: 群組的內部 UUID（bot_groups.id；個人對話為 None）
         line_user_id: 平台使用者 ID（bot_users.platform_user_id）
         agent_id: 這次對話使用的 Agent ID（語音設定用）
+        platform: 這次對話的平台（`line`／`telegram`）。`send_nas_file` 用它判斷
+            模型帶的 `telegram_chat_id` 算不算數——LINE 對話裡不算（issue #210 review）。
 
     Returns:
         要附加到 ching-tech-os MCP server 的環境變數
     """
     env: dict[str, str] = {}
+    if platform:
+        env["CTOS_BOT_PLATFORM"] = str(platform)
     if line_group_id:
         env["CTOS_BOT_GROUP_ID"] = str(line_group_id)
         # 語音設定（voice_tools）已經在用的名字，沿用同一個值避免兩套名字打架
@@ -312,6 +313,14 @@ def build_bot_mcp_env(
     if agent_id:
         env["CTOS_AGENT_ID"] = str(agent_id)
     return env
+
+
+def resolve_bot_platform() -> str | None:
+    """這條連線的平台（`line`／`telegram`），沒有注入就回 None。
+
+    由 `build_bot_mcp_env(platform=...)` 寫進 `CTOS_BOT_PLATFORM`。
+    """
+    return os.environ.get("CTOS_BOT_PLATFORM") or None
 
 
 def resolve_agent_allowed_shared_sources() -> list[str] | None:
