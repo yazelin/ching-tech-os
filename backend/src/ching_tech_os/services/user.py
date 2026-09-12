@@ -461,13 +461,22 @@ async def update_user_preferences(user_id: int, preferences: dict) -> dict:
         更新後的完整偏好設定（合併後的真實值）
     """
     async with get_connection() as conn:
-        # 只有現有值真的是 JSON 物件才用 jsonb_concat (||) 合併；
-        # NULL 或舊版雙重編碼／被串成陣列的壞資料一律用新值直接覆蓋
+        # 合併規則（壞資料不能因為一次改主題就被清空）：
+        #   1. 現有值是 JSON 物件 → 直接用 jsonb_concat (||) 合併
+        #   2. 現有值是 JSON 字串純量（舊版雙重編碼寫出來的，正式機最可能是這種）
+        #      → 先用 `#>> '{}'` 剝掉外層字串，內容真的是物件才合併；
+        #        `pg_input_is_valid` 擋掉剝出來不是合法 JSON 的情況（例如 "hello"），
+        #        不加這層 CAST 會直接噴 22P02
+        #   3. 其餘（NULL、被 || 串成的陣列、剝開也不是物件）→ 用新值直接覆蓋
         row = await conn.fetchrow(
             """
             UPDATE users
             SET preferences = CASE
                 WHEN jsonb_typeof(preferences) = 'object' THEN preferences || $2::jsonb
+                WHEN jsonb_typeof(preferences) = 'string'
+                     AND pg_input_is_valid(preferences #>> '{}', 'jsonb')
+                     AND jsonb_typeof((preferences #>> '{}')::jsonb) = 'object'
+                    THEN (preferences #>> '{}')::jsonb || $2::jsonb
                 ELSE $2::jsonb
             END
             WHERE id = $1

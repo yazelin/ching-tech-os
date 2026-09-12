@@ -12,7 +12,7 @@ from typing import Any
 from uuid import UUID
 
 from ..database import get_connection
-from ..utils.jsonb import parse_json_field
+from ..utils.jsonb import parse_json_dict, parse_json_field
 from ..models.ai import (
     AiAgentCreate,
     AiAgentResponse,
@@ -629,8 +629,8 @@ async def get_logs(
                 item["allowed_tools"] = parse_json_field(item["allowed_tools"])
             # 從 parsed_response 提取 used_tools（對 run_skill_script 加上 skill 資訊）
             if item.get("parsed_response"):
-                parsed = parse_json_field(item["parsed_response"])
-                tool_calls = parsed.get("tool_calls", []) if parsed else []
+                parsed = parse_json_dict(item["parsed_response"])
+                tool_calls = parsed.get("tool_calls") or []
                 used_tools_set = {}
                 for tc in tool_calls:
                     name = tc.get("name")

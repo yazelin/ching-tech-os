@@ -283,23 +283,36 @@ class _FakeJsonbConn:
             return "string"
         return None
 
+    @staticmethod
+    def _unwrap_string(value):
+        """模擬 `pg_input_is_valid(preferences #>> '{}', 'jsonb')` 後的 CAST"""
+        try:
+            return json.loads(value)
+        except ValueError:
+            return None
+
     async def fetchrow(self, sql, *args):
         if sql.strip().startswith("SELECT preferences"):
             return {"preferences": self.value}
         if "UPDATE users" in sql and "preferences" in sql:
             incoming = json.loads(json.dumps(args[1]))  # codec 編碼 + PostgreSQL 解析
-            if "jsonb_typeof(preferences) = 'object'" in sql:
-                if self._typeof(self.value) == "object":
-                    merged = dict(self.value)
-                    if isinstance(incoming, dict):
-                        merged.update(incoming)
-                    else:  # 舊行為：object || 非 object 會串成陣列
-                        merged = [self.value, incoming]
-                    self.value = merged
-                else:
-                    self.value = incoming
-            else:
+            merge_objects = "jsonb_typeof(preferences) = 'object'" in sql
+            unwrap_strings = "jsonb_typeof(preferences) = 'string'" in sql
+            base = None
+            if merge_objects and self._typeof(self.value) == "object":
+                base = self.value
+            elif unwrap_strings and self._typeof(self.value) == "string":
+                unwrapped = self._unwrap_string(self.value)
+                if isinstance(unwrapped, dict):
+                    base = unwrapped
+            if base is None:
                 self.value = incoming
+            elif isinstance(incoming, dict):
+                merged = dict(base)
+                merged.update(incoming)
+                self.value = merged
+            else:  # 舊行為：object || 非 object 會串成陣列
+                self.value = [base, incoming]
             return {"preferences": self.value}
         raise AssertionError(f"未預期的 SQL：{sql}")
 
@@ -331,3 +344,48 @@ async def test_put_overwrites_corrupted_row(monkeypatch: pytest.MonkeyPatch) -> 
     assert updated == {"theme": "light"}
     assert conn.value == {"theme": "light"}
     assert await user_service.get_user_preferences(1) == {"theme": "light"}
+
+
+# 舊版 update_user_permissions 寫出來的列：整包 preferences 變成 JSON 字串純量
+STRING_SCALAR_PREFERENCES = json.dumps(
+    {"permissions": {"apps": {"settings": True}}, "theme": "dark"}
+)
+
+
+@pytest.mark.asyncio
+async def test_put_merges_into_string_scalar_row(monkeypatch: pytest.MonkeyPatch) -> None:
+    """字串純量的列：剝殼之後合併，管理員設好的 permissions 不可以被改主題洗掉"""
+    conn = _FakeJsonbConn(STRING_SCALAR_PREFERENCES)
+    _patch_conn(monkeypatch, user_service, conn)
+
+    updated = await user_service.update_user_preferences(1, {"theme": "light"})
+
+    assert updated["theme"] == "light"
+    assert updated["permissions"]["apps"]["settings"] is True
+    assert conn.value == {"permissions": {"apps": {"settings": True}}, "theme": "light"}
+    assert await user_service.get_user_preferences(1) == updated
+
+
+@pytest.mark.asyncio
+async def test_put_overwrites_string_scalar_that_is_not_an_object(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """字串純量剝開來不是物件（"hello"、"[1,2]"）→ 用新值覆蓋，不可以炸也不可以串成陣列"""
+    for broken in ("hello", "[1, 2]"):
+        conn = _FakeJsonbConn(broken)
+        _patch_conn(monkeypatch, user_service, conn)
+
+        updated = await user_service.update_user_preferences(1, {"theme": "light"})
+
+        assert updated == {"theme": "light"}
+        assert conn.value == {"theme": "light"}
+
+
+def test_update_preferences_sql_unwraps_string_scalar_rows() -> None:
+    """SQL 本身要有剝殼分支，而且 CAST 前一定要有 pg_input_is_valid 擋著"""
+    import inspect
+
+    sql = inspect.getsource(user_service.update_user_preferences)
+    assert "jsonb_typeof(preferences) = 'string'" in sql
+    assert "pg_input_is_valid(preferences #>> '{}', 'jsonb')" in sql
+    assert "(preferences #>> '{}')::jsonb || $2::jsonb" in sql
