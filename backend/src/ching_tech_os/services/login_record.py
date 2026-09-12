@@ -325,7 +325,7 @@ async def get_login_stats(user_id: int | None = None, days: int = 30) -> dict:
                     COUNT(DISTINCT device_fingerprint) as unique_devices
                 FROM login_records
                 WHERE user_id = $1
-                AND created_at >= NOW() - ($2 || ' days')::INTERVAL
+                AND created_at >= NOW() - make_interval(days => $2)
                 """,
                 user_id,
                 days,
@@ -340,7 +340,7 @@ async def get_login_stats(user_id: int | None = None, days: int = 30) -> dict:
                     COUNT(DISTINCT ip_address) as unique_ips,
                     COUNT(DISTINCT device_fingerprint) as unique_devices
                 FROM login_records
-                WHERE created_at >= NOW() - ($1 || ' days')::INTERVAL
+                WHERE created_at >= NOW() - make_interval(days => $1)
                 """,
                 days,
             )
