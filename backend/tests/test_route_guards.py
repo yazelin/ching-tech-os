@@ -81,8 +81,24 @@ ALLOWED_PUBLIC: dict[tuple[str, str], str] = {
 # strict=True 讓 XPASS 也算失敗，逼人回來把這裡的條目刪掉。
 KNOWN_UNGUARDED: dict[tuple[str, str], str] = {
     ("GET", "/api/voice/voices"): "#256",
-    ("GET", "/api/nvr/snapshot/{channel}"): "#261",
-    ("GET", "/api/nvr/recording-status"): "#261",
+}
+
+
+# ============================================================
+# 修好之後釘住不准退回去
+# ============================================================
+# 曾經沒閘、已經補上守衛的路由：這裡寫死它必須掛哪個依賴，
+# 免得日後有人「簡化」時把閘拆掉，只靠上面那條通則的允許清單再被加一筆矇混過去。
+REGRESSION_PINS: dict[tuple[str, str], tuple[str, str]] = {
+    # (方法, 路徑): (必須出現的依賴名, 出處 issue)
+    ("GET", "/api/nvr/snapshot/{channel}"): (
+        "require_app_permission.<locals>.checker",
+        "#261",
+    ),
+    ("GET", "/api/nvr/recording-status"): (
+        "require_app_permission.<locals>.checker",
+        "#261",
+    ),
 }
 
 
@@ -234,4 +250,21 @@ def test_known_unguarded_routes_are_still_unguarded(api_routes, entry) -> None:
     """已知沒閘的路由：修好後這裡會 XPASS（strict）而紅，提醒刪掉 KNOWN_UNGUARDED 條目。"""
     assert _is_guarded(api_routes.get(entry, set())), (
         f"{_fmt(entry)} 尚未掛上身分依賴（{KNOWN_UNGUARDED[entry]}）"
+    )
+
+
+@pytest.mark.parametrize(
+    ("entry", "required_dep", "issue"),
+    [
+        pytest.param(entry, dep, issue, id=f"{entry[0]} {entry[1]} {issue}")
+        for entry, (dep, issue) in sorted(REGRESSION_PINS.items())
+    ],
+)
+def test_fixed_routes_keep_their_guard(api_routes, entry, required_dep, issue) -> None:
+    """修過的路由要一直掛著那道閘，不准退回沒閘的狀態。"""
+    names = api_routes.get(entry)
+    assert names is not None, f"{_fmt(entry)} 在 app.routes 裡找不到（{issue}）"
+    assert required_dep in names, (
+        f"{_fmt(entry)} 少了 {required_dep}（{issue} 修過的閘被拆掉了）\n"
+        f"  目前依賴：{sorted(names)}"
     )

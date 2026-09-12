@@ -400,8 +400,9 @@ session 的權限快取沒帶到某個 `app_id` 時，`require_app_permission` �
 `backend/tests/test_route_guards.py`
 
 - `ALLOWED_PUBLIC`：允許公開的端點，每一條都附一句理由。
-- `KNOWN_UNGUARDED`：已知沒閘、已開 issue 待修的端點（目前 #256、#261），用 `xfail(strict=True)` 盯著；
+- `KNOWN_UNGUARDED`：已知沒閘、已開 issue 待修的端點（目前只剩 #256），用 `xfail(strict=True)` 盯著；
   修好之後測試會 XPASS 而變紅，提醒把條目刪掉。
+- `REGRESSION_PINS`：修過的端點釘住它必須掛哪道閘（目前 #261 的 nvr 兩支），不准退回沒閘的狀態。
 - `IDENTITY_DEPENDENCIES`：什麼算「有掛身分」的認定清單。
 
 測試的作法是 FastAPI route 內省：在 `ENABLED_MODULES='*'` 下把 `app.routes`（含 `extends/` 模組）
