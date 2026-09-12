@@ -116,6 +116,7 @@ systemctl is-active ching-tech-os
 | #238 | #237 種子資料 tenant id | 只影響全新安裝 |
 | #245 | #240 jsonb 雙重編碼：寫入端傳 dict、讀取端新舊都吃、preferences 字串列剝殼合併 | **PG 版本下限變 16**（`pg_input_is_valid`）；既有壞列不會自動修，見 #244 |
 | #258 | #255 `/api/login-records/stats` 必 500（days 以 int 串 INTERVAL）改 `make_interval` | 新前端登入紀錄頁的統計卡部署後才會有數字 |
+| #263 | #262 `/api/config/apps` 與 `/api/skills/{name}/frontend/{path}` 加登入（舊桌面附 `?token=`） | **部署後舊桌面開一次 NVR／HIS 的 skill app 確認還載得到** |
 
 ## 1. 待部署 PR 與對使用者可見的影響
 
