@@ -391,6 +391,28 @@ session 的權限快取沒帶到某個 `app_id` 時，`require_app_permission` �
 
 ---
 
+## 公開端點清單（以測試為準）
+
+每條 `/api` 路由都必須掛上身分依賴（`get_current_session`、`require_admin`、
+`require_app_permission(...)` 這一類）。少數端點設計上就是公開，或有自己的驗證方式
+（平台簽章、來源 IP、不可猜測的分享 token），這些例外**列在測試裡**，不在這份文件裡再抄一份：
+
+`backend/tests/test_route_guards.py`
+
+- `ALLOWED_PUBLIC`：允許公開的端點，每一條都附一句理由。
+- `KNOWN_UNGUARDED`：已知沒閘、已開 issue 待修的端點（目前 #256、#261），用 `xfail(strict=True)` 盯著；
+  修好之後測試會 XPASS 而變紅，提醒把條目刪掉。
+- `IDENTITY_DEPENDENCIES`：什麼算「有掛身分」的認定清單。
+
+測試的作法是 FastAPI route 內省：在 `ENABLED_MODULES='*'` 下把 `app.routes`（含 `extends/` 模組）
+每條路由的 `route.dependant` 依賴樹整棵走過，看有沒有出現身分依賴。
+新端點忘了掛登入或權限，這個測試會直接紅並印出那條路由。
+
+要新增公開端點，就在 `ALLOWED_PUBLIC` 加一條並寫清楚為什麼可以公開；
+測試同時會檢查清單裡的每一條都真的存在於 `app.routes`，避免路由改名後留下死條目。
+
+---
+
 ## Bot 對外開放、未綁定者的工具範圍
 
 LINE／Telegram Bot 是對外開放的入口：任何人加好友或把 bot 拉進群組就能對話，
@@ -649,6 +671,7 @@ app.add_middleware(
 | `backend/migrations/versions/007_seed_admin_user.py` | 預設管理員帳號 migration |
 | `frontend/js/device-fingerprint.js` | 裝置指紋 |
 | `backend/src/ching_tech_os/services/permissions.py` | App 功能權限與 `require_app_permission` |
+| `backend/tests/test_route_guards.py` | 路由守衛回歸測試與公開端點允許清單（唯一事實來源） |
 | `backend/src/ching_tech_os/services/socket_auth.py` | Socket.IO 連線身分工具（token 擷取、讀連線 session） |
 | `frontend/js/login.js` | 登入模組 |
 | `frontend/js/socket-client.js` | Socket.IO 客戶端（連線帶 token） |
