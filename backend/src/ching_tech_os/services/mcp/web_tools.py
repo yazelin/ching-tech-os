@@ -46,6 +46,28 @@ def _is_public_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     return True
 
 
+async def block_non_public_requests(route, request) -> None:
+    """`page.route()` handler：每一個 request 的 URL 都過一次公開位址檢查。
+
+    只檢查最初的 URL 擋不住重新導向：公開網域 302 到
+    `https://192.168.11.11/` 之後，瀏覽器照樣會去載入它。主 frame 與
+    subresource（img／xhr／iframe…）都會經過這裡。
+
+    非公開目標一律 `abort()`；檢查本身出錯也 abort（寧可載不到，不要漏出去）。
+    """
+    try:
+        error = check_public_http_target(request.url)
+    except Exception:  # pragma: no cover - 防呆：檢查本身壞掉不能變成放行
+        error = "❌ 目標檢查失敗"
+
+    if error:
+        logger.warning("[web] 擋下非公開目標：%s", request.url)
+        await route.abort()
+        return
+
+    await route.continue_()
+
+
 def check_public_http_target(url: str) -> str | None:
     """SSRF 防護：只放行解析結果全部是公開位址的 HTTPS 目標（issue #210 review）。
 
@@ -60,6 +82,13 @@ def check_public_http_target(url: str) -> str | None:
     - 主機是 IP 字面值且不是公開位址
     - DNS 解析出來的位址**任何一個**不是公開位址（擋 DNS rebinding 的一半：
       同一個名字同時回公開與內網位址時一律拒絕）
+
+    這支 helper 只判斷「這個 URL 現在解析起來是不是公開位址」。實際防護是三層：
+    最初的 URL、`page.route()` 攔到的每一個 request URL、以及 `page.goto()` 之後
+    真正落地的 `page.url`。三層都用這同一個判斷式。
+
+    擋不住的：本函式的 `getaddrinfo()` 與瀏覽器自己的 DNS 是兩次獨立解析，
+    中間換答案（DNS rebinding）沒有完全封死。
 
     Returns:
         None 表示放行；否則回傳要顯示給使用者的錯誤字串（不丟例外）
@@ -153,6 +182,9 @@ async def browse_webpage(
         )
         page = await browser.new_page(viewport={"width": 1280, "height": 720})
 
+        # 第二層：瀏覽器實際要發出的每一個 request 都再檢查一次（擋重新導向）
+        await page.route("**/*", block_non_public_requests)
+
         # 頁面導航：先嘗試 networkidle，失敗則 fallback
         try:
             await page.goto(url, wait_until="networkidle", timeout=timeout)
@@ -163,6 +195,14 @@ async def browse_webpage(
                 await page.wait_for_timeout(3000)
             except Exception as e:
                 return f"❌ 頁面載入超時：{e}"
+
+        # 第三層：真正落地的 URL 再檢查一次。route handler 已經會擋掉非公開的
+        # request，但導航可能停在別的地方（例如 meta refresh、history API），
+        # 所以讀內容之前以 `page.url` 為準再確認一次。
+        landed_error = check_public_http_target(page.url)
+        if landed_error:
+            logger.warning("[web] 落地 URL 非公開，拒絕讀取內容：%s", page.url)
+            return landed_error
 
         # 取得頁面標題
         title = await page.title() or "（無標題）"

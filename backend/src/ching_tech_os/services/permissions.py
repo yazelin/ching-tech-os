@@ -287,7 +287,7 @@ TOOLS_INTENTIONALLY_OPEN: dict[str, str] = {
     "get_message_attachments": "附件查詢是 bot 的基礎功能；與 summarize_chat 同一條身分解析，同樣只有 bot 路徑靠注入擋死（issue #209、#231）。",
     "download_web_image": "只把外部 URL 的圖片抓進 /tmp 暫存區回給同一條對話，不讀也不寫 NAS、知識庫或使用者資料。",
     "text_to_speech": "語音回覆是基礎對話功能；語音設定用伺服器注入的 CTOS_USER_ID／CTOS_GROUP_ID 查，模型參數影響不到，輸出只有音檔。",
-    "browse_webpage": "只讀公開的 HTTPS 網頁並回傳文字；`web_tools.check_public_http_target()` 會擋掉 loopback／私有／link-local／CGNAT／unique-local 位址、無點主機名稱與 .local／.internal／.lan 這類內網後綴，DNS 解析結果有任何一個非公開位址就拒絕，所以打不到內網。",
+    "browse_webpage": "只讀公開的 HTTPS 網頁並回傳文字。`web_tools.check_public_http_target()` 會拒絕 loopback／私有／link-local／CGNAT／unique-local 位址、無點主機名稱與 .local／.internal／.lan 這類內網後綴（DNS 解析結果有任何一個非公開就拒絕），並套在三個地方：最初的 URL、`page.route()` 攔到的每一個 request URL（擋重新導向與 subresource）、以及 `page.goto()` 之後真正落地的 `page.url`。未封死：本地檢查與瀏覽器是兩次獨立 DNS 解析，中間換答案（DNS rebinding）仍有空隙。",
 }
 
 # ============================================================

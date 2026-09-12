@@ -466,6 +466,19 @@ chat id 一律忽略並記 warning，LINE 使用者沒辦法把 NAS 檔案推到
   不是公開位址就拒絕。沒有這一層，未綁定者可以叫 bot 去讀內網頁面
   （SSRF），「只讀公開網頁」這個開放理由就不成立。
 
+  **檢查套在三個地方**，因為只看最初的 URL 擋不住重新導向——公開網域 302 到
+  `https://192.168.11.11/`，Chromium 照樣會去載入它：
+
+  | 時機 | 實作 | 擋什麼 |
+  |------|------|--------|
+  | 呼叫進來 | `browse_webpage` 開頭 | 模型直接指定內網位址 |
+  | 每一個 request | `page.route("**/*", block_non_public_requests)` | 重新導向與 subresource（img／xhr／iframe）打內網；非公開一律 `abort()`，檢查本身出錯也 abort |
+  | 讀內容之前 | `check_public_http_target(page.url)` | 導航最後停在內網位址（meta refresh、history API），在取 title／snapshot 之前就拒絕 |
+
+  **沒有封死的**：`check_public_http_target()` 的 `getaddrinfo()` 與瀏覽器自己的
+  DNS 是兩次獨立解析，中間換答案（DNS rebinding）仍有空隙。要完全封死得讓
+  瀏覽器只走一個會做同樣檢查的 proxy，不在這次範圍。
+
 ### 公開分享連結（#205）
 
 分享連結不需要帳號就打得開，所以「能不能建立連結」必須等於「建立的人讀不讀得到」。

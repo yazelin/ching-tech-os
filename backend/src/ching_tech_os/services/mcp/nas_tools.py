@@ -632,7 +632,11 @@ async def send_nas_file(
         and has_bot_identity_injection()
         and resolve_bot_platform() != "telegram"
     ):
-        logger.warning("[memory] 模型帶入的 id 與連線身分不符，已改用連線身分")
+        logger.warning(
+            "[nas] 這條連線不是 Telegram 對話（platform=%s），"
+            "已捨棄模型帶入的 telegram_chat_id，不跨平台發送",
+            resolve_bot_platform() or "未注入",
+        )
         telegram_chat_id = None
 
     from pathlib import Path

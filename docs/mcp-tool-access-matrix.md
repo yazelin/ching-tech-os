@@ -131,7 +131,7 @@
 | 工具 | 理由 |
 |------|------|
 | `add_memory` | 記憶是 bot 的基礎功能；範圍由伺服器注入的連線身分決定（issue #204），未綁定者只寫得到自己這條對話的記憶。 |
-| `browse_webpage` | 只讀公開的 HTTPS 網頁並回傳文字；`web_tools.check_public_http_target()` 會擋掉 loopback／私有／link-local／CGNAT／unique-local 位址、無點主機名稱與 .local／.internal／.lan 這類內網後綴，DNS 解析結果有任何一個非公開位址就拒絕，所以打不到內網。 |
+| `browse_webpage` | 只讀公開的 HTTPS 網頁並回傳文字。`web_tools.check_public_http_target()` 會拒絕 loopback／私有／link-local／CGNAT／unique-local 位址、無點主機名稱與 .local／.internal／.lan 這類內網後綴（DNS 解析結果有任何一個非公開就拒絕），並套在三個地方：最初的 URL、`page.route()` 攔到的每一個 request URL（擋重新導向與 subresource）、以及 `page.goto()` 之後真正落地的 `page.url`。未封死：本地檢查與瀏覽器是兩次獨立 DNS 解析，中間換答案（DNS rebinding）仍有空隙。 |
 | `delete_memory` | 記憶是 bot 的基礎功能；SQL 帶注入身分的擁有者條件，刪不到別人的記憶（issue #204）。 |
 | `download_web_image` | 只把外部 URL 的圖片抓進 /tmp 暫存區回給同一條對話，不讀也不寫 NAS、知識庫或使用者資料。 |
 | `get_memories` | 記憶是 bot 的基礎功能；只讀得到注入身分底下的記憶（issue #204）。 |
