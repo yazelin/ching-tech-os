@@ -13,6 +13,13 @@ from mcp.server.fastmcp import FastMCP
 
 from ...database import get_connection, init_db_pool
 
+# 訊息常數集中在 permissions.py（與 BOUND_USER_REQUIRED_MESSAGE 放一起），
+# 這裡 re-export 讓工具端沿用 `mcp_server.XXX` 的既有寫法。
+from ..permissions import (  # noqa: F401
+    BOT_GROUP_SCOPE_DENIED_MESSAGE,
+    BOT_IDENTITY_REQUIRED_MESSAGE,
+)
+
 logger = logging.getLogger("mcp_server")
 
 # 台北時區 (UTC+8)
@@ -181,10 +188,103 @@ def resolve_bot_identity(
     return resolved_group, resolved_user
 
 
+def has_bot_identity_injection() -> bool:
+    """這條 MCP 連線有沒有被注入 bot 對話身分。
+
+    有注入＝呼叫端（LINE／Telegram）已經驗過是誰在講話，`resolve_bot_identity()`
+    的回傳值就是可信的。沒有注入＝目前實際上就是網頁聊天（`api/ai.py` 呼叫
+    `call_ai()` 沒有帶 `extra_mcp_env`），身分只能從 `ctos_user_id` 再驗一次。
+    """
+    return bool(
+        os.environ.get("CTOS_BOT_GROUP_ID")
+        or os.environ.get("CTOS_GROUP_ID")
+        or os.environ.get("CTOS_BOT_USER_ID")
+    )
+
+
+async def _ctos_user_in_bot_group(ctos_user_id: int, line_group_id: str) -> bool:
+    """這個 CTOS 使用者有沒有參與這個 bot 群組。
+
+    沒有 bot_group_members 這張表，既有的關聯只有兩條：
+    `bot_users.user_id`（綁定的 CTOS 帳號）與 `bot_messages`（誰在哪個群組發過話）。
+    沿用同一條關聯：綁定的 bot 帳號在這個群組留過訊息才算參與。
+    """
+    from uuid import UUID as _UUID
+
+    try:
+        group_uuid = _UUID(str(line_group_id))
+    except (ValueError, AttributeError):
+        return False
+
+    await ensure_db_connection()
+    async with get_connection() as conn:
+        row = await conn.fetchval(
+            """
+            SELECT 1
+            FROM bot_messages m
+            JOIN bot_users u ON m.bot_user_id = u.id
+            WHERE m.bot_group_id = $1 AND u.user_id = $2
+            LIMIT 1
+            """,
+            group_uuid,
+            ctos_user_id,
+        )
+        return row is not None
+
+
+async def _ctos_user_owns_bot_user(ctos_user_id: int, platform_user_id: str) -> bool:
+    """這個平台使用者 ID 是不是這個 CTOS 使用者自己綁的。"""
+    await ensure_db_connection()
+    async with get_connection() as conn:
+        row = await conn.fetchval(
+            "SELECT 1 FROM bot_users WHERE platform_user_id = $1 AND user_id = $2 LIMIT 1",
+            str(platform_user_id),
+            ctos_user_id,
+        )
+        return row is not None
+
+
+async def resolve_conversation_scope(
+    line_group_id: str | None,
+    line_user_id: str | None,
+    ctos_user_id: int | None = None,
+) -> tuple[str | None, str | None, str | None]:
+    """讀群組對話／附件的身分解析（issue #209）。
+
+    `resolve_bot_identity()` 只解決「有注入時模型不能宣稱別人」，但網頁聊天那條路
+    沒有注入，模型帶什麼群組 id 就讀什麼群組——已登入的網頁使用者可以讀到任何群組的
+    對話與附件。所以分兩段：
+
+    1. 有注入 → 直接用注入值，模型參數一律忽略（與記憶工具同一套）。
+    2. 沒有注入 → 要有伺服器認得的 `ctos_user_id`，而且指定的群組／個人身分
+       必須跟這個 CTOS 帳號有既有關聯，否則拒絕。
+
+    Returns:
+        (line_group_id, line_user_id, error_message)：error 非 None 就是拒絕
+    """
+    resolved_group, resolved_user = resolve_bot_identity(line_group_id, line_user_id)
+
+    if has_bot_identity_injection():
+        return resolved_group, resolved_user, None
+
+    uid = resolve_ctos_user_id(ctos_user_id)
+    if uid is None:
+        return None, None, BOT_IDENTITY_REQUIRED_MESSAGE
+
+    if resolved_group and not await _ctos_user_in_bot_group(uid, resolved_group):
+        return None, None, BOT_GROUP_SCOPE_DENIED_MESSAGE
+
+    if resolved_user and not await _ctos_user_owns_bot_user(uid, resolved_user):
+        return None, None, BOT_GROUP_SCOPE_DENIED_MESSAGE
+
+    return resolved_group, resolved_user, None
+
+
 def build_bot_mcp_env(
     line_group_id=None,
     line_user_id=None,
     agent_id=None,
+    platform=None,
 ) -> dict[str, str]:
     """組 bot 對話要注入 MCP 子行程的身分環境變數（issue #204）。
 
@@ -195,11 +295,15 @@ def build_bot_mcp_env(
         line_group_id: 群組的內部 UUID（bot_groups.id；個人對話為 None）
         line_user_id: 平台使用者 ID（bot_users.platform_user_id）
         agent_id: 這次對話使用的 Agent ID（語音設定用）
+        platform: 這次對話的平台（`line`／`telegram`）。`send_nas_file` 用它判斷
+            模型帶的 `telegram_chat_id` 算不算數——LINE 對話裡不算（issue #210 review）。
 
     Returns:
         要附加到 ching-tech-os MCP server 的環境變數
     """
     env: dict[str, str] = {}
+    if platform:
+        env["CTOS_BOT_PLATFORM"] = str(platform)
     if line_group_id:
         env["CTOS_BOT_GROUP_ID"] = str(line_group_id)
         # 語音設定（voice_tools）已經在用的名字，沿用同一個值避免兩套名字打架
@@ -209,6 +313,14 @@ def build_bot_mcp_env(
     if agent_id:
         env["CTOS_AGENT_ID"] = str(agent_id)
     return env
+
+
+def resolve_bot_platform() -> str | None:
+    """這條連線的平台（`line`／`telegram`），沒有注入就回 None。
+
+    由 `build_bot_mcp_env(platform=...)` 寫進 `CTOS_BOT_PLATFORM`。
+    """
+    return os.environ.get("CTOS_BOT_PLATFORM") or None
 
 
 def resolve_agent_allowed_shared_sources() -> list[str] | None:

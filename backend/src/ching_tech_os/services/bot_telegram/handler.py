@@ -512,6 +512,7 @@ async def _handle_text(
                             message_uuid=restricted_msg_uuid,
                             user_display_name=display_name,
                             bot_group_id=bot_group_id if is_group else None,
+                            platform_type="telegram",
                         )
                         if reply:
                             await adapter.send_text(chat_id, reply)
@@ -1022,6 +1023,7 @@ async def _handle_text_with_ai(
         line_group_id=bot_group_id,
         line_user_id=platform_user_id,
         agent_id=agent.get("id"),
+        platform="telegram",
     )
     response = await call_ai(
         prompt=text,

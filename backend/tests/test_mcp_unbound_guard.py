@@ -43,6 +43,15 @@ _REQUIRED_APP_TOOLS = [
     ("vendor-management", "find_party"),
     ("inventory-management", "get_stock"),
     ("file-manager", "search_nas_files"),
+    ("file-manager", "codex_image_tool"),
+    ("printer", "prepare_print_file"),
+]
+
+# 預設權限是 False 的 app：未綁定要擋，但已綁定的一般使用者也要有人開才行，
+# 所以不能放進 _REQUIRED_APP_TOOLS（那份的「已綁定仍放行」會紅）。
+_ADMIN_GRANTED_APP_TOOLS = [
+    ("task-scheduler", "manage_scheduled_task"),
+    ("task-scheduler", "list_scheduled_tasks"),
 ]
 
 
@@ -62,6 +71,8 @@ def test_apps_require_bound_user_set() -> None:
 
     前四個是第 3 點查證的結論（issue #201）；`share-manager` 是 issue #205——
     分享工具會把知識條目或 NAS 檔案變成不用帳號就打得開的公開連結。
+    `printer`／`task-scheduler` 是 issue #210：前者把檔案推進實體印表機佇列，
+    後者留下一條之後會自己執行的任務。
     """
     assert permissions_module.APPS_REQUIRE_BOUND_USER == {
         "project-management",
@@ -69,6 +80,8 @@ def test_apps_require_bound_user_set() -> None:
         "inventory-management",
         "file-manager",
         "share-manager",
+        "printer",
+        "task-scheduler",
     }
 
 
@@ -85,6 +98,17 @@ async def test_unbound_user_denied_for_required_apps(
     allowed, message = await mcp_server.check_mcp_tool_permission(tool_name, None)
     assert allowed is False
     assert "綁定" in message
+    assert message == permissions_module.BOUND_USER_REQUIRED_MESSAGE
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("required_app, tool_name", _ADMIN_GRANTED_APP_TOOLS)
+async def test_unbound_user_denied_for_admin_granted_apps(
+    required_app: str, tool_name: str
+) -> None:
+    """預設關閉又要求已綁定的 app（issue #210 的 task-scheduler）。"""
+    allowed, message = await mcp_server.check_mcp_tool_permission(tool_name, None)
+    assert allowed is False
     assert message == permissions_module.BOUND_USER_REQUIRED_MESSAGE
 
 

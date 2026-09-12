@@ -11,6 +11,7 @@ from .server import (
     ensure_db_connection,
     check_mcp_tool_permission,
     require_bound_user,
+    resolve_bot_identity,
     _LIST_ALL_KNOWLEDGE_QUERIES,
 )
 from ...database import get_connection
@@ -153,6 +154,11 @@ async def search_knowledge(
     allowed, error_msg = await check_mcp_tool_permission("search_knowledge", ctos_user_id)
     if not allowed:
         return f"❌ {error_msg}"
+
+    # 身分一律以連線為準，模型宣稱別人的 id 無效（issue #204／#209）。
+    # 目前搜尋範圍是用 ctos_user_id 換 username 決定的，line_user_id 還沒被用到；
+    # 先接上注入，之後要用它分範圍時不會又是一個模型說了算的參數。
+    _, line_user_id = resolve_bot_identity(None, line_user_id)
 
     from .. import knowledge as kb_service
 
@@ -718,6 +724,10 @@ async def add_note(
     if bound_err:
         return f"❌ {bound_err}"
 
+    # 身分一律以連線為準：知識庫的 scope／專案歸屬是由這兩個 id 決定的，
+    # 模型宣稱別的群組就能把筆記寫進別的專案範圍（issue #209）。
+    line_group_id, line_user_id = resolve_bot_identity(line_group_id, line_user_id)
+
     from ...models.knowledge import KnowledgeCreate, KnowledgeTags, KnowledgeSource
     from .. import knowledge as kb_service
 
@@ -806,6 +816,9 @@ async def add_note_with_attachments(
     bound_err = require_bound_user("add_note_with_attachments", ctos_user_id)
     if bound_err:
         return f"❌ {bound_err}"
+
+    # 身分一律以連線為準（issue #209），同 add_note。
+    line_group_id, line_user_id = resolve_bot_identity(line_group_id, line_user_id)
 
     from ...models.knowledge import KnowledgeCreate, KnowledgeTags, KnowledgeSource
     from .. import knowledge as kb_service

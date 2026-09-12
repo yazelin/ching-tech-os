@@ -7,12 +7,31 @@ from uuid import uuid4
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from ching_tech_os.services import permissions as permissions_module
+from ching_tech_os.services.mcp import scheduler_tools
+from ching_tech_os.services.mcp.server import (
+    check_mcp_tool_permission as _real_check_mcp_tool_permission,
+)
 from ching_tech_os.services.mcp.scheduler_tools import (
     _check_admin,
     _collect_static_schedules,
     _format_task,
     _parse_trigger,
 )
+
+
+@pytest.fixture(autouse=True)
+def _allow_tool_permission(monkeypatch):
+    """排程兩支現在會先過 app 權限（issue #210，task-scheduler）。
+
+    這份檔案測的是排程邏輯本身；app 權限那一關由
+    test_scheduler_tools_deny_unbound 與 tests/test_mcp_unbound_guard.py 負責。
+    """
+    monkeypatch.setattr(
+        scheduler_tools,
+        "check_mcp_tool_permission",
+        AsyncMock(return_value=(True, "")),
+    )
 
 
 # ============================================
@@ -786,3 +805,55 @@ class TestCollectStaticSchedules:
             mock_sched.get_jobs.side_effect = Exception("scheduler not running")
             result = _collect_static_schedules()
             assert result == []
+
+
+# ============================================
+# app 權限（issue #210）
+# ============================================
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("tool_name", ["manage_scheduled_task", "list_scheduled_tasks"])
+async def test_scheduler_tools_deny_unbound(tool_name, monkeypatch):
+    """未綁定叫排程工具要被擋，而且 task_scheduler service 完全沒被 await。
+
+    排程會持久化、之後自動執行（executor 可以是 agent 或 skill script），
+    所以 `task-scheduler` 進了 `APPS_REQUIRE_BOUND_USER`。
+    """
+    monkeypatch.delenv("CTOS_USER_ID", raising=False)
+    # 這條測的就是真的權限檢查，把 autouse fixture 的放行還原
+    monkeypatch.setattr(
+        scheduler_tools,
+        "check_mcp_tool_permission",
+        _real_check_mcp_tool_permission,
+    )
+
+    created = AsyncMock()
+    listed = AsyncMock(return_value=[])
+    monkeypatch.setattr(
+        "ching_tech_os.services.task_scheduler.create_scheduled_task", created
+    )
+    monkeypatch.setattr(
+        "ching_tech_os.services.task_scheduler.list_scheduled_tasks", listed
+    )
+    admin = AsyncMock(return_value=(1, None))
+    monkeypatch.setattr(scheduler_tools, "_check_admin", admin)
+    monkeypatch.setattr(
+        scheduler_tools, "ensure_db_connection", AsyncMock()
+    )
+
+    tool = getattr(scheduler_tools, tool_name)
+    result = json.loads(await tool() if tool_name == "list_scheduled_tasks" else await tool(action="create"))
+
+    assert result["success"] is False
+    assert result["error"] == permissions_module.BOUND_USER_REQUIRED_MESSAGE
+    created.assert_not_awaited()
+    listed.assert_not_awaited()
+    admin.assert_not_awaited()
+
+
+def test_scheduler_tools_mapped_to_app():
+    """registry：兩支都對到 task-scheduler，而且這個 app 要求已綁定。"""
+    assert permissions_module.TOOL_APP_MAPPING["manage_scheduled_task"] == "task-scheduler"
+    assert permissions_module.TOOL_APP_MAPPING["list_scheduled_tasks"] == "task-scheduler"
+    assert "task-scheduler" in permissions_module.APPS_REQUIRE_BOUND_USER

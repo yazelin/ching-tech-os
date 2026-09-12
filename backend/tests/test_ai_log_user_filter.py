@@ -623,6 +623,12 @@ async def test_skill_script_log_uses_ctos_user_id(monkeypatch: pytest.MonkeyPatc
         return None
 
     monkeypatch.setattr(skill_script_tools, "ensure_db_connection", _noop)
+
+    async def _allow(_tool_name, _ctos_user_id):
+        return True, ""
+
+    # issue #210：run_skill_script 多一關 app 權限，這條測的是 ai_log 的 user_id
+    monkeypatch.setattr(skill_script_tools, "check_mcp_tool_permission", _allow)
     monkeypatch.setattr("ching_tech_os.skills.get_skill_manager", lambda: _SM())
     monkeypatch.setattr("ching_tech_os.skills.script_runner.ScriptRunner", _Runner)
     create_log = AsyncMock()

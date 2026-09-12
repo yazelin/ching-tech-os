@@ -390,7 +390,7 @@ session 的權限快取沒帶到某個 `app_id` 時，`require_app_permission` �
 LINE／Telegram Bot 是對外開放的入口：任何人加好友或把 bot 拉進群組就能對話，
 `ctos_user_id is None`（沒有綁定 CTOS 帳號）是常態，不是例外。這套權限設計原本
 假設呼叫者是已綁定的自己人，未綁定者因此一路走得進來——issue #201、#204、#205、
-#207 都是同一個根因的不同出口，四個都已修。
+#207、#209、#210 都是同一個根因的不同出口，都已修。
 
 **逐支工具的實際範圍看 [MCP 工具存取矩陣](mcp-tool-access-matrix.md)**
 （由 `backend/scripts/gen_tool_access_matrix.py` 從程式內省產生，測試會比對逐字相同）。
@@ -401,8 +401,83 @@ LINE／Telegram Bot 是對外開放的入口：任何人加好友或把 bot 拉�
 |------|------|--------|
 | app 權限 | `check_mcp_tool_permission()`＋`APPS_REQUIRE_BOUND_USER` | 這個人有沒有這個功能；專案／往來／物料／NAS 檔案／分享未綁定一律拒絕（#201、#205） |
 | 條目層級 | 知識庫 `_check_item_access()`、記憶的擁有者條件 | 這一筆是不是你的；未綁定只讀得到 `scope=global` 且 `is_public` |
-| 工具內部自檢 | `require_bound_user()`＋`TOOLS_REQUIRE_BOUND_USER` | 憑空建立新資料的寫入（`add_note`、`add_note_with_attachments`，#207） |
+| 工具內部自檢 | `require_bound_user()`＋`TOOLS_REQUIRE_BOUND_USER` | 憑空建立新資料的寫入（`add_note`、`add_note_with_attachments`，#207；文件生成三支與 `run_skill_script`，#210） |
 | 資源存取檢查 | `share.check_resource_access()` | 把讀不到的東西送出去（#205，見下節） |
+| 連線身分解析 | `resolve_bot_identity()`／`resolve_conversation_scope()` | 模型宣稱別的群組／別人（#204、#209，見下節） |
+
+### 身分注入補齊（#209）
+
+`resolve_bot_identity()`（#204）原本只套在記憶工具，其餘收
+`line_group_id`／`line_user_id` 的工具仍然是模型說了算。這些 id 不是裝飾：
+
+- `add_note`／`add_note_with_attachments`：id 決定知識庫的 scope 與專案歸屬。
+- `send_nas_file`：id 就是發送目標。
+- `summarize_chat`／`get_message_attachments`：id 就是讀取範圍。
+
+現在這些工具都先過 `resolve_bot_identity()`，有注入就以注入值為準。讀群組對話與
+附件的兩支再多一層 `resolve_conversation_scope()`：沒有注入時要求有
+`ctos_user_id`，而且指定的群組／個人身分必須與這個 CTOS 帳號有既有關聯
+（`bot_users.user_id` 綁定 ＋ `bot_messages` 在該群組留過訊息），否則拒絕。
+
+**這兩層的強度差很多，不要混為一談：**
+
+- **bot 路徑（LINE／Telegram）**：`CTOS_BOT_*` 由伺服器注入，模型帶什麼都會被
+  覆蓋，這條路是真的擋住了。
+- **網頁聊天**：`api/ai.py` 連 `CTOS_USER_ID` 都沒注入，所以
+  `resolve_ctos_user_id()` 拿到的就是**模型參數本身**。那道群組關聯檢查是拿
+  「模型宣稱的身分」去比對，擋得住「完全沒帶身分」，擋不住「宣稱別人的身分」。
+  只是提高門檻，**不是修好了**；真正的解是讓 `api/ai.py` 把 session 的
+  `user_id` 注入 MCP 子行程（issue #231）。
+
+殘留：`send_nas_file` 的 `telegram_chat_id` 本身不在 `build_bot_mcp_env()` 的注入
+範圍（issue #232）。跨平台那一半已經擋掉——`build_bot_mcp_env()` 現在會注入
+`CTOS_BOT_PLATFORM`（`line`／`telegram`），連線不是 Telegram 對話時模型帶的
+chat id 一律忽略並記 warning，LINE 使用者沒辦法把 NAS 檔案推到任意 Telegram
+聊天室；剩下的是 Telegram 對話裡模型仍可指定同平台的別的 chat id。
+
+### 每一支工具都要有決定（#210）
+
+以前「沒呼叫 `check_mcp_tool_permission()`」和「刻意開放」長得一模一樣：工具沒登錄
+`TOOL_APP_MAPPING` 就等於不檢查，預設是開的。現在每一支不做 app 權限檢查的工具
+都必須登記在 `permissions.TOOLS_INTENTIONALLY_OPEN`（工具名 → 一句理由），
+矩陣會原樣列出理由，沒登記又沒檢查的工具矩陣測試會紅。
+
+這一輪的決定：
+
+- 送到外部或實體世界：`prepare_print_file` 的權限檢查本來寫成 `if ctos_user_id:`，
+  未綁定反而整個跳過；改成一律檢查，`printer` 進 `APPS_REQUIRE_BOUND_USER`
+  （預設權限維持 True，內部員工既有用法不變）。
+- 會持久化、之後自動執行：排程兩支對到 `task-scheduler`（模組提供、預設 False），
+  同樣進 `APPS_REQUIRE_BOUND_USER`。
+- `run_skill_script`：對到 `ai-assistant`，另加未綁定自檢——等同讓對話端跑
+  伺服器上的程式。
+- 文件生成三支：對到既有的 `md2ppt`／`md2doc`，另加未綁定自檢——都會在 NAS 的
+  `ai-generated` 目錄產檔，`generate_md2ppt`／`generate_md2doc` 還會建立
+  不需帳號就打得開的分享連結。
+- `codex_image_tool`：`reference_images` 會讀 NAS 根目錄底下的檔案並送到外部服務，
+  對到 `file-manager`（已在 `APPS_REQUIRE_BOUND_USER`）。
+- 登記為有意開放的九支（記憶四支、讀對話兩支、`download_web_image`、
+  `text_to_speech`、`browse_webpage`）逐支的理由見矩陣。其中 `browse_webpage`
+  的「只讀公開網頁」不能只靠 scheme 是 https：
+  `web_tools.check_public_http_target()` 會把主機名稱解析出來，
+  loopback／私有（10/8、172.16/12、192.168/16）／link-local（169.254/16）／
+  CGNAT（100.64/10）／IPv6 unique-local 與 loopback、無點主機名稱、
+  `.local`／`.internal`／`.lan` 這類內網後綴一律拒絕，DNS 解析結果**任何一個**
+  不是公開位址就拒絕。沒有這一層，未綁定者可以叫 bot 去讀內網頁面
+  （SSRF），「只讀公開網頁」這個開放理由就不成立。
+
+  **檢查套在三個地方**，因為只看最初的 URL 擋不住重新導向——公開網域 302 到
+  `https://192.168.11.11/`，Chromium 照樣會去載入它：
+
+  | 時機 | 實作 | 擋什麼 |
+  |------|------|--------|
+  | 呼叫進來 | `browse_webpage` 開頭 | 模型直接指定內網位址 |
+  | 每一個 request | `page.route("**/*", block_non_public_requests)` | 重新導向與 subresource（img／xhr／iframe）打內網；非公開一律 `abort()`，檢查本身出錯也 abort |
+  | 讀內容之前 | `check_public_http_target(page.url)` | 導航最後停在內網位址（meta refresh、history API），在取 title／snapshot 之前就拒絕 |
+
+  **沒有封死的**：`check_public_http_target()` 的 `getaddrinfo()` 與瀏覽器自己的
+  DNS 是兩次獨立解析，中間換答案（DNS rebinding）仍有空隙。要完全封死得讓
+  瀏覽器只走一個會做同樣檢查的 proxy，不在這次範圍。
 
 ### 公開分享連結（#205）
 
@@ -484,6 +559,7 @@ bot 走的路徑上，身分一律由伺服器注入，模型在工具參數裡�
 | `CTOS_USER_ID` | 綁定的 CTOS 使用者 ID | `claude_agent.py`／`codex_agent.py` | `resolve_ctos_user_id()` |
 | `CTOS_BOT_GROUP_ID`（＋沿用的 `CTOS_GROUP_ID`） | `bot_groups.id` | `build_bot_mcp_env()`，由 `linebot_ai.py`／`bot_telegram/handler.py`／`bot/identity_router.py` 呼叫 | `resolve_bot_identity()` |
 | `CTOS_BOT_USER_ID` | `bot_users.platform_user_id` | 同上 | `resolve_bot_identity()` |
+| `CTOS_BOT_PLATFORM` | `line`／`telegram` | 同上 | `resolve_bot_platform()`（`send_nas_file` 用它擋跨平台推送） |
 
 環境變數不存在時工具才會採用參數——**網頁聊天就是這種情況**：
 `api/ai.py` 的 Socket.IO `ai_message` 呼叫 `call_ai()` 時沒有帶 `ctos_user_id`，
@@ -492,7 +568,11 @@ bot 走的路徑上，身分一律由伺服器注入，模型在工具參數裡�
 記憶工具吃模型帶的 `line_group_id`／`line_user_id`、`update_memory`／`delete_memory`
 沒有擁有者範圍。進 socket 之前有 session 認證，所以不是匿名者能打的路，
 但同一個登入者可以指定別人的 id。這條缺口記在
-[存取矩陣的「已知缺口」](mcp-tool-access-matrix.md#已知缺口本次未修)，尚未修。
+[存取矩陣的「已知缺口」](mcp-tool-access-matrix.md#已知缺口)，尚未修。
+`summarize_chat`／`get_message_attachments` 在這條路上多擋了一層（#209 的
+`resolve_conversation_scope()` 會要求 `ctos_user_id` 並驗群組關聯），但那個
+`ctos_user_id` 在這條路上同樣是模型帶的，所以只是提高門檻，**不是修好了**。
+其餘工具仍然照舊。
 
 ---
 

@@ -6,6 +6,26 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from ching_tech_os.services.mcp.web_tools import browse_webpage
 
 
+@pytest.fixture(autouse=True)
+def _public_dns(monkeypatch: pytest.MonkeyPatch):
+    """預設把主機名稱解析成公開位址，測試不吃真實 DNS。
+
+    SSRF 防護（issue #210 review）會真的呼叫 `socket.getaddrinfo`；
+    沒有這個 fixture，這份檔案在離線環境會整批紅。需要驗擋下來的情境時，
+    個別測試再 monkeypatch 一次（後設的贏）。
+    """
+    import socket as _socket
+
+    from ching_tech_os.services.mcp import web_tools
+
+    def _fake_getaddrinfo(host, port, **_kwargs):
+        return [
+            (_socket.AF_INET, _socket.SOCK_STREAM, _socket.IPPROTO_TCP, "", ("93.184.216.34", port)),
+        ]
+
+    monkeypatch.setattr(web_tools.socket, "getaddrinfo", _fake_getaddrinfo)
+
+
 def _make_pw_mock(mock_browser=None, launch_error=None):
     """建立 playwright mock 鏈"""
     if launch_error:
@@ -22,9 +42,20 @@ def _make_pw_mock(mock_browser=None, launch_error=None):
     return mock_pw_ctx
 
 
-def _make_page_mock(title="測試頁面", content="頁面內容", goto_side_effect=None):
-    """建立 page mock"""
+def _make_page_mock(
+    title="測試頁面",
+    content="頁面內容",
+    goto_side_effect=None,
+    landed_url="https://example.com/",
+):
+    """建立 page mock
+
+    `landed_url` 是 `page.url`：SSRF 防護在讀內容之前會拿它再檢查一次
+    （擋重新導向落在內網位址，issue #210 review round 2）。
+    """
     mock_page = AsyncMock()
+    mock_page.url = landed_url
+    mock_page.route = AsyncMock()
     if goto_side_effect:
         mock_page.goto = goto_side_effect
     else:
@@ -143,3 +174,288 @@ class TestBrowseWebpage:
         with patch(PW_PATCH, return_value=mock_pw):
             result = await browse_webpage(url="https://example.com")
             assert "擷取網頁失敗" in result
+
+
+# ============================================================
+# SSRF 防護（issue #210 review）
+# ============================================================
+
+# `browse_webpage` 登記在 TOOLS_INTENTIONALLY_OPEN，理由是「只讀公開網頁」。
+# 只檢查 scheme 是 https 的話這個理由不成立：未綁定者可以叫 bot 去讀內網頁面。
+
+
+@pytest.mark.parametrize(
+    "url, resolved",
+    [
+        ("https://a.example.com/x", "127.0.0.1"),          # loopback
+        ("https://b.example.com/x", "10.1.2.3"),           # private 10/8
+        ("https://c.example.com/x", "172.16.0.5"),         # private 172.16/12
+        ("https://d.example.com/x", "192.168.11.11"),      # private 192.168/16
+        ("https://e.example.com/x", "169.254.169.254"),    # link-local（雲端 metadata）
+        ("https://f.example.com/x", "100.64.0.1"),         # CGNAT 100.64/10
+        ("https://g.example.com/x", "::1"),                # IPv6 loopback
+        ("https://h.example.com/x", "fd00::1"),            # IPv6 unique-local
+        ("https://i.example.com/x", "::ffff:192.168.0.1"),  # IPv4-mapped IPv6
+    ],
+)
+def test_check_public_http_target_blocks_resolved_private_addresses(
+    monkeypatch: pytest.MonkeyPatch, url: str, resolved: str
+) -> None:
+    """DNS 解析到內部位址一律拒絕（每個網段一條）。"""
+    import socket as _socket
+
+    from ching_tech_os.services.mcp import web_tools
+
+    def _fake_getaddrinfo(host, port, **_kwargs):
+        family = _socket.AF_INET6 if ":" in resolved else _socket.AF_INET
+        return [(family, _socket.SOCK_STREAM, _socket.IPPROTO_TCP, "", (resolved, port))]
+
+    monkeypatch.setattr(web_tools.socket, "getaddrinfo", _fake_getaddrinfo)
+
+    result = web_tools.check_public_http_target(url)
+    assert result is not None
+    assert result.startswith("❌")
+    assert "內部網路位址" in result
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://127.0.0.1/x",
+        "https://10.1.2.3/x",
+        "https://192.168.11.11/x",
+        "https://169.254.169.254/x",
+        "https://100.64.0.1/x",
+        "https://[::1]/x",
+        "https://[fd00::1]/x",
+    ],
+)
+def test_check_public_http_target_blocks_ip_literals(
+    monkeypatch: pytest.MonkeyPatch, url: str
+) -> None:
+    """IP 字面值不查 DNS，直接判斷（順便確認真的沒去解析）。"""
+    from ching_tech_os.services.mcp import web_tools
+
+    def _explode(*_a, **_k):
+        raise AssertionError("IP 字面值不該去查 DNS")
+
+    monkeypatch.setattr(web_tools.socket, "getaddrinfo", _explode)
+
+    result = web_tools.check_public_http_target(url)
+    assert result is not None
+    assert "內部網路位址" in result
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://intranet/x",
+        "https://nas.local/x",
+        "https://wiki.internal/x",
+        "https://printer.lan/x",
+    ],
+)
+def test_check_public_http_target_blocks_internal_hostnames(
+    monkeypatch: pytest.MonkeyPatch, url: str
+) -> None:
+    """沒有點的主機名稱與內網後綴，連查都不用查。"""
+    from ching_tech_os.services.mcp import web_tools
+
+    def _explode(*_a, **_k):
+        raise AssertionError("內網主機名稱不該去查 DNS")
+
+    monkeypatch.setattr(web_tools.socket, "getaddrinfo", _explode)
+
+    result = web_tools.check_public_http_target(url)
+    assert result is not None
+    assert "內部主機名稱" in result
+
+
+def test_check_public_http_target_allows_public_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """正向對照：解析到公開位址就放行。"""
+    import socket as _socket
+
+    from ching_tech_os.services.mcp import web_tools
+
+    def _fake_getaddrinfo(host, port, **_kwargs):
+        return [
+            (_socket.AF_INET, _socket.SOCK_STREAM, _socket.IPPROTO_TCP, "", ("93.184.216.34", port)),
+        ]
+
+    monkeypatch.setattr(web_tools.socket, "getaddrinfo", _fake_getaddrinfo)
+
+    assert web_tools.check_public_http_target("https://example.com/x") is None
+
+
+def test_check_public_http_target_rejects_mixed_resolution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """同一個名字同時回公開與內網位址（DNS rebinding 的常見形狀）一律拒絕。"""
+    import socket as _socket
+
+    from ching_tech_os.services.mcp import web_tools
+
+    def _fake_getaddrinfo(host, port, **_kwargs):
+        return [
+            (_socket.AF_INET, _socket.SOCK_STREAM, _socket.IPPROTO_TCP, "", ("93.184.216.34", port)),
+            (_socket.AF_INET, _socket.SOCK_STREAM, _socket.IPPROTO_TCP, "", ("192.168.0.9", port)),
+        ]
+
+    monkeypatch.setattr(web_tools.socket, "getaddrinfo", _fake_getaddrinfo)
+
+    result = web_tools.check_public_http_target("https://example.com/x")
+    assert result is not None
+    assert "內部網路位址" in result
+
+
+def test_check_public_http_target_reports_unresolvable_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """解析失敗回錯誤字串，不丟例外。"""
+    import socket as _socket
+
+    from ching_tech_os.services.mcp import web_tools
+
+    def _fail(*_a, **_k):
+        raise _socket.gaierror("nope")
+
+    monkeypatch.setattr(web_tools.socket, "getaddrinfo", _fail)
+
+    result = web_tools.check_public_http_target("https://example.com/x")
+    assert result is not None
+    assert "無法解析主機名稱" in result
+
+
+@pytest.mark.asyncio
+async def test_browse_webpage_refuses_internal_target(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """工具本體要走這道檢查，而且在啟動瀏覽器之前就擋下來。"""
+    from ching_tech_os.services.mcp import web_tools
+
+    def _explode(*_a, **_k):
+        raise AssertionError("內網位址不該啟動瀏覽器")
+
+    monkeypatch.setattr(web_tools, "async_playwright", _explode, raising=False)
+
+    result = await web_tools.browse_webpage("https://192.168.11.11/admin")
+    assert result.startswith("❌")
+    assert "內部網路位址" in result
+
+
+# ============================================================
+# 重新導向與落地 URL（issue #210 review round 2）
+# ============================================================
+
+# 只檢查最初的 URL 擋不住重新導向：公開網域 302 到 https://192.168.11.11/
+# 之後 Chromium 照樣會去載入它。防護因此是三層，下面驗第二、三層。
+
+
+@pytest.mark.asyncio
+async def test_browse_webpage_refuses_internal_landed_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`goto()` 之後落在內網位址：拒絕，而且完全不讀內容。"""
+    import socket as _socket
+
+    from ching_tech_os.services.mcp import web_tools
+
+    def _fake_getaddrinfo(host, port, **_kwargs):
+        # 公開網域解析得到，內網位址是字面值，走不到這裡
+        return [
+            (_socket.AF_INET, _socket.SOCK_STREAM, _socket.IPPROTO_TCP, "", ("93.184.216.34", port)),
+        ]
+
+    monkeypatch.setattr(web_tools.socket, "getaddrinfo", _fake_getaddrinfo)
+
+    mock_browser, mock_page = _make_page_mock(landed_url="https://192.168.11.11/admin")
+
+    with patch(PW_PATCH, return_value=_make_pw_mock(mock_browser)):
+        result = await browse_webpage(url="https://redirector.example.com/go")
+
+    assert result.startswith("❌")
+    assert "內部網路位址" in result
+    mock_page.title.assert_not_awaited()
+    mock_page.locator.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_browse_webpage_registers_request_route(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """每一個 request 都要被攔下來檢查：route 有掛上，handler 就是那支。"""
+    from ching_tech_os.services.mcp import web_tools
+
+    mock_browser, mock_page = _make_page_mock()
+
+    with patch(PW_PATCH, return_value=_make_pw_mock(mock_browser)):
+        await browse_webpage(url="https://example.com")
+
+    mock_page.route.assert_awaited_once()
+    pattern, handler = mock_page.route.await_args.args
+    assert pattern == "**/*"
+    assert handler is web_tools.block_non_public_requests
+
+
+@pytest.mark.asyncio
+async def test_block_non_public_requests_aborts_internal_target(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """route handler 對內網 request 要 abort，不能 continue。"""
+    from ching_tech_os.services.mcp import web_tools
+
+    route = AsyncMock()
+    request = MagicMock(url="https://192.168.11.11/admin")
+
+    await web_tools.block_non_public_requests(route, request)
+
+    route.abort.assert_awaited_once()
+    route.continue_.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_block_non_public_requests_continues_public_target(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """正向對照：公開 request 照常放行。"""
+    import socket as _socket
+
+    from ching_tech_os.services.mcp import web_tools
+
+    def _fake_getaddrinfo(host, port, **_kwargs):
+        return [
+            (_socket.AF_INET, _socket.SOCK_STREAM, _socket.IPPROTO_TCP, "", ("93.184.216.34", port)),
+        ]
+
+    monkeypatch.setattr(web_tools.socket, "getaddrinfo", _fake_getaddrinfo)
+
+    route = AsyncMock()
+    request = MagicMock(url="https://example.com/style.css")
+
+    await web_tools.block_non_public_requests(route, request)
+
+    route.continue_.assert_awaited_once()
+    route.abort.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_block_non_public_requests_aborts_when_check_explodes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """檢查本身壞掉時要 abort，不能變成放行。"""
+    from ching_tech_os.services.mcp import web_tools
+
+    def _explode(_url):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(web_tools, "check_public_http_target", _explode)
+
+    route = AsyncMock()
+    request = MagicMock(url="https://example.com/x")
+
+    await web_tools.block_non_public_requests(route, request)
+
+    route.abort.assert_awaited_once()
+    route.continue_.assert_not_awaited()

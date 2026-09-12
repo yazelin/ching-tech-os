@@ -13,7 +13,13 @@ import re
 import uuid
 from pathlib import Path
 
-from .server import mcp, logger, ensure_db_connection, check_mcp_tool_permission
+from .server import (
+    mcp,
+    logger,
+    ensure_db_connection,
+    check_mcp_tool_permission,
+    require_bound_user,
+)
 
 
 # ============================================================
@@ -207,6 +213,7 @@ async def generate_presentation(
     image_source: str = "pexels",
     outline_json: str | dict | None = None,
     output_format: str = "html",
+    ctos_user_id: int | None = None,
 ) -> str:
     """
     生成簡報（HTML 或 PDF，使用 Marp）
@@ -253,6 +260,19 @@ async def generate_presentation(
     Returns:
         包含簡報資訊和 NAS 路徑的回應，可用於 create_share_link
     """
+    # 權限檢查（issue #210）：這支工具會把簡報檔寫進 NAS，並可能呼叫外部生圖服務。
+    # `check_mcp_tool_permission` 需要查 DB 時會自己 ensure 連線，這裡不先開。
+    allowed, error_msg = await check_mcp_tool_permission(
+        "generate_presentation", ctos_user_id
+    )
+    if not allowed:
+        return f"❌ {error_msg}"
+
+    # 未綁定不得憑空在 NAS 產檔（同 issue #207 的理由）
+    bound_err = require_bound_user("generate_presentation", ctos_user_id)
+    if bound_err:
+        return f"❌ {bound_err}"
+
     from ...services.presentation import generate_html_presentation
 
     # 驗證：必須有 topic 或 outline_json
@@ -370,6 +390,15 @@ async def generate_md2ppt(
 
     await ensure_db_connection()
 
+    # 權限檢查（issue #210）：這支工具會建立不需帳號就打得開的分享連結
+    allowed, error_msg = await check_mcp_tool_permission("generate_md2ppt", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
+    bound_err = require_bound_user("generate_md2ppt", ctos_user_id)
+    if bound_err:
+        return f"❌ {bound_err}"
+
     # 驗證：必須以 --- 開頭（frontmatter）
     stripped = markdown_content.strip()
     if not stripped.startswith("---"):
@@ -457,6 +486,15 @@ async def generate_md2doc(
     from ...models.share import ShareLinkCreate
 
     await ensure_db_connection()
+
+    # 權限檢查（issue #210）：這支工具會建立不需帳號就打得開的分享連結
+    allowed, error_msg = await check_mcp_tool_permission("generate_md2doc", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
+
+    bound_err = require_bound_user("generate_md2doc", ctos_user_id)
+    if bound_err:
+        return f"❌ {bound_err}"
 
     # 驗證：必須以 --- 開頭（frontmatter）
     stripped = markdown_content.strip()
@@ -563,10 +601,12 @@ async def prepare_print_file(
     - 自動轉 PDF：Office 文件（.docx, .xlsx, .pptx, .doc, .xls, .ppt, .odt, .ods, .odp）
     """
     await ensure_db_connection()
-    if ctos_user_id:
-        allowed, error_msg = await check_mcp_tool_permission("prepare_print_file", ctos_user_id)
-        if not allowed:
-            return f"❌ {error_msg}"
+    # 權限檢查一律要跑（issue #210）：原本寫成 `if ctos_user_id:`，未綁定者反而
+    # 整個跳過檢查，直接把檔案推進印表機佇列。`printer` 已進
+    # `APPS_REQUIRE_BOUND_USER`，未綁定一律拒絕。
+    allowed, error_msg = await check_mcp_tool_permission("prepare_print_file", ctos_user_id)
+    if not allowed:
+        return f"❌ {error_msg}"
 
     # 路徑轉換：虛擬路徑 → 絕對路徑
     try:

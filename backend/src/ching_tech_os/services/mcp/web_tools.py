@@ -3,9 +3,137 @@
 包含：browse_webpage（使用 Playwright 擷取 JS 渲染後的網頁內容）
 """
 
+import ipaddress
+import socket
 from urllib.parse import urlparse
 
 from .server import mcp, logger
+
+
+# 主機名稱只在內網有意義的後綴（mDNS／企業內網慣例）
+_INTERNAL_HOST_SUFFIXES = (".local", ".internal", ".lan", ".intranet", ".home.arpa")
+
+
+def _is_public_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    """這個位址是不是公開網際網路位址。
+
+    `ipaddress` 的 `is_global` 已經涵蓋 loopback／private（10/8、172.16/12、
+    192.168/16）／link-local（169.254/16、fe80::/10）／unique-local（fc00::/7）
+    ／保留位址，但 CGNAT（100.64/10）在部分 Python 版本仍被算成 global，
+    所以額外擋一次；IPv4-mapped IPv6（::ffff:10.0.0.1）也拆出來用 v4 規則判。
+    """
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        ip = ip.ipv4_mapped
+
+    if (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_multicast
+        or ip.is_reserved
+        or ip.is_unspecified
+    ):
+        return False
+
+    if isinstance(ip, ipaddress.IPv4Address):
+        # CGNAT：ISP 的共享位址段，不是公開可定址的目標
+        if ip in ipaddress.ip_network("100.64.0.0/10"):
+            return False
+    else:
+        if ip.is_site_local:
+            return False
+
+    return True
+
+
+async def block_non_public_requests(route, request) -> None:
+    """`page.route()` handler：每一個 request 的 URL 都過一次公開位址檢查。
+
+    只檢查最初的 URL 擋不住重新導向：公開網域 302 到
+    `https://192.168.11.11/` 之後，瀏覽器照樣會去載入它。主 frame 與
+    subresource（img／xhr／iframe…）都會經過這裡。
+
+    非公開目標一律 `abort()`；檢查本身出錯也 abort（寧可載不到，不要漏出去）。
+    """
+    try:
+        error = check_public_http_target(request.url)
+    except Exception:  # pragma: no cover - 防呆：檢查本身壞掉不能變成放行
+        error = "❌ 目標檢查失敗"
+
+    if error:
+        logger.warning("[web] 擋下非公開目標：%s", request.url)
+        await route.abort()
+        return
+
+    await route.continue_()
+
+
+def check_public_http_target(url: str) -> str | None:
+    """SSRF 防護：只放行解析結果全部是公開位址的 HTTPS 目標（issue #210 review）。
+
+    `browse_webpage` 登記在 `permissions.TOOLS_INTENTIONALLY_OPEN`（未綁定者也能
+    呼叫），理由是「只讀公開網頁」。原本只檢查 scheme 是 https 而且 netloc 非空，
+    未綁定者因此可以叫 bot 去打 `https://192.168.11.11/...`、`https://localhost:8088/...`
+    這類內網位址，把內網頁面內容讀回對話裡——那就不是只讀公開網頁了。
+
+    規則（任何一條不過就拒絕）：
+    - 主機名稱沒有點（`https://intranet/`）或是內網後綴（`.local`／`.internal`
+      ／`.lan`／`.intranet`／`.home.arpa`）
+    - 主機是 IP 字面值且不是公開位址
+    - DNS 解析出來的位址**任何一個**不是公開位址（擋 DNS rebinding 的一半：
+      同一個名字同時回公開與內網位址時一律拒絕）
+
+    這支 helper 只判斷「這個 URL 現在解析起來是不是公開位址」。實際防護是三層：
+    最初的 URL、`page.route()` 攔到的每一個 request URL、以及 `page.goto()` 之後
+    真正落地的 `page.url`。三層都用這同一個判斷式。
+
+    擋不住的：本函式的 `getaddrinfo()` 與瀏覽器自己的 DNS 是兩次獨立解析，
+    中間換答案（DNS rebinding）沒有完全封死。
+
+    Returns:
+        None 表示放行；否則回傳要顯示給使用者的錯誤字串（不丟例外）
+    """
+    parsed = urlparse(url)
+    host = parsed.hostname
+    if not host:
+        return "❌ 無效的 URL"
+
+    host = host.rstrip(".")
+    lowered = host.lower()
+
+    try:
+        literal = ipaddress.ip_address(host)
+    except ValueError:
+        literal = None
+
+    if literal is not None:
+        if not _is_public_ip(literal):
+            return f"❌ 不允許存取內部網路位址：{host}"
+        return None
+
+    if "." not in lowered or lowered.endswith(_INTERNAL_HOST_SUFFIXES):
+        return f"❌ 不允許存取內部主機名稱：{host}"
+
+    try:
+        infos = socket.getaddrinfo(host, parsed.port or 443, proto=socket.IPPROTO_TCP)
+    except socket.gaierror:
+        return f"❌ 無法解析主機名稱：{host}"
+
+    addresses = []
+    for info in infos:
+        try:
+            addresses.append(ipaddress.ip_address(info[4][0]))
+        except ValueError:
+            continue
+
+    if not addresses:
+        return f"❌ 無法解析主機名稱：{host}"
+
+    for address in addresses:
+        if not _is_public_ip(address):
+            return f"❌ 不允許存取內部網路位址：{host} → {address}"
+
+    return None
 
 
 @mcp.tool()
@@ -34,6 +162,11 @@ async def browse_webpage(
     if not parsed.netloc:
         return "❌ 無效的 URL"
 
+    # SSRF 防護：這支工具對未綁定者開放，不能拿來讀內網頁面
+    target_error = check_public_http_target(url)
+    if target_error:
+        return target_error
+
     try:
         from playwright.async_api import async_playwright
     except ImportError:
@@ -49,6 +182,9 @@ async def browse_webpage(
         )
         page = await browser.new_page(viewport={"width": 1280, "height": 720})
 
+        # 第二層：瀏覽器實際要發出的每一個 request 都再檢查一次（擋重新導向）
+        await page.route("**/*", block_non_public_requests)
+
         # 頁面導航：先嘗試 networkidle，失敗則 fallback
         try:
             await page.goto(url, wait_until="networkidle", timeout=timeout)
@@ -59,6 +195,14 @@ async def browse_webpage(
                 await page.wait_for_timeout(3000)
             except Exception as e:
                 return f"❌ 頁面載入超時：{e}"
+
+        # 第三層：真正落地的 URL 再檢查一次。route handler 已經會擋掉非公開的
+        # request，但導航可能停在別的地方（例如 meta refresh、history API），
+        # 所以讀內容之前以 `page.url` 為準再確認一次。
+        landed_error = check_public_http_target(page.url)
+        if landed_error:
+            logger.warning("[web] 落地 URL 非公開，拒絕讀取內容：%s", page.url)
+            return landed_error
 
         # 取得頁面標題
         title = await page.title() or "（無標題）"

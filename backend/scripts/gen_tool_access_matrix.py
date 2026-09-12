@@ -36,7 +36,11 @@ IN_REPO_MODULE_PREFIX = "ching_tech_os.services.mcp."
 _PERMISSION_CALL_MARKERS = ("check_mcp_tool_permission", "_guard(")
 
 # 工具原始碼裡代表「bot 身分由伺服器注入」的呼叫
-_BOT_IDENTITY_MARKERS = ("resolve_bot_identity(", "_connected_memory_scope(")
+_BOT_IDENTITY_MARKERS = (
+    "resolve_bot_identity(",
+    "_connected_memory_scope(",
+    "resolve_conversation_scope(",
+)
 
 _DOC_HEADER = """# MCP 工具存取矩陣
 
@@ -47,7 +51,7 @@ _DOC_HEADER = """# MCP 工具存取矩陣
 ## 共同根因
 
 這套權限設計假設呼叫者是已綁定的自己人，但 bot 對外開放，未綁定者一路走得進來。
-四個 issue 都是同一個根因的不同出口：
+下面這些 issue 都是同一個根因的不同出口：
 
 | Issue | 出口 | 狀態 |
 |-------|------|------|
@@ -55,6 +59,8 @@ _DOC_HEADER = """# MCP 工具存取矩陣
 | #207 | 未綁定者可用 `add_note`／`add_note_with_attachments` 寫進全域知識庫 | 已修（工具內部自檢 `TOOLS_REQUIRE_BOUND_USER`） |
 | #204 | 記憶工具直接吃模型帶的 `line_group_id`／`line_user_id`，可冒充別的群組／別人 | 已修（`resolve_bot_identity`，伺服器注入優先） |
 | #205 | 分享工具（`create_share_link`／`share_knowledge_attachment`）可把任何知識條目／NAS 檔案變成公開連結 | 已修（`share-manager` 進 `APPS_REQUIRE_BOUND_USER` ＋ `share.check_resource_access()`） |
+| #209 | 知識庫／NAS／訊息工具還吃模型帶的 `line_group_id`／`line_user_id`，可寫進別的專案範圍、把檔案推到別的群組、讀別的群組的對話 | 已修（`resolve_bot_identity()` ＋ 讀對話類走 `resolve_conversation_scope()`） |
+| #210 | 十幾支工具連 `check_mcp_tool_permission()` 都沒呼叫，`TOOL_APP_MAPPING` 只是裝飾 | 已修（逐支對到 app，或登記進 `TOOLS_INTENTIONALLY_OPEN` 並寫明理由） |
 
 四道關卡各擋不同的東西，缺一不可：
 
@@ -73,7 +79,9 @@ _DOC_HEADER = """# MCP 工具存取矩陣
   `否` 表示被擋在工具層；`是` 表示 app 權限這一關放行——知識庫工具還有條目層級
   （`_check_item_access`）在後面擋：未綁定只讀得到 `scope=global` 且 `is_public`
   的條目，對既有條目的寫入一律拒絕。`是（未檢查）` 表示這支工具連
-  `check_mcp_tool_permission` 都沒呼叫，app 對應只是裝飾。
+  `check_mcp_tool_permission` 都沒呼叫，app 對應只是裝飾（issue #210 之後應該是空的）；
+  `是（登記開放）` 表示這支工具登記在 `permissions.TOOLS_INTENTIONALLY_OPEN`，
+  是刻意對未綁定者開放的基礎功能，理由列在表格下方。
 - **寫入**：會建立／修改／刪除資料，或產生檔案、對外送出內容。
 - **身分來源**：`ctos_user_id` ＝ 伺服器用 `CTOS_USER_ID` 環境變數注入（`mcp.tool`
   包裝層強制，模型帶什麼都會被覆蓋）；`bot 身分（注入）` ＝ 走 `resolve_bot_identity()`，
@@ -120,12 +128,15 @@ def _tool_source(fn) -> str:
 def _classify(name: str, tool) -> dict:
     from ching_tech_os.services.permissions import (
         APPS_REQUIRE_BOUND_USER,
-        APP_DISPLAY_NAMES,
         TOOL_APP_MAPPING,
+        TOOLS_INTENTIONALLY_OPEN,
         TOOLS_REQUIRE_BOUND_USER,
         WRITE_TOOLS,
+        get_app_display_names,
         get_effective_app_permissions,
     )
+
+    app_display_names = get_app_display_names()
 
     fn = inspect.unwrap(tool.fn)
     params = inspect.signature(fn).parameters
@@ -140,10 +151,20 @@ def _classify(name: str, tool) -> dict:
         if app_id is None:
             app_cell = "—（無需權限）"
         else:
-            app_cell = f"`{app_id}`（{APP_DISPLAY_NAMES.get(app_id, app_id)}）"
+            app_cell = f"`{app_id}`（{app_display_names.get(app_id, app_id)}）"
+
+    if name in TOOLS_INTENTIONALLY_OPEN and checks_permission:
+        # 「登記開放」與「有做 app 權限檢查」是兩個相反的決定。靜靜標成開放，
+        # 矩陣就會謊報這支工具不受權限保護（或反過來），所以直接爆掉。
+        raise ValueError(
+            f"{name} 同時登記在 TOOLS_INTENTIONALLY_OPEN 又呼叫了權限檢查："
+            "兩者只能擇一，請從 registry 拿掉或移除工具裡的檢查"
+        )
 
     if name in TOOLS_REQUIRE_BOUND_USER:
         unbound = "否（工具自檢）"
+    elif name in TOOLS_INTENTIONALLY_OPEN:
+        unbound = "是（登記開放）"
     elif not checks_permission:
         unbound = "是（未檢查）"
     elif app_id is None:
@@ -178,6 +199,25 @@ def _classify(name: str, tool) -> dict:
     }
 
 
+def _render_intentionally_open() -> list[str]:
+    """有意對未綁定開放的工具：理由直接抄 registry，矩陣不另寫一套說法。"""
+    from ching_tech_os.services.permissions import TOOLS_INTENTIONALLY_OPEN
+
+    lines = ["## 有意對未綁定開放的工具（issue #210）", ""]
+    lines.append(
+        "來源：`services/permissions.py` 的 `TOOLS_INTENTIONALLY_OPEN`。"
+        "這裡列的是「看過、決定要開」，不是「還沒看」——"
+        "沒登記又沒呼叫 `check_mcp_tool_permission()` 的工具，矩陣測試會紅。"
+    )
+    lines.append("")
+    lines.append("| 工具 | 理由 |")
+    lines.append("|------|------|")
+    for name, reason in sorted(TOOLS_INTENTIONALLY_OPEN.items()):
+        lines.append(f"| `{name}` | {reason} |")
+    lines.append("")
+    return lines
+
+
 def _render_gaps(rows: list[dict]) -> list[str]:
     """已知缺口一節：由表格資料算出來，不手寫（手寫的清單三個月後就是假的）。"""
 
@@ -197,36 +237,73 @@ def _render_gaps(rows: list[dict]) -> list[str]:
     ]
     unmapped_modules = sorted({r["module"] for r in rows if "未登錄" in r["app"]})
 
-    lines = ["## 已知缺口（本次未修）", ""]
+    lines = ["## 已知缺口", ""]
+
+    if unchecked:
+        lines.append(
+            f"**沒有工具層權限檢查、也沒登記開放的 {len(unchecked)} 支**："
+            f"{names(unchecked)}。"
+            "這些工具連 `check_mcp_tool_permission()` 都沒呼叫，"
+            "`TOOL_APP_MAPPING` 的對應只是裝飾，未綁定者只要模型肯呼叫就跑得動。"
+        )
+    else:
+        lines.append(
+            "**沒有工具層權限檢查、也沒登記開放的工具**：無（issue #210）。"
+            "每一支不呼叫 `check_mcp_tool_permission()` 的工具都登記在 "
+            "`TOOLS_INTENTIONALLY_OPEN`，理由見上一節。"
+        )
+    lines.append("")
+
+    if unmapped_modules:
+        lines.append(
+            f"**完全不在 `TOOL_APP_MAPPING` 的模組（{len(unmapped_modules)} 個）**："
+            + "、".join(f"`{m}`" for m in unmapped_modules)
+            + "。新增工具沒登錄 registry 就等於不檢查，預設是開的。"
+        )
+    else:
+        lines.append(
+            "**完全不在 `TOOL_APP_MAPPING` 的模組**：無。"
+            "但新增工具沒登錄 registry 還是等於不檢查，預設是開的——"
+            "加工具時要一起決定。"
+        )
+    lines.append("")
 
     lines.append(
-        f"**沒有工具層權限檢查的 {len(unchecked)} 支**："
-        f"{names(unchecked)}。"
-        "這些工具連 `check_mcp_tool_permission()` 都沒呼叫，"
-        "`TOOL_APP_MAPPING` 的對應只是裝飾，未綁定者只要模型肯呼叫就跑得動。"
-        "目前尚未有對應 issue。"
-    )
-    lines.append("")
-    lines.append(
-        f"**完全不在 `TOOL_APP_MAPPING` 的模組（{len(unmapped_modules)} 個）**："
-        + "、".join(f"`{m}`" for m in unmapped_modules)
-        + "。新增工具沒登錄 registry 就等於不檢查，預設是開的。"
-    )
-    lines.append("")
-    lines.append(
         f"**未綁定可呼叫又會寫入／送出的 {len(unbound_writes)} 支**："
-        f"{names(unbound_writes_open)} 沒有第二道關卡"
-        "（例如 `prepare_print_file` 會把檔案送進印表機佇列）；"
+        f"{names(unbound_writes_open)} 沒有 app 權限這一關"
+        "（都登記在 `TOOLS_INTENTIONALLY_OPEN`：記憶靠注入身分分範圍，"
+        "其餘只寫得到 `/tmp` 暫存區）；"
         f"{names(unbound_writes_guarded)} 還有條目層級 `_check_item_access()` 擋著，"
         "未綁定實際上寫不進去。"
     )
     lines.append("")
+
+    if model_param:
+        lines.append(
+            f"**bot 身分還是模型說了算的 {len(model_param)} 支**："
+            f"{names(model_param)}。"
+            "這些工具收 `line_group_id`／`line_user_id` 但沒接 `resolve_bot_identity()`，"
+            "已綁定的使用者可以宣稱別的群組，把筆記寫進別的專案範圍或讀到別的群組的訊息附件。"
+        )
+    else:
+        lines.append(
+            "**bot 身分還是模型說了算的工具**：無（issue #209）。"
+            "收 `line_group_id`／`line_user_id` 的工具都先過 `resolve_bot_identity()`，"
+            "**有注入時**（LINE／Telegram）模型帶的 id 一律被覆蓋。"
+            "讀群組對話／附件的兩支再多一層 `resolve_conversation_scope()`："
+            "沒有注入時要有 `ctos_user_id` 且與該群組有既有關聯才放行——"
+            "但沒有注入就表示連 `CTOS_USER_ID` 也沒注入，"
+            "那個 `ctos_user_id` 本身就是模型帶進來的值，"
+            "所以這一關擋得住「沒身分」，擋不住「宣稱別人的身分」，"
+            "真正的解是 issue #231（見下方「網頁聊天不注入身分」）。"
+        )
+    lines.append("")
     lines.append(
-        f"**bot 身分還是模型說了算的 {len(model_param)} 支**："
-        f"{names(model_param)}。"
-        "這些工具收 `line_group_id`／`line_user_id` 但沒接 `resolve_bot_identity()`，"
-        "已綁定的使用者可以宣稱別的群組，把筆記寫進別的專案範圍或讀到別的群組的訊息附件。"
-        "修法與 #204 相同，不在這支 PR 的範圍。"
+        "**`send_nas_file` 的 `telegram_chat_id` 不在注入範圍**（issue #232）："
+        "`build_bot_mcp_env()` 注入的是 `CTOS_BOT_GROUP_ID`／`CTOS_BOT_USER_ID`／"
+        "`CTOS_BOT_PLATFORM`，Telegram 的 chat id 本身仍由模型參數決定。"
+        "跨平台那一半已經擋掉（連線不是 Telegram 對話時模型帶的 chat id 一律忽略），"
+        "剩下的是 Telegram 對話裡模型仍可指定同平台的別的 chat id。"
     )
     lines.append("")
     lines.append(
@@ -237,6 +314,10 @@ def _render_gaps(rows: list[dict]) -> list[str]:
         "`update_memory`／`delete_memory` 沒有擁有者範圍。"
         "進 socket 之前有 session 認證，所以不是匿名者能打的路，"
         "但同一個登入者可以指定別人的 id。"
+        "`summarize_chat`／`get_message_attachments` 在這條路上多擋了一層"
+        "（要求 `ctos_user_id` 並驗群組關聯），但那個 `ctos_user_id` 同樣是模型帶的，"
+        "所以只是提高了門檻，**不是修好了**；要真的修好得讓 `api/ai.py` 注入身分"
+        "（issue #231）。其餘工具仍然照舊。"
     )
     lines.append("")
     return lines
@@ -264,6 +345,7 @@ def render() -> str:
             f"| {row['unbound']} | {row['write']} | {row['identity']} |"
         )
     lines.append("")
+    lines.extend(_render_intentionally_open())
     lines.extend(_render_gaps(rows))
     return "\n".join(lines)
 

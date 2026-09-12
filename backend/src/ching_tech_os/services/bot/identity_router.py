@@ -134,6 +134,7 @@ async def handle_restricted_mode(
     message_uuid: UUID | None = None,
     user_display_name: str | None = None,
     bot_group_id: str | None = None,
+    platform_type: str = "line",
 ) -> str | None:
     """執行受限模式 AI 流程
 
@@ -150,6 +151,7 @@ async def handle_restricted_mode(
         message_uuid: 訊息 UUID（用於 AI log）
         user_display_name: 使用者顯示名稱
         bot_group_id: Bot 群組 ID（用於查詢群組受限 Agent 偏好）
+        platform_type: "line" | "telegram"，注入成 CTOS_BOT_PLATFORM
 
     Returns:
         AI 回應文字，或 None
@@ -339,6 +341,7 @@ async def handle_restricted_mode(
             line_group_id=line_group_id,
             line_user_id=platform_user_id,
             agent_id=(agent or {}).get("id"),
+            platform=platform_type,
         )
     )
 
