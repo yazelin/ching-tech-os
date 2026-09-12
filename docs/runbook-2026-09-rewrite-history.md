@@ -11,6 +11,15 @@
 - GitHub 上舊 commit 仍可用 hash 開、`refs/pull/*` 仍在 → 步驟六要向 GitHub Support 申請清除，否則只做半套。
 - B 在 10 個 fork 裡，改寫收不回。
 
+## 已知風險：拿不到完整的下游清單（2026-09-12 查證）
+
+- fork：10 個（GitHub API），名稱 B 在全部 10 個裡，名稱 A 不在任何一個。fork 不會跟著 force-push 改，只能通知。
+- 別人的 clone：**查不到**。GitHub 只給 14 天 clone 流量（含 CI 與 `uv tool install`），沒有任何 API 能列出誰 clone 過。要當作「一定有」。
+- 同事機器上的 `ctos` CLI：`uv tool install` 會把整個 repo clone 進 uv cache，**台數不知道**。改寫後每台都要 `--reinstall`，沒重裝的機器 cache 裡就永遠留著舊歷史；這不是 runbook 能保證的事，只能靠通知加事後抽查。
+- 已知的 checkout：.11 的 `~/SDD/ching-tech-os`、開發機的 `~/SDD/ching-tech-os`、開發機臨時 worktree（`~/SDD/wt/`，執行前要全部刪掉）、mirror 備份（scratchpad 與 NAS `/mnt/nas/ctos/backups/git/`，**只當回滾用，不可拿來 push**）。
+
+結論：改寫能保證的只有 GitHub 上的 `refs/heads/*` 與 `refs/tags/*`（`refs/pull/*` 要 GitHub Support）。fork、未知 clone、未知台數的 uv cache 三者都在改寫範圍之外，執行當天不要把它們當成能收乾淨的東西。
+
 ## 步驟三：改寫（在開發機的新目錄做，不碰現有 checkout）
 
 ```bash
