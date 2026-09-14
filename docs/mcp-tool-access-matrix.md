@@ -135,8 +135,8 @@
 | `delete_memory` | 記憶是 bot 的基礎功能；SQL 帶注入身分的擁有者條件，刪不到別人的記憶（issue #204）。 |
 | `download_web_image` | 只把外部 URL 的圖片抓進 /tmp 暫存區回給同一條對話，不讀也不寫 NAS、知識庫或使用者資料。 |
 | `get_memories` | 記憶是 bot 的基礎功能；只讀得到注入身分底下的記憶（issue #204）。 |
-| `get_message_attachments` | 附件查詢是 bot 的基礎功能；與 summarize_chat 同一條身分解析，同樣只有 bot 路徑靠注入擋死（issue #209、#231）。 |
-| `summarize_chat` | 群組摘要是 bot 的基礎功能；bot 路徑有身分注入，只讀得到自己這個群組。沒有注入（網頁聊天）時要求 `ctos_user_id` 並驗群組關聯，但那個值本身是模型帶的，只是提高門檻，真正的解是 issue #231（issue #209）。 |
+| `get_message_attachments` | 附件查詢是 bot 的基礎功能；與 summarize_chat 同一條身分解析，bot 路徑靠 `CTOS_BOT_*` 注入、網頁路徑靠 `CTOS_USER_ID` 注入＋驗群組關聯（issue #209、#231）。 |
+| `summarize_chat` | 群組摘要是 bot 的基礎功能；bot 路徑有身分注入，只讀得到自己這個群組。網頁聊天沒有 bot 注入，改要求伺服器注入的 `ctos_user_id`（issue #231 起由 `api/ai.py` 從 session 帶入）並驗群組關聯才放行（issue #209）。 |
 | `text_to_speech` | 語音回覆是基礎對話功能；語音設定用伺服器注入的 CTOS_USER_ID／CTOS_GROUP_ID 查，模型參數影響不到，輸出只有音檔。 |
 | `update_memory` | 記憶是 bot 的基礎功能；SQL 帶注入身分的擁有者條件，改不到別人的記憶（issue #204）。 |
 
@@ -148,8 +148,8 @@
 
 **未綁定可呼叫又會寫入／送出的 9 支**：`download_web_image`、`add_memory`、`delete_memory`、`update_memory`、`text_to_speech` 沒有 app 權限這一關（都登記在 `TOOLS_INTENTIONALLY_OPEN`：記憶靠注入身分分範圍，其餘只寫得到 `/tmp` 暫存區）；`add_attachments_to_knowledge`、`delete_knowledge_item`、`update_knowledge_attachment`、`update_knowledge_item` 還有條目層級 `_check_item_access()` 擋著，未綁定實際上寫不進去。
 
-**bot 身分還是模型說了算的工具**：無（issue #209）。收 `line_group_id`／`line_user_id` 的工具都先過 `resolve_bot_identity()`，**有注入時**（LINE／Telegram）模型帶的 id 一律被覆蓋。讀群組對話／附件的兩支再多一層 `resolve_conversation_scope()`：沒有注入時要有 `ctos_user_id` 且與該群組有既有關聯才放行——但沒有注入就表示連 `CTOS_USER_ID` 也沒注入，那個 `ctos_user_id` 本身就是模型帶進來的值，所以這一關擋得住「沒身分」，擋不住「宣稱別人的身分」，真正的解是 issue #231（見下方「網頁聊天不注入身分」）。
+**bot 身分還是模型說了算的工具**：無（issue #209）。收 `line_group_id`／`line_user_id` 的工具都先過 `resolve_bot_identity()`，**有注入時**（LINE／Telegram）模型帶的 id 一律被覆蓋。讀群組對話／附件的兩支再多一層 `resolve_conversation_scope()`：沒有 bot 注入時要有 `ctos_user_id` 且與該群組有既有關聯才放行。網頁聊天的 `CTOS_USER_ID` 自 issue #231 起由 `api/ai.py` 從 session 注入，所以這一關在網頁端拿到的是伺服器驗過的身分，不是模型帶的值（見下方「網頁聊天的身分注入」）。
 
 **`send_nas_file` 的 `telegram_chat_id` 不在注入範圍**（issue #232）：`build_bot_mcp_env()` 注入的是 `CTOS_BOT_GROUP_ID`／`CTOS_BOT_USER_ID`／`CTOS_BOT_PLATFORM`，Telegram 的 chat id 本身仍由模型參數決定。跨平台那一半已經擋掉（連線不是 Telegram 對話時模型帶的 chat id 一律忽略），剩下的是 Telegram 對話裡模型仍可指定同平台的別的 chat id。
 
-**網頁聊天不注入身分**：`api/ai.py` 的 Socket.IO `ai_message` 走 `call_ai()` 時沒有帶 `ctos_user_id` 也沒有帶 `extra_mcp_env`（雖然 session 裡就有 `user_id`），那條路會起一個沒有任何身分環境變數的 MCP 子行程：工具的 `ctos_user_id` 由模型參數決定、記憶工具吃模型帶的 id、`update_memory`／`delete_memory` 沒有擁有者範圍。進 socket 之前有 session 認證，所以不是匿名者能打的路，但同一個登入者可以指定別人的 id。`summarize_chat`／`get_message_attachments` 在這條路上多擋了一層（要求 `ctos_user_id` 並驗群組關聯），但那個 `ctos_user_id` 同樣是模型帶的，所以只是提高了門檻，**不是修好了**；要真的修好得讓 `api/ai.py` 注入身分（issue #231）。其餘工具仍然照舊。
+**網頁聊天的身分注入**（issue #231 已修）：`api/ai.py` 的 Socket.IO `ai_chat_event`／`compress_chat` 走 `call_ai()` 時帶 `ctos_user_id=session.user_id`，值取自進入事件時重新驗過的 session，不從 request body 也不從模型參數取；`call_ai()` 把它變成 MCP 子行程的 `CTOS_USER_ID`，`resolve_ctos_user_id()` 只認這個環境變數，模型在工具參數裡宣稱別人的 id 不算數。bot 專屬的 `CTOS_BOT_PLATFORM`／`CTOS_BOT_GROUP_ID`／`CTOS_BOT_USER_ID` 不注入網頁端（網頁聊天沒有對應的對話身分）。剩下的是記憶工具：`add_memory`／`get_memories`／`update_memory`／`delete_memory` 的範圍是 bot 對話身分，網頁端沒有可注入的值，仍然吃模型帶的 `line_group_id`／`line_user_id`，不在 issue #231 的範圍內。

@@ -128,12 +128,21 @@ def register_events(sio: AsyncServer):
 
         # 呼叫 AI（8.2：web-chat 走 provider-neutral call_ai；
         # routing context 用 caller 端事實，canary 由設定控制，預設仍為 Claude）
+        #
+        # issue #231：身分一律取自這條連線的 session（`user_id`，上面已由
+        # `revalidate_socket_session()` 重新驗過），不吃 request body 也不吃模型參數。
+        # `call_ai()` 會把它變成 MCP 子行程的 `CTOS_USER_ID`（見
+        # `services/claude_agent.py`／`codex_agent.py`），工具端的
+        # `resolve_ctos_user_id()` 只認這個值。session 沒有 user_id 時傳 None
+        # （不硬造身分）——不過上面取對話那一關已經先擋掉了。
+        # bot 專屬的 `CTOS_BOT_PLATFORM`／群組 id 不屬於網頁聊天，不帶 extra_mcp_env。
         response = await call_ai(
             prompt=message,
             model=model,
             history=history,
             system_prompt=system_prompt,
             tools=agent_tools,
+            ctos_user_id=user_id,
             routing_context=RoutingContext(
                 context_type="web-chat", agent_name=agent_name
             ),
@@ -400,7 +409,8 @@ def register_events(sio: AsyncServer):
         start_time = time.time()
 
         # 呼叫 AI 產生摘要（3.1：summary pipeline 走 provider-neutral call_ai）
-        response = await summarize_messages(messages_to_compress)
+        # issue #231：同樣帶連線身分，摘要管線之後若開工具才不會又變成無身分
+        response = await summarize_messages(messages_to_compress, ctos_user_id=user_id)
 
         # 計算耗時
         duration_ms = int((time.time() - start_time) * 1000)

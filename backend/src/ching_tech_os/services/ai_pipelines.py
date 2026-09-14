@@ -14,8 +14,14 @@ from .claude_agent import get_prompt_content
 async def summarize_messages(
     messages_to_compress: list[dict],
     timeout: int = DEFAULT_TIMEOUT,
+    ctos_user_id: int | None = None,
 ) -> AIResponse:
-    """壓縮對話歷史成摘要（3.1：summary pipeline，純文字契約）。"""
+    """壓縮對話歷史成摘要（3.1：summary pipeline，純文字契約）。
+
+    ``ctos_user_id`` 是呼叫端已驗過的身分（issue #231），由 ``call_ai()`` 轉成
+    MCP 子行程的 ``CTOS_USER_ID``。這條管線目前沒開工具，帶著是為了之後開了
+    工具也不會退回無身分；拿不到身分就傳 None，不硬造。
+    """
     summarizer_prompt = await get_prompt_content("summarizer")
     if not summarizer_prompt:
         return AIResponse(
@@ -49,5 +55,6 @@ async def summarize_messages(
         model="haiku",
         system_prompt=summarizer_prompt,
         timeout=timeout,
+        ctos_user_id=ctos_user_id,
         routing_context=RoutingContext(context_type="compress"),
     )

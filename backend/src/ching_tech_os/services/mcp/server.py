@@ -101,9 +101,10 @@ def resolve_ctos_user_id(ctos_user_id: int | None) -> int | None:
     使用者綁定的 ctos_user_id 放進 CTOS_USER_ID 環境變數。這是伺服器驗過的
     身分，模型在工具參數裡打什麼都不能覆蓋（防冒充）。
 
-    環境變數不存在時才採用參數。實際上就是網頁聊天：`api/ai.py` 呼叫 `call_ai()`
-    沒有帶 ctos_user_id 也沒有帶 extra_mcp_env（見 docs/mcp-tool-access-matrix.md
-    的已知缺口）。`execute_tool()` 目前只有 MCP server 內部的 skill fallback 在用。
+    網頁聊天自 issue #231 起也會注入：`api/ai.py` 呼叫 `call_ai()` 時帶
+    `ctos_user_id=session.user_id`，同樣變成 `CTOS_USER_ID`。環境變數不存在時
+    才採用參數——剩下的是不經過這兩條路的呼叫端（例如 `execute_tool()` 目前只有
+    MCP server 內部的 skill fallback 在用）。
     """
     env_val = os.environ.get("CTOS_USER_ID")
     if env_val:
@@ -153,9 +154,10 @@ def resolve_bot_identity(
     - 模型只帶 user → 用注入的個人 id
     - 兩個都帶或都沒帶 → 兩個都用注入值（工具本身是群組優先）
 
-    環境變數都不存在時才採用參數——目前實際上就是網頁聊天（`api/ai.py` 呼叫
-    `call_ai()` 沒有帶 `extra_mcp_env`），那條路的身分仍由模型參數決定，
-    缺口記在 `docs/mcp-tool-access-matrix.md`。
+    環境變數都不存在時才採用參數——目前實際上就是網頁聊天：`api/ai.py` 自
+    issue #231 起會注入 `CTOS_USER_ID`，但 bot 專屬的 `CTOS_BOT_*` 不屬於網頁端
+    （網頁聊天沒有「這條對話屬於哪個群組」），所以記憶工具的範圍在那條路上仍由
+    模型參數決定，缺口記在 `docs/mcp-tool-access-matrix.md`。
 
     Args:
         line_group_id: 模型帶進來的群組 UUID（bot_groups.id）
@@ -193,8 +195,9 @@ def has_bot_identity_injection() -> bool:
     """這條 MCP 連線有沒有被注入 bot 對話身分。
 
     有注入＝呼叫端（LINE／Telegram）已經驗過是誰在講話，`resolve_bot_identity()`
-    的回傳值就是可信的。沒有注入＝目前實際上就是網頁聊天（`api/ai.py` 呼叫
-    `call_ai()` 沒有帶 `extra_mcp_env`），身分只能從 `ctos_user_id` 再驗一次。
+    的回傳值就是可信的。沒有注入＝目前實際上就是網頁聊天（`api/ai.py` 不帶 bot
+    專屬的 `CTOS_BOT_*`），身分只能從 `ctos_user_id` 再驗一次——那個值自 issue
+    #231 起也是伺服器注入的 `CTOS_USER_ID`，不是模型帶的。
     """
     return bool(
         os.environ.get("CTOS_BOT_GROUP_ID")
@@ -258,7 +261,9 @@ async def resolve_conversation_scope(
 
     1. 有注入 → 直接用注入值，模型參數一律忽略（與記憶工具同一套）。
     2. 沒有注入 → 要有伺服器認得的 `ctos_user_id`，而且指定的群組／個人身分
-       必須跟這個 CTOS 帳號有既有關聯，否則拒絕。
+       必須跟這個 CTOS 帳號有既有關聯，否則拒絕。網頁聊天走的就是這一段：
+       issue #231 之後 `ctos_user_id` 來自 session 注入的 `CTOS_USER_ID`，
+       在那之前它永遠是 None，所以這兩支工具在網頁端其實是一律拒絕。
 
     Returns:
         (line_group_id, line_user_id, error_message)：error 非 None 就是拒絕

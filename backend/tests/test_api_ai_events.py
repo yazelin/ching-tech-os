@@ -210,6 +210,8 @@ async def test_ai_chat_event_success(monkeypatch: pytest.MonkeyPatch) -> None:
     routing_context = call_ai_mock.await_args.kwargs["routing_context"]
     assert routing_context.context_type == "web-chat"
     assert routing_context.agent_name == "agent-a"
+    # issue #231：身分取自這條連線的 session，而且只從 session 取
+    assert call_ai_mock.await_args.kwargs["ctos_user_id"] == 1
     # AI log 的 parsed_response 保留 tool_calls 並附加 routing metadata
     log_data = create_log.await_args.args[0]
     assert log_data.parsed_response["routing"]["provider"] == "claude"
@@ -346,6 +348,118 @@ async def test_ai_chat_event_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     update_title.assert_not_called()
     create_log.assert_awaited_once()
     log_message.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_ai_chat_event_injects_session_identity(monkeypatch: pytest.MonkeyPatch) -> None:
+    """issue #231：`call_ai` 一定收得到登入者身分，而且身分只能是 session 的。
+
+    這是正式機那個 bug 的回歸測試：沒帶 `ctos_user_id` 時 MCP 子行程沒有
+    `CTOS_USER_ID`，`run_skill_script` 走未綁定那支，回「請先綁定 CTOS 帳號」。
+    順便把「不從 request body／model 參數取身分」也釘住——data 裡塞別人的
+    id 不會改變送進 `call_ai` 的值。
+    """
+    sio = _FakeSio()
+    ai_api.register_events(sio)
+    _stub_resolve_session(monkeypatch, user_id=7)
+
+    chat_id = uuid4()
+    monkeypatch.setattr(
+        ai_api.ai_chat,
+        "get_chat",
+        AsyncMock(
+            return_value={
+                "id": chat_id,
+                "user_id": 7,
+                "title": "新對話",
+                "prompt_name": "bot-debug",
+                "messages": [],
+            }
+        ),
+    )
+    monkeypatch.setattr(ai_api.ai_chat, "get_agent_system_prompt", AsyncMock(return_value="sys"))
+    monkeypatch.setattr(
+        ai_api.ai_chat,
+        "get_agent_config",
+        AsyncMock(return_value={"id": uuid4(), "tools": ["run_skill_script"]}),
+    )
+    monkeypatch.setattr(ai_api.ai_chat, "update_chat_messages", AsyncMock())
+    monkeypatch.setattr(ai_api.ai_chat, "update_chat_title", AsyncMock())
+    call_ai_mock = AsyncMock(return_value=_response(success=True, message="ok"))
+    monkeypatch.setattr(ai_api, "call_ai", call_ai_mock)
+    monkeypatch.setattr(ai_api.ai_manager, "create_log", AsyncMock())
+    monkeypatch.setattr(ai_api, "log_message", AsyncMock())
+
+    await sio.handlers["ai_chat_event"](
+        "sid-1",
+        {
+            "chatId": str(chat_id),
+            "message": "跑一下 check-db-status",
+            "model": "claude-sonnet",
+            # 冒充嘗試：request body 帶別人的 id，不該影響注入的身分
+            "ctos_user_id": 999,
+            "userId": 999,
+        },
+    )
+
+    kwargs = call_ai_mock.await_args.kwargs
+    assert kwargs["ctos_user_id"] == 7
+    # bot 專屬的平台／群組身分不屬於網頁聊天，不得一起帶
+    assert "extra_mcp_env" not in kwargs or kwargs["extra_mcp_env"] is None
+
+
+@pytest.mark.asyncio
+async def test_ai_chat_event_without_user_id_never_calls_ai(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """session 沒有 user_id（NAS 帳號還沒 upsert）時不硬造身分。
+
+    這條路在取對話那一關就擋掉了，`call_ai` 根本不會被呼叫——
+    也就不會有「猜一個 user_id 送進去」的機會。
+    """
+    sio = _FakeSio()
+    ai_api.register_events(sio)
+    _stub_resolve_session(monkeypatch, user_id=None)
+
+    get_chat = AsyncMock(return_value={"id": uuid4(), "messages": []})
+    monkeypatch.setattr(ai_api.ai_chat, "get_chat", get_chat)
+    call_ai_mock = AsyncMock(return_value=_response(success=True, message="ok"))
+    monkeypatch.setattr(ai_api, "call_ai", call_ai_mock)
+
+    await sio.handlers["ai_chat_event"](
+        "sid-1", {"chatId": str(uuid4()), "message": "hi", "model": "claude-sonnet"}
+    )
+
+    call_ai_mock.assert_not_called()
+    get_chat.assert_not_called()
+    events = [call.args[0] for call in sio.emit.await_args_list]
+    assert events == ["ai_error"]
+
+
+@pytest.mark.asyncio
+async def test_compress_chat_injects_session_identity(monkeypatch: pytest.MonkeyPatch) -> None:
+    """issue #231：摘要管線同樣帶連線身分（`summarize_messages`）。"""
+    sio = _FakeSio()
+    ai_api.register_events(sio)
+    _stub_resolve_session(monkeypatch, user_id=7)
+
+    long_messages = [
+        {"role": "user", "content": f"訊息 {idx}", "timestamp": idx} for idx in range(15)
+    ]
+    monkeypatch.setattr(
+        ai_api.ai_chat, "get_chat", AsyncMock(return_value={"messages": long_messages})
+    )
+    monkeypatch.setattr(
+        ai_api.ai_manager, "get_prompt_by_name", AsyncMock(return_value={"id": uuid4()})
+    )
+    summarize = AsyncMock(return_value=_response(success=True, message="摘要內容"))
+    monkeypatch.setattr(ai_api, "summarize_messages", summarize)
+    monkeypatch.setattr(ai_api.ai_chat, "update_chat_messages", AsyncMock())
+    monkeypatch.setattr(ai_api.ai_manager, "create_log", AsyncMock())
+
+    await sio.handlers["compress_chat"]("sid-1", {"chatId": str(uuid4())})
+
+    assert summarize.await_args.kwargs["ctos_user_id"] == 7
 
 
 @pytest.mark.asyncio
