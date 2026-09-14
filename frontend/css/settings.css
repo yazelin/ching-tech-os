@@ -482,6 +482,17 @@
   padding: var(--spacing-lg);
 }
 
+.permissions-admin-note {
+  margin: 0 0 var(--spacing-lg);
+  padding: var(--spacing-md);
+  border-left: 3px solid var(--color-warning);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-surface-dark);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+}
+
 .permissions-group {
   margin-bottom: var(--spacing-lg);
 }

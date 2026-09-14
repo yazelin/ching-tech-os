@@ -152,10 +152,11 @@ async def test_preferences_endpoints(monkeypatch: pytest.MonkeyPatch):
 async def test_update_user_permissions_api_with_knowledge(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(user_api, "get_user_by_id", AsyncMock(return_value={"role": "user"}))
     monkeypatch.setattr(user_api, "update_user_permissions", AsyncMock(return_value={"apps": {}, "knowledge": {"read": True}}))
+    # 回應改回「實際存下來的設定」，不再經過 role 推導（見 test_admin_api.py 的回歸測試）
     monkeypatch.setattr(
         user_api,
-        "get_user_permissions_for_role",
-        lambda _role, _prefs: {"apps": {}, "knowledge": {"read": True}},
+        "get_user_permissions",
+        lambda _prefs: {"apps": {}, "knowledge": {"read": True}},
     )
 
     response = await user_api.update_user_permissions_api(

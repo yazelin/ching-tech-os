@@ -43,6 +43,7 @@ from ..services.smb import create_smb_service, SMBAuthError, SMBConnectionError
 from ..services.workers import run_in_smb_pool
 from ..services.password import hash_password, validate_password_strength
 from ..services.permissions import (
+    get_user_permissions,
     get_user_permissions_for_role,
     get_default_permissions,
     get_app_display_names,
@@ -320,7 +321,11 @@ async def list_users(
     for user in users:
         preferences = _parse_preferences(user.get("preferences"))
         user_role = user.get("role") or "user"
-        permissions = get_user_permissions_for_role(user_role, preferences)
+        # permissions 回「實際存在 preferences 的設定」，不是 role 推導出的有效權限。
+        # admin 的權限來自 users.role（check 一律放行），拿 get_user_permissions_for_role()
+        # 會回一張全開的表，前端勾選框就會顯示全勾，與 DB 實際存的值不符；管理者照著那個
+        # 畫面按儲存，等於把一整張全開的表寫進對方 preferences。前端另以 is_admin 提示全通。
+        permissions = get_user_permissions(preferences)
         result.append(AdminUserInfo(
             id=user["id"],
             username=user["username"],
@@ -363,8 +368,6 @@ async def update_user_permissions_api(
             detail="使用者不存在",
         )
 
-    target_role = target_user.get("role", "user")
-
     # 建立更新的權限資料
     permissions_update = {}
     if request.apps is not None:
@@ -380,7 +383,8 @@ async def update_user_permissions_api(
 
     # 更新權限
     updated_prefs = await update_user_permissions(user_id, permissions_update)
-    updated_perms = get_user_permissions_for_role(target_role, updated_prefs)
+    # 與 list_users 同語意：回實際存下來的設定，不摻 role 推導的全開表
+    updated_perms = get_user_permissions(updated_prefs)
 
     return UpdatePermissionsResponse(
         success=True,
