@@ -307,8 +307,9 @@ def _render_gaps(rows: list[dict]) -> list[str]:
     lines.append("")
     lines.append(
         "**網頁聊天的身分注入**（issue #231 已修）：`api/ai.py` 的 Socket.IO "
-        "`ai_chat_event`／`compress_chat` 走 `call_ai()` 時帶 "
-        "`ctos_user_id=session.user_id`，值取自進入事件時重新驗過的 session，"
+        "`ai_chat_event`／`compress_chat`、以及 `services/ai_manager.py` 的 "
+        "`call_agent()`（`POST /api/ai/test`，Agent 設定頁的測試面板）走 `call_ai()` "
+        "時都帶 `ctos_user_id=session.user_id`，值取自伺服器驗過的 session，"
         "不從 request body 也不從模型參數取；`call_ai()` 把它變成 MCP 子行程的 "
         "`CTOS_USER_ID`，`resolve_ctos_user_id()` 只認這個環境變數，"
         "模型在工具參數裡宣稱別人的 id 不算數。"

@@ -594,7 +594,9 @@ bot 走的路徑上，身分一律由伺服器注入，模型在工具參數裡�
 `ai_chat_event` 呼叫 `call_ai()` 時帶 `ctos_user_id=session.user_id`，值取自
 進入事件時重新驗過的 session，不從 request body 也不從模型參數取，所以登入者
 指定別人的 id 不算數。`compress_chat` 的摘要管線（`summarize_messages()`）同樣
-帶這個身分。bot 專屬的 `CTOS_BOT_PLATFORM`／`CTOS_BOT_GROUP_ID`／
+帶這個身分。Agent 設定頁的測試面板（`POST /api/ai/test` →
+`ai_manager.call_agent()`）也是同一套：router 從 `session.user_id` 傳下來的
+`user_id` 除了寫進 log 欄位，也一併給 `call_ai()`。bot 專屬的 `CTOS_BOT_PLATFORM`／`CTOS_BOT_GROUP_ID`／
 `CTOS_BOT_USER_ID` 不屬於網頁聊天，不注入——網頁聊天沒有「這條對話屬於哪個
 群組」這回事。session 沒有 `user_id`（NAS 帳號還沒 upsert）時傳 None，不硬造
 身分；那條路在取對話那一關就已經先擋掉了。

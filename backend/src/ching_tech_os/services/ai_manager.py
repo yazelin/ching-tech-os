@@ -836,12 +836,18 @@ async def call_agent(
         else None
     )
     start_time = time.time()
+    # issue #231：身分由呼叫端從 session 傳下來（`/api/ai/test` 是
+    # `api/ai_management.py` 的 `session.user_id`），不是 log 專用欄位——
+    # 一併給 provider，`call_ai()` 才會把它變成 MCP 子行程的 `CTOS_USER_ID`，
+    # 工具端的 `resolve_ctos_user_id()` 也才不會退回模型自己帶的 id。
+    # 取不到就傳 None，不猜。
     result = await call_ai(
         prompt=message,
         model=agent["model"],
         history=history,
         system_prompt=system_prompt,
         tools=tools,
+        ctos_user_id=user_id,
         routing_context=routing_context,
     )
     duration_ms = int((time.time() - start_time) * 1000)

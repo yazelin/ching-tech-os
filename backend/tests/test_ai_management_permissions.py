@@ -26,13 +26,17 @@ from ching_tech_os.models.auth import SessionData
 from ching_tech_os.services.permissions import DEFAULT_APP_PERMISSIONS, has_app_permission
 
 
-def _session(role: str = "user", app_permissions: dict[str, bool] | None = None) -> SessionData:
+def _session(
+    role: str = "user",
+    app_permissions: dict[str, bool] | None = None,
+    user_id: int | None = 1,
+) -> SessionData:
     now = datetime.now(timezone.utc)
     return SessionData(
         username="tester",
         password="xxx",
         nas_host="localhost",
-        user_id=1,
+        user_id=user_id,
         created_at=now,
         expires_at=now,
         role=role,
@@ -250,6 +254,78 @@ async def test_test_agent_user_denied(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     assert resp.status_code == 403
     run.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_test_agent_injects_session_identity(monkeypatch: pytest.MonkeyPatch) -> None:
+    """issue #231：`/api/ai/test` 也要把登入者身分帶到 provider。
+
+    這條路是 Agent 設定頁的測試面板：`test_agent()` → `call_agent()` → `call_ai()`。
+    `user_id` 先前只進 log 欄位，沒進 provider，所以工具端的
+    `resolve_ctos_user_id()` 會退回模型自己帶的 id。
+    這裡不 mock `test_agent`／`call_agent`，一路跑到 `call_ai` 才攔，
+    確認注入真的穿過整條鏈。
+    """
+    from ching_tech_os.services import ai_manager
+    from ching_tech_os.services.ai_provider import AIResponse
+
+    agent_id = uuid4()
+    agent = _agent(agent_id)
+    agent["tools"] = ["run_skill_script"]
+    monkeypatch.setattr(ai_manager, "get_agent", AsyncMock(return_value=agent))
+    monkeypatch.setattr(ai_manager, "get_agent_by_name", AsyncMock(return_value=agent))
+    monkeypatch.setattr(ai_manager, "create_log", AsyncMock(return_value={"id": uuid4()}))
+    call_ai_mock = AsyncMock(
+        return_value=AIResponse(success=True, message="ok", provider="claude")
+    )
+    monkeypatch.setattr(ai_manager, "call_ai", call_ai_mock)
+
+    resp = await _request(
+        _app(_session(role="admin", user_id=7)),
+        "POST",
+        "/api/ai/test",
+        json={
+            "agent_id": str(agent_id),
+            "message": "跑一下 check-db-status",
+            # 冒充嘗試：request body 多帶別人的 id（Pydantic 會忽略），
+            # 送進 provider 的身分仍必須是 session 的
+            "user_id": 999,
+            "ctos_user_id": 999,
+        },
+    )
+
+    assert resp.status_code == 200
+    call_ai_mock.assert_awaited_once()
+    assert call_ai_mock.await_args.kwargs["ctos_user_id"] == 7
+
+
+@pytest.mark.asyncio
+async def test_test_agent_without_user_id_passes_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """session 沒有 user_id 時傳 None，不猜一個身分給 provider。"""
+    from ching_tech_os.services import ai_manager
+    from ching_tech_os.services.ai_provider import AIResponse
+
+    agent_id = uuid4()
+    agent = _agent(agent_id)
+    monkeypatch.setattr(ai_manager, "get_agent", AsyncMock(return_value=agent))
+    monkeypatch.setattr(ai_manager, "get_agent_by_name", AsyncMock(return_value=agent))
+    monkeypatch.setattr(ai_manager, "create_log", AsyncMock(return_value={"id": uuid4()}))
+    call_ai_mock = AsyncMock(
+        return_value=AIResponse(success=True, message="ok", provider="claude")
+    )
+    monkeypatch.setattr(ai_manager, "call_ai", call_ai_mock)
+
+    resp = await _request(
+        _app(_session(role="admin", user_id=None)),
+        "POST",
+        "/api/ai/test",
+        json={"agent_id": str(agent_id), "message": "hi"},
+    )
+
+    assert resp.status_code == 200
+    assert call_ai_mock.await_args.kwargs["ctos_user_id"] is None
 
 
 # ============================================================
