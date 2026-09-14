@@ -291,11 +291,10 @@ def _render_gaps(rows: list[dict]) -> list[str]:
             "收 `line_group_id`／`line_user_id` 的工具都先過 `resolve_bot_identity()`，"
             "**有注入時**（LINE／Telegram）模型帶的 id 一律被覆蓋。"
             "讀群組對話／附件的兩支再多一層 `resolve_conversation_scope()`："
-            "沒有注入時要有 `ctos_user_id` 且與該群組有既有關聯才放行——"
-            "但沒有注入就表示連 `CTOS_USER_ID` 也沒注入，"
-            "那個 `ctos_user_id` 本身就是模型帶進來的值，"
-            "所以這一關擋得住「沒身分」，擋不住「宣稱別人的身分」，"
-            "真正的解是 issue #231（見下方「網頁聊天不注入身分」）。"
+            "沒有 bot 注入時要有 `ctos_user_id` 且與該群組有既有關聯才放行。"
+            "網頁聊天的 `CTOS_USER_ID` 自 issue #231 起由 `api/ai.py` 從 session 注入，"
+            "所以這一關在網頁端拿到的是伺服器驗過的身分，不是模型帶的值"
+            "（見下方「網頁聊天的身分注入」）。"
         )
     lines.append("")
     lines.append(
@@ -307,17 +306,18 @@ def _render_gaps(rows: list[dict]) -> list[str]:
     )
     lines.append("")
     lines.append(
-        "**網頁聊天不注入身分**：`api/ai.py` 的 Socket.IO `ai_message` 走 "
-        "`call_ai()` 時沒有帶 `ctos_user_id` 也沒有帶 `extra_mcp_env`（雖然 "
-        "session 裡就有 `user_id`），那條路會起一個沒有任何身分環境變數的 MCP 子行程："
-        "工具的 `ctos_user_id` 由模型參數決定、記憶工具吃模型帶的 id、"
-        "`update_memory`／`delete_memory` 沒有擁有者範圍。"
-        "進 socket 之前有 session 認證，所以不是匿名者能打的路，"
-        "但同一個登入者可以指定別人的 id。"
-        "`summarize_chat`／`get_message_attachments` 在這條路上多擋了一層"
-        "（要求 `ctos_user_id` 並驗群組關聯），但那個 `ctos_user_id` 同樣是模型帶的，"
-        "所以只是提高了門檻，**不是修好了**；要真的修好得讓 `api/ai.py` 注入身分"
-        "（issue #231）。其餘工具仍然照舊。"
+        "**網頁聊天的身分注入**（issue #231 已修）：`api/ai.py` 的 Socket.IO "
+        "`ai_chat_event`／`compress_chat`、以及 `services/ai_manager.py` 的 "
+        "`call_agent()`（`POST /api/ai/test`，Agent 設定頁的測試面板）走 `call_ai()` "
+        "時都帶 `ctos_user_id=session.user_id`，值取自伺服器驗過的 session，"
+        "不從 request body 也不從模型參數取；`call_ai()` 把它變成 MCP 子行程的 "
+        "`CTOS_USER_ID`，`resolve_ctos_user_id()` 只認這個環境變數，"
+        "模型在工具參數裡宣稱別人的 id 不算數。"
+        "bot 專屬的 `CTOS_BOT_PLATFORM`／`CTOS_BOT_GROUP_ID`／`CTOS_BOT_USER_ID` "
+        "不注入網頁端（網頁聊天沒有對應的對話身分）。"
+        "剩下的是記憶工具：`add_memory`／`get_memories`／`update_memory`／"
+        "`delete_memory` 的範圍是 bot 對話身分，網頁端沒有可注入的值，"
+        "仍然吃模型帶的 `line_group_id`／`line_user_id`，不在 issue #231 的範圍內。"
     )
     lines.append("")
     return lines

@@ -38,6 +38,27 @@ async def test_summarize_messages_parity_contract(monkeypatch: pytest.MonkeyPatc
     assert kwargs["timeout"] == 12
     # routing context 用 caller 事實；canary 由設定控制
     assert kwargs["routing_context"].context_type == "compress"
+    # issue #231：呼叫端沒給身分就傳 None，不硬造
+    assert kwargs["ctos_user_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_summarize_messages_passes_ctos_user_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """issue #231：呼叫端給的身分要原樣轉給 call_ai（之後才變 CTOS_USER_ID）。"""
+    monkeypatch.setattr(
+        ai_pipelines, "get_prompt_content", AsyncMock(return_value="summary prompt")
+    )
+    call_ai_mock = AsyncMock(
+        return_value=AIResponse(success=True, message="摘要完成", provider="claude")
+    )
+    monkeypatch.setattr(ai_pipelines, "call_ai", call_ai_mock)
+
+    await ai_pipelines.summarize_messages(
+        [{"role": "user", "content": "問題A"}], ctos_user_id=7
+    )
+    assert call_ai_mock.await_args.kwargs["ctos_user_id"] == 7
 
 
 @pytest.mark.asyncio

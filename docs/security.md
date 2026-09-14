@@ -590,18 +590,27 @@ bot 走的路徑上，身分一律由伺服器注入，模型在工具參數裡�
 | `CTOS_BOT_USER_ID` | `bot_users.platform_user_id` | 同上 | `resolve_bot_identity()` |
 | `CTOS_BOT_PLATFORM` | `line`／`telegram` | 同上 | `resolve_bot_platform()`（`send_nas_file` 用它擋跨平台推送） |
 
-環境變數不存在時工具才會採用參數——**網頁聊天就是這種情況**：
-`api/ai.py` 的 Socket.IO `ai_message` 呼叫 `call_ai()` 時沒有帶 `ctos_user_id`，
-也沒有帶 `extra_mcp_env`（雖然 session 裡就有 `user_id`），所以那條路會起一個
-沒有任何身分環境變數的 MCP 子行程：工具的 `ctos_user_id` 由模型參數決定、
-記憶工具吃模型帶的 `line_group_id`／`line_user_id`、`update_memory`／`delete_memory`
-沒有擁有者範圍。進 socket 之前有 session 認證，所以不是匿名者能打的路，
-但同一個登入者可以指定別人的 id。這條缺口記在
-[存取矩陣的「已知缺口」](mcp-tool-access-matrix.md#已知缺口)，尚未修。
-`summarize_chat`／`get_message_attachments` 在這條路上多擋了一層（#209 的
-`resolve_conversation_scope()` 會要求 `ctos_user_id` 並驗群組關聯），但那個
-`ctos_user_id` 在這條路上同樣是模型帶的，所以只是提高門檻，**不是修好了**。
-其餘工具仍然照舊。
+網頁聊天（issue #231 之後）也注入了 `CTOS_USER_ID`：`api/ai.py` 的 Socket.IO
+`ai_chat_event` 呼叫 `call_ai()` 時帶 `ctos_user_id=session.user_id`，值取自
+進入事件時重新驗過的 session，不從 request body 也不從模型參數取，所以登入者
+指定別人的 id 不算數。`compress_chat` 的摘要管線（`summarize_messages()`）同樣
+帶這個身分。Agent 設定頁的測試面板（`POST /api/ai/test` →
+`ai_manager.call_agent()`）也是同一套：router 從 `session.user_id` 傳下來的
+`user_id` 除了寫進 log 欄位，也一併給 `call_ai()`。bot 專屬的 `CTOS_BOT_PLATFORM`／`CTOS_BOT_GROUP_ID`／
+`CTOS_BOT_USER_ID` 不屬於網頁聊天，不注入——網頁聊天沒有「這條對話屬於哪個
+群組」這回事。session 沒有 `user_id`（NAS 帳號還沒 upsert）時傳 None，不硬造
+身分；那條路在取對話那一關就已經先擋掉了。
+
+因此 `summarize_chat`／`get_message_attachments` 在網頁端走的是
+`resolve_conversation_scope()` 的第二段（沒有 bot 注入、但有伺服器認得的
+`ctos_user_id`）：要讀哪個群組／哪個平台帳號，必須跟這個 CTOS 帳號有既有關聯
+（`bot_messages` 裡發過話、或 `bot_users.user_id` 是自己綁的）才放行，否則回
+「你沒有參與這個群組的對話」。這道關卡在 #231 之前是「一律拒絕」（`ctos_user_id`
+永遠是 None），之後才真正按 #209 設計的方式運作。
+
+記憶工具（`add_memory`／`get_memories`／`update_memory`／`delete_memory`）在網頁端
+仍然吃模型帶的 `line_group_id`／`line_user_id`——它們的範圍是 bot 對話身分，
+網頁聊天沒有對應的注入值，這一段不在 #231 的範圍內。
 
 ---
 
