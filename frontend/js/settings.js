@@ -884,7 +884,16 @@ const SettingsApp = (function () {
     }
 
     const appNames = defaultPerms?.app_names || APP_NAMES;
+    // user.permissions 是 preferences 裡實際存的設定，不含 admin 由 role 取得的全通。
     const userPerms = user.permissions;
+    // 管理員的權限來自 role，網頁端一律放行，下面的勾選框對他不生效；但 API token
+    // 驗證後會把身分降成 user（api_token.py），那時就只剩這裡存的設定可用。
+    const adminNote = user.is_admin
+      ? `<p class="permissions-admin-note">
+           ${user.username} 是管理員，網頁端一律全通，下列設定對網頁操作不生效。
+           但 API token（ctos CLI／自動化）驗證後身分會降為一般使用者，屆時只認這裡的設定。
+         </p>`
+      : '';
 
     // 建立對話框
     const dialog = document.createElement('div');
@@ -896,6 +905,7 @@ const SettingsApp = (function () {
           <button class="permissions-dialog-close">${getIcon('close')}</button>
         </div>
         <div class="permissions-dialog-body">
+          ${adminNote}
           <div class="permissions-group">
             <h4>應用程式權限</h4>
             <div class="permissions-list">

@@ -260,3 +260,59 @@ class TestUserApi:
             # 管理員應有所有應用程式權限
             assert data["permissions"]["apps"]["terminal"] is True
             assert data["permissions"]["apps"]["code-editor"] is True
+
+
+# ============================================================
+# 後台權限勾選框要反映 DB 實際存的值（回歸測試）
+# ============================================================
+
+class TestAdminUserListReportsStoredPermissions:
+    """/api/admin/users 的 permissions 必須是 preferences 實際存的設定
+
+    這個欄位只餵給後台的權限勾選對話框，而那個對話框按下「儲存」時會把畫面上的
+    勾選狀態原樣 PATCH 回去。若這裡回 role 推導的全開表，管理員帳號會顯示成全勾，
+    管理者照著按儲存就把一整張全開的表寫進對方 preferences；更糟的是它看起來像
+    「權限已開」，實際上 preferences 是空的——API token 驗證後身分被降為 user
+    （api_token.py 一律 role="user"），那時就只剩 preferences，於是 403。
+    """
+
+    def setup_method(self):
+        self.app = create_test_app()
+        self.app.dependency_overrides[get_current_session] = create_session_override(
+            "admin", role="admin"
+        )
+
+    def _list_users(self, users):
+        with patch(
+            "ching_tech_os.api.user.get_all_users", new_callable=AsyncMock
+        ) as mock_get_all:
+            mock_get_all.return_value = users
+            response = TestClient(self.app).get("/api/admin/users")
+        assert response.status_code == 200
+        return {u["username"]: u for u in response.json()["users"]}
+
+    def test_admin_with_empty_preferences_is_not_reported_as_all_granted(self):
+        """preferences 空的管理員，不可回報成權限全開"""
+        admin = self._list_users([MOCK_ADMIN_USER])["admin"]
+
+        assert admin["is_admin"] is True
+        # 這一條就是 kb-229 那次事故的根：後台顯示有勾，DB 其實是空的
+        assert admin["permissions"]["knowledge"]["global_write"] is False
+        assert admin["permissions"]["knowledge"]["global_delete"] is False
+
+    def test_stored_permissions_are_preserved(self):
+        """有存設定的使用者，照實回報"""
+        user2 = self._list_users([MOCK_USER_WITH_PERMS])["user2"]
+
+        assert user2["permissions"]["knowledge"]["global_write"] is True
+        assert user2["permissions"]["apps"]["terminal"] is True
+
+    def test_admin_and_normal_user_with_same_preferences_report_the_same(self):
+        """同樣的 preferences，admin 與一般使用者回報的權限必須一致
+
+        角色只決定網頁端放不放行，不該汙染「存了什麼」的回報。
+        """
+        same_prefs_admin = {**MOCK_NORMAL_USER, "username": "admin2", "role": "admin"}
+        users = self._list_users([MOCK_NORMAL_USER, same_prefs_admin])
+
+        assert users["admin2"]["permissions"] == users["user1"]["permissions"]

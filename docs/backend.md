@@ -130,6 +130,16 @@ uv run uvicorn ching_tech_os.main:socket_app --host 0.0.0.0 --port 8088 --reload
 | DELETE | `/api/admin/users/{user_id}` | 永久刪除使用者 |
 | GET | `/api/admin/default-permissions` | 取得預設權限設定 |
 
+`GET /api/admin/users` 與 `PATCH .../permissions` 回的 `permissions` 是**該使用者 `preferences`
+裡實際存下來的設定**（與預設值合併），不是 role 推導出的有效權限。管理員的權限來自
+`users.role`（`check_knowledge_permission_async` 一律放行），若這裡回一張全開的表，後台勾選
+對話框會顯示全勾、與 DB 實際值不符，而那個對話框按「儲存」時是把畫面上的勾選狀態原樣送回，
+等於把全開的表寫進對方 `preferences`。
+
+這個區別在 PAT 情境會咬人：API token 驗證後身分一律降為 `role="user"`，管理員帳號當下只剩
+`preferences` 可用。`preferences` 空的管理員用 CLI 寫 global 知識會吃 403，而後台看起來卻是
+「權限全開」。前端以 `is_admin` 另外標示網頁端全通。
+
 ### NAS 檔案操作
 
 | 方法 | 端點 | 說明 |
