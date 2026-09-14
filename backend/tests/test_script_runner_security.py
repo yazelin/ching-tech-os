@@ -184,3 +184,81 @@ async def test_execute_path_unsupported_timeout_and_exception(
     )
     assert exception_result["success"] is False
     assert exception_result["error"] == "boom"
+
+
+@pytest.mark.asyncio
+async def test_execute_path_stdin_eof_without_input(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """#274: 不帶 input 時，讀 stdin 的腳本要立刻收到 EOF，而不是卡到 timeout。
+
+    真的跑子行程（不 mock communicate），讓 asyncio 的 stdin 關閉行為真的被驗到。
+    """
+    runner = ScriptRunner(tmp_path)
+    script_path = tmp_path / "read_stdin.py"
+    script_path.write_text(
+        "import sys\ndata = sys.stdin.read()\nprint(f'got:{data!r}')\n",
+        encoding="utf-8",
+    )
+    # 強制用 python3 直接跑，略過 uv 啟動開銷，維持測試快速且確定
+    monkeypatch.setattr(runner, "_build_command", lambda path: ["python3", str(path)])
+
+    result = await runner.execute_path(
+        script_path=script_path,
+        skill_name="demo",
+        timeout=5,
+    )
+
+    assert result["success"] is True
+    assert result["output"] == "got:''"
+    assert result["duration_ms"] < 2000
+
+
+@pytest.mark.asyncio
+async def test_execute_path_accepts_none_input(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """#274: input 是 None 也不能爆（排程的 executor_config 可能存 null）。"""
+    runner = ScriptRunner(tmp_path)
+    script_path = tmp_path / "read_stdin_none.py"
+    script_path.write_text(
+        "import sys\nprint(f'got:{sys.stdin.read()!r}')\n", encoding="utf-8"
+    )
+    monkeypatch.setattr(runner, "_build_command", lambda path: ["python3", str(path)])
+
+    result = await runner.execute_path(
+        script_path=script_path,
+        skill_name="demo",
+        input=None,  # type: ignore[arg-type]
+        timeout=5,
+    )
+
+    assert result["success"] is True
+    assert result["output"] == "got:''"
+
+
+@pytest.mark.asyncio
+async def test_execute_path_passes_input_content(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """釘住既有行為：有帶 input 時內容要正確傳進子行程（不能回歸）。"""
+    runner = ScriptRunner(tmp_path)
+    script_path = tmp_path / "read_stdin.py"
+    script_path.write_text(
+        "import sys\ndata = sys.stdin.read()\nprint(f'got:{data!r}')\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(runner, "_build_command", lambda path: ["python3", str(path)])
+
+    result = await runner.execute_path(
+        script_path=script_path,
+        skill_name="demo",
+        input="hello",
+        timeout=5,
+    )
+
+    assert result["success"] is True
+    assert result["output"] == "got:'hello'"

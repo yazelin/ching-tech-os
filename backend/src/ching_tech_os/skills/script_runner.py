@@ -177,9 +177,14 @@ class ScriptRunner:
                     cwd=tmpdir,
                 )
                 stdout, stderr = await asyncio.wait_for(
-                    proc.communicate(
-                        input=input.encode("utf-8") if input else None
-                    ),
+                    # input 一律傳 bytes（即使空字串）：asyncio 只有在
+                    # input is not None 時才會關閉子行程 stdin，讓它收到
+                    # EOF；傳 None 會讓 stdin 永遠開著，等 sys.stdin.read()
+                    # 的腳本因此卡到 timeout（#274）。
+                    # `or ""` 是防呆：executor_config 是自由格式 dict，
+                    # `config.get("input", "")` 在值明確是 null 時會回 None
+                    # （task_scheduler.py:386），排程是無人值守的路徑。
+                    proc.communicate(input=(input or "").encode("utf-8")),
                     timeout=timeout,
                 )
                 duration_ms = int((time.monotonic() - start) * 1000)
