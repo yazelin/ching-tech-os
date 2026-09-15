@@ -83,9 +83,9 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 舊 ERP（鼎新 e-Go）整庫傾印的逐欄說明。**這是推導出來的，不是原廠文件**，
 每個欄位標明依據等級，請照等級決定要不要自己再確認。
 
-- 表 **197** 張、**3,001,440** 列；資料字典對得上功能名的 102 張
+- 表 **197** 張、**3,001,440** 列；資料字典對得上功能名的 107 張
 - 欄位名 = 表名後三碼 ＋ 三位序號（1-based）。例：`TPADGA` 第 5 欄是 `DGA005`
-- 推出外鍵 **231** 個（值域重疊 ≥ 90%）
+- 推出外鍵 **233** 個（值域重疊 ≥ 90%）
 
 | 依據 | 意思 |
 |---|---|
@@ -1152,6 +1152,214 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 | 22 | `LMD022` | timestamp | 100% | 1 | 建檔／異動時間 | `rule` |
 | 23 | `LMD023` | — | 0 | — | 全空 | — |
 | 24 | `LMD024` | — | 0 | — | 全空 | — |
+
+
+## 勞健保設定資料
+
+### `PALML`　〔人事薪資〕　15 列 × 15 欄
+
+主鍵：`LML001`
+
+| # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
+|--:|---|---|--:|--:|---|---|
+| 1 | `LML001` | text | 100% | 15 | 唯一 | `-` |
+| 2 | `LML002` | text_zh | 100% | 15 | 唯一 | `pattern` |
+| 3 | `LML003` | decimal | 100% | 4 | 金額／數量 | `rule` |
+| 4 | `LML004` | decimal | 100% | 4 | 金額／數量 | `rule` |
+| 5 | `LML005` | decimal | 100% | 1 | — | `pattern` |
+| 6 | `LML006` | — | 0 | — | 全空 | — |
+| 7 | `LML007` | — | 0 | — | 全空 | — |
+| 8 | `LML008` | — | 0 | — | 全空 | — |
+| 9 | `LML009` | — | 0 | — | 全空 | — |
+| 10 | `LML010` | decimal | 100% | 3 | 金額／數量 | `rule` |
+| 11 | `LML011` | decimal | 100% | 1 | 金額／數量 | `rule` |
+| 12 | `LML012` | text | 33% | 1 | — | `-` |
+| 13 | `LML013` | timestamp | 100% | 9 | 建檔／異動時間 | `rule` |
+| 14 | `LML014` | — | 0 | — | 全空 | — |
+| 15 | `LML015` | timestamp | 67% | 6 | 建檔／異動時間 | `rule` |
+
+### `PALMM`　〔人事薪資〕　5 列 × 22 欄
+
+主鍵：`LMM001`
+
+| # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
+|--:|---|---|--:|--:|---|---|
+| 1 | `LMM001` | decimal | 100% | 5 | 唯一 | `pattern` |
+| 2 | `LMM002` | text_zh | 100% | 5 | 唯一 | `pattern` |
+| 3 | `LMM003` | decimal | 100% | 1 | — | `pattern` |
+| 4 | `LMM004` | decimal | 100% | 1 | — | `pattern` |
+| 5 | `LMM005` | decimal | 100% | 1 | — | `pattern` |
+| 6 | `LMM006` | decimal | 100% | 1 | — | `pattern` |
+| 7 | `LMM007` | decimal | 100% | 2 | — | `pattern` |
+| 8 | `LMM008` | decimal | 100% | 2 | — | `pattern` |
+| 9 | `LMM009` | decimal | 100% | 1 | — | `pattern` |
+| 10 | `LMM010` | decimal | 100% | 2 | — | `pattern` |
+| 11 | `LMM011` | decimal | 100% | 1 | — | `pattern` |
+| 12 | `LMM012` | decimal | 100% | 1 | — | `pattern` |
+| 13 | `LMM013` | — | 0 | — | 全空 | — |
+| 14 | `LMM014` | — | 0 | — | 全空 | — |
+| 15 | `LMM015` | — | 0 | — | 全空 | — |
+| 16 | `LMM016` | — | 0 | — | 全空 | — |
+| 17 | `LMM017` | decimal | 100% | 1 | 金額／數量 | `rule` |
+| 18 | `LMM018` | decimal | 100% | 1 | 金額／數量 | `rule` |
+| 19 | `LMM019` | text | 100% | 1 | — | `-` |
+| 20 | `LMM020` | timestamp | 100% | 3 | 建檔／異動時間 | `rule` |
+| 21 | `LMM021` | — | 0 | — | 全空 | — |
+| 22 | `LMM022` | timestamp | 100% | 1 | 建檔／異動時間 | `rule` |
+
+### `PALMN`　〔人事薪資〕　1 列 × 52 欄
+
+| # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
+|--:|---|---|--:|--:|---|---|
+| 1 | `LMN001` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 2 | `LMN002` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 3 | `LMN003` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 4 | `LMN004` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 5 | `LMN005` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 6 | `LMN006` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 7 | `LMN007` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 8 | `LMN008` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 9 | `LMN009` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 10 | `LMN010` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 11 | `LMN011` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 12 | `LMN012` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 13 | `LMN013` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 14 | `LMN014` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 15 | `LMN015` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 16 | `LMN016` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 17 | `LMN017` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 18 | `LMN018` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 19 | `LMN019` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 20 | `LMN020` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 21 | `LMN021` | decimal | 100% | 1 | — | `pattern` |
+| 22 | `LMN022` | decimal | 100% | 1 | — | `pattern` |
+| 23 | `LMN023` | decimal | 100% | 1 | — | `pattern` |
+| 24 | `LMN024` | decimal | 100% | 1 | — | `pattern` |
+| 25 | `LMN025` | decimal | 100% | 1 | — | `pattern` |
+| 26 | `LMN026` | decimal | 100% | 1 | — | `pattern` |
+| 27 | `LMN027` | decimal | 100% | 1 | — | `pattern` |
+| 28 | `LMN028` | decimal | 100% | 1 | — | `pattern` |
+| 29 | `LMN029` | decimal | 100% | 1 | — | `pattern` |
+| 30 | `LMN030` | decimal | 100% | 1 | — | `pattern` |
+| 31 | `LMN031` | decimal | 100% | 1 | — | `pattern` |
+| 32 | `LMN032` | decimal | 100% | 1 | — | `pattern` |
+| 33 | `LMN033` | decimal | 100% | 1 | — | `pattern` |
+| 34 | `LMN034` | decimal | 100% | 1 | — | `pattern` |
+| 35 | `LMN035` | decimal | 100% | 1 | — | `pattern` |
+| 36 | `LMN036` | decimal | 100% | 1 | — | `pattern` |
+| 37 | `LMN037` | decimal | 100% | 1 | — | `pattern` |
+| 38 | `LMN038` | decimal | 100% | 1 | — | `pattern` |
+| 39 | `LMN039` | decimal | 100% | 1 | — | `pattern` |
+| 40 | `LMN040` | decimal | 100% | 1 | — | `pattern` |
+| 41 | `LMN041` | decimal | 100% | 1 | — | `pattern` |
+| 42 | `LMN042` | decimal | 100% | 1 | — | `pattern` |
+| 43 | `LMN043` | — | 0 | — | 全空 | — |
+| 44 | `LMN044` | — | 0 | — | 全空 | — |
+| 45 | `LMN045` | decimal | 100% | 1 | — | `pattern` |
+| 46 | `LMN046` | decimal | 100% | 1 | — | `pattern` |
+| 47 | `LMN047` | decimal | 100% | 1 | 金額／數量 | `rule` |
+| 48 | `LMN048` | decimal | 100% | 1 | 金額／數量 | `rule` |
+| 49 | `LMN049` | — | 0 | — | 全空 | — |
+| 50 | `LMN050` | timestamp | 100% | 1 | 建檔／異動時間 | `rule` |
+| 51 | `LMN051` | — | 0 | — | 全空 | — |
+| 52 | `LMN052` | timestamp | 100% | 1 | 建檔／異動時間 | `rule` |
+
+### `PALMO`　〔人事薪資〕　1 列 × 69 欄
+
+| # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
+|--:|---|---|--:|--:|---|---|
+| 1 | `LMO001` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 2 | `LMO002` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 3 | `LMO003` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 4 | `LMO004` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 5 | `LMO005` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 6 | `LMO006` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 7 | `LMO007` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 8 | `LMO008` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 9 | `LMO009` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 10 | `LMO010` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 11 | `LMO011` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 12 | `LMO012` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 13 | `LMO013` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 14 | `LMO014` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 15 | `LMO015` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 16 | `LMO016` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 17 | `LMO017` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 18 | `LMO018` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 19 | `LMO019` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 20 | `LMO020` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 21 | `LMO021` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 22 | `LMO022` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 23 | `LMO023` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 24 | `LMO024` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 25 | `LMO025` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 26 | `LMO026` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 27 | `LMO027` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 28 | `LMO028` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 29 | `LMO029` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 30 | `LMO030` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 31 | `LMO031` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 32 | `LMO032` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 33 | `LMO033` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 34 | `LMO034` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 35 | `LMO035` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 36 | `LMO036` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 37 | `LMO037` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 38 | `LMO038` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 39 | `LMO039` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 40 | `LMO040` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 41 | `LMO041` | decimal | 100% | 1 | — | `pattern` |
+| 42 | `LMO042` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 43 | `LMO043` | decimal | 100% | 1 | — | `pattern` |
+| 44 | `LMO044` | decimal | 100% | 1 | — | `pattern` |
+| 45 | `LMO045` | — | 0 | — | 全空 | — |
+| 46 | `LMO046` | — | 0 | — | 全空 | — |
+| 47 | `LMO047` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 48 | `LMO048` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 49 | `LMO049` | decimal | 100% | 1 | 金額／數量 | `rule` |
+| 50 | `LMO050` | decimal | 100% | 1 | 金額／數量 | `rule` |
+| 51 | `LMO051` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 52 | `LMO052` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 53 | `LMO053` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 54 | `LMO054` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 55 | `LMO055` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 56 | `LMO056` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 57 | `LMO057` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 58 | `LMO058` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 59 | `LMO059` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 60 | `LMO060` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 61 | `LMO061` | decimal | 100% | 1 | 郵遞區號 | `rule` |
+| 62 | `LMO062` | decimal | 100% | 1 | — | `pattern` |
+| 63 | `LMO063` | decimal | 100% | 1 | — | `pattern` |
+| 64 | `LMO064` | decimal | 100% | 1 | — | `pattern` |
+| 65 | `LMO065` | decimal | 100% | 1 | — | `pattern` |
+| 66 | `LMO066` | — | 0 | — | 全空 | — |
+| 67 | `LMO067` | timestamp | 100% | 1 | 建檔／異動時間 | `rule` |
+| 68 | `LMO068` | — | 0 | — | 全空 | — |
+| 69 | `LMO069` | timestamp | 100% | 1 | 建檔／異動時間 | `rule` |
+
+
+## 員工相關資料檔
+
+### `PALMI`　〔人事薪資〕　7 列 × 13 欄
+
+主鍵：`LMI001`
+
+| # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
+|--:|---|---|--:|--:|---|---|
+| 1 | `LMI001` | decimal | 100% | 7 | 唯一 | `pattern` |
+| 2 | `LMI002` | text_zh | 100% | 7 | 唯一 | `pattern` |
+| 3 | `LMI003` | — | 0 | — | 全空 | — |
+| 4 | `LMI004` | — | 0 | — | 全空 | — |
+| 5 | `LMI005` | — | 0 | — | 全空 | — |
+| 6 | `LMI006` | — | 0 | — | 全空 | — |
+| 7 | `LMI007` | — | 0 | — | 全空 | — |
+| 8 | `LMI008` | decimal | 100% | 1 | 金額／數量 | `rule` |
+| 9 | `LMI009` | decimal | 100% | 1 | 金額／數量 | `rule` |
+| 10 | `LMI010` | text | 100% | 1 | — | `-` |
+| 11 | `LMI011` | timestamp | 100% | 3 | 建檔／異動時間 | `rule` |
+| 12 | `LMI012` | — | 0 | — | 全空 | — |
+| 13 | `LMI013` | — | 0 | — | 全空 | — |
 
 
 ## 商品分類
@@ -3709,40 +3917,40 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
 |--:|---|---|--:|--:|---|---|
 | 1 | `KEB001` | docno | 100% | 3,283 | **銷貨單號**；對應 KEA001 | `verified+dict` |
-| 2 | `KEB002` | decimal | 100% | 22 | **項次** | `verified` |
-| 3 | `KEB003` | text | 100% | 1,314 | **品號** | `verified` |
+| 2 | `KEB002` | decimal | 100% | 21 | **項次** | `verified` |
+| 3 | `KEB003` | text | 100% | 1,313 | **品號** | `verified` |
 | 4 | `KEB004` | text_zh | 100% | 2,785 | **品名** | `inferred` |
-| 5 | `KEB005` | text | 100% | 20 | **單位** | `verified` |
-| 6 | `KEB006` | code | 100% | 5 | — | `pattern` |
-| 7 | `KEB007` | decimal | 100% | 69 | **數量** | `verified` |
-| 8 | `KEB008` | decimal | 100% | 116 | 金額／數量 | `rule` |
+| 5 | `KEB005` | text | 100% | 19 | **單位** | `verified` |
+| 6 | `KEB006` | code | 100% | 4 | → `TPADDA`（100%） | `fk` |
+| 7 | `KEB007` | decimal | 100% | 68 | **數量** | `verified` |
+| 8 | `KEB008` | decimal | 100% | 115 | 金額／數量 | `rule` |
 | 9 | `KEB009` | decimal | 100% | 98 | 金額／數量 | `rule` |
-| 10 | `KEB010` | decimal | 100% | 922 | **單價** | `verified` |
+| 10 | `KEB010` | decimal | 100% | 921 | **單價** | `verified` |
 | 11 | `KEB011` | decimal | 100% | 1,065 | 金額／數量 | `rule` |
 | 12 | `KEB012` | decimal | 100% | 1,065 | **金額** | `verified` |
 | 13 | `KEB013` | flag | 100% | 1 | 是否旗標 | `rule` |
 | 14 | `KEB014` | decimal | 100% | 1 | 金額／數量 | `rule` |
-| 15 | `KEB015` | decimal | 1% | 2 | — | `pattern` |
-| 16 | `KEB016` | docno | 1% | 13 | → `DCSIBA`（92%） | `fk` |
-| 17 | `KEB017` | decimal | 1% | 11 | — | `pattern` |
-| 18 | `KEB018` | decimal | 100% | 2 | 金額／數量 | `rule` |
+| 15 | `KEB015` | decimal | 1% | 1 | — | `pattern` |
+| 16 | `KEB016` | docno | 1% | 12 | → `DCSIBA`（100%） | `fk` |
+| 17 | `KEB017` | decimal | 1% | 10 | — | `pattern` |
+| 18 | `KEB018` | decimal | 100% | 1 | 金額／數量 | `rule` |
 | 19 | `KEB019` | decimal | 100% | 1 | 金額／數量 | `rule` |
-| 20 | `KEB020` | decimal | 100% | 2 | 金額／數量 | `rule` |
+| 20 | `KEB020` | decimal | 100% | 1 | 金額／數量 | `rule` |
 | 21 | `KEB021` | flag | 100% | 1 | 是否旗標 | `rule` |
-| 22 | `KEB022` | decimal | 0% | 1 | 郵遞區號 | `rule` |
+| 22 | `KEB022` | — | 0 | — | 全空 | — |
 | 23 | `KEB023` | flag | 100% | 1 | 是否旗標 | `rule` |
-| 24 | `KEB024` | decimal | 0% | 1 | 金額／數量 | `rule` |
-| 25 | `KEB025` | text | 98% | 3,514 | — | `-` |
+| 24 | `KEB024` | — | 0 | — | 全空 | — |
+| 25 | `KEB025` | text | 98% | 3,515 | — | `-` |
 | 26 | `KEB026` | text | 1% | 12 | — | `-` |
 | 27 | `KEB027` | decimal | 100% | 1 | 金額／數量 | `rule` |
 | 28 | `KEB028` | decimal | 100% | 1 | 金額／數量 | `rule` |
-| 29 | `KEB029` | code | 0% | 1 | — | `pattern` |
-| 30 | `KEB030` | timestamp | 0% | 1 | 建檔／異動時間 | `rule` |
-| 31 | `KEB031` | decimal | 100% | 2 | 金額／數量 | `rule` |
-| 32 | `KEB032` | code | 100% | 2 | — | `pattern` |
-| 33 | `KEB033` | timestamp | 100% | 3,879 | 建檔／異動時間 | `rule` |
+| 29 | `KEB029` | — | 0 | — | 全空 | — |
+| 30 | `KEB030` | — | 0 | — | 全空 | — |
+| 31 | `KEB031` | decimal | 100% | 1 | 金額／數量 | `rule` |
+| 32 | `KEB032` | code | 100% | 1 | — | `pattern` |
+| 33 | `KEB033` | timestamp | 100% | 3,881 | 建檔／異動時間 | `rule` |
 | 34 | `KEB034` | code | 100% | 1 | — | `pattern` |
-| 35 | `KEB035` | timestamp | 100% | 3,930 | 建檔／異動時間 | `rule` |
+| 35 | `KEB035` | timestamp | 100% | 3,932 | 建檔／異動時間 | `rule` |
 | 36 | `KEB036` | — | 0 | — | 全空 | — |
 | 37 | `KEB037` | decimal | 63% | 1 | 金額／數量 | `rule` |
 | 38 | `KEB038` | decimal | 63% | 1 | 金額／數量 | `rule` |
@@ -4512,28 +4720,28 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 | 9 | `ESS009` | text_zh | 100% | 890 | — | `pattern` |
 | 10 | `ESS010` | text_zh | 100% | 4 | — | `pattern` |
 
-### `HCRBPA`　〔系統對照（資料字典）〕　87 列 × 18 欄
+### `HCRBPA`　〔系統對照（資料字典）〕　87 列 × 18 欄（取樣前 85 列）
 
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
 |--:|---|---|--:|--:|---|---|
-| 1 | `BPA001` | decimal | 98% | 16 | — | `pattern` |
-| 2 | `BPA002` | decimal | 100% | 13 | — | `pattern` |
-| 3 | `BPA003` | text_zh | 98% | 84 | — | `pattern` |
-| 4 | `BPA004` | date | 41% | 1 | 電話／傳真 | `rule` |
-| 5 | `BPA005` | text_zh | 55% | 31 | — | `pattern` |
-| 6 | `BPA006` | text | 95% | 79 | — | `-` |
-| 7 | `BPA007` | text | 2% | 2 | → `TPABCA`（100%） | `fk` |
-| 8 | `BPA008` | text | 11% | 10 | — | `-` |
-| 9 | `BPA009` | text | 46% | 39 | → `TPABCA`（97%） | `fk` |
-| 10 | `BPA010` | decimal | 56% | 48 | — | `pattern` |
-| 11 | `BPA011` | text | 93% | 80 | → `TPABCA`（100%） | `fk` |
-| 12 | `BPA012` | timestamp | 2% | 2 | 建檔／異動時間 | `rule` |
-| 13 | `BPA013` | decimal | 95% | 1 | 金額／數量 | `rule` |
-| 14 | `BPA014` | decimal | 98% | 3 | 金額／數量 | `rule` |
+| 1 | `BPA001` | decimal | 100% | 16 | — | `pattern` |
+| 2 | `BPA002` | decimal | 100% | 11 | — | `pattern` |
+| 3 | `BPA003` | text_zh | 100% | 84 | — | `pattern` |
+| 4 | `BPA004` | date | 42% | 1 | 電話／傳真 | `rule` |
+| 5 | `BPA005` | text_zh | 56% | 31 | — | `pattern` |
+| 6 | `BPA006` | text | 100% | 81 | — | `-` |
+| 7 | `BPA007` | — | 0 | — | 全空 | — |
+| 8 | `BPA008` | text | 12% | 10 | — | `-` |
+| 9 | `BPA009` | text | 45% | 38 | → `TPABCA`（100%） | `fk` |
+| 10 | `BPA010` | decimal | 55% | 47 | — | `pattern` |
+| 11 | `BPA011` | text | 98% | 82 | → `TPABCA`（100%） | `fk` |
+| 12 | `BPA012` | — | 0 | — | 全空 | — |
+| 13 | `BPA013` | decimal | 100% | 1 | 金額／數量 | `rule` |
+| 14 | `BPA014` | decimal | 100% | 1 | 金額／數量 | `rule` |
 | 15 | `BPA015` | — | 0 | — | 全空 | — |
-| 16 | `BPA016` | timestamp | 91% | 55 | 建檔／異動時間 | `rule` |
+| 16 | `BPA016` | timestamp | 95% | 57 | 建檔／異動時間 | `rule` |
 | 17 | `BPA017` | — | 0 | — | 全空 | — |
-| 18 | `BPA018` | timestamp | 95% | 12 | 建檔／異動時間 | `rule` |
+| 18 | `BPA018` | timestamp | 100% | 12 | 建檔／異動時間 | `rule` |
 
 ### `HCRBPB`　〔系統對照（資料字典）〕　12 列 × 18 欄
 
@@ -4913,22 +5121,22 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 | 13 | `NNB013` | code | 100% | 1 | — | `pattern` |
 | 14 | `NNB014` | timestamp | 99% | 123 | 建檔／異動時間 | `rule` |
 
-### `KJSNOA`　〔會計總帳〕　31 列 × 12 欄（取樣前 30 列）
+### `KJSNOA`　〔會計總帳〕　31 列 × 12 欄（取樣前 28 列）
 
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
 |--:|---|---|--:|--:|---|---|
-| 1 | `NOA001` | text | 93% | 28 | — | `-` |
-| 2 | `NOA002` | text_zh | 93% | 28 | — | `pattern` |
+| 1 | `NOA001` | text | 100% | 28 | 唯一 | `-` |
+| 2 | `NOA002` | text_zh | 100% | 28 | 唯一 | `pattern` |
 | 3 | `NOA003` | — | 0 | — | 全空 | — |
 | 4 | `NOA004` | — | 0 | — | 全空 | — |
 | 5 | `NOA005` | — | 0 | — | 全空 | — |
-| 6 | `NOA006` | decimal | 7% | 1 | 金額／數量 | `rule` |
-| 7 | `NOA007` | decimal | 93% | 1 | 金額／數量 | `rule` |
-| 8 | `NOA008` | decimal | 93% | 2 | — | `pattern` |
-| 9 | `NOA009` | text | 60% | 4 | — | `-` |
-| 10 | `NOA010` | timestamp | 93% | 26 | — | `pattern` |
-| 11 | `NOA011` | text | 57% | 4 | — | `-` |
-| 12 | `NOA012` | timestamp | 83% | 24 | 建檔／異動時間 | `rule` |
+| 6 | `NOA006` | — | 0 | — | 全空 | — |
+| 7 | `NOA007` | decimal | 100% | 1 | 金額／數量 | `rule` |
+| 8 | `NOA008` | decimal | 100% | 1 | 金額／數量 | `rule` |
+| 9 | `NOA009` | text | 64% | 2 | → `TPADBA`（100%） | `fk` |
+| 10 | `NOA010` | timestamp | 100% | 27 | 建檔／異動時間 | `rule` |
+| 11 | `NOA011` | text | 61% | 2 | → `TPADBA`（100%） | `fk` |
+| 12 | `NOA012` | timestamp | 96% | 26 | 建檔／異動時間 | `rule` |
 
 ### `KJSNOB`　〔會計總帳〕　125 列 × 18 欄
 
@@ -5010,208 +5218,6 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 | 11 | `NPH011` | timestamp | 100% | 56 | 建檔／異動時間；唯一 | `rule` |
 | 12 | `NPH012` | — | 0 | — | 全空 | — |
 | 13 | `NPH013` | timestamp | 100% | 56 | 建檔／異動時間；唯一 | `rule` |
-
-### `PALMI`　〔人事薪資〕　7 列 × 13 欄
-
-主鍵：`LMI001`
-
-| # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
-|--:|---|---|--:|--:|---|---|
-| 1 | `LMI001` | decimal | 100% | 7 | 唯一 | `pattern` |
-| 2 | `LMI002` | text_zh | 100% | 7 | 唯一 | `pattern` |
-| 3 | `LMI003` | — | 0 | — | 全空 | — |
-| 4 | `LMI004` | — | 0 | — | 全空 | — |
-| 5 | `LMI005` | — | 0 | — | 全空 | — |
-| 6 | `LMI006` | — | 0 | — | 全空 | — |
-| 7 | `LMI007` | — | 0 | — | 全空 | — |
-| 8 | `LMI008` | decimal | 100% | 1 | 金額／數量 | `rule` |
-| 9 | `LMI009` | decimal | 100% | 1 | 金額／數量 | `rule` |
-| 10 | `LMI010` | text | 100% | 1 | — | `-` |
-| 11 | `LMI011` | timestamp | 100% | 3 | 建檔／異動時間 | `rule` |
-| 12 | `LMI012` | — | 0 | — | 全空 | — |
-| 13 | `LMI013` | — | 0 | — | 全空 | — |
-
-### `PALML`　〔人事薪資〕　15 列 × 15 欄
-
-主鍵：`LML001`
-
-| # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
-|--:|---|---|--:|--:|---|---|
-| 1 | `LML001` | text | 100% | 15 | 唯一 | `-` |
-| 2 | `LML002` | text_zh | 100% | 15 | 唯一 | `pattern` |
-| 3 | `LML003` | decimal | 100% | 4 | 金額／數量 | `rule` |
-| 4 | `LML004` | decimal | 100% | 4 | 金額／數量 | `rule` |
-| 5 | `LML005` | decimal | 100% | 1 | — | `pattern` |
-| 6 | `LML006` | — | 0 | — | 全空 | — |
-| 7 | `LML007` | — | 0 | — | 全空 | — |
-| 8 | `LML008` | — | 0 | — | 全空 | — |
-| 9 | `LML009` | — | 0 | — | 全空 | — |
-| 10 | `LML010` | decimal | 100% | 3 | 金額／數量 | `rule` |
-| 11 | `LML011` | decimal | 100% | 1 | 金額／數量 | `rule` |
-| 12 | `LML012` | text | 33% | 1 | — | `-` |
-| 13 | `LML013` | timestamp | 100% | 9 | 建檔／異動時間 | `rule` |
-| 14 | `LML014` | — | 0 | — | 全空 | — |
-| 15 | `LML015` | timestamp | 67% | 6 | 建檔／異動時間 | `rule` |
-
-### `PALMM`　〔人事薪資〕　5 列 × 22 欄
-
-主鍵：`LMM001`
-
-| # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
-|--:|---|---|--:|--:|---|---|
-| 1 | `LMM001` | decimal | 100% | 5 | 唯一 | `pattern` |
-| 2 | `LMM002` | text_zh | 100% | 5 | 唯一 | `pattern` |
-| 3 | `LMM003` | decimal | 100% | 1 | — | `pattern` |
-| 4 | `LMM004` | decimal | 100% | 1 | — | `pattern` |
-| 5 | `LMM005` | decimal | 100% | 1 | — | `pattern` |
-| 6 | `LMM006` | decimal | 100% | 1 | — | `pattern` |
-| 7 | `LMM007` | decimal | 100% | 2 | — | `pattern` |
-| 8 | `LMM008` | decimal | 100% | 2 | — | `pattern` |
-| 9 | `LMM009` | decimal | 100% | 1 | — | `pattern` |
-| 10 | `LMM010` | decimal | 100% | 2 | — | `pattern` |
-| 11 | `LMM011` | decimal | 100% | 1 | — | `pattern` |
-| 12 | `LMM012` | decimal | 100% | 1 | — | `pattern` |
-| 13 | `LMM013` | — | 0 | — | 全空 | — |
-| 14 | `LMM014` | — | 0 | — | 全空 | — |
-| 15 | `LMM015` | — | 0 | — | 全空 | — |
-| 16 | `LMM016` | — | 0 | — | 全空 | — |
-| 17 | `LMM017` | decimal | 100% | 1 | 金額／數量 | `rule` |
-| 18 | `LMM018` | decimal | 100% | 1 | 金額／數量 | `rule` |
-| 19 | `LMM019` | text | 100% | 1 | — | `-` |
-| 20 | `LMM020` | timestamp | 100% | 3 | 建檔／異動時間 | `rule` |
-| 21 | `LMM021` | — | 0 | — | 全空 | — |
-| 22 | `LMM022` | timestamp | 100% | 1 | 建檔／異動時間 | `rule` |
-
-### `PALMN`　〔人事薪資〕　1 列 × 52 欄
-
-| # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
-|--:|---|---|--:|--:|---|---|
-| 1 | `LMN001` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 2 | `LMN002` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 3 | `LMN003` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 4 | `LMN004` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 5 | `LMN005` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 6 | `LMN006` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 7 | `LMN007` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 8 | `LMN008` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 9 | `LMN009` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 10 | `LMN010` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 11 | `LMN011` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 12 | `LMN012` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 13 | `LMN013` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 14 | `LMN014` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 15 | `LMN015` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 16 | `LMN016` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 17 | `LMN017` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 18 | `LMN018` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 19 | `LMN019` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 20 | `LMN020` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 21 | `LMN021` | decimal | 100% | 1 | — | `pattern` |
-| 22 | `LMN022` | decimal | 100% | 1 | — | `pattern` |
-| 23 | `LMN023` | decimal | 100% | 1 | — | `pattern` |
-| 24 | `LMN024` | decimal | 100% | 1 | — | `pattern` |
-| 25 | `LMN025` | decimal | 100% | 1 | — | `pattern` |
-| 26 | `LMN026` | decimal | 100% | 1 | — | `pattern` |
-| 27 | `LMN027` | decimal | 100% | 1 | — | `pattern` |
-| 28 | `LMN028` | decimal | 100% | 1 | — | `pattern` |
-| 29 | `LMN029` | decimal | 100% | 1 | — | `pattern` |
-| 30 | `LMN030` | decimal | 100% | 1 | — | `pattern` |
-| 31 | `LMN031` | decimal | 100% | 1 | — | `pattern` |
-| 32 | `LMN032` | decimal | 100% | 1 | — | `pattern` |
-| 33 | `LMN033` | decimal | 100% | 1 | — | `pattern` |
-| 34 | `LMN034` | decimal | 100% | 1 | — | `pattern` |
-| 35 | `LMN035` | decimal | 100% | 1 | — | `pattern` |
-| 36 | `LMN036` | decimal | 100% | 1 | — | `pattern` |
-| 37 | `LMN037` | decimal | 100% | 1 | — | `pattern` |
-| 38 | `LMN038` | decimal | 100% | 1 | — | `pattern` |
-| 39 | `LMN039` | decimal | 100% | 1 | — | `pattern` |
-| 40 | `LMN040` | decimal | 100% | 1 | — | `pattern` |
-| 41 | `LMN041` | decimal | 100% | 1 | — | `pattern` |
-| 42 | `LMN042` | decimal | 100% | 1 | — | `pattern` |
-| 43 | `LMN043` | — | 0 | — | 全空 | — |
-| 44 | `LMN044` | — | 0 | — | 全空 | — |
-| 45 | `LMN045` | decimal | 100% | 1 | — | `pattern` |
-| 46 | `LMN046` | decimal | 100% | 1 | — | `pattern` |
-| 47 | `LMN047` | decimal | 100% | 1 | 金額／數量 | `rule` |
-| 48 | `LMN048` | decimal | 100% | 1 | 金額／數量 | `rule` |
-| 49 | `LMN049` | — | 0 | — | 全空 | — |
-| 50 | `LMN050` | timestamp | 100% | 1 | 建檔／異動時間 | `rule` |
-| 51 | `LMN051` | — | 0 | — | 全空 | — |
-| 52 | `LMN052` | timestamp | 100% | 1 | 建檔／異動時間 | `rule` |
-
-### `PALMO`　〔人事薪資〕　1 列 × 69 欄
-
-| # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
-|--:|---|---|--:|--:|---|---|
-| 1 | `LMO001` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 2 | `LMO002` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 3 | `LMO003` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 4 | `LMO004` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 5 | `LMO005` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 6 | `LMO006` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 7 | `LMO007` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 8 | `LMO008` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 9 | `LMO009` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 10 | `LMO010` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 11 | `LMO011` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 12 | `LMO012` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 13 | `LMO013` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 14 | `LMO014` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 15 | `LMO015` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 16 | `LMO016` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 17 | `LMO017` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 18 | `LMO018` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 19 | `LMO019` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 20 | `LMO020` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 21 | `LMO021` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 22 | `LMO022` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 23 | `LMO023` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 24 | `LMO024` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 25 | `LMO025` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 26 | `LMO026` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 27 | `LMO027` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 28 | `LMO028` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 29 | `LMO029` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 30 | `LMO030` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 31 | `LMO031` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 32 | `LMO032` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 33 | `LMO033` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 34 | `LMO034` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 35 | `LMO035` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 36 | `LMO036` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 37 | `LMO037` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 38 | `LMO038` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 39 | `LMO039` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 40 | `LMO040` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 41 | `LMO041` | decimal | 100% | 1 | — | `pattern` |
-| 42 | `LMO042` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 43 | `LMO043` | decimal | 100% | 1 | — | `pattern` |
-| 44 | `LMO044` | decimal | 100% | 1 | — | `pattern` |
-| 45 | `LMO045` | — | 0 | — | 全空 | — |
-| 46 | `LMO046` | — | 0 | — | 全空 | — |
-| 47 | `LMO047` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 48 | `LMO048` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 49 | `LMO049` | decimal | 100% | 1 | 金額／數量 | `rule` |
-| 50 | `LMO050` | decimal | 100% | 1 | 金額／數量 | `rule` |
-| 51 | `LMO051` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 52 | `LMO052` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 53 | `LMO053` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 54 | `LMO054` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 55 | `LMO055` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 56 | `LMO056` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 57 | `LMO057` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 58 | `LMO058` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 59 | `LMO059` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 60 | `LMO060` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 61 | `LMO061` | decimal | 100% | 1 | 郵遞區號 | `rule` |
-| 62 | `LMO062` | decimal | 100% | 1 | — | `pattern` |
-| 63 | `LMO063` | decimal | 100% | 1 | — | `pattern` |
-| 64 | `LMO064` | decimal | 100% | 1 | — | `pattern` |
-| 65 | `LMO065` | decimal | 100% | 1 | — | `pattern` |
-| 66 | `LMO066` | — | 0 | — | 全空 | — |
-| 67 | `LMO067` | timestamp | 100% | 1 | 建檔／異動時間 | `rule` |
-| 68 | `LMO068` | — | 0 | — | 全空 | — |
-| 69 | `LMO069` | timestamp | 100% | 1 | 建檔／異動時間 | `rule` |
 
 ### `PALMV`　〔人事薪資〕　1 列 × 86 欄
 
@@ -6123,15 +6129,15 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 | 47 | `BVF047` | — | 0 | — | 全空 | — |
 | 48 | `BVF048` | timestamp | 100% | 2 | 建檔／異動時間 | `rule` |
 
-### `TPABYA`　〔公用設定／基本資料〕　5,610 列 × 5 欄（取樣前 4,939 列）
+### `TPABYA`　〔公用設定／基本資料〕　5,610 列 × 5 欄（取樣前 5,000 列）
 
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
 |--:|---|---|--:|--:|---|---|
-| 1 | `BYA001` | text | 84% | 1,951 | — | `-` |
-| 2 | `BYA002` | text | 31% | 94 | — | `-` |
-| 3 | `BYA003` | timestamp | 18% | 380 | — | `pattern` |
-| 4 | `BYA004` | text_zh | 17% | 715 | — | `pattern` |
-| 5 | `BYA005` | text | 31% | 591 | — | `-` |
+| 1 | `BYA001` | text | 84% | 1,974 | — | `-` |
+| 2 | `BYA002` | text | 32% | 94 | — | `-` |
+| 3 | `BYA003` | timestamp | 18% | 393 | — | `pattern` |
+| 4 | `BYA004` | text_zh | 17% | 727 | — | `pattern` |
+| 5 | `BYA005` | text | 32% | 604 | — | `-` |
 
 ### `TPABYB`　〔公用設定／基本資料〕　6 列 × 15 欄
 
@@ -6187,7 +6193,7 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 | 12 | `BZB012` | — | 0 | — | 全空 | — |
 | 13 | `BZB013` | timestamp | 100% | 4,105 | 建檔／異動時間 | `rule` |
 
-### `TPABZC`　〔公用設定／基本資料〕　1,478 列 × 9 欄
+### `TPABZC`　〔公用設定／基本資料〕　1,478 列 × 9 欄（取樣前 1,477 列）
 
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
 |--:|---|---|--:|--:|---|---|
@@ -6195,11 +6201,11 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 | 2 | `BZC002` | text_zh | 100% | 596 | — | `pattern` |
 | 3 | `BZC003` | text_zh | 100% | 1,346 | — | `pattern` |
 | 4 | `BZC004` | — | 0 | — | 全空 | — |
-| 5 | `BZC005` | timestamp | 0% | 1 | 建檔／異動時間 | `rule` |
+| 5 | `BZC005` | — | 0 | — | 全空 | — |
 | 6 | `BZC006` | text | 1% | 2 | → `TPADBA`（100%） | `fk` |
-| 7 | `BZC007` | timestamp | 100% | 1,469 | 建檔／異動時間 | `rule` |
+| 7 | `BZC007` | timestamp | 100% | 1,468 | 建檔／異動時間 | `rule` |
 | 8 | `BZC008` | text | 1% | 2 | → `TPADBA`（100%） | `fk` |
-| 9 | `BZC009` | timestamp | 100% | 1,399 | 建檔／異動時間 | `rule` |
+| 9 | `BZC009` | timestamp | 100% | 1,400 | 建檔／異動時間 | `rule` |
 
 ### `TPABZD`　〔公用設定／基本資料〕　61 列 × 6 欄
 

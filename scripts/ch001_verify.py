@@ -117,8 +117,11 @@ def check_orphans(src: Path) -> bool:
             print(f"- {label}：來源缺檔，跳過")
             continue
         idx = [k - 1 for k in key]
-        hs = {tuple(r[i] for i in idx) for r in read(hp) if len(r) > max(idx)}
-        ds = {tuple(r[i] for i in idx) for r in read(dp) if len(r) > max(idx)}
+        # 排除主鍵空白的殘列（舊系統誤建後清空但沒刪，見 KNOWN_DEFECTS）
+        hs = {k for r in read(hp) if len(r) > max(idx)
+              if all((k := tuple(r[i] for i in idx)))}
+        ds = {k for r in read(dp) if len(r) > max(idx)
+              if all((k := tuple(r[i] for i in idx)))}
         no_head, no_detail = len(ds - hs), len(hs - ds)
         flag = "" if not (no_head or no_detail) else "  ← 有孤兒"
         print(f"- {label}　單頭 {len(hs):,}　明細鍵 {len(ds):,}　"

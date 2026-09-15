@@ -67,9 +67,15 @@ def decode_cell(cell: bytes, udf: dict | None = None) -> str:
         i += 2
     return "".join(out)
 
-def read(path, limit=None, udf=None, max_bytes=None):
-    """逐列產出已解碼的欄位清單。以 CRLF 斷列（欄位內不會出現裸 CR/LF）。
+def read(path, limit=None, udf=None, max_bytes=None, expected_cols=None):
+    """逐列產出已解碼的欄位清單。
 
+    斷列規則不是「遇到 CRLF 就換列」—— **欄位內容可以含換行**（實測進貨明細
+    有一筆品名裡有 CRLF，整列被切成 4 欄與 60 欄兩段，害那張單的明細加總短少）。
+    所以先取眾數欄數當基準，欄數不足的段落與下一段接回去（接回時補回被切掉的
+    CRLF，內容無損）。
+
+    expected_cols 可指定基準欄數；不給就從前 2000 段取眾數。
     max_bytes 只讀檔頭若干位元組（盤點取樣用），會捨棄最後一段不完整的列。
     """
     with open(path, "rb") as fh:
@@ -77,7 +83,26 @@ def read(path, limit=None, udf=None, max_bytes=None):
     if max_bytes and len(data) == max_bytes:
         data = data[:data.rfind(b"\r\n") + 2] or data
     data = data.replace(b"\x00", b"")
-    for k, line in enumerate(data.split(b"\r\n")):
-        if limit and k >= limit: break
-        if not line.strip(b"| "): continue
-        yield [decode_cell(c, udf).strip() for c in split_row(line)]
+    segments = [s for s in data.split(b"\r\n") if s.strip(b"| ")]
+
+    if expected_cols is None:
+        from collections import Counter
+        sample = Counter(len(split_row(s)) for s in segments[:2000])
+        expected_cols = sample.most_common(1)[0][0] if sample else 0
+
+    MAX_JOIN = 20          # 防呆：真的接不出來就放行，不要無限吞後面的列
+    buf, joined = None, 0
+    count = 0
+    for seg in segments:
+        cur = buf + b"\r\n" + seg if buf is not None else seg
+        cells = split_row(cur)
+        if len(cells) < expected_cols and joined < MAX_JOIN:
+            buf, joined = cur, joined + 1
+            continue
+        buf, joined = None, 0
+        if limit and count >= limit:
+            return
+        count += 1
+        yield [decode_cell(c, udf).strip() for c in cells]
+    if buf is not None:    # 檔尾殘留的不完整列照樣給出去，不靜默丟
+        yield [decode_cell(c, udf).strip() for c in split_row(buf)]
