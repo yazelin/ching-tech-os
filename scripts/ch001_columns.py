@@ -12,6 +12,26 @@
 格式：(表, 欄位) -> (中文名, 依據說明, 等級)
 """
 
+# 表名第一段對應 e-Go 的模組。來源：系統流程圖與主選單列（會計操作文件截圖）。
+MODULE_PREFIX: dict[str, str] = {
+    "TPA": "公用設定／基本資料",
+    "CRM": "業務 CRM",
+    "DCS": "訂單／採購",
+    "JSK": "進銷存",
+    "SGM": "生產管理",
+    "YSF": "應收／應付（帳款）",
+    "PJM": "票據管理",
+    "KJS": "會計總帳",
+    "PAL": "人事薪資",
+    "POS": "POS 前台",
+    "CMS": "人事基本資料",
+    "HCR": "系統對照（資料字典）",
+    "HYA": "維修管理",
+    "WSC": "進／出口",
+    "INV": "盤點",
+    "DSC": "系統內建對照資料",
+}
+
 COLUMNS: dict[tuple[str, str], tuple[str, str, str]] = {
     # ---- TPADGA 廠商主檔（673 列 × 58 欄）----
     ("TPADGA", "DGA001"): ("廠商代號", "唯一鍵；對 ERPNext 廠商名稱前綴命中 89.2%", "verified"),
@@ -64,4 +84,66 @@ COLUMNS: dict[tuple[str, str], tuple[str, str, str]] = {
     ("CRMIKG", "IKG010"): ("電話", "電話格式，填充 9%", "inferred"),
     ("CRMIKG", "IKG011"): ("公司電話", "電話格式，填充 79%，是主要號碼", "inferred"),
     ("CRMIKG", "IKG012"): ("email", "email 格式", "verified"),
+    # ---- 會計：欄位對照直接來自 e-Go「會計傳票」輸入畫面 ----
+    # 畫面上的明細欄是：序號｜會計科目｜科目名稱｜摘要｜借/貸｜金額
+    ("KJSNFA", "NFA001"): ("傳票類別", "1=收入、2=支出、3=轉帳；用現金科目的借貸方向驗證（類別1現金在借方437:101、類別2在貸方14738:77），與畫面下拉選單順序一致", "verified"),
+    ("KJSNFA", "NFA002"): ("傳票總號", "格式 YYYYMMDD######，與畫面「傳票總號」欄位格式相同；與 NFA001 合為主鍵", "verified"),
+    ("KJSNFA", "NFA005"): ("傳票日期", "資料字典標為關鍵欄；值域 2007–2026 無缺年", "verified"),
+
+    ("KJSNFB", "NFB001"): ("傳票類別", "同 NFA001", "verified"),
+    ("KJSNFB", "NFB002"): ("傳票總號", "對 KJSNFA 零孤兒", "verified"),
+    ("KJSNFB", "NFB003"): ("序號", "010/020/030…，對應畫面明細的「序號」欄", "verified"),
+    ("KJSNFB", "NFB004"): ("會計科目", "值域落在 KJSNDA；對應畫面「會計科目」欄", "verified"),
+    ("KJSNFB", "NFB007"): ("摘要", "對應畫面「摘要」欄", "verified"),
+    ("KJSNFB", "NFB008"): ("借貸別", "值域 {1, -1}；對應畫面「借/貸」欄", "verified"),
+    ("KJSNFB", "NFB009"): ("金額", "對應畫面「金額」欄", "verified"),
+
+    ("KJSNHB", "NHB001"): ("傳票類別", "同 NFA001", "verified"),
+    ("KJSNHB", "NHB002"): ("傳票總號", "對 KJSNFA 零孤兒", "verified"),
+    ("KJSNHB", "NHB003"): ("序號", "000/010/020…", "verified"),
+    ("KJSNHB", "NHB004"): ("會計科目", "值域落在 KJSNDA", "verified"),
+    ("KJSNHB", "NHB005"): ("子科目", "格式 <科目>-<序號>，例 1102-001 永豐銀行乙存", "verified"),
+    ("KJSNHB", "NHB006"): ("傳票日期", "與 NFA005 一致", "verified"),
+    ("KJSNHB", "NHB007"): ("摘要", "與 NFB007 同型", "inferred"),
+    ("KJSNHB", "NHB008"): ("借方金額", "全庫 SUM(借)=SUM(貸)=8,502,130,448.00，118,946 張傳票 100% 平衡", "verified"),
+    ("KJSNHB", "NHB009"): ("貸方金額", "同上", "verified"),
+    ("KJSNHB", "NHB013"): ("幣別", "唯一值 TWD", "verified"),
+
+    ("KJSNDA", "NDA001"): ("會計科目代號", "唯一鍵；被 KJSNFB/KJSNHB 參照", "verified"),
+    ("KJSNDA", "NDA002"): ("科目名稱", "中文，例 1101=現金、1102=銀行存款", "verified"),
+    ("KJSNDA", "NDA003"): ("上層科目", "值域落在 KJSNCA（中類）", "verified"),
+    ("KJSNDA", "NDA008"): ("科目英文名", "例 Cash on hand", "verified"),
+
+    ("TPABAA", "BAA002"): ("公司名稱", "舊系統畫面標籤（TPADPB）明載；e-Go 標題列顯示公司代號 CH001", "verified"),
+    # ---- 會計：欄位對照直接來自 e-Go「會計傳票」輸入畫面 ----
+    # 畫面上的明細欄是：序號｜會計科目｜科目名稱｜摘要｜借/貸｜金額
+    ("KJSNFA", "NFA001"): ("傳票類別", "1=收入、2=支出、3=轉帳；用現金科目的借貸方向驗證（類別1現金在借方437:101、類別2在貸方14738:77），與畫面下拉選單順序一致", "verified"),
+    ("KJSNFA", "NFA002"): ("傳票總號", "格式 YYYYMMDD######，與畫面「傳票總號」欄位格式相同；與 NFA001 合為主鍵", "verified"),
+    ("KJSNFA", "NFA005"): ("傳票日期", "資料字典標為關鍵欄；值域 2007–2026 無缺年", "verified"),
+
+    ("KJSNFB", "NFB001"): ("傳票類別", "同 NFA001", "verified"),
+    ("KJSNFB", "NFB002"): ("傳票總號", "對 KJSNFA 零孤兒", "verified"),
+    ("KJSNFB", "NFB003"): ("序號", "010/020/030…，對應畫面明細的「序號」欄", "verified"),
+    ("KJSNFB", "NFB004"): ("會計科目", "值域落在 KJSNDA；對應畫面「會計科目」欄", "verified"),
+    ("KJSNFB", "NFB007"): ("摘要", "對應畫面「摘要」欄", "verified"),
+    ("KJSNFB", "NFB008"): ("借貸別", "值域 {1, -1}；對應畫面「借/貸」欄", "verified"),
+    ("KJSNFB", "NFB009"): ("金額", "對應畫面「金額」欄", "verified"),
+
+    ("KJSNHB", "NHB001"): ("傳票類別", "同 NFA001", "verified"),
+    ("KJSNHB", "NHB002"): ("傳票總號", "對 KJSNFA 零孤兒", "verified"),
+    ("KJSNHB", "NHB003"): ("序號", "000/010/020…", "verified"),
+    ("KJSNHB", "NHB004"): ("會計科目", "值域落在 KJSNDA", "verified"),
+    ("KJSNHB", "NHB005"): ("子科目", "格式 <科目>-<序號>，例 1102-001 永豐銀行乙存", "verified"),
+    ("KJSNHB", "NHB006"): ("傳票日期", "與 NFA005 一致", "verified"),
+    ("KJSNHB", "NHB007"): ("摘要", "與 NFB007 同型", "inferred"),
+    ("KJSNHB", "NHB008"): ("借方金額", "全庫 SUM(借)=SUM(貸)=8,502,130,448.00，118,946 張傳票 100% 平衡", "verified"),
+    ("KJSNHB", "NHB009"): ("貸方金額", "同上", "verified"),
+    ("KJSNHB", "NHB013"): ("幣別", "唯一值 TWD", "verified"),
+
+    ("KJSNDA", "NDA001"): ("會計科目代號", "唯一鍵；被 KJSNFB/KJSNHB 參照", "verified"),
+    ("KJSNDA", "NDA002"): ("科目名稱", "中文，例 1101=現金、1102=銀行存款", "verified"),
+    ("KJSNDA", "NDA003"): ("上層科目", "值域落在 KJSNCA（中類）", "verified"),
+    ("KJSNDA", "NDA008"): ("科目英文名", "例 Cash on hand", "verified"),
+
+    ("TPABAA", "BAA002"): ("公司名稱", "舊系統畫面標籤（TPADPB）明載；e-Go 標題列顯示公司代號 CH001", "verified"),
 }

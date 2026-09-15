@@ -36,9 +36,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 from ch001_reader import read  # noqa: E402
 
 try:
-    from ch001_columns import COLUMNS as MANUAL_COLUMNS  # noqa: E402
+    from ch001_columns import COLUMNS as MANUAL_COLUMNS, MODULE_PREFIX  # noqa: E402
 except ImportError:          # 人工對照是選配
-    MANUAL_COLUMNS = {}
+    MANUAL_COLUMNS, MODULE_PREFIX = {}, {}
 
 SAMPLE = 5000          # 每張表取樣列數（推欄位夠用，不必讀完 112 萬列）
 SAMPLE_BYTES = 8_000_000
@@ -296,7 +296,8 @@ def main(argv=None) -> int:
                     | {"role": col2role.get(c["name"]),
                        "fk": list(fks[(t, c["name"])]) if (t, c["name"]) in fks else None,
                        "xref": xref.get((t, c["name"])),
-                       "label_zh": labels_zh.get((t, c["name"]))}
+                       "label_zh": labels_zh.get((t, c["name"])),
+                       "manual": MANUAL_COLUMNS.get((t, c["name"]))}
                     for c in info["cols"]
                 ],
             }
@@ -375,7 +376,7 @@ def emit_markdown(prof, table2func, col2role, keys, fks, xref, joins, labels_zh)
     total_rows = sum(i["rows"] for i in prof.values())
     named = sum(1 for t in prof if t in table2func)
     print("# CH001_export 資料庫 schema\n")
-    print("舊 ERP（鼎新 Workflow）整庫傾印的逐欄說明。**這是推導出來的，不是原廠文件**，")
+    print("舊 ERP（鼎新 e-Go）整庫傾印的逐欄說明。**這是推導出來的，不是原廠文件**，")
     print("每個欄位標明依據等級，請照等級決定要不要自己再確認。\n")
     print(f"- 表 **{len(prof)}** 張、**{total_rows:,}** 列；資料字典對得上功能名的 {named} 張")
     print(f"- 欄位名 = 表名後三碼 ＋ 三位序號（1-based）。例：`TPADGA` 第 5 欄是 `DGA005`")
@@ -402,7 +403,9 @@ def emit_markdown(prof, table2func, col2role, keys, fks, xref, joins, labels_zh)
             info = prof[t]
             pk = keys.get(t)
             trunc = f"（取樣前 {info['sampled']:,} 列）" if info["sampled"] < info["rows"] else ""
-            print(f"### `{t}`　{info['rows']:,} 列 × {info['ncol']} 欄{trunc}\n")
+            mod = MODULE_PREFIX.get(t[:3])
+            mod_s = f"　〔{mod}〕" if mod else ""
+            print(f"### `{t}`{mod_s}　{info['rows']:,} 列 × {info['ncol']} 欄{trunc}\n")
             if pk:
                 print(f"主鍵：`{pk[0]}`\n")
             print("| # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |")

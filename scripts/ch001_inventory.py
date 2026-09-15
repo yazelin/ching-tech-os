@@ -85,7 +85,7 @@ for t, r in results.items():
     by_func[table2func.get(t, "（字典未收錄）")].append((t, r))
 
 print(f"# CH001_export 全表盤點\n")
-print(f"來源：`smb://192.168.11.6/d/CH001_export`（鼎新 Workflow ERP 整庫傾印）")
+print(f"來源：`smb://192.168.11.6/d/CH001_export`（鼎新 e-Go 整庫傾印）")
 print(f"格式：Big5、`|` 分隔、無標題列、`0x00` 表 NULL、CRLF 換行\n")
 print(f"有資料的表 **{len(results)}** 張；資料字典 `HCRBPA`／`HCRBPB` 收錄 **{len(table2func)}** 個表名，"
       f"對應 **{len(set(table2func.values()))}** 種功能。\n")

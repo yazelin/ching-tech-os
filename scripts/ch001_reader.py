@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CH001_export（鼎新 Workflow ERP 傾印）的讀取器。
+"""CH001_export（鼎新 e-Go 傾印）的讀取器。
 
 來源：`smb://192.168.11.6/d/CH001_export`，590 個 `.txt`、197 個有資料。
 格式：Big5 系列編碼、`|` 分隔、**無標題列**、`0x00` 表 NULL、CRLF 斷列。
