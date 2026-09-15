@@ -133,7 +133,13 @@ def load_dictionary(src: Path) -> tuple[dict[str, str], dict[str, str], list[tup
                 continue
             func, spec = r[2].strip(), r[5]
             for tok in re.findall(r"\b([A-Z]{4,6})\b", spec):
-                table2func.setdefault(tok, func)
+                # 一張表可能對應多個功能（JSKJDA 同時是「驗收(退)單」與「進貨單」），
+                # 只留第一個會害使用者找不到自己認得的名字
+                prev = table2func.get(tok)
+                if prev is None:
+                    table2func[tok] = func
+                elif func not in prev.split("／"):
+                    table2func[tok] = f"{prev}／{func}"
             # 主鍵／關鍵欄：TABLE(COL001)
             for tbl, col in re.findall(r"\b([A-Z]{4,6})\((\w{3}\d{3})\)", spec):
                 col2role.setdefault(col, f"{func} 的關鍵欄")

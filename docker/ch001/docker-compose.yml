@@ -1,0 +1,51 @@
+# 舊 ERP（鼎新 e-Go）歷史資料查核用資料庫
+#
+# 與 CTOS 的資料庫完全分開：獨立容器、獨立 volume、獨立 port。
+# 理由是這批資料是給會計／採購／業務查核用的歷史，這一版有機會不再使用，
+# 分開才能「不要了就整個丟掉」而不影響 CTOS。
+#
+# 使用方式（在 .11 上）：
+#   cd docker/ch001
+#   cp .env.example .env && 編輯填入密碼
+#   docker compose up -d
+#
+# 收掉：
+#   docker compose down -v      # -v 連 volume 一起刪，資料不留
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ch001-db
+    environment:
+      POSTGRES_USER: ${CH001_DB_USER:-ch001}
+      POSTGRES_PASSWORD: ${CH001_DB_PASSWORD:?需在 .env 設定，不給預設值}
+      POSTGRES_DB: ${CH001_DB_NAME:-ch001}
+      # 舊系統資料是 Big5 來源，轉換時已統一成 UTF-8
+      LANG: zh_TW.UTF-8
+    volumes:
+      - ch001_data:/var/lib/postgresql/data
+    ports:
+      # 5432-5435 在 .11 上已被佔用（CTOS、jaba、billing 等）
+      - "${CH001_DB_PORT:-5436}:5432"
+    restart: unless-stopped
+    shm_size: 256mb
+    command:
+      # 查核以大範圍讀取為主（試算表、明細帳、對帳單），加大讀取相關參數
+      - postgres
+      - -c
+      - shared_buffers=512MB
+      - -c
+      - work_mem=64MB
+      - -c
+      - maintenance_work_mem=256MB
+      # 這是唯讀歷史庫，不需要為了耐當機犧牲載入速度
+      - -c
+      - synchronous_commit=off
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${CH001_DB_USER:-ch001} -d ${CH001_DB_NAME:-ch001}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  ch001_data:

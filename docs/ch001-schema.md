@@ -549,6 +549,9 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 | 36 | `JAB036` | — | 0 | — | 全空 | — |
 | 37 | `JAB037` | — | 0 | — | 全空 | — |
 
+
+## 借入單／借入還出單／驗收(退)單／進貨單
+
 ### `JSKJGA`　〔進銷存〕　161 列 × 47 欄
 
 主鍵：`JGA044`
@@ -771,6 +774,9 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 | 33 | `KAB033` | code | 100% | 1 | — | `pattern` |
 | 34 | `KAB034` | timestamp | 100% | 17 | 建檔／異動時間；唯一 | `rule` |
 | 35 | `KAB035` | — | 0 | — | 全空 | — |
+
+
+## 借出單／借出還入單／銷貨單
 
 ### `JSKKCA`　〔進銷存〕　23 列 × 47 欄
 
@@ -2230,6 +2236,9 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 | 26 | `PBA026` | timestamp | 100% | 5,000 | 建檔／異動時間；唯一 | `rule` |
 | 27 | `PBA027` | — | 0 | — | 全空 | — |
 | 28 | `PBA028` | timestamp | 100% | 4,440 | 建檔／異動時間 | `rule` |
+
+
+## 應收票據／應付票據／銀行存提單／銀行轉帳單／銀行存款匯差調整
 
 ### `PJMPTA`　〔票據管理〕　17,158 列 × 27 欄（取樣前 5,000 列）
 
@@ -3983,6 +3992,9 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 
 </details>
 
+
+## 銷貨單／銷退單／其它應收帳款／銷項發票彙總開立
+
 ### `JSKKHA`　〔進銷存〕　4,194 列 × 25 欄
 
 主鍵：`KHA005`
@@ -4014,6 +4026,9 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 | 23 | `KHA023` | timestamp | 100% | 4,068 | 建檔／異動時間 | `rule` |
 | 24 | `KHA024` | — | 0 | — | 全空 | — |
 | 25 | `KHA025` | timestamp | 100% | 4,068 | 建檔／異動時間 | `rule` |
+
+
+## 銷貨單／銷退單／應收帳款開帳單／其它應收帳款／收款單
 
 ### `YSFGCA`　〔應收／應付（帳款）〕　18,482 列 × 38 欄（取樣前 5,000 列）
 
@@ -4312,7 +4327,7 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 | 20 | `PQA020` | timestamp | 100% | 8 | 建檔／異動時間；唯一 | `rule` |
 
 
-## 驗收(退)單
+## 驗收(退)單／進貨單
 
 ### `JSKJDA`　〔進銷存〕　47,276 列 × 73 欄（取樣前 5,000 列）
 
@@ -4487,6 +4502,9 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 
 </details>
 
+
+## 驗收(退)單／進貨單／進貨退出單／託工進貨單／託工退貨單／其它應付帳款／進項發票彙總開立
+
 ### `JSKJJA`　〔進銷存〕　48,407 列 × 24 欄（取樣前 5,000 列）
 
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
@@ -4515,6 +4533,55 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 | 22 | `JJA022` | timestamp | 100% | 3,954 | 建檔／異動時間 | `rule` |
 | 23 | `JJA023` | — | 0 | — | 全空 | — |
 | 24 | `JJA024` | timestamp | 100% | 3,954 | 建檔／異動時間 | `rule` |
+
+
+## 驗收(退)單／進貨單／進貨退出單／託工進貨單／託工退貨單／應付帳款開帳單／其它應付帳款／付款單
+
+### `YSFGPA`　〔應收／應付（帳款）〕　51,285 列 × 38 欄（取樣前 5,000 列）
+
+| # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
+|--:|---|---|--:|--:|---|---|
+| 1 | `GPA001` | decimal | 100% | 1 | 對應 JDA030 | `dict` |
+| 2 | `GPA002` | docno | 100% | 4,999 | 對應 JDA001 | `dict` |
+| 3 | `GPA003` | code | 100% | 108 | → `TPADGA`（100%） | `fk` |
+| 4 | `GPA004` | date | 100% | 389 | 電話／傳真 | `rule` |
+| 5 | `GPA005` | code | 100% | 8 | → `TPADBA`（100%） | `fk` |
+| 6 | `GPA006` | code | 100% | 5 | → `TPADAA`（100%） | `fk` |
+| 7 | `GPA007` | text | 100% | 1 | 幣別 | `rule` |
+| 8 | `GPA008` | decimal | 100% | 2 | 金額／數量 | `rule` |
+| 9 | `GPA009` | — | 0 | — | 全空 | — |
+| 10 | `GPA010` | decimal | 100% | 2,892 | 金額／數量 | `rule` |
+| 11 | `GPA011` | decimal | 100% | 1,449 | 金額／數量 | `rule` |
+| 12 | `GPA012` | decimal | 100% | 3,018 | 金額／數量 | `rule` |
+| 13 | `GPA013` | decimal | 100% | 3,018 | 金額／數量 | `rule` |
+| 14 | `GPA014` | decimal | 100% | 2,892 | 金額／數量 | `rule` |
+| 15 | `GPA015` | decimal | 100% | 1,449 | 金額／數量 | `rule` |
+| 16 | `GPA016` | decimal | 100% | 3,018 | 金額／數量 | `rule` |
+| 17 | `GPA017` | decimal | 100% | 3,018 | 金額／數量 | `rule` |
+| 18 | `GPA018` | date | 100% | 389 | 電話／傳真 | `rule` |
+| 19 | `GPA019` | date | 100% | 389 | 電話／傳真 | `rule` |
+| 20 | `GPA020` | decimal | 100% | 1 | — | `pattern` |
+| 21 | `GPA021` | decimal | 100% | 1 | 金額／數量 | `rule` |
+| 22 | `GPA022` | decimal | 100% | 36 | 金額／數量 | `rule` |
+| 23 | `GPA023` | decimal | 100% | 36 | 金額／數量 | `rule` |
+| 24 | `GPA024` | date | 100% | 389 | 電話／傳真 | `rule` |
+| 25 | `GPA025` | decimal | 100% | 1 | 金額／數量 | `rule` |
+| 26 | `GPA026` | decimal | 100% | 1 | 金額／數量 | `rule` |
+| 27 | `GPA027` | decimal | 100% | 1 | 金額／數量 | `rule` |
+| 28 | `GPA028` | decimal | 100% | 1 | 金額／數量 | `rule` |
+| 29 | `GPA029` | decimal | 100% | 1 | 金額／數量 | `rule` |
+| 30 | `GPA030` | — | 0 | — | 全空 | — |
+| 31 | `GPA031` | — | 0 | — | 全空 | — |
+| 32 | `GPA032` | — | 0 | — | 全空 | — |
+| 33 | `GPA033` | — | 0 | — | 全空 | — |
+| 34 | `GPA034` | — | 0 | — | 全空 | — |
+| 35 | `GPA035` | code | 100% | 2 | → `TPADBA`（100%） | `fk` |
+| 36 | `GPA036` | timestamp | 100% | 5,000 | 建檔／異動時間；唯一 | `rule` |
+| 37 | `GPA037` | — | 0 | — | 全空 | — |
+| 38 | `GPA038` | timestamp | 100% | 4,999 | 建檔／異動時間 | `rule` |
+
+
+## 驗收(退)單／進貨單／進貨退出單／銷貨單／銷退單／調整單／調撥單／組合單／拆解單／領料單／退料單／生產入庫單／生產退回單／託工送料單／託工退料單／託工進貨單／託工退貨單
 
 ### `JSKLNA`　〔進銷存〕　162,539 列 × 39 欄（取樣前 5,000 列）
 
@@ -4559,49 +4626,6 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 | 37 | `LNA037` | timestamp | 100% | 5,000 | 建檔／異動時間；唯一 | `rule` |
 | 38 | `LNA038` | — | 0 | — | 全空 | — |
 | 39 | `LNA039` | timestamp | 100% | 5,000 | 建檔／異動時間；唯一 | `rule` |
-
-### `YSFGPA`　〔應收／應付（帳款）〕　51,285 列 × 38 欄（取樣前 5,000 列）
-
-| # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
-|--:|---|---|--:|--:|---|---|
-| 1 | `GPA001` | decimal | 100% | 1 | 對應 JDA030 | `dict` |
-| 2 | `GPA002` | docno | 100% | 4,999 | 對應 JDA001 | `dict` |
-| 3 | `GPA003` | code | 100% | 108 | → `TPADGA`（100%） | `fk` |
-| 4 | `GPA004` | date | 100% | 389 | 電話／傳真 | `rule` |
-| 5 | `GPA005` | code | 100% | 8 | → `TPADBA`（100%） | `fk` |
-| 6 | `GPA006` | code | 100% | 5 | → `TPADAA`（100%） | `fk` |
-| 7 | `GPA007` | text | 100% | 1 | 幣別 | `rule` |
-| 8 | `GPA008` | decimal | 100% | 2 | 金額／數量 | `rule` |
-| 9 | `GPA009` | — | 0 | — | 全空 | — |
-| 10 | `GPA010` | decimal | 100% | 2,892 | 金額／數量 | `rule` |
-| 11 | `GPA011` | decimal | 100% | 1,449 | 金額／數量 | `rule` |
-| 12 | `GPA012` | decimal | 100% | 3,018 | 金額／數量 | `rule` |
-| 13 | `GPA013` | decimal | 100% | 3,018 | 金額／數量 | `rule` |
-| 14 | `GPA014` | decimal | 100% | 2,892 | 金額／數量 | `rule` |
-| 15 | `GPA015` | decimal | 100% | 1,449 | 金額／數量 | `rule` |
-| 16 | `GPA016` | decimal | 100% | 3,018 | 金額／數量 | `rule` |
-| 17 | `GPA017` | decimal | 100% | 3,018 | 金額／數量 | `rule` |
-| 18 | `GPA018` | date | 100% | 389 | 電話／傳真 | `rule` |
-| 19 | `GPA019` | date | 100% | 389 | 電話／傳真 | `rule` |
-| 20 | `GPA020` | decimal | 100% | 1 | — | `pattern` |
-| 21 | `GPA021` | decimal | 100% | 1 | 金額／數量 | `rule` |
-| 22 | `GPA022` | decimal | 100% | 36 | 金額／數量 | `rule` |
-| 23 | `GPA023` | decimal | 100% | 36 | 金額／數量 | `rule` |
-| 24 | `GPA024` | date | 100% | 389 | 電話／傳真 | `rule` |
-| 25 | `GPA025` | decimal | 100% | 1 | 金額／數量 | `rule` |
-| 26 | `GPA026` | decimal | 100% | 1 | 金額／數量 | `rule` |
-| 27 | `GPA027` | decimal | 100% | 1 | 金額／數量 | `rule` |
-| 28 | `GPA028` | decimal | 100% | 1 | 金額／數量 | `rule` |
-| 29 | `GPA029` | decimal | 100% | 1 | 金額／數量 | `rule` |
-| 30 | `GPA030` | — | 0 | — | 全空 | — |
-| 31 | `GPA031` | — | 0 | — | 全空 | — |
-| 32 | `GPA032` | — | 0 | — | 全空 | — |
-| 33 | `GPA033` | — | 0 | — | 全空 | — |
-| 34 | `GPA034` | — | 0 | — | 全空 | — |
-| 35 | `GPA035` | code | 100% | 2 | → `TPADBA`（100%） | `fk` |
-| 36 | `GPA036` | timestamp | 100% | 5,000 | 建檔／異動時間；唯一 | `rule` |
-| 37 | `GPA037` | — | 0 | — | 全空 | — |
-| 38 | `GPA038` | timestamp | 100% | 4,999 | 建檔／異動時間 | `rule` |
 
 
 ## （字典未收錄）

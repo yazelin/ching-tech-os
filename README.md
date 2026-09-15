@@ -71,6 +71,13 @@ ChingTech OS 是擎添工業內部使用的整合式工作平台，以 Web 技�
   階段 1 的 19 張表已可轉出 707,971 列，借貸平衡與數量×單價、單頭==明細三個等式
   在轉出的 JSONL 上重驗全數 100%。
 
+- **舊 ERP 查核資料庫**：`scripts/ch001_load.py` 把中間格式灌進獨立的 `ch001`
+  PostgreSQL schema（容器設定在 `docker/ch001/`，與 CTOS 的 DB 完全分開，
+  不要了就 `docker compose down -v`）。中文欄位名用 `COMMENT ON` 寫進資料庫，
+  會計、採購、業務用 DBeaver 之類的工具打開就看得到「統一編號 [verified]」，
+  不必等前端。本機排練：19 張表、707,971 列、171 MB、載入 19 秒，
+  三個等式在 SQL 層重驗全數 100%。
+
 - **bot 與舊程式切換到往來與物料模組**：Line／Telegram bot 的 prompt（程式碼與
   `ai_prompts`，migration 032）、`skills/erp`、`skills/project`、ctos CLI 的 `erp`
   子命令與舊桌面都已改指新工具與新前端，不再出現 `mcp__erpnext__*` 與 `http://ct.erp`。
