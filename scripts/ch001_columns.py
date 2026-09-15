@@ -146,4 +146,44 @@ COLUMNS: dict[tuple[str, str], tuple[str, str, str]] = {
     ("KJSNDA", "NDA008"): ("科目英文名", "例 Cash on hand", "verified"),
 
     ("TPABAA", "BAA002"): ("公司名稱", "舊系統畫面標籤（TPADPB）明載；e-Go 標題列顯示公司代號 CH001", "verified"),
+    # ---- 進銷存：靠業務邏輯的內在一致性推出來（等式全數成立才算數）----
+    # 單頭金額 == 明細加總、數量 × 單價 == 金額。這兩個等式與借貸平衡同一種性質：
+    # 欄位選錯就不會 100% 成立，所以成立本身就是證明。
+    ("JSKJDA", "JDA001"): ("進貨單號", "唯一鍵；對 JSKJDB 零孤兒", "verified"),
+    ("JSKJDA", "JDA003"): ("進貨日期", "資料字典標為關鍵欄；2007–2026 無缺年", "verified"),
+    ("JSKJDA", "JDA004"): ("廠商代號", "值域 100% 落在 TPADGA", "verified"),
+    ("JSKJDA", "JDA005"): ("業務員", "值域 100% 落在 TPADBA（使用者資料）", "verified"),
+    ("JSKJDA", "JDA006"): ("部門", "值域 100% 落在 TPADAA（部門資料）", "verified"),
+    ("JSKJDA", "JDA015"): ("金額合計", "5,979/5,979 等於 JSKJDB 第 11 欄加總（排除兩邊皆零）", "verified"),
+    ("JSKJDA", "JDA017"): ("金額合計（副本）", "與 JDA015 逐筆同值 5,979/5,979；用途差異未確認", "inferred"),
+    ("JSKJDA", "JDA030"): ("單別", "資料字典的 LNA001=JDA030 指向庫存異動的單別欄", "verified"),
+
+    ("JSKJDB", "JDB001"): ("進貨單號", "對 JSKJDA 零孤兒", "verified"),
+    ("JSKJDB", "JDB002"): ("項次", "同一單號內遞增", "verified"),
+    ("JSKJDB", "JDB003"): ("品號", "6,770/6,770 落在 TPADEA 品號", "verified"),
+    ("JSKJDB", "JDB004"): ("品名", "舊系統畫面標籤（TPADPB）明載", "verified"),
+    ("JSKJDB", "JDB005"): ("單位", "值域為 EA／M／PC／台／只／個／包 等計量單位", "verified"),
+    ("JSKJDB", "JDB006"): ("倉庫", "值域 100% 落在 TPADDA", "verified"),
+    ("JSKJDB", "JDB007"): ("數量", "JDB007 × JDB009 == JDB011，19,446/19,446；中位數 3、100% 整數", "verified"),
+    ("JSKJDB", "JDB009"): ("單價", "同上等式；中位數 230，7.1% 有小數", "verified"),
+    ("JSKJDB", "JDB011"): ("金額", "等於 JDB007 × JDB009，且加總等於 JDA015", "verified"),
+
+    ("JSKKEA", "KEA001"): ("銷貨單號", "舊系統畫面標籤（TPATRL）標為「銷貨單」；對 JSKKEB 零孤兒", "verified"),
+    ("JSKKEA", "KEA003"): ("銷貨日期", "2007–2026 無缺年", "verified"),
+    ("JSKKEA", "KEA004"): ("客戶代號", "值域 100% 落在 TPADFA", "verified"),
+    ("JSKKEA", "KEA005"): ("請款客戶代號", "值域 100% 落在 TPADFA；與 KEA004 並存，多為同值", "inferred"),
+    ("JSKKEA", "KEA006"): ("業務員", "值域 100% 落在 TPADBA", "verified"),
+    ("JSKKEA", "KEA007"): ("部門", "值域 100% 落在 TPADAA", "verified"),
+    ("JSKKEA", "KEA023"): ("金額合計", "5,358/5,358 等於 JSKKEB 第 12 欄加總", "verified"),
+    ("JSKKEA", "KEA025"): ("金額合計（副本）", "與 KEA023 逐筆同值 5,358/5,358", "inferred"),
+
+    ("JSKKEB", "KEB001"): ("銷貨單號", "對 JSKKEA 零孤兒", "verified"),
+    ("JSKKEB", "KEB002"): ("項次", "同一單號內遞增", "verified"),
+    ("JSKKEB", "KEB003"): ("品號", "2,752/2,753 落在 TPADEA 品號", "verified"),
+    ("JSKKEB", "KEB004"): ("品名", "與 JDB004 同型", "inferred"),
+    ("JSKKEB", "KEB005"): ("單位", "值域為計量單位", "verified"),
+    ("JSKKEB", "KEB007"): ("數量", "KEB007 × KEB010 == KEB012，16,568/16,568；中位數 1", "verified"),
+    ("JSKKEB", "KEB010"): ("單價", "同上等式；中位數 4,300", "verified"),
+    ("JSKKEB", "KEB012"): ("金額", "等於 KEB007 × KEB010，且加總等於 KEA023", "verified"),
+
 }

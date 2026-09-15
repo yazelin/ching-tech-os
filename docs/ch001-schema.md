@@ -24,9 +24,9 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 ```
 表      197 張、3,001,440 列
 欄位    5,495 個（全空 1,909，有資料 3,586）
-        業務語意明確     390 欄   10.9%   畫面標籤／字典／外鍵／交叉驗證／人工定案
-        另有型別語意   1,975 欄   55.1%   日期、金額、旗標這類
-        推不出來       1,221 欄   34.0%
+        業務語意明確     407 欄   11.3%   畫面標籤／字典／外鍵／交叉驗證／人工定案
+        另有型別語意   1,965 欄   54.8%   日期、金額、旗標這類
+        推不出來       1,214 欄   33.9%
 ```
 
 推不出來的多半是保留欄與未啟用功能的設定欄。要補只有兩條路：跟原廠要資料字典，
@@ -34,8 +34,8 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 
 ## 人工定案的主檔與會計
 
-`scripts/ch001_columns.py` 收人工定案，目前 69 欄（54 `verified`、14 `inferred`、1 `guess`），
-涵蓋廠商、客戶、商品、聯絡人、公司資料與會計四張表。每條都附依據，可逐條檢查。
+`scripts/ch001_columns.py` 收人工定案，目前 102 欄（83 `verified`、18 `inferred`、1 `guess`），涵蓋 13 張表：
+廠商、客戶、商品、聯絡人、公司資料、會計四張、進貨與銷貨各兩張。每條都附依據，可逐條檢查。
 
 ### 來自 e-Go 操作畫面的證據
 
@@ -51,6 +51,22 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
    實測收入 437 張、支出 14,738 張全部差 1 筆；轉帳 103,771 張差 0 筆，
    而 103,771 正好等於 `KJSNFB` 能平的張數。
 4. **表名前綴對應模組**：系統流程圖與主選單列給出十二個模組，對得上表名第一段。
+
+### 用業務邏輯的內在一致性推欄位
+
+進銷存那幾張單據沒有操作畫面可對照，改用等式驗證 —— 與借貸平衡同一種性質：
+**欄位選錯等式就不會成立，所以 100% 成立本身就是證明**。
+
+| 等式 | 結果 |
+|---|---|
+| `JSKJDA` 金額合計 == `JSKJDB` 金額加總 | 5,979／5,979 |
+| `JSKJDB` 數量 × 單價 == 金額 | 19,446／19,446 |
+| `JSKKEA` 金額合計 == `JSKKEB` 金額加總 | 5,358／5,358 |
+| `JSKKEB` 數量 × 單價 == 金額 | 16,568／16,568 |
+
+比對一律排除兩邊皆零的列 —— 不排除的話 `0 == 0` 會讓任何兩欄都「100% 相符」，
+第一次跑就踩到這個坑。數量與單價誰是誰再用值域分辨（進貨數量中位數 3、
+單價 230；銷貨數量中位數 1、單價 4,300）。
 
 三個純靠資料驗出來的發現：
 
@@ -69,7 +85,7 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 
 - 表 **197** 張、**3,001,440** 列；資料字典對得上功能名的 102 張
 - 欄位名 = 表名後三碼 ＋ 三位序號（1-based）。例：`TPADGA` 第 5 欄是 `DGA005`
-- 推出外鍵 **243** 個（值域重疊 ≥ 90%）
+- 推出外鍵 **231** 個（值域重疊 ≥ 90%）
 
 | 依據 | 意思 |
 |---|---|
@@ -236,8 +252,6 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 
 ### `YSFGQA`　〔應收／應付（帳款）〕　12,211 列 × 40 欄（取樣前 5,000 列）
 
-主鍵：`GQA038`
-
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
 |--:|---|---|--:|--:|---|---|
 | 1 | `GQA001` | decimal | 100% | 4,999 | **付款單**；電話／傳真 | `label+rule` |
@@ -290,7 +304,7 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 | 3 | `GQB003` | decimal | 100% | 6 | — | `pattern` |
 | 4 | `GQB004` | decimal | 100% | 3,374 | 金額／數量 | `rule` |
 | 5 | `GQB005` | decimal | 100% | 3,374 | 金額／數量 | `rule` |
-| 6 | `GQB006` | code | 87% | 4,354 | → `PJMPIA`（96%） | `fk` |
+| 6 | `GQB006` | code | 87% | 4,354 | — | `pattern` |
 | 7 | `GQB007` | — | 0 | — | 全空 | — |
 | 8 | `GQB008` | decimal | 89% | 3 | 電話／傳真 | `rule` |
 | 9 | `GQB009` | date | 87% | 229 | 電話／傳真 | `rule` |
@@ -312,15 +326,13 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 
 ### `YSFGQC`　〔應收／應付（帳款）〕　51,200 列 × 39 欄（取樣前 5,000 列）
 
-主鍵：`GQC039`
-
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
 |--:|---|---|--:|--:|---|---|
 | 1 | `GQC001` | decimal | 100% | 775 | 電話／傳真；對應 GQA001 | `rule+dict` |
 | 2 | `GQC002` | decimal | 100% | 110 | — | `pattern` |
 | 3 | `GQC003` | date | 100% | 60 | 電話／傳真 | `rule` |
 | 4 | `GQC004` | decimal | 100% | 5 | — | `pattern` |
-| 5 | `GQC005` | text | 100% | 4,974 | → `JSKJDC`（92%） | `fk` |
+| 5 | `GQC005` | text | 100% | 4,974 | — | `-` |
 | 6 | `GQC006` | date | 100% | 383 | 電話／傳真 | `rule` |
 | 7 | `GQC007` | decimal | 100% | 3,060 | 金額／數量 | `rule` |
 | 8 | `GQC008` | decimal | 100% | 3,059 | 金額／數量 | `rule` |
@@ -767,7 +779,7 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
 |--:|---|---|--:|--:|---|---|
 | 1 | `KCA001` | decimal | 100% | 2 | — | `pattern` |
-| 2 | `KCA002` | docno | 100% | 15 | 對應 KAA001；→ `JSKKAA ∪ TPABQA`（93%） | `dict+fk` |
+| 2 | `KCA002` | docno | 100% | 15 | 對應 KAA001；→ `JSKKAA ∪ JSKKBA`（100%） | `dict+fk` |
 | 3 | `KCA003` | decimal | 100% | 4 | — | `pattern` |
 | 4 | `KCA004` | code | 100% | 7 | → `TPADFA`（100%） | `fk` |
 | 5 | `KCA005` | date | 100% | 14 | 電話／傳真 | `rule` |
@@ -1231,12 +1243,10 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 
 ### `TPADEA`　〔公用設定／基本資料〕　25,159 列 × 71 欄（取樣前 5,000 列）
 
-主鍵：`DEA001`
-
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
 |--:|---|---|--:|--:|---|---|
 | 1 | `DEA001` | text | 100% | 5,000 | **品號**；唯一 | `verified` |
-| 2 | `DEA002` | text | 100% | 4,960 | **品名**；**品名** | `label+verified` |
+| 2 | `DEA002` | text | 100% | 4,960 | **品名** | `label+verified` |
 | 3 | `DEA003` | text_zh | 100% | 22 | **單位** | `inferred` |
 | 4 | `DEA004` | — | 0 | — | 全空 | — |
 | 5 | `DEA005` | text | 100% | 27 | **商品分類**；→ `TPADED`（100%） | `verified+fk` |
@@ -1258,8 +1268,8 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 | 21 | `DEA021` | decimal | 100% | 1 | 金額／數量 | `rule` |
 | 22 | `DEA022` | decimal | 100% | 577 | 金額／數量 | `rule` |
 | 23 | `DEA023` | decimal | 100% | 673 | 金額／數量 | `rule` |
-| 24 | `DEA024` | decimal | 100% | 409 | **零售價**；**零售價** | `label+verified` |
-| 25 | `DEA025` | decimal | 100% | 1 | **會員價**；**會員價** | `label+verified` |
+| 24 | `DEA024` | decimal | 100% | 409 | **零售價** | `label+verified` |
+| 25 | `DEA025` | decimal | 100% | 1 | **會員價** | `label+verified` |
 | 26 | `DEA026` | decimal | 100% | 1 | 金額／數量 | `rule` |
 | 27 | `DEA027` | decimal | 100% | 1 | 金額／數量 | `rule` |
 | 28 | `DEA028` | decimal | 100% | 1 | 金額／數量 | `rule` |
@@ -1321,8 +1331,6 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 </details>
 
 ### `TPADEC`　〔公用設定／基本資料〕　25,159 列 × 10 欄（取樣前 5,000 列）
-
-主鍵：`DEC001`
 
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
 |--:|---|---|--:|--:|---|---|
@@ -1529,8 +1537,6 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 
 ### `TPADFB`　〔公用設定／基本資料〕　14,279 列 × 17 欄（取樣前 5,000 列）
 
-主鍵：`DFB015`
-
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
 |--:|---|---|--:|--:|---|---|
 | 1 | `DFB001` | code | 100% | 34 | → `TPADFA`（100%） | `fk` |
@@ -1575,8 +1581,6 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 ## 廠商特價
 
 ### `TPADGB`　〔公用設定／基本資料〕　27,375 列 × 17 欄（取樣前 5,000 列）
-
-主鍵：`DGB015`
 
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
 |--:|---|---|--:|--:|---|---|
@@ -1782,8 +1786,6 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 
 ### `PJMPIA`　〔票據管理〕　11,081 列 × 47 欄（取樣前 5,000 列）
 
-主鍵：`PIA001`
-
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
 |--:|---|---|--:|--:|---|---|
 | 1 | `PIA001` | code | 100% | 5,000 | **應付票據**；唯一 | `label` |
@@ -1836,11 +1838,9 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 
 ### `PJMPJA`　〔票據管理〕　21,976 列 × 27 欄（取樣前 5,000 列）
 
-主鍵：`PJA025`
-
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
 |--:|---|---|--:|--:|---|---|
-| 1 | `PJA001` | code | 100% | 2,500 | 對應 PIA001；→ `PJMPIA`（100%） | `dict+fk` |
+| 1 | `PJA001` | code | 100% | 2,500 | 對應 PIA001 | `dict` |
 | 2 | `PJA002` | decimal | 100% | 2 | — | `pattern` |
 | 3 | `PJA003` | date | 100% | 188 | 電話／傳真 | `rule` |
 | 4 | `PJA004` | decimal | 100% | 2 | — | `pattern` |
@@ -1991,8 +1991,6 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 | 44 | `PAA044` | timestamp | 100% | 4,180 | 建檔／異動時間 | `rule` |
 
 ### `PJMPBA`　〔票據管理〕　13,733 列 × 28 欄（取樣前 5,000 列）
-
-主鍵：`PBA026`
 
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
 |--:|---|---|--:|--:|---|---|
@@ -2288,8 +2286,6 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 
 ### `YSFGDA`　〔應收／應付（帳款）〕　5,658 列 × 40 欄（取樣前 5,000 列）
 
-主鍵：`GDA001`
-
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
 |--:|---|---|--:|--:|---|---|
 | 1 | `GDA001` | decimal | 100% | 5,000 | **收款單**；電話／傳真；唯一 | `label+rule` |
@@ -2370,7 +2366,7 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 | 2 | `GDC002` | decimal | 100% | 41 | — | `pattern` |
 | 3 | `GDC003` | date | 100% | 771 | 電話／傳真 | `rule` |
 | 4 | `GDC004` | decimal | 100% | 5 | — | `pattern` |
-| 5 | `GDC005` | text | 100% | 4,758 | → `JSKKEA`（92%） | `fk` |
+| 5 | `GDC005` | text | 100% | 4,758 | — | `-` |
 | 6 | `GDC006` | date | 100% | 1,259 | 電話／傳真 | `rule` |
 | 7 | `GDC007` | decimal | 100% | 2,129 | 金額／數量 | `rule` |
 | 8 | `GDC008` | decimal | 100% | 2,068 | 金額／數量 | `rule` |
@@ -2410,8 +2406,6 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 ## 會計傳票
 
 ### `KJSNFA`　〔會計總帳〕　118,945 列 × 30 欄（取樣前 5,000 列）
-
-主鍵：`NFA028`
 
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
 |--:|---|---|--:|--:|---|---|
@@ -2456,8 +2450,6 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 
 ### `KJSNFB`　〔會計總帳〕　303,945 列 × 27 欄（取樣前 5,000 列）
 
-主鍵：`NFB027`
-
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
 |--:|---|---|--:|--:|---|---|
 | 1 | `NFB001` | decimal | 100% | 2 | **傳票類別**；對應 NFA001 | `verified+dict` |
@@ -2501,8 +2493,6 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 </details>
 
 ### `KJSNFC`　〔會計總帳〕　100,384 列 × 14 欄（取樣前 5,000 列）
-
-主鍵：`NFC002`
 
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
 |--:|---|---|--:|--:|---|---|
@@ -3013,7 +3003,7 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 |--:|---|---|--:|--:|---|---|
 | 1 | `IBB001` | docno | 100% | 13 | 對應 IBA001；→ `DCSIBA`（100%） | `dict+fk` |
 | 2 | `IBB002` | decimal | 100% | 16 | — | `pattern` |
-| 3 | `IBB003` | text | 100% | 40 | → `JSKLPA ∪ TPADEA`（98%） | `fk` |
+| 3 | `IBB003` | text | 100% | 40 | — | `-` |
 | 4 | `IBB004` | text_zh | 100% | 40 | — | `pattern` |
 | 5 | `IBB005` | text | 100% | 8 | — | `-` |
 | 6 | `IBB006` | decimal | 100% | 13 | 金額／數量 | `rule` |
@@ -3244,8 +3234,6 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 
 ### `JSKJDC`　〔進銷存〕　47,275 列 × 39 欄（取樣前 5,000 列）
 
-主鍵：`JDC001`
-
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
 |--:|---|---|--:|--:|---|---|
 | 1 | `JDC001` | docno | 100% | 5,000 | 對應 JDA001；唯一 | `dict` |
@@ -3289,8 +3277,6 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 | 39 | `JDC039` | timestamp | 25% | 1,268 | 建檔／異動時間 | `rule` |
 
 ### `JSKJDD`　〔進銷存〕　21,224 列 × 46 欄（取樣前 5,000 列）
-
-主鍵：`JDD032`
 
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
 |--:|---|---|--:|--:|---|---|
@@ -3484,8 +3470,6 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 
 ### `JSKJIA`　〔進銷存〕　5,621 列 × 25 欄（取樣前 5,000 列）
 
-主鍵：`JIA002`
-
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
 |--:|---|---|--:|--:|---|---|
 | 1 | `JIA001` | decimal | 100% | 1 | 對應 JIB001 | `dict` |
@@ -3516,12 +3500,10 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 
 ### `JSKJIB`　〔進銷存〕　42,119 列 × 22 欄（取樣前 5,000 列）
 
-主鍵：`JIB005`
-
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
 |--:|---|---|--:|--:|---|---|
 | 1 | `JIB001` | decimal | 100% | 1 | 對應 JIA001 | `dict` |
-| 2 | `JIB002` | code | 100% | 686 | 對應 JIA002；→ `JSKJIA`（100%） | `dict+fk` |
+| 2 | `JIB002` | code | 100% | 686 | 對應 JIA002 | `dict` |
 | 3 | `JIB003` | date | 100% | 417 | 電話／傳真；對應 JIA003 | `rule+dict` |
 | 4 | `JIB004` | decimal | 100% | 3 | — | `pattern` |
 | 5 | `JIB005` | docno | 100% | 5,000 | 唯一 | `pattern` |
@@ -3614,17 +3596,15 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 
 ### `JSKKEA`　〔進銷存〕　17,649 列 × 92 欄（取樣前 5,000 列）
 
-主鍵：`KEA001`
-
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
 |--:|---|---|--:|--:|---|---|
-| 1 | `KEA001` | docno | 100% | 5,000 | **銷貨單**；對應 KEB001；唯一 | `label+dict` |
+| 1 | `KEA001` | docno | 100% | 5,000 | **銷貨單**；**銷貨單號**；對應 KEB001；唯一 | `label+verified+dict` |
 | 2 | `KEA002` | — | 0 | — | 全空 | — |
-| 3 | `KEA003` | date | 100% | 1,257 | 電話／傳真；銷貨單 的關鍵欄 | `rule+dict` |
-| 4 | `KEA004` | code | 100% | 141 | → `TPADFA`（100%） | `fk` |
-| 5 | `KEA005` | code | 100% | 141 | → `TPADFA`（100%） | `fk` |
-| 6 | `KEA006` | code | 100% | 5 | → `TPADBA`（100%） | `fk` |
-| 7 | `KEA007` | code | 100% | 3 | → `TPADAA`（100%） | `fk` |
+| 3 | `KEA003` | date | 100% | 1,257 | **銷貨日期**；銷貨單 的關鍵欄 | `verified+dict` |
+| 4 | `KEA004` | code | 100% | 141 | **客戶代號**；→ `TPADFA`（100%） | `verified+fk` |
+| 5 | `KEA005` | code | 100% | 141 | **請款客戶代號**；→ `TPADFA`（100%） | `inferred+fk` |
+| 6 | `KEA006` | code | 100% | 5 | **業務員**；→ `TPADBA`（100%） | `verified+fk` |
+| 7 | `KEA007` | code | 100% | 3 | **部門**；→ `TPADAA`（100%） | `verified+fk` |
 | 8 | `KEA008` | text | 100% | 1 | 幣別 | `rule` |
 | 9 | `KEA009` | decimal | 100% | 1 | 金額／數量 | `rule` |
 | 10 | `KEA010` | — | 0 | — | 全空 | — |
@@ -3640,9 +3620,9 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 | 20 | `KEA020` | decimal | 100% | 2 | — | `pattern` |
 | 21 | `KEA021` | decimal | 100% | 3 | — | `pattern` |
 | 22 | `KEA022` | decimal | 100% | 2 | 金額／數量 | `rule` |
-| 23 | `KEA023` | decimal | 100% | 1,561 | 金額／數量 | `rule` |
+| 23 | `KEA023` | decimal | 100% | 1,561 | **金額合計** | `verified` |
 | 24 | `KEA024` | decimal | 100% | 1,216 | 金額／數量 | `rule` |
-| 25 | `KEA025` | decimal | 100% | 1,561 | 金額／數量 | `rule` |
+| 25 | `KEA025` | decimal | 100% | 1,561 | **金額合計（副本）** | `inferred` |
 | 26 | `KEA026` | decimal | 100% | 1,216 | 金額／數量 | `rule` |
 | 27 | `KEA027` | decimal | 100% | 1 | 金額／數量 | `rule` |
 | 28 | `KEA028` | decimal | 100% | 1 | 金額／數量 | `rule` |
@@ -3711,22 +3691,35 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 | 91 | `KEA091` | phone | 98% | 137 | 電話／傳真 | `rule` |
 | 92 | `KEA092` | — | 0 | — | 全空 | — |
 
+<details><summary>人工定案的依據</summary>
+
+- `KEA001` **銷貨單號**（verified）：舊系統畫面標籤（TPATRL）標為「銷貨單」；對 JSKKEB 零孤兒
+- `KEA003` **銷貨日期**（verified）：2007–2026 無缺年
+- `KEA004` **客戶代號**（verified）：值域 100% 落在 TPADFA
+- `KEA005` **請款客戶代號**（inferred）：值域 100% 落在 TPADFA；與 KEA004 並存，多為同值
+- `KEA006` **業務員**（verified）：值域 100% 落在 TPADBA
+- `KEA007` **部門**（verified）：值域 100% 落在 TPADAA
+- `KEA023` **金額合計**（verified）：5,358/5,358 等於 JSKKEB 第 12 欄加總
+- `KEA025` **金額合計（副本）**（inferred）：與 KEA023 逐筆同值 5,358/5,358
+
+</details>
+
 ### `JSKKEB`　〔進銷存〕　24,818 列 × 53 欄（取樣前 5,000 列）
 
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
 |--:|---|---|--:|--:|---|---|
-| 1 | `KEB001` | docno | 100% | 3,283 | 對應 KEA001；→ `JSKKEA`（100%） | `dict+fk` |
-| 2 | `KEB002` | decimal | 100% | 22 | — | `pattern` |
-| 3 | `KEB003` | text | 100% | 1,314 | — | `-` |
-| 4 | `KEB004` | text_zh | 100% | 2,785 | — | `pattern` |
-| 5 | `KEB005` | text | 100% | 20 | — | `-` |
+| 1 | `KEB001` | docno | 100% | 3,283 | **銷貨單號**；對應 KEA001 | `verified+dict` |
+| 2 | `KEB002` | decimal | 100% | 22 | **項次** | `verified` |
+| 3 | `KEB003` | text | 100% | 1,314 | **品號** | `verified` |
+| 4 | `KEB004` | text_zh | 100% | 2,785 | **品名** | `inferred` |
+| 5 | `KEB005` | text | 100% | 20 | **單位** | `verified` |
 | 6 | `KEB006` | code | 100% | 5 | — | `pattern` |
-| 7 | `KEB007` | decimal | 100% | 69 | 金額／數量 | `rule` |
+| 7 | `KEB007` | decimal | 100% | 69 | **數量** | `verified` |
 | 8 | `KEB008` | decimal | 100% | 116 | 金額／數量 | `rule` |
 | 9 | `KEB009` | decimal | 100% | 98 | 金額／數量 | `rule` |
-| 10 | `KEB010` | decimal | 100% | 922 | 金額／數量 | `rule` |
+| 10 | `KEB010` | decimal | 100% | 922 | **單價** | `verified` |
 | 11 | `KEB011` | decimal | 100% | 1,065 | 金額／數量 | `rule` |
-| 12 | `KEB012` | decimal | 100% | 1,065 | 金額／數量 | `rule` |
+| 12 | `KEB012` | decimal | 100% | 1,065 | **金額** | `verified` |
 | 13 | `KEB013` | flag | 100% | 1 | 是否旗標 | `rule` |
 | 14 | `KEB014` | decimal | 100% | 1 | 金額／數量 | `rule` |
 | 15 | `KEB015` | decimal | 1% | 2 | — | `pattern` |
@@ -3769,6 +3762,19 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 | 52 | `KEB052` | — | 0 | — | 全空 | — |
 | 53 | `KEB053` | — | 0 | — | 全空 | — |
 
+<details><summary>人工定案的依據</summary>
+
+- `KEB001` **銷貨單號**（verified）：對 JSKKEA 零孤兒
+- `KEB002` **項次**（verified）：同一單號內遞增
+- `KEB003` **品號**（verified）：2,752/2,753 落在 TPADEA 品號
+- `KEB004` **品名**（inferred）：與 JDB004 同型
+- `KEB005` **單位**（verified）：值域為計量單位
+- `KEB007` **數量**（verified）：KEB007 × KEB010 == KEB012，16,568/16,568；中位數 1
+- `KEB010` **單價**（verified）：同上等式；中位數 4,300
+- `KEB012` **金額**（verified）：等於 KEB007 × KEB010，且加總等於 KEA023
+
+</details>
+
 ### `JSKKHA`　〔進銷存〕　4,194 列 × 25 欄
 
 主鍵：`KHA005`
@@ -3802,8 +3808,6 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 | 25 | `KHA025` | timestamp | 100% | 4,068 | 建檔／異動時間 | `rule` |
 
 ### `YSFGCA`　〔應收／應付（帳款）〕　18,482 列 × 38 欄（取樣前 5,000 列）
-
-主鍵：`GCA002`
 
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
 |--:|---|---|--:|--:|---|---|
@@ -4104,16 +4108,14 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 
 ### `JSKJDA`　〔進銷存〕　47,276 列 × 73 欄（取樣前 5,000 列）
 
-主鍵：`JDA054`
-
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
 |--:|---|---|--:|--:|---|---|
-| 1 | `JDA001` | docno | 100% | 4,999 | **驗收(退)單**；對應 JDB001；→ `JSKJDC`（100%） | `label+dict+fk` |
+| 1 | `JDA001` | docno | 100% | 4,999 | **驗收(退)單**；**進貨單號**；對應 JDB001 | `label+verified+dict` |
 | 2 | `JDA002` | code | 0% | 1 | — | `pattern` |
-| 3 | `JDA003` | date | 100% | 389 | 電話／傳真；驗收(退)單 的關鍵欄 | `rule+dict` |
-| 4 | `JDA004` | code | 100% | 108 | → `TPADGA`（100%） | `fk` |
-| 5 | `JDA005` | code | 100% | 8 | → `TPADBA`（100%） | `fk` |
-| 6 | `JDA006` | code | 100% | 5 | → `TPADAA`（100%） | `fk` |
+| 3 | `JDA003` | date | 100% | 389 | **進貨日期**；驗收(退)單 的關鍵欄 | `verified+dict` |
+| 4 | `JDA004` | code | 100% | 108 | **廠商代號**；→ `TPADGA`（100%） | `verified+fk` |
+| 5 | `JDA005` | code | 100% | 8 | **業務員**；→ `TPADBA`（100%） | `verified+fk` |
+| 6 | `JDA006` | code | 100% | 5 | **部門**；→ `TPADAA`（100%） | `verified+fk` |
 | 7 | `JDA007` | text | 100% | 1 | 幣別 | `rule` |
 | 8 | `JDA008` | decimal | 100% | 2 | 金額／數量 | `rule` |
 | 9 | `JDA009` | date | 100% | 389 | 電話／傳真 | `rule` |
@@ -4122,9 +4124,9 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 | 12 | `JDA012` | decimal | 100% | 2 | — | `pattern` |
 | 13 | `JDA013` | decimal | 100% | 2 | — | `pattern` |
 | 14 | `JDA014` | decimal | 100% | 2 | 金額／數量 | `rule` |
-| 15 | `JDA015` | decimal | 100% | 2,891 | 金額／數量 | `rule` |
+| 15 | `JDA015` | decimal | 100% | 2,891 | **金額合計** | `verified` |
 | 16 | `JDA016` | decimal | 100% | 1,449 | 金額／數量 | `rule` |
-| 17 | `JDA017` | decimal | 100% | 2,891 | 金額／數量 | `rule` |
+| 17 | `JDA017` | decimal | 100% | 2,891 | **金額合計（副本）** | `inferred` |
 | 18 | `JDA018` | decimal | 100% | 1,449 | 金額／數量 | `rule` |
 | 19 | `JDA019` | flag | 100% | 2 | 是否旗標 | `rule` |
 | 20 | `JDA020` | decimal | 100% | 4,984 | 電話／傳真 | `rule` |
@@ -4137,7 +4139,7 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 | 27 | `JDA027` | — | 0 | — | 全空 | — |
 | 28 | `JDA028` | — | 0 | — | 全空 | — |
 | 29 | `JDA029` | — | 0 | — | 全空 | — |
-| 30 | `JDA030` | decimal | 100% | 1 | 對應 LNA001 | `dict` |
+| 30 | `JDA030` | decimal | 100% | 1 | **單別**；對應 LNA001 | `verified+dict` |
 | 31 | `JDA031` | date | 94% | 366 | 電話／傳真 | `rule` |
 | 32 | `JDA032` | code | 94% | 1,102 | — | `pattern` |
 | 33 | `JDA033` | flag | 100% | 4 | 是否旗標 | `rule` |
@@ -4182,23 +4184,34 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 | 72 | `JDA072` | — | 0 | — | 全空 | — |
 | 73 | `JDA073` | — | 0 | — | 全空 | — |
 
-### `JSKJDB`　〔進銷存〕　135,912 列 × 63 欄（取樣前 5,000 列）
+<details><summary>人工定案的依據</summary>
 
-主鍵：`JDB043`
+- `JDA001` **進貨單號**（verified）：唯一鍵；對 JSKJDB 零孤兒
+- `JDA003` **進貨日期**（verified）：資料字典標為關鍵欄；2007–2026 無缺年
+- `JDA004` **廠商代號**（verified）：值域 100% 落在 TPADGA
+- `JDA005` **業務員**（verified）：值域 100% 落在 TPADBA（使用者資料）
+- `JDA006` **部門**（verified）：值域 100% 落在 TPADAA（部門資料）
+- `JDA015` **金額合計**（verified）：5,979/5,979 等於 JSKJDB 第 11 欄加總（排除兩邊皆零）
+- `JDA017` **金額合計（副本）**（inferred）：與 JDA015 逐筆同值 5,979/5,979；用途差異未確認
+- `JDA030` **單別**（verified）：資料字典的 LNA001=JDA030 指向庫存異動的單別欄
+
+</details>
+
+### `JSKJDB`　〔進銷存〕　135,912 列 × 63 欄（取樣前 5,000 列）
 
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
 |--:|---|---|--:|--:|---|---|
-| 1 | `JDB001` | docno | 100% | 1,514 | 對應 JDA001；→ `JSKJDC`（100%） | `dict+fk` |
-| 2 | `JDB002` | decimal | 100% | 27 | — | `pattern` |
-| 3 | `JDB003` | text | 100% | 2,128 | — | `-` |
-| 4 | `JDB004` | text_zh | 100% | 2,213 | **品名** | `label` |
-| 5 | `JDB005` | text | 100% | 30 | — | `-` |
-| 6 | `JDB006` | code | 100% | 3 | → `TPADDA`（100%） | `fk` |
-| 7 | `JDB007` | decimal | 100% | 135 | 金額／數量 | `rule` |
+| 1 | `JDB001` | docno | 100% | 1,514 | **進貨單號**；對應 JDA001 | `verified+dict` |
+| 2 | `JDB002` | decimal | 100% | 27 | **項次** | `verified` |
+| 3 | `JDB003` | text | 100% | 2,128 | **品號** | `verified` |
+| 4 | `JDB004` | text_zh | 100% | 2,213 | **品名** | `label+verified` |
+| 5 | `JDB005` | text | 100% | 30 | **單位** | `verified` |
+| 6 | `JDB006` | code | 100% | 3 | **倉庫**；→ `TPADDA`（100%） | `verified+fk` |
+| 7 | `JDB007` | decimal | 100% | 135 | **數量** | `verified` |
 | 8 | `JDB008` | decimal | 100% | 1 | 金額／數量 | `rule` |
-| 9 | `JDB009` | decimal | 100% | 903 | 金額／數量 | `rule` |
+| 9 | `JDB009` | decimal | 100% | 903 | **單價** | `verified` |
 | 10 | `JDB010` | decimal | 100% | 1,424 | 金額／數量 | `rule` |
-| 11 | `JDB011` | decimal | 100% | 1,424 | 金額／數量 | `rule` |
+| 11 | `JDB011` | decimal | 100% | 1,424 | **金額** | `verified` |
 | 12 | `JDB012` | flag | 100% | 1 | 是否旗標 | `rule` |
 | 13 | `JDB013` | decimal | 1% | 1 | — | `pattern` |
 | 14 | `JDB014` | docno | 1% | 3 | → `DCSHDA`（100%） | `fk` |
@@ -4252,9 +4265,21 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 | 62 | `JDB062` | — | 0 | — | 全空 | — |
 | 63 | `JDB063` | — | 0 | — | 全空 | — |
 
-### `JSKJJA`　〔進銷存〕　48,407 列 × 24 欄（取樣前 5,000 列）
+<details><summary>人工定案的依據</summary>
 
-主鍵：`JJA005`
+- `JDB001` **進貨單號**（verified）：對 JSKJDA 零孤兒
+- `JDB002` **項次**（verified）：同一單號內遞增
+- `JDB003` **品號**（verified）：6,770/6,770 落在 TPADEA 品號
+- `JDB004` **品名**（verified）：舊系統畫面標籤（TPADPB）明載
+- `JDB005` **單位**（verified）：值域為 EA／M／PC／台／只／個／包 等計量單位
+- `JDB006` **倉庫**（verified）：值域 100% 落在 TPADDA
+- `JDB007` **數量**（verified）：JDB007 × JDB009 == JDB011，19,446/19,446；中位數 3、100% 整數
+- `JDB009` **單價**（verified）：同上等式；中位數 230，7.1% 有小數
+- `JDB011` **金額**（verified）：等於 JDB007 × JDB009，且加總等於 JDA015
+
+</details>
+
+### `JSKJJA`　〔進銷存〕　48,407 列 × 24 欄（取樣前 5,000 列）
 
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
 |--:|---|---|--:|--:|---|---|
@@ -4285,12 +4310,10 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 
 ### `JSKLNA`　〔進銷存〕　162,539 列 × 39 欄（取樣前 5,000 列）
 
-主鍵：`LNA037`
-
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
 |--:|---|---|--:|--:|---|---|
 | 1 | `LNA001` | decimal | 100% | 1 | 對應 JDA030 | `dict` |
-| 2 | `LNA002` | docno | 100% | 1,514 | 對應 JDA001；→ `JSKJDC`（100%） | `dict+fk` |
+| 2 | `LNA002` | docno | 100% | 1,514 | 對應 JDA001 | `dict` |
 | 3 | `LNA003` | decimal | 100% | 27 | — | `pattern` |
 | 4 | `LNA004` | text | 100% | 1 | — | `-` |
 | 5 | `LNA005` | text | 100% | 2,128 | — | `-` |
@@ -4331,12 +4354,10 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 
 ### `YSFGPA`　〔應收／應付（帳款）〕　51,285 列 × 38 欄（取樣前 5,000 列）
 
-主鍵：`GPA036`
-
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
 |--:|---|---|--:|--:|---|---|
 | 1 | `GPA001` | decimal | 100% | 1 | 對應 JDA030 | `dict` |
-| 2 | `GPA002` | docno | 100% | 4,999 | 對應 JDA001；→ `JSKJDC`（100%） | `dict+fk` |
+| 2 | `GPA002` | docno | 100% | 4,999 | 對應 JDA001 | `dict` |
 | 3 | `GPA003` | code | 100% | 108 | → `TPADGA`（100%） | `fk` |
 | 4 | `GPA004` | date | 100% | 389 | 電話／傳真 | `rule` |
 | 5 | `GPA005` | code | 100% | 8 | → `TPADBA`（100%） | `fk` |
@@ -4632,7 +4653,7 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
 |--:|---|---|--:|--:|---|---|
-| 1 | `LOA001` | text | 100% | 4,996 | → `TPADEA`（99%） | `fk` |
+| 1 | `LOA001` | text | 100% | 4,996 | — | `-` |
 | 2 | `LOA002` | code | 100% | 3 | → `TPADDA`（100%） | `fk` |
 | 3 | `LOA003` | decimal | 100% | 215 | 金額／數量 | `rule` |
 | 4 | `LOA004` | decimal | 100% | 984 | 金額／數量 | `rule` |
@@ -5710,7 +5731,7 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
 |--:|---|---|--:|--:|---|---|
 | 1 | `BAA001` | code | 100% | 1 | — | `pattern` |
-| 2 | `BAA002` | text_zh | 100% | 1 | **公司名稱**；**公司名稱** | `label+verified` |
+| 2 | `BAA002` | text_zh | 100% | 1 | **公司名稱** | `label+verified` |
 | 3 | `BAA003` | text_zh | 100% | 1 | — | `pattern` |
 | 4 | `BAA004` | phone | 100% | 1 | 電話／傳真 | `rule` |
 | 5 | `BAA005` | phone | 100% | 1 | 電話／傳真 | `rule` |
@@ -5864,8 +5885,6 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 
 ### `TPABQA`　〔公用設定／基本資料〕　8,543 列 × 4 欄（取樣前 5,000 列）
 
-主鍵：`BQA002`
-
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
 |--:|---|---|--:|--:|---|---|
 | 1 | `BQA001` | text | 100% | 9 | — | `-` |
@@ -5986,8 +6005,6 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 | 15 | `BUA015` | timestamp | 100% | 169 | 建檔／異動時間 | `rule` |
 
 ### `TPABUE`　〔公用設定／基本資料〕　1,126,537 列 × 14 欄（取樣前 5,000 列）
-
-主鍵：`BUE001`
 
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
 |--:|---|---|--:|--:|---|---|
@@ -6153,8 +6170,6 @@ python3 scripts/ch001_schema.py --src <CH001_export> --erpnext <ERPNext doctypes
 | 11 | `BZA011` | timestamp | 0% | 1 | 建檔／異動時間 | `rule` |
 
 ### `TPABZB`　〔公用設定／基本資料〕　5,810 列 × 13 欄（取樣前 5,000 列）
-
-主鍵：`BZB002`
 
 | # | 欄位 | 型別 | 填充 | 相異 | 說明 | 依據 |
 |--:|---|---|--:|--:|---|---|

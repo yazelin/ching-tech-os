@@ -205,9 +205,16 @@ def profile_tables(src: Path) -> dict:
 
 
 def detect_keys(prof: dict) -> dict[str, list[str]]:
-    """每張表的主鍵：單欄唯一優先，否則找最短的唯一欄組合（只試前幾欄）。"""
+    """每張表的單欄主鍵候選。
+
+    只在「整張表都讀過」時才認定 —— 取樣時某欄剛好唯一並不代表全表唯一
+    （實測 JSKJDB 取樣 5,000 列會誤判 JDB043 是主鍵，全表 135,912 列就不成立）。
+    取樣的表一律不宣稱主鍵，由資料字典的關鍵欄標示代替。
+    """
     keys = {}
     for t, info in prof.items():
+        if info["sampled"] < info["rows"]:
+            continue
         single = [c for c in info["cols"] if c["unique"]]
         if single:
             keys[t] = [single[0]["name"]]
@@ -428,7 +435,12 @@ def emit_markdown(prof, table2func, col2role, keys, fks, xref, joins, labels_zh)
                     dt, ov = fks[(t, c["name"])]
                     notes.append(f"→ `{dt}`（{ov*100:.0f}%）"); basis.append("fk")
                 if (t, c["name"]) in labels_zh:
-                    notes.insert(0, f"**{labels_zh[(t, c['name'])]}**"); basis.insert(0, "label")
+                    zh_label = labels_zh[(t, c["name"])]
+                    # 人工定案已寫同一個名字就不重複，只補依據
+                    if man and man[0] == zh_label:
+                        basis.insert(0, "label")
+                    else:
+                        notes.insert(0, f"**{zh_label}**"); basis.insert(0, "label")
                 if (t, c["name"]) in xref:
                     notes.append(xref[(t, c["name"])]); basis.append("xref")
                 if c["unique"]:
