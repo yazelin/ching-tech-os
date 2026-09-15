@@ -52,6 +52,13 @@ ChingTech OS 是擎添工業內部使用的整合式工作平台，以 Web 技�
   問人，不自己猜；REST（`/api/parties` 等）只服務新前端，兩者共用同一層 service。
   每筆寫入同交易寫稽核並回 `audit_id`，主檔是軟刪除、採購單是取消不是刪。前端進行中。
 
+- **舊 ERP 資料盤點與完整性驗收**：舊系統（鼎新 Workflow）退場前的整庫傾印
+  `CH001_export`（197 張有資料的表）是自建 ERP 的唯一歷史來源，`scripts/ch001_*.py`
+  四支工具負責讀取、剖析、盤點與驗收，結果見 `docs/ch001-export-inventory.md`。
+  讀法有坑：Big5 中文字的低位元組可能是 `0x7C`（即 `|`），先解碼再切分會靜默錯位，
+  必須先在 bytes 上用狀態機切欄再逐欄解碼。完整性已驗收：118,946 張傳票借貸
+  100% 平衡、四張主要交易表 2007–2026 一年不缺。
+
 - **bot 與舊程式切換到往來與物料模組**：Line／Telegram bot 的 prompt（程式碼與
   `ai_prompts`，migration 032）、`skills/erp`、`skills/project`、ctos CLI 的 `erp`
   子命令與舊桌面都已改指新工具與新前端，不再出現 `mcp__erpnext__*` 與 `http://ct.erp`。
