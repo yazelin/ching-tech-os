@@ -59,6 +59,13 @@ ChingTech OS 是擎添工業內部使用的整合式工作平台，以 Web 技�
   必須先在 bytes 上用狀態機切欄再逐欄解碼。完整性已驗收：118,946 張傳票借貸
   100% 平衡、四張主要交易表 2007–2026 一年不缺。
 
+- **舊 ERP schema 推導**：那批資料表沒有標題列，欄位只有位置。`scripts/ch001_schema.py`
+  用六種獨立證據推導逐欄語意（舊系統畫面標籤、可驗證規則、資料字典、值域重疊外鍵、
+  ERPNext 交叉驗證、資料形狀），輸出 `docs/ch001-schema.md`，**每欄標明依據等級**，
+  推測與驗證不混為一談。欄位命名規律是「表名後三碼＋三位序號」（用字典的 8 個已知欄位
+  驗過，8/8 相符）。目前推出 243 個外鍵、347 欄業務語意；主檔 44 欄由
+  `scripts/ch001_columns.py` 人工定案並附依據。
+
 - **bot 與舊程式切換到往來與物料模組**：Line／Telegram bot 的 prompt（程式碼與
   `ai_prompts`，migration 032）、`skills/erp`、`skills/project`、ctos CLI 的 `erp`
   子命令與舊桌面都已改指新工具與新前端，不再出現 `mcp__erpnext__*` 與 `http://ct.erp`。
