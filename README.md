@@ -52,6 +52,32 @@ ChingTech OS 是擎添工業內部使用的整合式工作平台，以 Web 技�
   問人，不自己猜；REST（`/api/parties` 等）只服務新前端，兩者共用同一層 service。
   每筆寫入同交易寫稽核並回 `audit_id`，主檔是軟刪除、採購單是取消不是刪。前端進行中。
 
+- **舊 ERP 資料盤點與完整性驗收**：舊系統（鼎新 e-Go）退場前的整庫傾印
+  `CH001_export`（197 張有資料的表）是自建 ERP 的唯一歷史來源，`scripts/ch001_*.py`
+  四支工具負責讀取、剖析、盤點與驗收，結果見 `docs/ch001-export-inventory.md`。
+  讀法有坑：Big5 中文字的低位元組可能是 `0x7C`（即 `|`），先解碼再切分會靜默錯位，
+  必須先在 bytes 上用狀態機切欄再逐欄解碼。完整性已驗收：118,946 張傳票借貸
+  100% 平衡、四張主要交易表 2007–2026 一年不缺。
+
+- **舊 ERP schema 推導**：那批資料表沒有標題列，欄位只有位置。`scripts/ch001_schema.py`
+  用六種獨立證據推導逐欄語意（舊系統畫面標籤、可驗證規則、資料字典、值域重疊外鍵、
+  ERPNext 交叉驗證、資料形狀），輸出 `docs/ch001-schema.md`，**每欄標明依據等級**，
+  推測與驗證不混為一談。欄位命名規律是「表名後三碼＋三位序號」（用字典的 8 個已知欄位
+  驗過，8/8 相符）。人工定案 102 欄（`scripts/ch001_columns.py`，每條附依據）。
+
+- **舊 ERP 中間格式**：`scripts/ch001_transform.py` 把來源轉成 JSONL ＋ `schema.json`，
+  **不依賴 CTOS**，誰都能拿去灌進自己的資料庫。JSONL 的 key 用舊系統原始欄位名，
+  中文與依據放 schema，所以推不出語意的欄位也原樣保留。金額一律字串不走浮點。
+  階段 1 的 19 張表已可轉出 707,971 列，借貸平衡與數量×單價、單頭==明細三個等式
+  在轉出的 JSONL 上重驗全數 100%。
+
+- **舊 ERP 查核資料庫**：`scripts/ch001_load.py` 把中間格式灌進獨立的 `ch001`
+  PostgreSQL schema（容器設定在 `docker/ch001/`，與 CTOS 的 DB 完全分開，
+  不要了就 `docker compose down -v`）。中文欄位名用 `COMMENT ON` 寫進資料庫，
+  會計、採購、業務用 DBeaver 之類的工具打開就看得到「統一編號 [verified]」，
+  不必等前端。本機排練：19 張表、707,971 列、171 MB、載入 19 秒，
+  三個等式在 SQL 層重驗全數 100%。
+
 - **bot 與舊程式切換到往來與物料模組**：Line／Telegram bot 的 prompt（程式碼與
   `ai_prompts`，migration 032）、`skills/erp`、`skills/project`、ctos CLI 的 `erp`
   子命令與舊桌面都已改指新工具與新前端，不再出現 `mcp__erpnext__*` 與 `http://ct.erp`。
