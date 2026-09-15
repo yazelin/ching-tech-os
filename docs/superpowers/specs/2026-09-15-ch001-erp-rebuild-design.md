@@ -1,30 +1,58 @@
-# 舊 ERP 歷史資料在 CTOS 重建（含會計與票據）設計
+# 舊 ERP 歷史資料匯復與查核設計
 
 日期：2026-09-15
-狀態：待實作；範圍由 yazelin 拍板（2026-09-15）
-上位規格：`2026-09-12-ai-native-erp-design.md`（本規格**擴充**其第一節原則 5 的「不做」清單）
+狀態：待實作；範圍與定位由 yazelin 拍板（2026-09-15）
+上位規格：`2026-09-12-ai-native-erp-design.md`（本規格是**平行**的獨立系統，不擴充它）
 資料來源盤點：`docs/ch001-export-inventory.md`
 
-## 一、背景與決定
+## 一、這是什麼，不是什麼
 
 舊 ERP（鼎新 Workflow）要退場。整庫傾印 `CH001_export` 是唯一的歷史資料來源，
-不會再更新。同事另建的新 ERP（`192.168.11.6:8000`）只做到進貨單與使用者管理，
-沒有客戶、沒有會計，短期內接不了這批歷史。
+不會再更新。同事另建的新 ERP（`192.168.11.6:8000`）從零開始，可能參考這裡
+建起來的樣子。
 
-yazelin 的決定（2026-09-15，逐條）：
+**這套東西是給同事確認資料內容正確無誤用的查核工具，不是 CTOS 要拿來營運的系統。**
+（yazelin，2026-09-15）
 
-1. **在 CTOS 重建**，做法沿用 `scripts/erpnext_import.py` 那條管線。
-2. **範圍做到會計與票據**，不是只做主檔。
-3. **完整搬進來可以查帳**，不是只搬單頭。
-4. **匯出的內容不要有漏** —— 已驗收，118,946 張傳票借貸 100% 平衡。
-5. **歷史資料唯讀封存**。
-6. **科目餘額兩者都要**：即時算為正本、月結快照為快取、加對帳。
+設計目標因此不是「好用」，是**好查、好比對、好證明**。落下來的取捨：
 
-這推翻了上位規格原則 5 的「不做會計分錄、發票、報價／銷售單據」。上位規格
-同步修訂，理由是當時的判斷基於 ERPNext 只有 1 張銷貨單、0 筆分錄；
-`CH001_export` 有 17,649 張銷貨單與 319,121 筆分錄，前提變了。
+| 不做 | 為什麼 |
+|---|---|
+| 建立／修改／刪除的 service 函式 | 沒有人會在裡面建東西 |
+| `erp_audit` 稽核 | 沒有寫入就沒有稽核對象 |
+| 唯讀 trigger | 不開寫入路徑，不必擋 |
+| uuid 主鍵、`created_by`／`updated_at`／`deleted_at` | 查核用不上，反而擋路 |
+| MCP 工具 | 選配，不列在必要範圍 |
+| 稅務申報、BOM、多公司、多幣別 | 來源沒有或不在查核範圍 |
 
-## 二、來源的讀法（已定案，不要重新發明）
+**真正的資產是「鼎新 197 張無欄名資料表 → 人看得懂的現代 schema」這份對照與轉換。**
+那件事不管誰建系統都得做一次，做對了就永久有效。CTOS 這套只是它的第一個消費者，
+同事的版本是第二個。所以轉換層必須獨立於 CTOS（第四節）。
+
+### 隔離：獨立的 PostgreSQL schema
+
+全部資料放 `ch001` schema，不進 CTOS 既有的 `public`。
+
+1. 不污染 CTOS 的正式表（`parties`／`items`／`purchase_orders` 等維持原樣）。
+2. 給同事的唯讀帳號只授 `ch001` 的 `USAGE` 與 `SELECT`，碰不到使用者、
+   知識庫、AI 紀錄。
+3. 這版不要了就 `DROP SCHEMA ch001 CASCADE`，一句話，沒有殘留。
+4. 不需要動 CTOS 的 alembic 主線；`ch001` 的 DDL 是獨立的 `.sql`，
+   由匯入器負責建立。
+
+## 二、決定（yazelin，2026-09-15）
+
+1. 在 CTOS 完整匯復鼎新的資料，做到會計與票據。
+2. 完整搬進來可以查帳。
+3. 匯出的內容不要有漏 —— 已驗收，118,946 張傳票借貸 100% 平衡。
+4. 這套是給同事確認資料正確用的，不是我們要用的。
+5. 同事那邊從零開始，可能參考我們建起來的樣子。
+6. 科目餘額：即時算與月結快照都要，加對帳。
+7. 中間格式用 JSONL ＋ schema 文件。
+8. 階段 1 驗完後把對照與中間格式交付給同事。
+9. 同事用唯讀檢視頁，並開唯讀資料庫帳號給他直連。
+
+## 三、來源的讀法（已定案，不要重新發明）
 
 細節見 `docs/ch001-export-inventory.md`，三件必須遵守：
 
@@ -33,144 +61,183 @@ yazelin 的決定（2026-09-15，逐條）：
 2. **分錄表是 `KJSNHB`**（借方貸方分兩欄，100% 平衡），不是 `KJSNFB`
    （單邊 `±1` 乘金額，只平 87.24%）。
 3. **已知瑕疵不得靜默丟棄**：銷貨明細 1 筆單號欄被打成中文備註、
-   會計傳票 2 筆分錄無單頭、1 筆單頭無分錄。匯入時記入報告並跳過，
-   報告要出現在 `--dry-run` 輸出裡。
+   會計傳票 2 筆分錄無單頭、1 筆單頭無分錄。挑掉並記進 `manifest.json`，
+   且要出現在 `--dry-run` 輸出裡。
 
-## 三、資料模型
+## 四、中間格式（交付給同事的東西）
 
-既有十張表（migration 030）不動。新增十三張，全部沿用既有慣例：
-uuid 主鍵、`created_at`／`updated_at`／`created_by`、軟刪除 `deleted_at`、
-寫入同交易寫 `erp_audit`。
+轉換層不 import 任何 `ching_tech_os` 的東西，輸出中性格式：
 
-### 銷貨與發票（階段 3）
+- `<表名>.jsonl` — 一列一個 JSON 物件，鍵即 schema 欄位名。
+- `schema.json` — 每個欄位的型別、可否為空、主鍵、外鍵指向。
+- `manifest.json` — 來源表、筆數、產生時間、跳過的瑕疵逐筆記錄。
 
-| 表 | 來源 | 重點欄位 |
+不綁資料庫，同事用 PostgreSQL、MySQL 或別的都讀得動。金額一律字串
+（避免浮點誤差），日期一律 `YYYY-MM-DD`，NULL 就是 JSON `null`。
+
+## 五、資料模型
+
+**主鍵直接用來源的鍵**，不生 uuid。同事要驗資料時會拿鼎新的單號來查
+（`PC209001010001`、傳票 `(2, 20900101000001)`、廠商 `SX0001`），
+主鍵就該是那個鍵。三件事同時變簡單：他查得到、兩邊逐欄對得起來、
+匯入天然冪等（主鍵衝突就是重複）。
+
+每張表只多一個 `imported_at TIMESTAMPTZ`，其餘欄位全部來自來源。
+
+### 主檔
+
+| 表 | 來源 | 主鍵 |
 |---|---|---|
-| `sales_orders` | `JSKKEA` | `so_no`（唯一）、`party_id`、`order_date`、`status`、`total_amount`、`source_ref` |
-| `sales_order_lines` | `JSKKEB` | `so_id`、`item_id`、`description`、`qty`、`unit_price`、`amount`、`sort_order` |
-| `invoices` | `JSKJIA`（進項）／`JSKKGA`（銷項） | `invoice_no`、`direction`（`in`／`out`）、`party_id`、`invoice_date`、`net_amount`、`tax_amount`、`total_amount`、`source_ref` |
-| `invoice_lines` | `JSKJIB`／`JSKKGB` | `invoice_id`、`ref_type`、`ref_id`、`amount`、`tax_amount` |
+| `parties` | `TPADGA`（廠商）＋`TPADFA`（客戶） | `code` |
+| `party_contacts` | `CRMIKG` | `(party_code, seq)` |
+| `items` | `TPADEA` | `code` |
+| `item_groups` | `TPADED` | `code` |
+| `warehouses` | `TPADDA` | `code` |
 
-`direction` 用單一表加方向欄而不是拆兩張，因為兩邊欄位幾乎相同，
-查「這家廠商的所有發票」也不必 union。
+廠商與客戶同一張表、用 `is_supplier`／`is_customer` 兩個旗標，
+因為舊系統的代號前綴（`SM`／`SF`／`CM`／`CF`）已經把兩者分開，
+不會撞鍵。
 
-### 會計（階段 4）
+### 採購進貨與庫存
 
-| 表 | 來源 | 重點欄位 |
+| 表 | 來源 | 主鍵 |
 |---|---|---|
-| `gl_accounts` | `KJSNAA`→`KJSNBA`→`KJSNCA`→`KJSNDA` | `code`（唯一）、`name`、`name_en`、`parent_id`、`level`（1–4）、`is_leaf`、`direction`（借／貸性質） |
-| `gl_vouchers` | `KJSNFA` | `voucher_type`、`voucher_no`、`voucher_date`、`period`（yyyymm）、`summary`、`source_ref`；`(voucher_type, voucher_no)` 唯一 |
-| `gl_voucher_lines` | **`KJSNHB`** | `voucher_id`、`line_no`、`account_id`、`sub_account`、`summary`、`debit`、`credit`、`currency`、`ref_doc` |
-| `gl_period_balances` | `KJSNHA` | `account_id`、`period`、`debit_total`、`credit_total`、`balance`；`(account_id, period)` 唯一 |
+| `purchase_orders` / `purchase_order_lines` | `DCSHDA` / `DCSHDB` | `po_no` / `(po_no, line_no)` |
+| `goods_receipts` / `goods_receipt_lines` | `JSKJDA` / `JSKJDB` | `gr_no` / `(gr_no, line_no)` |
+| `goods_returns` | `JSKJFA` | `gn_no` |
+| `stock_movements` | `JSKLNA` | `(doc_type, doc_no, line_no)` |
 
-科目四層平鋪成一張表加 `parent_id`，不建四張。鼎新的四層是
-類（9）→ 大類（35）→ 中類（67）→ 科目（289），`level` 保留原層級以便對照。
+### 銷貨與發票
 
-`debit` 與 `credit` **分兩欄**，直接對應來源，不做 `signed_amount` 轉換 ——
-轉換會讓「借貸平衡」這個驗證失去意義。
-
-### 應收應付與票據（階段 5）
-
-| 表 | 來源 | 重點欄位 |
+| 表 | 來源 | 主鍵 |
 |---|---|---|
-| `receivables` | `YSFGAA`＋`YSFGEA` | `party_id`、`doc_no`、`doc_date`、`due_date`、`amount`、`settled_amount`、`status` |
-| `payables` | `YSFGNA`＋`YSFGRA` | 同上，方向相反 |
-| `payments` | `YSFGDA`（收款）／`YSFGQA`（付款） | `direction`、`payment_no`、`party_id`、`payment_date`、`amount`、`method` |
-| `payment_allocations` | `YSFGCA`／`YSFGPA` | `payment_id`、`target_type`（`receivable`／`payable`）、`target_id`、`amount` |
-| `notes_receivable` | `PJMPAA` | `note_no`、`party_id`、`issue_date`、`due_date`、`amount`、`bank`、`status` |
-| `notes_payable` | `PJMPIA` | 同上 |
+| `sales_orders` / `sales_order_lines` | `JSKKEA` / `JSKKEB` | `so_no` / `(so_no, line_no)` |
+| `sales_returns` | `JSKKFA` | `sr_no` |
+| `quotations` | `DCSIAA` | `quote_no` |
+| `invoices` / `invoice_lines` | `JSKJIA`（進項）／`JSKKGA`（銷項） | `(direction, invoice_no)` |
 
-收付款與沖銷拆成 `payments` ＋ `payment_allocations` 兩張，因為一張收款單
-可以沖多筆應收（`YSFGCA` 18,482 列對 `YSFGDA` 5,658 列，確實是一對多）。
+`direction` 是 `in`／`out`，兩邊欄位幾乎相同，查「這家的所有發票」不必 union。
 
-## 四、唯讀封存（yazelin 拍板）
+### 會計
 
-歷史資料一律不得編輯或刪除。**不靠 service 層的紀律，用資料庫擋**：
+| 表 | 來源 | 主鍵 |
+|---|---|---|
+| `gl_accounts` | `KJSNAA`→`BA`→`CA`→`DA` | `code` |
+| `gl_vouchers` | `KJSNFA` | `(voucher_type, voucher_no)` |
+| `gl_voucher_lines` | **`KJSNHB`** | `(voucher_type, voucher_no, line_no)` |
+| `gl_period_balances` | `KJSNHA` | `(account_code, period)` |
 
-1. 每張歷史表都有 `source_ref TEXT`。來自 `CH001_export` 的列一律非 NULL
-   （格式 `CH001:<表名>:<原始鍵>`），CTOS 自己新建的列為 NULL。
-2. 每張表加一個 `BEFORE UPDATE OR DELETE` trigger：`OLD.source_ref IS NOT NULL`
-   就 `RAISE EXCEPTION`。單一共用 trigger function，各表各自 `CREATE TRIGGER`。
-3. service 層在 trigger 之前先給出可讀的錯誤（`ArchivedRecordError`），
-   讓 MCP 工具能回「這是舊系統的歷史資料，不能修改」而不是丟 DB 例外。
-4. MCP 工具與 REST 的寫入端點對這些列回 409。
+科目四層平鋪成一張表加 `parent_code`，`level` 保留原層級
+（類 9 → 大類 35 → 中類 67 → 科目 289）。
 
-**驗收必須有負控制**：把 trigger 移掉之後，那組測試要變紅。只證明「改不動」
-不夠，要證明「是 trigger 在擋」。
+**`debit` 與 `credit` 分兩欄**，直接對應來源，不做 `signed_amount` 轉換 ——
+轉換會讓借貸平衡這個驗證失去意義，而它是這批資料唯一的硬指標。
 
-例外：`stock_balances` 是推導值不是歷史事實，不上鎖。
+### 應收應付與票據
 
-## 五、科目餘額雙軌（yazelin 拍板）
+| 表 | 來源 | 主鍵 |
+|---|---|---|
+| `receivables` / `payables` | `YSFGAA`＋`YSFGEA` / `YSFGNA`＋`YSFGRA` | `doc_no` |
+| `payments` | `YSFGDA`（收）／`YSFGQA`（付） | `(direction, payment_no)` |
+| `payment_allocations` | `YSFGCA` / `YSFGPA` | `(direction, payment_no, seq)` |
+| `notes_receivable` / `notes_payable` | `PJMPAA` / `PJMPIA` | `note_no` |
 
-- **正本**：從 `gl_voucher_lines` 即時聚合。提供
-  `gl_account_balance(account_id, period_from, period_to)` service 函式，
-  底層是 `SUM(debit) - SUM(credit)`，索引建在 `(account_id, voucher_id)`
-  與 `gl_vouchers(period)`。
-- **快取**：`gl_period_balances` 直接收 `KJSNHA` 的月結資料（舊系統已經算好，
-  2007 起每月每科目），查報表走這張。
-- **對帳**：`scripts/ch001_verify.py` 增加一項檢查，對每個
-  (科目, 期間) 比對即時聚合與快照。**不相符就 exit 1。**
-  這一項是雙軌制的成立條件 —— 沒有它，兩套數字遲早分家。
+收付款與沖銷拆兩張：一張收款單可沖多筆應收
+（`YSFGCA` 18,482 列對 `YSFGDA` 5,658 列，確實是一對多）。
 
-## 六、匯入器
+## 六、三個查核出口
 
-沿用 `scripts/erpnext_import.py` 的結構，新增 `scripts/ch001_import.py`：
+查核工具的價值全在這一節。沒有這些，資料進來了也證明不了什麼。
 
-- **門面層照抄**：`Services` 類別綁 service 函式，所以每筆都留 `erp_audit`
-  （`via="import"`）。新表要先有對應的 service 函式才能匯。
-- **冪等**：`source_ref` 當 key，已存在就只更新真的變了的欄位。重跑收斂。
-- **參數**：`--src`、`--dry-run`、`--only <階段>`、`--db-name`、`--actor-user-id`，
-  與 ERPNext 匯入器一致。
-- **合併 ERPNext**：階段 1 跑完 `CH001` 之後再跑 `erpnext_import.py`。
-  兩邊靠舊代號對上（97.3% 的 ERPNext 廠商名稱開頭就是舊代號，
-  格式 `SF0001 - 名稱`），不會產生重複。ERPNext 的值較新，覆蓋同名欄位。
-- **批次**：`stock_movements` 16 萬筆、`gl_voucher_lines` 31 萬筆，
-  要用 `executemany` 分批，單筆 INSERT 會跑到天亮。批次大小先設 1000，
-  實測後調。
+### 1. 唯讀資料庫帳號
 
-## 七、階段與 PR 切法
+同事從 `192.168.11.6` 直連 `.11` 的 PostgreSQL，只授 `ch001` schema 的
+`USAGE` ＋ `SELECT`。
 
-每支 implement → review → fix → re-review → CI 綠 → 合併。**後端合併即停，
-不自行部署 .11。** 每個階段結束都是可用狀態。
+**這是對正式機的變更，不由 agent 執行**：規格只寫出該下什麼、
+開哪個網段，實際執行等 yazelin 授權或自己做。附一份 `ch001_readonly.sql`
+（`CREATE ROLE` ＋ `GRANT`，密碼留佔位）與 `pg_hba` 需要加的那一行。
 
-| # | 內容 | 新表 | 匯入列數 |
-|---|---|---|---|
-| 1 | 主檔（客戶／廠商／聯絡人／地址／商品／倉庫）＋合併 ERPNext | 0 | 29,886 |
-| 2 | 採購進貨＋庫存異動 | 0 | 347,059 |
-| 3 | 唯讀封存機制（trigger ＋ service ＋ 負控制測試） | 0 | 0 |
-| 4 | 銷貨＋發票 | 4 | 51,400 |
-| 5 | 會計科目＋傳票＋月結快照＋對帳 | 4 | 842,795 |
-| 6 | 應收應付＋收付款＋票據 | 6 | 123,506 |
+### 2. 唯讀檢視頁（ctos-web）
 
-階段 3 刻意排在有歷史資料之後、大量單據之前：主檔已經進來了可以驗鎖，
-而後面四個階段的表一建立就帶著 trigger，不必回頭補。
+不做 CRUD，四種畫面：
 
-MCP 工具與前端畫面**不在本規格**，等資料進來再依實際查詢需求開。
-唯一例外是階段 5 結束時要有 `gl_trial_balance`（試算表）工具，
-否則「可以查帳」這個目標沒有可驗收的出口。
+- **表清單** — 每張表的中文名、筆數、來源鼎新表名、最後匯入時間。
+- **原始列檢視** — 逐列瀏覽、翻頁、依主鍵搜尋。讓他跟鼎新畫面逐欄對照。
+- **鑽取** — 單號點進去看明細；傳票點進去看分錄；廠商點進去看它的進貨、
+  發票、應付。
+- **對帳報表** — 見下。
 
-## 八、驗收
+### 3. 對帳報表（他在鼎新有得比的數字）
+
+- **試算表** — 某期間各科目借貸合計與餘額，底部合計必須相等。
+- **科目明細帳** — 某科目某期間的每一筆分錄，可回推到來源單據。
+- **進銷存** — 某期間某品號的期初、進、銷、期末。
+- **廠商／客戶對帳單** — 某往來對象的應收應付與收付款沖銷。
+- **與 ERPNext 的差異報告** — 419 客戶／665 廠商的交叉比對，
+  列出只在一邊有的、統編不一致的。
+
+報表同時輸出 CSV，他要拿去 Excel 比對也行。
+
+## 七、轉換與匯入
+
+三支腳本，中間隔著中間格式：
+
+| 腳本 | 做什麼 | 依賴 CTOS |
+|---|---|---|
+| `ch001_transform.py` | `CH001_export` → 中間格式。語意翻譯：欄位位置換欄位名、單頭明細接起來、瑕疵挑掉記進 manifest | 否 |
+| `ch001_load.py` | 中間格式 → `ch001` schema。建表、批次 COPY | 只依賴連線字串 |
+| `ch001_dump.py` | `ch001` schema → 中間格式。換系統時帶走資料，也是匯入的迴圈驗證 | 只依賴連線字串 |
+
+`ch001_transform.py` 純函式為主、不連資料庫，測試不需要 DB。它的輸出就是
+階段 1 之後要交給同事的東西。
+
+載入用 `COPY`，不用逐筆 INSERT —— `gl_voucher_lines` 31 萬筆、
+`stock_movements` 16 萬筆，逐筆會跑到天亮。
+
+## 八、階段
+
+每支 implement → review → fix → re-review → CI 綠 → 合併。
+**後端合併即停，不自行部署 .11。**
+
+| # | 內容 | 匯入列數 | 出口 |
+|---|---|---:|---|
+| 1 | 主檔 ＋ `ch001` schema ＋ 三支腳本骨架 | 29,886 | **交付中間格式與 schema 給同事** |
+| 2 | 唯讀檢視頁（表清單、原始列、鑽取）＋ 唯讀 DB 帳號 SQL | 0 | 同事可以開始查 |
+| 3 | 採購進貨＋庫存 | 347,059 | 進銷存報表 |
+| 4 | 銷貨＋發票 | 51,400 | 廠商客戶對帳單 |
+| 5 | 會計科目＋傳票＋月結快照 | 842,795 | 試算表、科目明細帳 |
+| 6 | 應收應付＋收付款＋票據 | 123,506 | 應收應付對帳 |
+
+階段 2 刻意排在只有主檔的時候：畫面用最小的資料量做完並驗過，
+後面每個階段只是多幾張表接上去，不必回頭改畫面架構。
+
+## 九、驗收
 
 每個階段除了單元測試，都要跑：
 
 1. `scripts/ch001_verify.py --src <目錄>` 五項全過（階段 5 後為六項，含餘額對帳）。
-2. 匯入後的**筆數對帳**：DB 實際列數 == 來源列數 − 已知瑕疵筆數，差額必須為 0。
-3. 階段 5 額外：DB 裡 `SUM(debit) == SUM(credit) == 8,502,130,448.00`。
-   這個數字是硬指標，對不上就是匯入有問題。
-4. **重跑冪等**：同一份來源跑第二次，`erp_audit` 不應新增任何 `update` 紀錄。
+2. **筆數對帳**：DB 實際列數 == 來源列數 − 已知瑕疵筆數，差額必須為 0。
+3. **重跑冪等**：同一份來源跑第二次，資料庫內容逐表 checksum 不變。
+4. **迴圈等價**：`transform` → `load` → `dump` 產出的中間格式，
+   與第一步的中間格式逐表比對應等價（唯一允許的差異是 `imported_at`）。
+   這一項是「資料沒被鎖死」的證明。
+5. 階段 5 額外：`SUM(debit) == SUM(credit) == 8,502,130,448.00`。
+   這是硬指標，對不上就是匯入有問題。
+6. 階段 5 額外：`gl_period_balances` 與從 `gl_voucher_lines` 即時聚合的結果
+   逐（科目, 期間）相符。不相符就是失敗 —— 沒有這項，雙軌遲早分家。
 
-## 九、假設（換一種就會做出不同東西）
+## 十、假設（換一種就會做出不同東西）
 
-1. 舊系統造字（42 處）維持私用區佔位即可，不需要還原字形。
-   → 若要還原，得跟原系統要造字檔，是另一件事。
-2. 歷史資料只進 CTOS，不回寫同事的新 ERP。
-3. 幣別只有 TWD（來源實測 `TPADGA` 第 20 欄只有一個值）。多幣別不做。
-4. 人事薪資（`CMSMV`、`PALMT`、`PALML`–`PALMV` 等）不進 CTOS。
-5. `TPABYA` 等系統設定表不進 CTOS。
+1. 舊系統造字（42 處）維持 Unicode 私用區佔位，不還原字形。
+   要還原得跟原系統要造字檔，是另一件事。
+2. 幣別只有 TWD（`TPADGA` 第 20 欄實測只有一個值）。
+3. 人事薪資（`CMSMV`、`PALMT`、`PALML`–`PALMV` 等）不進 `ch001`。
+4. `TPABYA` 等系統設定表不進 `ch001`。
+5. 資料只進不出到同事的系統；他要用就拿中間格式自己灌。
 
-## 十、待拍板
+## 十一、待拍板
 
-1. 品號要不要沿用舊碼。沿用則兩邊天然對得起來；重編要一張對照表，
-   且須指定誰維護。（影響階段 1）
-2. 客戶主檔歸 CTOS 之後，同事的新 ERP 要不要打 CTOS 的 `/api/parties` 取用。
+1. 品號要不要沿用舊碼。（影響階段 1；沿用則兩邊天然對得起來）
+2. 唯讀 DB 帳號開給哪個網段、什麼時候開。（對正式機的變更）
 3. `CH001_export` 那個共享槽含員工薪資與勞健保資料，建議來源端移出。
