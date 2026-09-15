@@ -85,8 +85,8 @@ def build_ddl(schema: dict) -> str:
         # 表註解：中文功能 ＋ 模組 ＋ 列數
         bits = [x for x in (info.get("function"), info.get("module")) if x]
         label = "／".join(dict.fromkeys(bits)) or "（資料字典未收錄）"
-        out.append(f'COMMENT ON TABLE ch001."{table.lower()}" IS '
-                   f'{quote(f"{label}　來源 {info["rows"]:,} 列")};')
+        row_note = "{}　來源 {:,} 列".format(label, info["rows"])
+        out.append('COMMENT ON TABLE ch001."{}" IS {};'.format(table.lower(), quote(row_note)))
 
         # 欄位註解：中文名 ＋ 依據等級；推不出語意的寫型別與填充率
         for c in cols:

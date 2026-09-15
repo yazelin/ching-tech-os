@@ -52,6 +52,41 @@
 8. 階段 1 驗完後把對照與中間格式交付給同事。
 9. 同事用唯讀檢視頁，並開唯讀資料庫帳號給他直連。
 
+## 二之二、部署現況（2026-09-15）
+
+階段 1 已在 `.11` 上線。yazelin 授權執行。
+
+| 項目 | 值 |
+|---|---|
+| 容器 | `ch001-db`（`postgres:16-alpine`，`restart: unless-stopped`） |
+| Port | `5436`（5432–5435 已被 CTOS、jaba、billing 佔用） |
+| 工作目錄 | `~/ch001-work/`　**刻意不放在 `ching-tech-os` 工作樹裡** |
+| 資料 | 19 張表、707,971 列、171 MB |
+| 唯讀帳號 | `ch001_viewer`，密碼在 `~/ch001-work/.env`（權限 600，不進版控） |
+
+`ching-tech-os` 的工作樹全程未動（不 pull、不 build、不 checkout）；腳本以
+`scp` 傳到獨立目錄執行。`.11` 沒有 `python3-venv`，改用 `~/.local/bin/uv run
+--with psycopg2-binary`（`uv` 不在非互動 shell 的 PATH，要用絕對路徑）。
+
+正式機上的驗收，與本機排練完全一致：
+
+```
+借貸平衡          118,946/118,946　借方合計 8,502,130,448.00　差額 0
+進貨 單頭==明細     47,127/47,127
+數量 × 單價==金額   130,350/130,350
+表 19 張、171 MB、有中文註解的欄位 349
+```
+
+負控制（唯讀帳號真的寫不進去，不是只有「沒人去寫」）：
+
+- 讀 `ch001.tpadga` → 673 家廠商
+- `INSERT` → `cannot execute INSERT in a read-only transaction`
+- `CREATE TABLE` → `cannot execute CREATE TABLE in a read-only transaction`
+- 用同一組帳密連 CTOS 的 5432 → `password authentication failed`（兩邊完全隔離）
+
+收掉的方式：`cd ~/ch001-work && docker compose down -v`，volume 一起刪，
+CTOS 不受影響。
+
 ## 三、來源的讀法（已定案，不要重新發明）
 
 細節見 `docs/ch001-export-inventory.md`，三件必須遵守：
