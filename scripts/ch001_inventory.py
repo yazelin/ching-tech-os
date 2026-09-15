@@ -6,6 +6,7 @@
 
 用法：
     ch001_inventory.py <CH001_export 目錄> > docs/ch001-export-inventory.md
+    ch001_inventory.py <CH001_export 目錄> --json out.json > /dev/null
 """
 import re, sys, json
 from pathlib import Path
@@ -13,7 +14,8 @@ from collections import defaultdict
 sys.path.insert(0, str(Path(__file__).parent))
 from ch001_reader import read as b5read
 
-SRC = Path(sys.argv[1] if len(sys.argv) > 1 else "ch001")
+argv = sys.argv[1:]
+SRC = Path(argv[0] if argv and not argv[0].startswith("--") else "ch001")
 MAXROWS = 20000          # 大檔只讀前 N 列就夠推欄位
 
 # ---------- 1. 讀資料字典 HCRBPA / HCRBPB ----------
@@ -108,4 +110,8 @@ for func in list(dict.fromkeys(func_order)) + ["（字典未收錄）"]:
         nempty = sum(1 for c in r["cols"] if c is None)
         if nempty: print(f"（另有 {nempty} 欄全空）\n")
 
-json.dump({t: r for t, r in results.items()}, open("inventory.json", "w"), ensure_ascii=False)
+# 結構化結果只在明確要求時才寫檔，免得在工作目錄留副產品
+if "--json" in argv:
+    out = Path(argv[argv.index("--json") + 1])
+    json.dump(results, out.open("w"), ensure_ascii=False, indent=2)
+    print(f"\n<!-- 結構化結果：{out} -->", file=sys.stderr)
