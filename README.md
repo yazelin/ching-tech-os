@@ -74,9 +74,15 @@ ChingTech OS 是擎添工業內部使用的整合式工作平台，以 Web 技�
 - **舊 ERP 查核資料庫**：`scripts/ch001_load.py` 把中間格式灌進獨立的 `ch001`
   PostgreSQL schema（容器設定在 `docker/ch001/`，與 CTOS 的 DB 完全分開，
   不要了就 `docker compose down -v`）。中文欄位名用 `COMMENT ON` 寫進資料庫，
-  會計、採購、業務用 DBeaver 之類的工具打開就看得到「統一編號 [verified]」，
-  不必等前端。本機排練：19 張表、707,971 列、171 MB、載入 19 秒，
-  三個等式在 SQL 層重驗全數 100%。
+  會計、採購、業務用 DBeaver 之類的工具打開就看得到「統一編號 [verified]」。
+  本機排練：19 張表、707,971 列、171 MB、載入 19 秒，三個等式在 SQL 層重驗全數 100%。
+
+- **舊 ERP 查核頁**：`docker/ch001/viewer/` 是一支唯讀的小服務（FastAPI 單檔，
+  無前端建置步驟），讓不會下 SQL 的人用瀏覽器核對 —— 表清單按模組分組、
+  搜尋任一欄位、單頭點進去看明細（會計傳票是複合鍵，網址用 `~` 串起來）。
+  欄位中文名直接讀資料庫的 `COMMENT`，不維護第二份對照；認不出語意的欄位
+  顯示原始欄位名並標灰，**那正是要使用者指出來的部分**。連線走唯讀帳號，
+  且每個請求都開 read-only transaction。
 
 - **bot 與舊程式切換到往來與物料模組**：Line／Telegram bot 的 prompt（程式碼與
   `ai_prompts`，migration 032）、`skills/erp`、`skills/project`、ctos CLI 的 `erp`

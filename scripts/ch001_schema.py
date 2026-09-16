@@ -76,20 +76,43 @@ def _tw_vat(n: str) -> bool:
 
 
 def _tw_zip(v: str) -> bool:
-    return bool(re.fullmatch(r"\d{3,6}", v)) and 100 <= int(v[:3]) <= 983
+    r"""台灣郵遞區號：3 碼或 5 碼，不接受其他長度。
+
+    原本寫成 `\d{3,6}` 只看前三碼，會把會計科目代號 1101 當成郵遞區號
+    （110 在合法範圍內）。寧可標「未認出」也不要標錯 —— 使用者會相信標籤。
+    """
+    if len(v) not in (3, 5) or not v.isdigit():
+        return False
+    return 100 <= int(v[:3]) <= 983
+
+
+def _tw_phone(v: str) -> bool:
+    r"""電話：必須看得出是電話，不能只是「一串數字」。
+
+    原本 `[\d()\-\s#]{8,}` 會吃掉 8 位數的日期、14 位的傳票總號。
+    要求含分隔符（括號、dash、空白、分機符號），或是 09 開頭的手機號。
+    """
+    if not re.fullmatch(r"[\d()\-\s#]{8,}", v):
+        return False
+    if re.search(r"[()\-\s#]", v):
+        return True
+    return v.startswith("09") and len(v) == 10
 
 
 SEMANTIC_RULES = [
+    # 順序有意義：由窄到寬。日期必須排在電話之前 —— 20070101 是 8 位數字，
+    # 會被電話規則 [\d()\-\s#]{8,} 先吃掉，實測進貨單的日期欄因此被標成「電話／傳真」。
     ("統一編號", _tw_vat),
-    ("地址", lambda v: bool(re.search(r"[路街道巷弄號樓段村里鄉鎮市區縣]", v)) and len(v) > 5),
-    ("郵遞區號", _tw_zip),
-    ("email", lambda v: bool(re.fullmatch(r"[\w.+-]+@[\w.-]+\.\w+", v))),
-    ("電話／傳真", lambda v: bool(re.fullmatch(r"[\d()\-\s#]{8,}", v))),
+    ("建檔／異動時間", lambda v: bool(re.match(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}", v))),
     ("日期", lambda v: bool(re.fullmatch(r"(19|20)\d{6}", v))),
     ("年月", lambda v: bool(re.fullmatch(r"(19|20)\d{4}", v))),
-    ("建檔／異動時間", lambda v: bool(re.match(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}", v))),
-    ("幣別", lambda v: v in {"TWD", "USD", "JPY", "EUR", "CNY", "HKD"}),
+    ("email", lambda v: bool(re.fullmatch(r"[\w.+-]+@[\w.-]+\.\w+", v))),
+    ("郵遞區號", _tw_zip),
     ("是否旗標", lambda v: v in {"Y", "N", "T", "F"}),
+    ("幣別", lambda v: v in {"TWD", "USD", "JPY", "EUR", "CNY", "HKD"}),
+    ("地址", lambda v: bool(re.search(r"[路街道巷弄號樓段村里鄉鎮市區縣]", v)) and len(v) > 5),
+    # 電話放最後：它的字元集最寬，會誤吃純數字的日期與代碼
+    ("電話／傳真", _tw_phone),
     ("金額／數量", lambda v: bool(re.fullmatch(r"-?\d*\.\d{4,6}", v))),
 ]
 SEMANTIC_THRESHOLD = 0.95

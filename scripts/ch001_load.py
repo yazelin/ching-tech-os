@@ -34,6 +34,12 @@ import json
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent))
+try:
+    from ch001_columns import TABLE_LABELS
+except ImportError:
+    TABLE_LABELS = {}
+
 PG_TYPE = {"date": "date", "timestamp": "timestamp", "flag": "text", "text": "text",
            "text_zh": "text", "code": "text", "docno": "text", "email": "text",
            "phone": "text", "empty": "text"}
@@ -83,8 +89,11 @@ def build_ddl(schema: dict) -> str:
         out.append(");")
 
         # 表註解：中文功能 ＋ 模組 ＋ 列數
-        bits = [x for x in (info.get("function"), info.get("module")) if x]
-        label = "／".join(dict.fromkeys(bits)) or "（資料字典未收錄）"
+        # 功能與模組用不同分隔符：模組名本身可能含「／」（公用設定／基本資料），
+        # 混在一起的話讀的人跟程式都拆不開
+        func = TABLE_LABELS.get(table) or info.get("function") or "（資料字典未收錄）"
+        mod = info.get("module")
+        label = "{}　〔{}〕".format(func, mod) if mod else func
         row_note = "{}　來源 {:,} 列".format(label, info["rows"])
         out.append('COMMENT ON TABLE ch001."{}" IS {};'.format(table.lower(), quote(row_note)))
 

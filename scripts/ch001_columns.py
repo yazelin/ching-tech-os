@@ -32,6 +32,24 @@ MODULE_PREFIX: dict[str, str] = {
     "DSC": "系統內建對照資料",
 }
 
+# 表層級的中文名，覆蓋資料字典。用在字典的功能名不足以分辨的情況 ——
+# 會計科目分四層、四張表在字典裡都叫「會計科目」，畫面上並排會讓人選不下去。
+# 層級關係由資料驗證：KJSNDA.NDA003 指向 KJSNCA、NDA004 指向 KJSNBA，
+# 筆數也符合 9 → 35 → 67 → 289 的收斂。
+TABLE_LABELS: dict[str, str] = {
+    "KJSNAA": "會計科目 第1層 類",
+    "KJSNBA": "會計科目 第2層 大類",
+    "KJSNCA": "會計科目 第3層 中類",
+    "KJSNDA": "會計科目 第4層 科目",
+    "KJSNHA": "科目月結餘額",
+    "KJSNFA": "會計傳票 單頭",
+    "KJSNHB": "會計傳票 分錄",
+    "JSKJDA": "進貨單 單頭",
+    "JSKJDB": "進貨單 明細",
+    "JSKKEA": "銷貨單 單頭",
+    "JSKKEB": "銷貨單 明細",
+}
+
 COLUMNS: dict[tuple[str, str], tuple[str, str, str]] = {
     # ---- TPADGA 廠商主檔（673 列 × 58 欄）----
     ("TPADGA", "DGA001"): ("廠商代號", "唯一鍵；對 ERPNext 廠商名稱前綴命中 89.2%", "verified"),

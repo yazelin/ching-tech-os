@@ -47,5 +47,21 @@ services:
       timeout: 5s
       retries: 5
 
+  # 查核頁：會計／採購／業務用瀏覽器核對，不必裝 DBeaver
+  viewer:
+    build: ./viewer
+    container_name: ch001-viewer
+    environment:
+      # 連資料庫一律用唯讀帳號，服務本身沒有寫入能力
+      CH001_VIEWER_DSN: postgresql://ch001_viewer:${CH001_READONLY_PASSWORD:?需在 .env 設定}@postgres:5432/${CH001_DB_NAME:-ch001}
+      CH001_VIEWER_USER: ${CH001_VIEWER_USER:-ct}
+      CH001_VIEWER_PASSWORD: ${CH001_VIEWER_PASSWORD:?需在 .env 設定，不給預設值}
+    ports:
+      - "${CH001_VIEWER_PORT:-8092}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   ch001_data:

@@ -58,8 +58,9 @@
 
 | 項目 | 值 |
 |---|---|
-| 容器 | `ch001-db`（`postgres:16-alpine`，`restart: unless-stopped`） |
-| Port | `5436`（5432–5435 已被 CTOS、jaba、billing 佔用） |
+| 容器 | `ch001-db`（`postgres:16-alpine`）、`ch001-viewer`（查核頁），皆 `restart: unless-stopped` |
+| Port | 資料庫 `5436`（5432–5435 已被 CTOS、jaba、billing 佔用）、查核頁 `8092` |
+| 查核頁 | `http://192.168.11.11:8092`，HTTP Basic 登入 |
 | 工作目錄 | `~/ch001-work/`　**刻意不放在 `ching-tech-os` 工作樹裡** |
 | 資料 | 19 張表、707,971 列、171 MB |
 | 唯讀帳號 | `ch001_viewer`，密碼在 `~/ch001-work/.env`（權限 600，不進版控） |
@@ -83,6 +84,20 @@
 - `INSERT` → `cannot execute INSERT in a read-only transaction`
 - `CREATE TABLE` → `cannot execute CREATE TABLE in a read-only transaction`
 - 用同一組帳密連 CTOS 的 5432 → `password authentication failed`（兩邊完全隔離）
+
+階段 2 的查核頁也已上線（2026-09-16 收尾）：表清單按模組分組、搜尋任一欄位、
+單頭鑽明細。欄位中文名讀資料庫的 `COMMENT`，與 `ch001_columns.py` 是同一份來源。
+未認出語意的欄位顯示原始欄位名並標灰 —— 那是要請使用者指認的部分，不是瑕疵。
+
+收尾時修掉的三個問題（都是實際操作才會踩到的）：
+
+- 語意規則的順序：電話規則 `[\d()\-\s#]{8,}` 會先吃掉 8 位數的日期與 14 位的
+  傳票總號，把它們標成「電話／傳真」。改成日期優先，且電話必須含分隔符或是
+  09 開頭的手機；郵遞區號限定 3 或 5 碼，免得把會計科目 `1101` 當成郵遞區號。
+  **標錯比不標更糟 —— 使用者會相信標籤。**
+- 複合鍵鑽取：會計傳票的主鍵是 (類別, 總號)，只用第一欄當網址會抓到一整批
+  同類別的傳票。網址改用 `~` 串接多欄。
+- 表頭重複：未認出的欄位會上下印同一個名字兩遍（中文位置也印欄位名）。
 
 收掉的方式：`cd ~/ch001-work && docker compose down -v`，volume 一起刪，
 CTOS 不受影響。
