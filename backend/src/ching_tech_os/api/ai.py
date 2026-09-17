@@ -250,10 +250,10 @@ def register_events(sio: AsyncServer):
                 try:
                     await log_message(
                         severity="info",
-                        source="ai-assistant",
+                        source="user",
                         title="AI 助手回應",
                         content=f"對話: {chat.get('title', '新對話')}\n回應摘要: {response.message[:100]}...",
-                        category="user",
+                        category="ai-assistant",
                         user_id=user_id,
                         metadata={"chat_id": chat_id_str, "model": model}
                     )

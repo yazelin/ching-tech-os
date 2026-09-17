@@ -528,10 +528,10 @@ async def upload_file(
         try:
             await log_message(
                 severity="info",
-                source="file-manager",
+                source="app",
                 title="檔案上傳",
                 content=f"上傳檔案: {file_path}\n大小: {len(content)} bytes",
-                category="app",
+                category="file-manager",
                 user_id=session.user_id,
                 metadata={"path": f"/{share_name}/{file_path}", "size": len(content)}
             )
@@ -594,10 +594,10 @@ async def delete_file(
         try:
             await log_message(
                 severity="info",
-                source="file-manager",
+                source="app",
                 title="檔案刪除",
                 content=f"刪除: {request.path}",
-                category="app",
+                category="file-manager",
                 user_id=session.user_id,
                 metadata={"path": request.path, "recursive": request.recursive}
             )
