@@ -357,10 +357,10 @@ async def create_new_knowledge(
         try:
             await log_message(
                 severity="info",
-                source="knowledge-base",
+                source="app",
                 title="知識庫新增",
                 content=f"新增知識: {result.title}",
-                category="app",
+                category="knowledge-base",
                 metadata={"kb_id": result.id, "title": result.title, "scope": result.scope}
             )
         except Exception as e:
@@ -416,10 +416,10 @@ async def update_existing_knowledge(
         try:
             await log_message(
                 severity="info",
-                source="knowledge-base",
+                source="app",
                 title="知識庫更新",
                 content=f"更新知識: {result.title}",
-                category="app",
+                category="knowledge-base",
                 metadata={"kb_id": kb_id, "title": result.title}
             )
         except Exception as e:
@@ -474,10 +474,10 @@ async def delete_existing_knowledge(
         try:
             await log_message(
                 severity="info",
-                source="knowledge-base",
+                source="app",
                 title="知識庫刪除",
                 content=f"刪除知識: {kb_id}",
-                category="app",
+                category="knowledge-base",
                 metadata={"kb_id": kb_id}
             )
         except Exception as e:
