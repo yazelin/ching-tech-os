@@ -185,6 +185,7 @@ gh run list --limit 5      # 確認 CI 狀態
 | `.env` 範本路徑 | `FRONTEND_DIR`、`PROJECT_ATTACHMENTS_PATH` 預設是 `/home/ct/...`，忘記改會找不到前端目錄 |
 | submodule 目錄是空的 | 表示該 submodule 沒初始化。有權限就 `git submodule update --init extends/<name>`；沒權限就確認 `ENABLED_MODULES` 沒列到對應模組即可 |
 | voice 模組裝不起來 | 語音模組需要額外依賴：`uv sync --extra voice`（見 `.env.example` 模組清單註記） |
+| HIS 診間錄影監控報 `No module named 'silero_vad'` 或 `'whisper'` | 那條路徑需要額外依賴：`uv sync --extra his`。這兩個套件各自相依 torch，torch 再拉整包 NVIDIA CUDA wheel（約 4.4 GB），所以不放在基礎依賴。只有設了 `NVR_HOST` 才會走到 |
 | migration 沒跑 | 啟動後 API 報表格不存在 → `cd backend && uv run alembic upgrade head`。schema 變更一律走 Alembic，`docker/init.sql` 已停用 |
 
 ## 下一步
