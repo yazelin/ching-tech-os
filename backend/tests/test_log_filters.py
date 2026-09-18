@@ -14,7 +14,9 @@ from ching_tech_os.utils.log_filters import (
     install_log_filters,
 )
 
-TOKEN = "8294724422:AAFpygE0ijqqpdzhz5TGPvUf8HdJsN6Xxh8"
+# 刻意用假 token：格式與真值同構（10 位 bot id ＋ 冒號 ＋ 35 字元），
+# 但不是任何真實憑證。這支測試驗的是遮蔽行為，與 token 真假無關。
+TOKEN = "1234567890:AAFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEF"
 
 
 def _record(msg: str, *args) -> logging.LogRecord:
