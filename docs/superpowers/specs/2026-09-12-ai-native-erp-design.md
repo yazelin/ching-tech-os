@@ -37,6 +37,11 @@
 4. **每筆資料都可被 agent 讀成上下文**：往來對象頁、物料頁提供「AI 摘要」工具，聚合相關專案、採購、知識庫條目。
 5. **不做**：會計分錄、發票、稅務、報價／銷售單據、BOM、多公司、多幣別。
 
+   > **2026-09-15 補註**：這條不變。舊 ERP（鼎新）的會計、發票、銷售單據歷史
+   > 資料另有一套**獨立的查核系統**（`ch001` schema，給同事確認資料正確用，
+   > 不是 CTOS 要營運的），見 `2026-09-15-ch001-erp-rebuild-design.md`。
+   > 兩者不共用資料表，本模組的範圍不因此擴大。
+
 ## 二、範圍與資料模型
 
 三塊，掛在既有的 `vendor-management`（廠商管理）與 `inventory-management`（物料管理）兩個 app id 下（`DEFAULT_APP_PERMISSIONS` 已有、預設 True）。Alembic migration 030 起，全部 uuid 主鍵、`created_at`／`updated_at`、`created_by`、軟刪除 `deleted_at`。
