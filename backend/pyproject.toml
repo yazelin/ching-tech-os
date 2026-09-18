@@ -48,11 +48,17 @@ dependencies = [
     "dbfread>=2.0.7",
     "onvif-zeep>=0.2.12",
     "python-dvr>=0.0.1",
-    "openai-whisper>=20250625",
-    "silero-vad>=6.2.1",
 ]
 
 [project.optional-dependencies]
+# extends/his 的診間錄影監控專用。這兩個各自相依 torch，torch 又硬拉整包
+# NVIDIA CUDA wheel，合計約 4.4 GB。只有 consultation_monitor.py 與
+# consultation-recorder skill 會用到，而那條路徑要設了 NVR_HOST 才會啟動。
+# 放在基礎依賴等於每個開發者與 CI 都得下載一次，所以移到 extra。
+his = [
+    "openai-whisper>=20250625",
+    "silero-vad>=6.2.1",
+]
 voice = [
     "edge-tts>=6.1.0",
 ]
